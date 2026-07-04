@@ -1,75 +1,39 @@
 import { useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router";
 import { Sidebar } from "@/layout/Sidebar";
 import { TopBar } from "@/layout/TopBar";
 import type { View } from "@/layout/navConfig";
+import { viewRegistry } from "@/layout/viewRegistry";
 import { useAuth } from "@/auth/AuthContext";
 import { LoginView } from "@/auth/LoginView";
+import type { ShellId } from "@/auth/roles";
+import { PortalShell } from "@/portals/PortalShell";
+import { portalMeta, shellHomePath } from "@/portals/portalMeta";
 
-import DashboardView from "@/features/dashboard";
-import ClientsView from "@/features/clients";
-import CompagniesView from "@/features/compagnies";
-import ContratsView from "@/features/contrats";
-import ComparateurView from "@/features/comparateur";
-import SinistresView from "@/features/sinistres";
-import SanteView from "@/features/sante";
-import ComptabiliteView from "@/features/comptabilite";
-import IAView from "@/features/ia";
-import RapportsView from "@/features/rapports";
-import AdminView from "@/features/admin";
-import RenouvellementsView from "@/features/renouvellements";
-import AvenantsView from "@/features/avenants";
-import ResiliationsView from "@/features/resiliations";
-import CommissionsView from "@/features/commissions";
-import TresorerieView from "@/features/tresorerie";
-import RecouvrementView from "@/features/recouvrement";
-import DevisView from "@/features/devis";
-import IardView from "@/features/iard";
-import VieView from "@/features/vie";
-import FlotteView from "@/features/flotte";
-import CrmView from "@/features/crm";
-import GedView from "@/features/ged";
+function LoginRoute() {
+  const { currentUser, currentRole } = useAuth();
+  if (currentUser && currentRole) return <Navigate to={shellHomePath[currentRole.shell]} replace />;
+  return <LoginView />;
+}
 
-const viewRegistry: Record<View, React.ComponentType> = {
-  dashboard: DashboardView,
-  crm: CrmView,
-  clients: ClientsView,
-  compagnies: CompagniesView,
-  devis: DevisView,
-  comparateur: ComparateurView,
-  contrats: ContratsView,
-  renouvellements: RenouvellementsView,
-  avenants: AvenantsView,
-  resiliations: ResiliationsView,
-  sinistres: SinistresView,
-  sante: SanteView,
-  iard: IardView,
-  vie: VieView,
-  flotte: FlotteView,
-  comptabilite: ComptabiliteView,
-  commissions: CommissionsView,
-  recouvrement: RecouvrementView,
-  tresorerie: TresorerieView,
-  ged: GedView,
-  ia: IAView,
-  rapports: RapportsView,
-  admin: AdminView,
-};
+function HomeRedirect() {
+  const { currentUser, currentRole } = useAuth();
+  if (!currentUser || !currentRole) return <Navigate to="/login" replace />;
+  return <Navigate to={shellHomePath[currentRole.shell]} replace />;
+}
 
-export default function App() {
-  const { currentUser } = useAuth();
-
-  if (!currentUser) return <LoginView />;
-
-  // Keyed by role so switching profiles always lands back on the dashboard
-  // instead of a view the new role may not have access to.
-  return <ErpShell key={currentUser.roleId} />;
+function ProtectedRoute({ shell, children }: { shell: ShellId; children: React.ReactNode }) {
+  const { currentUser, currentRole } = useAuth();
+  if (!currentUser || !currentRole) return <Navigate to="/login" replace />;
+  if (currentRole.shell !== shell) return <Navigate to={shellHomePath[currentRole.shell]} replace />;
+  return <>{children}</>;
 }
 
 function ErpShell() {
   const [view, setView] = useState<View>("dashboard");
   const [collapsed, setCollapsed] = useState(false);
 
-  const ActiveView = viewRegistry[view] ?? DashboardView;
+  const ActiveView = viewRegistry[view] ?? viewRegistry.dashboard;
 
   return (
     <div className="flex overflow-hidden" style={{ height: "100vh", fontFamily: "'Outfit', sans-serif" }}>
@@ -81,5 +45,23 @@ function ErpShell() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<LoginRoute />} />
+        <Route path="/app/*" element={<ProtectedRoute shell="erp"><ErpShell /></ProtectedRoute>} />
+        <Route path="/portal/client/*" element={<ProtectedRoute shell="client-portal"><PortalShell meta={portalMeta["client-portal"]} /></ProtectedRoute>} />
+        <Route path="/portal/partner/*" element={<ProtectedRoute shell="partner-portal"><PortalShell meta={portalMeta["partner-portal"]} /></ProtectedRoute>} />
+        <Route path="/portal/company/*" element={<ProtectedRoute shell="company-portal"><PortalShell meta={portalMeta["company-portal"]} /></ProtectedRoute>} />
+        <Route path="/portal/provider/*" element={<ProtectedRoute shell="provider-portal"><PortalShell meta={portalMeta["provider-portal"]} /></ProtectedRoute>} />
+        <Route path="/portal/expert/*" element={<ProtectedRoute shell="expert-portal"><PortalShell meta={portalMeta["expert-portal"]} /></ProtectedRoute>} />
+        <Route path="/" element={<HomeRedirect />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }

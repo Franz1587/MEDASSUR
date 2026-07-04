@@ -75,6 +75,10 @@ export const navGroups: NavGroup[] = [
 
 export const allViews: View[] = navGroups.flatMap((g) => g.items.map((i) => i.id));
 
+export const moduleIcons: Record<View, React.ElementType> = Object.fromEntries(
+  navGroups.flatMap((g) => g.items.map((i) => [i.id, i.icon])),
+) as Record<View, React.ElementType>;
+
 export const viewLabels: Record<View, string> = {
   dashboard: "Tableau de Bord", crm: "CRM & Prospection", clients: "Gestion Clients",
   compagnies: "Compagnies", devis: "Devis", comparateur: "Comparateur IA",
