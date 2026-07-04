@@ -37,11 +37,11 @@ export const roles: Record<RoleId, RoleDefinition> = {
   },
   directeur_technique: {
     id: "directeur_technique", label: "Directeur Technique", family: "interne", shell: "erp",
-    allowedModules: [...dashboard, "contrats", "renouvellements", "avenants", "resiliations", "iard", "vie", "flotte", "sinistres", "sante", "comparateur", "rapports"],
+    allowedModules: [...dashboard, "contrats", "renouvellements", "avenants", "resiliations", "iard", "vie", "flotte", "sinistres", "sante", "comparateur", "rapports", "cotation", "prestataires", "accordPrealable", "fraude"],
   },
   gestionnaire_production: {
     id: "gestionnaire_production", label: "Gestionnaire Production", family: "interne", shell: "erp",
-    allowedModules: [...dashboard, "clients", "compagnies", "devis", "comparateur", "contrats", "renouvellements", "avenants", "resiliations", "iard", "vie", "flotte"],
+    allowedModules: [...dashboard, "clients", "compagnies", "devis", "appelOffres", "cotation", "comparateur", "contrats", "renouvellements", "avenants", "resiliations", "iard", "vie", "flotte"],
   },
   gestionnaire_sinistres: {
     id: "gestionnaire_sinistres", label: "Gestionnaire Sinistres", family: "interne", shell: "erp",
@@ -49,7 +49,7 @@ export const roles: Record<RoleId, RoleDefinition> = {
   },
   gestionnaire_sante: {
     id: "gestionnaire_sante", label: "Gestionnaire Santé", family: "interne", shell: "erp",
-    allowedModules: [...dashboard, "sante", "clients", "ged"],
+    allowedModules: [...dashboard, "sante", "clients", "ged", "prestataires", "accordPrealable", "fraude"],
   },
   gestionnaire_vie: {
     id: "gestionnaire_vie", label: "Gestionnaire Vie", family: "interne", shell: "erp",
@@ -65,11 +65,11 @@ export const roles: Record<RoleId, RoleDefinition> = {
   },
   comptable: {
     id: "comptable", label: "Comptable", family: "interne", shell: "erp",
-    allowedModules: [...dashboard, "comptabilite", "commissions", "tresorerie", "rapports"],
+    allowedModules: [...dashboard, "comptabilite", "commissions", "tresorerie", "fondsDeRoulement", "honoraires", "rapports"],
   },
   commercial: {
     id: "commercial", label: "Commercial", family: "interne", shell: "erp",
-    allowedModules: [...dashboard, "crm", "clients", "devis", "comparateur", "compagnies"],
+    allowedModules: [...dashboard, "crm", "clients", "devis", "appelOffres", "comparateur", "compagnies"],
   },
   agent_recouvrement: {
     id: "agent_recouvrement", label: "Agent de Recouvrement", family: "interne", shell: "erp",

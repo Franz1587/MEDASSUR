@@ -1,7 +1,8 @@
 import {
   LayoutDashboard, Users, Building2, FileText, Target, ScanLine, RefreshCw, Edit,
   XCircle, Shield, Stethoscope, Activity, Truck, AlertTriangle, BookOpen, DollarSign,
-  CreditCard, Wallet, Archive, Brain, BarChart3, Settings,
+  CreditCard, Wallet, Archive, Brain, BarChart3, Settings, FileSearch, Calculator,
+  ShieldCheck, ShieldAlert,
 } from "lucide-react";
 
 export type View =
@@ -9,7 +10,9 @@ export type View =
   | "comparateur" | "contrats" | "renouvellements" | "avenants"
   | "resiliations" | "sinistres" | "sante" | "iard" | "vie"
   | "flotte" | "comptabilite" | "commissions" | "recouvrement"
-  | "tresorerie" | "ged" | "ia" | "rapports" | "admin";
+  | "tresorerie" | "ged" | "ia" | "rapports" | "admin"
+  | "appelOffres" | "cotation" | "prestataires" | "accordPrealable"
+  | "fondsDeRoulement" | "honoraires" | "fraude";
 
 export interface NavItem {
   id: View;
@@ -31,6 +34,8 @@ export const navGroups: NavGroup[] = [
       { id: "clients", label: "Clients", icon: Users },
       { id: "compagnies", label: "Compagnies", icon: Building2 },
       { id: "devis", label: "Devis", icon: FileText },
+      { id: "appelOffres", label: "Appels d'Offres", icon: FileSearch },
+      { id: "cotation", label: "Cotation", icon: Calculator },
       { id: "comparateur", label: "Comparateur IA", icon: ScanLine },
     ],
   },
@@ -54,12 +59,22 @@ export const navGroups: NavGroup[] = [
   },
   { label: "Sinistres", items: [{ id: "sinistres", label: "Gestion Sinistres", icon: AlertTriangle }] },
   {
+    label: "Réseau & Contrôle",
+    items: [
+      { id: "prestataires", label: "Réseau de Soins", icon: Building2 },
+      { id: "accordPrealable", label: "Accords Préalables", icon: ShieldCheck },
+      { id: "fraude", label: "Contrôle & Fraude", icon: ShieldAlert },
+    ],
+  },
+  {
     label: "Finance",
     items: [
       { id: "comptabilite", label: "Comptabilité", icon: BookOpen },
       { id: "commissions", label: "Commissions", icon: DollarSign },
       { id: "recouvrement", label: "Recouvrement", icon: CreditCard },
       { id: "tresorerie", label: "Trésorerie", icon: Wallet },
+      { id: "fondsDeRoulement", label: "Fonds de Roulement", icon: Wallet },
+      { id: "honoraires", label: "Honoraires de Gestion", icon: DollarSign },
     ],
   },
   {
@@ -89,4 +104,7 @@ export const viewLabels: Record<View, string> = {
   commissions: "Commissions", recouvrement: "Recouvrement",
   tresorerie: "Trésorerie", ged: "GED & Documents",
   ia: "Assistant IA", rapports: "Reporting & KPIs", admin: "Administration",
+  appelOffres: "Appels d'Offres", cotation: "Cotation", prestataires: "Réseau de Soins",
+  accordPrealable: "Accords Préalables", fondsDeRoulement: "Fonds de Roulement",
+  honoraires: "Honoraires de Gestion", fraude: "Contrôle & Fraude",
 };

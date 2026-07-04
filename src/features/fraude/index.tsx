@@ -1,0 +1,85 @@
+import { useEffect, useState } from "react";
+import { ShieldAlert, Search } from "lucide-react";
+import { Badge } from "@/components/shared/Badge";
+import { ModuleHeader } from "@/components/shared/ModuleHeader";
+import { Btn } from "@/components/shared/Btn";
+import { getScoringsFraude, evaluerAssure } from "@/services/fraude.service";
+import type { ScoringFraude } from "@/types/fraude";
+
+function scoreVariant(score: number): "success" | "warning" | "danger" {
+  if (score >= 50) return "danger";
+  if (score >= 25) return "warning";
+  return "success";
+}
+
+export default function FraudeView() {
+  const [scores, setScores] = useState<ScoringFraude[]>([]);
+  const [assureId, setAssureId] = useState("");
+  const [evaluating, setEvaluating] = useState(false);
+
+  useEffect(() => {
+    getScoringsFraude().then(setScores);
+  }, []);
+
+  const handleEvaluer = async () => {
+    if (!assureId.trim()) return;
+    setEvaluating(true);
+    try {
+      await evaluerAssure(assureId.trim());
+      setScores(await getScoringsFraude());
+      setAssureId("");
+    } catch {
+      window.alert("Assuré introuvable ou erreur d'évaluation");
+    } finally {
+      setEvaluating(false);
+    }
+  };
+
+  return (
+    <div className="p-6 space-y-5">
+      <ModuleHeader title="Contrôle Médical & Fraude" subtitle="Scoring basé sur des règles automatiques — doublons d'actes, surconsommation" icon={ShieldAlert}
+        actions={
+          <div className="flex items-center gap-2">
+            <input
+              value={assureId}
+              onChange={(e) => setAssureId(e.target.value)}
+              placeholder="ID assuré (ex: ASS-001)"
+              className="px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 transition-colors w-48"
+            />
+            <Btn variant="primary" onClick={handleEvaluer}><Search className="w-4 h-4" />{evaluating ? "Évaluation…" : "Évaluer"}</Btn>
+          </div>
+        }
+      />
+      <div className="bg-card border border-border rounded-xl overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border">
+              {["Cible", "Nom", "Score", "Motifs", "Date évaluation"].map((h) => (
+                <th key={h} className="text-left text-xs text-muted-foreground font-semibold uppercase tracking-wide px-4 py-3 whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {scores.map((s) => (
+              <tr key={s.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
+                <td className="px-4 py-3 whitespace-nowrap"><Badge variant="gold">{s.cible}</Badge></td>
+                <td className="px-4 py-3 font-semibold text-foreground whitespace-nowrap">{s.cibleNom}</td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <div className="flex items-center gap-2">
+                    <div className="w-16 bg-secondary rounded-full h-1.5">
+                      <div className={`h-1.5 rounded-full ${s.score >= 50 ? "bg-red-500" : s.score >= 25 ? "bg-amber-500" : "bg-green-500"}`} style={{ width: `${s.score}%` }} />
+                    </div>
+                    <Badge variant={scoreVariant(s.score)}>{s.score}/100</Badge>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-xs text-muted-foreground max-w-md">{s.motifs}</td>
+                <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap" style={{ fontFamily: "'DM Mono', monospace" }}>{s.dateEvaluation}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {scores.length === 0 && <div className="py-12 text-center text-muted-foreground text-sm">Aucune évaluation enregistrée</div>}
+      </div>
+    </div>
+  );
+}
