@@ -1,6 +1,6 @@
-import { mockCompagnies } from "@/data/mock/compagnies.mock";
+import { http } from "@/lib/http";
 import type { Compagnie } from "@/types/compagnies";
 
 export async function getCompagnies(): Promise<Compagnie[]> {
-  return mockCompagnies;
+  return http.get<Compagnie[]>("/compagnies");
 }

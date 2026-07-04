@@ -1,6 +1,6 @@
-import { mockClients } from "@/data/mock/clients.mock";
+import { http } from "@/lib/http";
 import type { Client } from "@/types/clients";
 
 export async function getClients(): Promise<Client[]> {
-  return mockClients;
+  return http.get<Client[]>("/clients");
 }

@@ -1,0 +1,318 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Auth ─────────────────────────────────────────────────────────────
+model User {
+  id           String   @id @default(cuid())
+  roleId       String
+  nom          String
+  email        String   @unique
+  initiales    String
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+// ── CRM / Clients / Compagnies ──────────────────────────────────────
+// Ids below match the business-friendly ids already used by the frontend
+// mocks (CLI-001, CMP-001, CTR-2024-001…) instead of generated cuids, so
+// seed data stays 1:1 with src/data/mock/*.ts.
+model Client {
+  id        String   @id
+  nom       String
+  type      String
+  pays      String
+  contact   String
+  tel       String
+  email     String
+  statut    String
+  createdAt DateTime @default(now())
+
+  contrats      Contrat[]
+  devis         Devis[]
+  sinistres     Sinistre[]
+  impayes       Impaye[]
+  policesIard   PoliceIard[]
+  flottes       Flotte[]
+}
+
+model Compagnie {
+  id      String @id
+  nom     String
+  pays    String
+  taux    String
+  niveau  String
+
+  contrats      Contrat[]
+  commissions   Commission[]
+  policesIard   PoliceIard[]
+  contratsVie   ContratVie[]
+  flottes       Flotte[]
+}
+
+model Prospect {
+  id             String   @id
+  nom            String
+  type           String
+  source         String
+  etape          String
+  valeurEstimee  Decimal  @db.Decimal(18, 2)
+  commercial     String
+  dernierContact String
+}
+
+// ── Production ───────────────────────────────────────────────────────
+model Contrat {
+  id          String   @id
+  clientId    String
+  compagnieId String
+  branche     String
+  dateDebut   String
+  dateFin     String
+  prime       Decimal  @db.Decimal(18, 2)
+  statut      String
+
+  client        Client          @relation(fields: [clientId], references: [id])
+  compagnie     Compagnie       @relation(fields: [compagnieId], references: [id])
+  renouvellements Renouvellement[]
+  avenants      Avenant[]
+  resiliations  Resiliation[]
+  assures       AssureSante[]
+  impayes       Impaye[]
+  flotte        Flotte?
+}
+
+model Devis {
+  id             String   @id
+  clientId       String
+  branche        String
+  primeEstimee   Decimal  @db.Decimal(18, 2)
+  dateCreation   String
+  validite       String
+  statut         String
+
+  client   Client        @relation(fields: [clientId], references: [id])
+  offres   DevisOffre[]
+}
+
+model DevisOffre {
+  id           String  @id @default(cuid())
+  devisId      String
+  compagnieNom String
+  prime        Decimal @db.Decimal(18, 2)
+
+  devis Devis @relation(fields: [devisId], references: [id], onDelete: Cascade)
+}
+
+model Renouvellement {
+  id             String  @id
+  contratId      String
+  joursRestants  Int
+  primeActuelle  Decimal @db.Decimal(18, 2)
+  primeProposee  Decimal @db.Decimal(18, 2)
+  sinistralite   String
+  statut         String
+
+  contrat Contrat @relation(fields: [contratId], references: [id])
+}
+
+model Avenant {
+  id          String  @id
+  contratId   String
+  type        String
+  description String
+  primeAvant  Decimal @db.Decimal(18, 2)
+  primeApres  Decimal @db.Decimal(18, 2)
+  dateEffet   String
+  statut      String
+
+  contrat Contrat @relation(fields: [contratId], references: [id])
+}
+
+model Resiliation {
+  id          String  @id
+  contratId   String
+  motif       String
+  dateEffet   String
+  ristourne   Decimal @db.Decimal(18, 2)
+  initiateur  String
+  statut      String
+
+  contrat Contrat @relation(fields: [contratId], references: [id])
+}
+
+// ── Branches spécialisées ────────────────────────────────────────────
+model PoliceIard {
+  id             String  @id
+  clientId       String
+  sousBranche    String
+  compagnieId    String
+  capitalAssure  Decimal @db.Decimal(18, 2)
+  prime          Decimal @db.Decimal(18, 2)
+  statut         String
+
+  client    Client    @relation(fields: [clientId], references: [id])
+  compagnie Compagnie @relation(fields: [compagnieId], references: [id])
+}
+
+model ContratVie {
+  id              String  @id
+  assure          String
+  produit         String
+  compagnieId     String
+  capitalGaranti  Decimal @db.Decimal(18, 2)
+  primeAnnuelle   Decimal @db.Decimal(18, 2)
+  dateEffet       String
+  statut          String
+
+  compagnie      Compagnie      @relation(fields: [compagnieId], references: [id])
+  beneficiaires  Beneficiaire[]
+}
+
+model Beneficiaire {
+  id           String @id @default(cuid())
+  contratVieId String
+  nom          String
+  lien         String
+  quotePart    Int
+
+  contratVie ContratVie @relation(fields: [contratVieId], references: [id], onDelete: Cascade)
+}
+
+model Flotte {
+  id          String  @id
+  clientId    String
+  contratId   String  @unique
+  compagnieId String
+  nbVehicules Int
+  primeTotal  Decimal @db.Decimal(18, 2)
+  statut      String
+
+  client    Client     @relation(fields: [clientId], references: [id])
+  contrat   Contrat    @relation(fields: [contratId], references: [id])
+  compagnie Compagnie  @relation(fields: [compagnieId], references: [id])
+  vehicules Vehicule[]
+}
+
+model Vehicule {
+  id              String  @id @default(cuid())
+  flotteId        String
+  immatriculation String
+  modele          String
+  conducteur      String
+  valeurVenale    Decimal @db.Decimal(18, 2)
+  statut          String
+
+  flotte Flotte @relation(fields: [flotteId], references: [id], onDelete: Cascade)
+}
+
+// ── Sinistres ────────────────────────────────────────────────────────
+model Sinistre {
+  id          String  @id
+  clientId    String
+  branche     String
+  date        String
+  description String
+  montant     Decimal @db.Decimal(18, 2)
+  statut      String
+  priorite    String
+
+  client Client @relation(fields: [clientId], references: [id])
+}
+
+// ── Santé ────────────────────────────────────────────────────────────
+model AssureSante {
+  id          String  @id
+  nom         String
+  matricule   String
+  contratId   String
+  beneficiaires Int
+  cotisation  Decimal @db.Decimal(18, 2)
+  statut      String
+
+  contrat        Contrat          @relation(fields: [contratId], references: [id])
+  prisesEnCharge PriseEnCharge[]
+}
+
+model PriseEnCharge {
+  id           String  @id
+  assureId     String
+  prestataire  String
+  type         String
+  montant      Decimal @db.Decimal(18, 2)
+  statut       String
+  date         String
+
+  assure AssureSante @relation(fields: [assureId], references: [id])
+}
+
+// ── Finance ──────────────────────────────────────────────────────────
+model Commission {
+  id                 String  @id
+  compagnieId        String
+  periode            String
+  primeEncaissee     Decimal @db.Decimal(18, 2)
+  tauxCommission     String
+  montantCommission  Decimal @db.Decimal(18, 2)
+  statut             String
+
+  compagnie Compagnie @relation(fields: [compagnieId], references: [id])
+}
+
+model CompteBancaire {
+  id     String  @id
+  banque String
+  pays   String
+  devise String
+  solde  Decimal @db.Decimal(18, 2)
+}
+
+model FluxTresorerie {
+  id        String  @id @default(cuid())
+  date      String
+  libelle   String
+  type      String
+  montant   Decimal @db.Decimal(18, 2)
+  rapproche Boolean
+}
+
+model Impaye {
+  id          String  @id
+  clientId    String
+  contratId   String
+  montantDu   Decimal @db.Decimal(18, 2)
+  joursRetard Int
+  niveau      String
+  canal       String
+  statut      String
+
+  client  Client  @relation(fields: [clientId], references: [id])
+  contrat Contrat @relation(fields: [contratId], references: [id])
+}
+
+model JournalEntry {
+  id      String  @id @default(cuid())
+  date    String
+  num     String
+  libelle String
+  debit   Decimal @db.Decimal(18, 2)
+  credit  Decimal @db.Decimal(18, 2)
+  compte  String
+}
+
+// ── GED ──────────────────────────────────────────────────────────────
+model GedDocument {
+  id              String   @id
+  nom             String
+  type            String
+  entiteLiee      String
+  statutOcr       String
+  statutSignature String
+  tags            String[]
+  date            String
+}
