@@ -37,7 +37,7 @@ export const roles: Record<RoleId, RoleDefinition> = {
   },
   directeur_technique: {
     id: "directeur_technique", label: "Directeur Technique", family: "interne", shell: "erp",
-    allowedModules: [...dashboard, "contrats", "renouvellements", "avenants", "resiliations", "iard", "vie", "flotte", "sinistres", "sante", "comparateur", "rapports", "cotation", "prestataires", "accordPrealable", "fraude"],
+    allowedModules: [...dashboard, "contrats", "renouvellements", "avenants", "resiliations", "iard", "vie", "flotte", "sinistres", "sante", "comparateur", "rapports", "cotation"],
   },
   gestionnaire_production: {
     id: "gestionnaire_production", label: "Gestionnaire Production", family: "interne", shell: "erp",
@@ -49,7 +49,7 @@ export const roles: Record<RoleId, RoleDefinition> = {
   },
   gestionnaire_sante: {
     id: "gestionnaire_sante", label: "Gestionnaire Santé", family: "interne", shell: "erp",
-    allowedModules: [...dashboard, "sante", "clients", "ged", "prestataires", "accordPrealable", "fraude"],
+    allowedModules: [...dashboard, "sante", "clients", "ged"],
   },
   gestionnaire_vie: {
     id: "gestionnaire_vie", label: "Gestionnaire Vie", family: "interne", shell: "erp",
@@ -85,7 +85,10 @@ export const roles: Record<RoleId, RoleDefinition> = {
   },
   prestataire_sante: {
     id: "prestataire_sante", label: "Prestataire de Santé", family: "externe", shell: "provider-portal",
-    allowedModules: [...dashboard, "sante"],
+    // Le workspace "sante" interne (réseau, fraude, règlement des autres
+    // prestataires) n'est pas adapté à un prestataire externe — une vue
+    // libre-service dédiée (ses propres factures/bordereaux) reste à construire.
+    allowedModules: [...dashboard],
   },
   expert_auto: {
     id: "expert_auto", label: "Expert Automobile", family: "externe", shell: "expert-portal",

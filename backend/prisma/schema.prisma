@@ -333,6 +333,7 @@ model Prestataire {
 
   grillesTarifaires GrilleTarifaire[]
   prisesEnCharge    PriseEnCharge[]
+  bordereaux        BordereauReglement[]
 }
 
 model GrilleTarifaire {
@@ -384,10 +385,29 @@ model PriseEnCharge {
   ordrePaiement         String?
   accordPrealableId     String?
   scoreFraude           Decimal? @db.Decimal(5, 2)
+  bordereauId           String?
 
-  assure          AssureSante      @relation(fields: [assureId], references: [id])
-  prestataireRef  Prestataire?     @relation(fields: [prestataireId], references: [id])
-  accordPrealable AccordPrealable? @relation(fields: [accordPrealableId], references: [id])
+  assure          AssureSante         @relation(fields: [assureId], references: [id])
+  prestataireRef  Prestataire?        @relation(fields: [prestataireId], references: [id])
+  accordPrealable AccordPrealable?    @relation(fields: [accordPrealableId], references: [id])
+  bordereau       BordereauReglement? @relation(fields: [bordereauId], references: [id])
+}
+
+// ── Règlement des factures prestataires (bordereaux) ─────────────────
+model BordereauReglement {
+  id                String   @id
+  prestataireId     String
+  periode           String
+  nbPrisesEnCharge  Int
+  montantTotal      Decimal  @db.Decimal(18, 2)
+  montantValide     Decimal? @db.Decimal(18, 2)
+  statut            String // Reçu | En validation | Validé | Payé | Rejeté
+  dateReception     String
+  datePaiement      String?
+  referenceVirement String?
+
+  prestataire    Prestataire     @relation(fields: [prestataireId], references: [id])
+  prisesEnCharge PriseEnCharge[]
 }
 
 // ── Financier — auto-gestion santé ───────────────────────────────────

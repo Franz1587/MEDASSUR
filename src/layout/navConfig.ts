@@ -2,7 +2,6 @@ import {
   LayoutDashboard, Users, Building2, FileText, Target, ScanLine, RefreshCw, Edit,
   XCircle, Shield, Stethoscope, Activity, Truck, AlertTriangle, BookOpen, DollarSign,
   CreditCard, Wallet, Archive, Brain, BarChart3, Settings, FileSearch, Calculator,
-  ShieldCheck, ShieldAlert,
 } from "lucide-react";
 
 export type View =
@@ -11,8 +10,8 @@ export type View =
   | "resiliations" | "sinistres" | "sante" | "iard" | "vie"
   | "flotte" | "comptabilite" | "commissions" | "recouvrement"
   | "tresorerie" | "ged" | "ia" | "rapports" | "admin"
-  | "appelOffres" | "cotation" | "prestataires" | "accordPrealable"
-  | "fondsDeRoulement" | "honoraires" | "fraude";
+  | "appelOffres" | "cotation"
+  | "fondsDeRoulement" | "honoraires";
 
 export interface NavItem {
   id: View;
@@ -52,20 +51,12 @@ export const navGroups: NavGroup[] = [
     label: "Branches",
     items: [
       { id: "iard", label: "IARD", icon: Shield },
-      { id: "sante", label: "Santé", icon: Stethoscope },
+      { id: "sante", label: "Assurance Santé", icon: Stethoscope },
       { id: "vie", label: "Vie & Prévoyance", icon: Activity },
       { id: "flotte", label: "Flottes Auto", icon: Truck },
     ],
   },
   { label: "Sinistres", items: [{ id: "sinistres", label: "Gestion Sinistres", icon: AlertTriangle }] },
-  {
-    label: "Réseau & Contrôle",
-    items: [
-      { id: "prestataires", label: "Réseau de Soins", icon: Building2 },
-      { id: "accordPrealable", label: "Accords Préalables", icon: ShieldCheck },
-      { id: "fraude", label: "Contrôle & Fraude", icon: ShieldAlert },
-    ],
-  },
   {
     label: "Finance",
     items: [
@@ -99,12 +90,11 @@ export const viewLabels: Record<View, string> = {
   compagnies: "Compagnies", devis: "Devis", comparateur: "Comparateur IA",
   contrats: "Production — Contrats", renouvellements: "Renouvellements",
   avenants: "Avenants", resiliations: "Résiliations", sinistres: "Gestion Sinistres",
-  sante: "Module Santé", iard: "IARD", vie: "Vie & Prévoyance",
+  sante: "Assurance Santé", iard: "IARD", vie: "Vie & Prévoyance",
   flotte: "Flottes Auto", comptabilite: "Comptabilité SYSCOHADA",
   commissions: "Commissions", recouvrement: "Recouvrement",
   tresorerie: "Trésorerie", ged: "GED & Documents",
   ia: "Assistant IA", rapports: "Reporting & KPIs", admin: "Administration",
-  appelOffres: "Appels d'Offres", cotation: "Cotation", prestataires: "Réseau de Soins",
-  accordPrealable: "Accords Préalables", fondsDeRoulement: "Fonds de Roulement",
-  honoraires: "Honoraires de Gestion", fraude: "Contrôle & Fraude",
+  appelOffres: "Appels d'Offres", cotation: "Cotation",
+  fondsDeRoulement: "Fonds de Roulement", honoraires: "Honoraires de Gestion",
 };

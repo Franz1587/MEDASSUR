@@ -28,6 +28,7 @@ import { AccordPrealableModule } from "./accord-prealable/accord-prealable.modul
 import { FondsDeRoulementModule } from "./fonds-de-roulement/fonds-de-roulement.module";
 import { HonorairesModule } from "./honoraires/honoraires.module";
 import { FraudeModule } from "./fraude/fraude.module";
+import { ReglementPrestataireModule } from "./reglement-prestataire/reglement-prestataire.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 
 @Module({
@@ -61,6 +62,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
     FondsDeRoulementModule,
     HonorairesModule,
     FraudeModule,
+    ReglementPrestataireModule,
     NotificationsModule,
   ],
 })

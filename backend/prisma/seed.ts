@@ -183,6 +183,10 @@ const prisesEnCharge = [
   },
 ];
 
+const bordereauxReglement = [
+  { id: "BDX-2024-001", prestataireNom: "Hôpital Général Yaoundé", periode: "Octobre 2024", nbPrisesEnCharge: 1, montantTotal: 3_800_000, montantValide: 3_800_000, statut: "Payé", dateReception: "11/10/2024", datePaiement: "18/10/2024", referenceVirement: "VIR-2024-5521", priseEnChargeIds: ["PC-2024-0234"] },
+];
+
 const commissions = [
   { id: "COM-2024-1001", compagnieNom: "ACTIVA Assurances", periode: "Octobre 2024", primeEncaissee: 68_400_000, tauxCommission: "12%", montantCommission: 8_208_000, statut: "Reversé" },
   { id: "COM-2024-1002", compagnieNom: "AXA Côte d'Ivoire", periode: "Octobre 2024", primeEncaissee: 63_700_000, tauxCommission: "11%", montantCommission: 7_007_000, statut: "En attente" },
@@ -370,6 +374,9 @@ const gedDocuments = [
   { id: "DOC-2024-1203", nom: "Facture_expertise_SIN-0448.pdf", type: "Facture", entiteLiee: "SIN-2024-0448", statutOcr: "Analysé", statutSignature: "N/A", tags: ["Sinistre", "Expertise"], date: "09/10/2024" },
   { id: "DOC-2024-1204", nom: "Scan_permis_conduire_Diallo.jpg", type: "Pièce d'identité", entiteLiee: "Marie-Claire Diallo", statutOcr: "En cours", statutSignature: "N/A", tags: ["KYC"], date: "02/11/2024" },
   { id: "DOC-2024-1205", nom: "Avenant_AVN-2024-073.pdf", type: "Avenant", entiteLiee: "MTN Cameroun", statutOcr: "Analysé", statutSignature: "En attente", tags: ["Santé Collective"], date: "01/11/2024" },
+  { id: "DOC-2024-1206", nom: "Facture_HGY_8821.pdf", type: "Facture prestataire", entiteLiee: "Hôpital Général Yaoundé", statutOcr: "Analysé", statutSignature: "N/A", tags: ["Santé", "Prestataire"], date: "10/10/2024" },
+  { id: "DOC-2024-1207", nom: "Bordereau_reglement_HGY_202410.pdf", type: "Bordereau", entiteLiee: "Hôpital Général Yaoundé", statutOcr: "Analysé", statutSignature: "N/A", tags: ["Santé", "Règlement"], date: "12/10/2024" },
+  { id: "DOC-2024-1208", nom: "Carte_assure_ASS-001.pdf", type: "Carte assuré", entiteLiee: "Paul Nguesso", statutOcr: "Analysé", statutSignature: "N/A", tags: ["Santé", "Affiliation"], date: "01/01/2024" },
 ];
 
 async function main() {
@@ -382,6 +389,7 @@ async function main() {
   await prisma.honorairesGestion.deleteMany();
   await prisma.fondsDeRoulement.deleteMany();
   await prisma.priseEnCharge.deleteMany();
+  await prisma.bordereauReglement.deleteMany();
   await prisma.accordPrealable.deleteMany();
   await prisma.ayantDroit.deleteMany();
   await prisma.assureSante.deleteMany();
@@ -486,6 +494,19 @@ async function main() {
     });
   }
 
+  for (const b of bordereauxReglement) {
+    await prisma.bordereauReglement.create({
+      data: {
+        id: b.id, prestataireId: prestataireIdByNom.get(b.prestataireNom)!, periode: b.periode,
+        nbPrisesEnCharge: b.nbPrisesEnCharge, montantTotal: b.montantTotal, montantValide: b.montantValide,
+        statut: b.statut, dateReception: b.dateReception, datePaiement: b.datePaiement, referenceVirement: b.referenceVirement,
+      },
+    });
+  }
+  const bordereauIdByPriseEnCharge = new Map(
+    bordereauxReglement.flatMap((b) => b.priseEnChargeIds.map((pcId) => [pcId, b.id])),
+  );
+
   await prisma.priseEnCharge.createMany({
     data: prisesEnCharge.map((pc) => ({
       id: pc.id, prestataire: pc.prestataireNom, type: pc.type, montant: pc.montant, statut: pc.statut, date: pc.date,
@@ -494,7 +515,7 @@ async function main() {
       statutControleMedical: pc.statutControleMedical, baseRemboursement: pc.baseRemboursement,
       tauxRemboursement: pc.tauxRemboursement, franchise: pc.franchise, plafondApplique: pc.plafondApplique,
       resteACharge: pc.resteACharge, ordrePaiement: pc.ordrePaiement, accordPrealableId: pc.accordPrealableId,
-      scoreFraude: pc.scoreFraude,
+      scoreFraude: pc.scoreFraude, bordereauId: bordereauIdByPriseEnCharge.get(pc.id),
     })),
   });
 

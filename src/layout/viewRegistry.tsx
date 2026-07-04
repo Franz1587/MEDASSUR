@@ -25,11 +25,8 @@ import CrmView from "@/features/crm";
 import GedView from "@/features/ged";
 import AppelOffresView from "@/features/appel-offres";
 import CotationView from "@/features/cotation";
-import PrestatairesView from "@/features/prestataires";
-import AccordPrealableView from "@/features/accord-prealable";
 import FondsDeRoulementView from "@/features/fonds-de-roulement";
 import HonorairesView from "@/features/honoraires";
-import FraudeView from "@/features/fraude";
 
 export const viewRegistry: Record<View, React.ComponentType> = {
   dashboard: RoleDashboard,
@@ -49,9 +46,6 @@ export const viewRegistry: Record<View, React.ComponentType> = {
   iard: IardView,
   vie: VieView,
   flotte: FlotteView,
-  prestataires: PrestatairesView,
-  accordPrealable: AccordPrealableView,
-  fraude: FraudeView,
   comptabilite: ComptabiliteView,
   commissions: CommissionsView,
   recouvrement: RecouvrementView,
