@@ -1,12 +1,7 @@
 import { useState } from "react";
-import {
-  Target, FileText, RefreshCw, Edit, XCircle, Shield, Activity, Truck,
-  DollarSign, CreditCard, Wallet, Archive,
-} from "lucide-react";
 import { Sidebar } from "@/layout/Sidebar";
 import { TopBar } from "@/layout/TopBar";
 import type { View } from "@/layout/navConfig";
-import { PlaceholderView } from "@/components/shared/PlaceholderView";
 
 import DashboardView from "@/features/dashboard";
 import ClientsView from "@/features/clients";
@@ -19,31 +14,43 @@ import ComptabiliteView from "@/features/comptabilite";
 import IAView from "@/features/ia";
 import RapportsView from "@/features/rapports";
 import AdminView from "@/features/admin";
+import RenouvellementsView from "@/features/renouvellements";
+import AvenantsView from "@/features/avenants";
+import ResiliationsView from "@/features/resiliations";
+import CommissionsView from "@/features/commissions";
+import TresorerieView from "@/features/tresorerie";
+import RecouvrementView from "@/features/recouvrement";
+import DevisView from "@/features/devis";
+import IardView from "@/features/iard";
+import VieView from "@/features/vie";
+import FlotteView from "@/features/flotte";
+import CrmView from "@/features/crm";
+import GedView from "@/features/ged";
 
 const viewRegistry: Record<View, React.ComponentType> = {
   dashboard: DashboardView,
+  crm: CrmView,
   clients: ClientsView,
   compagnies: CompagniesView,
-  contrats: ContratsView,
+  devis: DevisView,
   comparateur: ComparateurView,
+  contrats: ContratsView,
+  renouvellements: RenouvellementsView,
+  avenants: AvenantsView,
+  resiliations: ResiliationsView,
   sinistres: SinistresView,
   sante: SanteView,
+  iard: IardView,
+  vie: VieView,
+  flotte: FlotteView,
   comptabilite: ComptabiliteView,
+  commissions: CommissionsView,
+  recouvrement: RecouvrementView,
+  tresorerie: TresorerieView,
+  ged: GedView,
   ia: IAView,
   rapports: RapportsView,
   admin: AdminView,
-  crm: () => <PlaceholderView title="CRM & Prospection" icon={Target} desc="Pipeline commercial, scoring prospects, relances automatiques et suivi des opportunités en temps réel." />,
-  devis: () => <PlaceholderView title="Module Devis" icon={FileText} desc="Création de devis multi-compagnies, simulation tarifaire et envoi électronique sécurisé." />,
-  renouvellements: () => <PlaceholderView title="Renouvellements" icon={RefreshCw} desc="Gestion proactive des renouvellements avec alertes automatiques et suivi du taux de fidélisation." />,
-  avenants: () => <PlaceholderView title="Avenants" icon={Edit} desc="Modification des contrats en vigueur, traçabilité des avenants et génération automatique des documents." />,
-  resiliations: () => <PlaceholderView title="Résiliations" icon={XCircle} desc="Traitement des demandes de résiliation, calcul des ristournes et archivage CIMA." />,
-  iard: () => <PlaceholderView title="IARD — Incendie Accidents Risques Divers" icon={Shield} desc="Gestion des polices IARD: habitation, RC, multirisques entreprises, risques industriels et agricoles." />,
-  vie: () => <PlaceholderView title="Vie & Prévoyance" icon={Activity} desc="Contrats vie entière, épargne retraite, prévoyance collective et décès invalidité pour entreprises." />,
-  flotte: () => <PlaceholderView title="Flottes Automobiles" icon={Truck} desc="Gestion des flottes de véhicules, suivi individuel par immatriculation, sinistres et renouvellements groupés." />,
-  commissions: () => <PlaceholderView title="Commissions" icon={DollarSign} desc="Suivi des commissions par compagnie et commercial, rapprochement automatique et états de compte." />,
-  recouvrement: () => <PlaceholderView title="Recouvrement" icon={CreditCard} desc="Gestion des impayés, relances automatisées multi-canaux, échéanciers et intégration Mobile Money." />,
-  tresorerie: () => <PlaceholderView title="Trésorerie" icon={Wallet} desc="Suivi des flux, rapprochement bancaire automatique, prévisions et intégration API bancaires CIMA." />,
-  ged: () => <PlaceholderView title="GED & Documents" icon={Archive} desc="Gestion électronique des documents avec OCR, signature électronique qualifiée et archivage légal." />,
 };
 
 export default function App() {

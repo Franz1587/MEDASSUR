@@ -27,3 +27,13 @@ export async function chatAssistant(_message: string): Promise<string> {
   await sleep(700);
   return iaDefaultResponse;
 }
+
+/**
+ * Simulated OCR classification for the GED module: extracts a document
+ * type and suggested tags. Kept mocked per product decision; swap this
+ * body for a real OCR call later without touching callers.
+ */
+export async function classifyDocument(_file?: File): Promise<{ type: string; tags: string[] }> {
+  await sleep(1500);
+  return { type: "Contrat", tags: ["Auto-classé", "IARD"] };
+}
