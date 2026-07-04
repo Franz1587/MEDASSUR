@@ -1,6 +1,28 @@
-import { ChevronRight, Search, Bell } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useTheme } from "next-themes";
+import { ChevronRight, Search, Bell, Sun, Moon } from "lucide-react";
 import { Badge } from "@/components/shared/Badge";
 import { viewLabels, type View } from "@/layout/navConfig";
+
+function ThemeToggle() {
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted) return <div className="w-8 h-8" />;
+
+  const isDark = resolvedTheme === "dark";
+  return (
+    <button
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      title={isDark ? "Passer en mode clair" : "Passer en mode sombre"}
+      className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+    >
+      {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+    </button>
+  );
+}
 
 export function TopBar({ current }: { current: View }) {
   return (
@@ -22,6 +44,7 @@ export function TopBar({ current }: { current: View }) {
           <Bell className="w-4 h-4" />
           <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full" />
         </button>
+        <ThemeToggle />
         <div className="flex items-center gap-2 text-xs text-muted-foreground border-l border-border pl-3">
           <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
           <span>Exercice 2024</span>
