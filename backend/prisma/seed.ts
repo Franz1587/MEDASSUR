@@ -117,16 +117,70 @@ const sinistres = [
 ];
 
 const assures = [
-  { id: "ASS-001", nom: "Paul Nguesso", matricule: "MTN-CM-00234", contratId: "CTR-2024-005", beneficiaires: 4, cotisation: 185_000, statut: "Actif" },
-  { id: "ASS-002", nom: "Yvette Koffi", matricule: "MTN-CM-00235", contratId: "CTR-2024-005", beneficiaires: 3, cotisation: 142_000, statut: "Actif" },
-  { id: "ASS-003", nom: "Bernard Atangana", matricule: "MTN-CM-00236", contratId: "CTR-2024-005", beneficiaires: 2, cotisation: 98_000, statut: "Suspendu" },
-  { id: "ASS-004", nom: "Ibrahim Diallo", matricule: "MTN-CM-00237", contratId: "CTR-2024-005", beneficiaires: 1, cotisation: 76_000, statut: "Actif" },
+  {
+    id: "ASS-001", nom: "Paul Nguesso", matricule: "MTN-CM-00234", contratId: "CTR-2024-005", beneficiaires: 4, cotisation: 185_000, statut: "Actif",
+    dateNaissance: "12/04/1982", statutMatrimonial: "Marié", numeroAssure: "CIS-SAN-000234", qrCode: "QR-CIS-000234", statutCarte: "Active", dateAffiliation: "01/04/2024",
+    ayantsDroit: [
+      { nom: "Chantal Nguesso", lienParente: "Conjointe", dateNaissance: "20/08/1985", statut: "Actif" },
+      { nom: "Paul Nguesso Jr.", lienParente: "Enfant", dateNaissance: "14/02/2012", statut: "Actif" },
+      { nom: "Sarah Nguesso", lienParente: "Enfant", dateNaissance: "03/06/2015", statut: "Actif" },
+    ],
+  },
+  {
+    id: "ASS-002", nom: "Yvette Koffi", matricule: "MTN-CM-00235", contratId: "CTR-2024-005", beneficiaires: 3, cotisation: 142_000, statut: "Actif",
+    dateNaissance: "05/11/1990", statutMatrimonial: "Célibataire", numeroAssure: "CIS-SAN-000235", qrCode: "QR-CIS-000235", statutCarte: "Active", dateAffiliation: "01/04/2024",
+    ayantsDroit: [
+      { nom: "Grace Koffi", lienParente: "Enfant", dateNaissance: "22/09/2018", statut: "Actif" },
+    ],
+  },
+  {
+    id: "ASS-003", nom: "Bernard Atangana", matricule: "MTN-CM-00236", contratId: "CTR-2024-005", beneficiaires: 2, cotisation: 98_000, statut: "Suspendu",
+    dateNaissance: "30/01/1978", statutMatrimonial: "Marié", numeroAssure: "CIS-SAN-000236", qrCode: "QR-CIS-000236", statutCarte: "Bloquée", dateAffiliation: "01/04/2024",
+    ayantsDroit: [],
+  },
+  {
+    id: "ASS-004", nom: "Ibrahim Diallo", matricule: "MTN-CM-00237", contratId: "CTR-2024-005", beneficiaires: 1, cotisation: 76_000, statut: "Actif",
+    dateNaissance: "17/07/1995", statutMatrimonial: "Célibataire", numeroAssure: "CIS-SAN-000237", qrCode: "QR-CIS-000237", statutCarte: "Active", dateAffiliation: "01/04/2024",
+    ayantsDroit: [],
+  },
+];
+
+const prestataires = [
+  { id: "PRS-001", nom: "Hôpital Général Yaoundé", type: "Hôpital", pays: "Cameroun", ville: "Yaoundé", statutConvention: "Conventionné", dateConventionnement: "01/01/2022", delaiPaiementMoyen: 21, scoreQualite: 87,
+    grilles: [{ acte: "Hospitalisation — journée", plafond: 250_000 }, { acte: "Chirurgie — acte majeur", plafond: 4_500_000 }] },
+  { id: "PRS-002", nom: "Clinique des Eaux-Claires", type: "Clinique", pays: "Côte d'Ivoire", ville: "Abidjan", statutConvention: "Conventionné", dateConventionnement: "15/03/2022", delaiPaiementMoyen: 14, scoreQualite: 91,
+    grilles: [{ acte: "Consultation généraliste", plafond: 15_000 }, { acte: "Consultation spécialiste", plafond: 30_000 }] },
+  { id: "PRS-003", nom: "Pharmacie Centrale Dakar", type: "Pharmacie", pays: "Sénégal", ville: "Dakar", statutConvention: "Conventionné", dateConventionnement: "01/06/2023", delaiPaiementMoyen: 7, scoreQualite: 82,
+    grilles: [{ acte: "Médicaments génériques", plafond: 50_000 }] },
+  { id: "PRS-004", nom: "Laboratoire BIOMED", type: "Laboratoire", pays: "Cameroun", ville: "Douala", statutConvention: "En négociation", dateConventionnement: null, delaiPaiementMoyen: null, scoreQualite: null,
+    grilles: [{ acte: "Bilan sanguin complet", plafond: 35_000 }] },
+  { id: "PRS-005", nom: "Cabinet Dentaire Excellence", type: "Cabinet", pays: "Côte d'Ivoire", ville: "Abidjan", statutConvention: "Suspendu", dateConventionnement: "01/01/2021", delaiPaiementMoyen: 45, scoreQualite: 38,
+    grilles: [{ acte: "Soins dentaires", plafond: 60_000 }] },
+];
+
+const accordsPrealables = [
+  { id: "ACP-2024-011", assureNom: "Paul Nguesso", type: "Hospitalisation", description: "Hospitalisation programmée — appendicectomie", dateDemande: "08/10/2024", statutAnalyseMedicale: "Validée", statutValidationFinanciere: "Validée", decision: "Accordé", montantAutorise: 3_800_000, dateDecision: "09/10/2024" },
 ];
 
 const prisesEnCharge = [
-  { id: "PC-2024-0234", assureNom: "Paul Nguesso", prestataire: "Hôpital Général Yaoundé", type: "Hospitalisation", montant: 3_800_000, statut: "Accordé", date: "10/10/2024" },
-  { id: "PC-2024-0233", assureNom: "Yvette Koffi", prestataire: "Clinique des Eaux-Claires", type: "Consultation", montant: 45_000, statut: "Remboursé", date: "08/10/2024" },
-  { id: "PC-2024-0232", assureNom: "Ibrahim Diallo", prestataire: "Pharmacie Centrale Dakar", type: "Pharmacie", montant: 78_000, statut: "Accordé", date: "07/10/2024" },
+  {
+    id: "PC-2024-0234", assureNom: "Paul Nguesso", prestataireNom: "Hôpital Général Yaoundé", type: "Hospitalisation", montant: 3_800_000, statut: "Accordé", date: "10/10/2024",
+    modePaiement: "TiersPayant", prescriptionRef: "PRESC-2024-5501", factureRef: "FACT-HGY-8821", statutControleMedical: "Validé",
+    baseRemboursement: 3_800_000, tauxRemboursement: 100, franchise: 0, plafondApplique: 4_500_000, resteACharge: 0, ordrePaiement: "OP-2024-3301",
+    accordPrealableId: "ACP-2024-011", scoreFraude: 8,
+  },
+  {
+    id: "PC-2024-0233", assureNom: "Yvette Koffi", prestataireNom: "Clinique des Eaux-Claires", type: "Consultation", montant: 45_000, statut: "Remboursé", date: "08/10/2024",
+    modePaiement: "Remboursement", prescriptionRef: "PRESC-2024-5498", factureRef: "FACT-CEC-1187", statutControleMedical: "Validé",
+    baseRemboursement: 36_000, tauxRemboursement: 80, franchise: 0, plafondApplique: 30_000, resteACharge: 9_000, ordrePaiement: "OP-2024-3298",
+    accordPrealableId: null, scoreFraude: 4,
+  },
+  {
+    id: "PC-2024-0232", assureNom: "Ibrahim Diallo", prestataireNom: "Pharmacie Centrale Dakar", type: "Pharmacie", montant: 78_000, statut: "Accordé", date: "07/10/2024",
+    modePaiement: "TiersPayant", prescriptionRef: "PRESC-2024-5490", factureRef: "FACT-PCD-2231", statutControleMedical: "En cours",
+    baseRemboursement: 54_600, tauxRemboursement: 70, franchise: 0, plafondApplique: 50_000, resteACharge: 27_600, ordrePaiement: null,
+    accordPrealableId: null, scoreFraude: 62,
+  },
 ];
 
 const commissions = [
@@ -164,12 +218,50 @@ const impayes = [
 ];
 
 const prospects = [
-  { id: "PRO-2024-401", nom: "Total Energies Gabon", type: "Entreprise", source: "Salon Assurance Libreville", etape: "Nouveau", valeurEstimee: 65_000_000, commercial: "Cécile Koné", dernierContact: "02/11/2024" },
-  { id: "PRO-2024-402", nom: "Ibrahim Diallo", type: "Particulier", source: "Recommandation", etape: "Qualifié", valeurEstimee: 950_000, commercial: "Cécile Koné", dernierContact: "30/10/2024" },
-  { id: "PRO-2024-403", nom: "Bolloré Transport & Logistics", type: "Entreprise", source: "Site web", etape: "Proposition envoyée", valeurEstimee: 38_000_000, commercial: "Nadège Fotso", dernierContact: "28/10/2024" },
-  { id: "PRO-2024-404", nom: "Clinique La Providence", type: "Entreprise", source: "Appel entrant", etape: "Négociation", valeurEstimee: 22_500_000, commercial: "Nadège Fotso", dernierContact: "25/10/2024" },
-  { id: "PRO-2024-395", nom: "Ecobank Sénégal", type: "Entreprise", source: "Partenariat courtier", etape: "Gagné", valeurEstimee: 54_000_000, commercial: "Cécile Koné", dernierContact: "18/10/2024" },
-  { id: "PRO-2024-390", nom: "Aminata Cissé", type: "Particulier", source: "Réseaux sociaux", etape: "Perdu", valeurEstimee: 620_000, commercial: "Nadège Fotso", dernierContact: "10/10/2024" },
+  { id: "PRO-2024-401", nom: "Total Energies Gabon", type: "Entreprise", source: "Salon Assurance Libreville", etape: "Nouveau", valeurEstimee: 65_000_000, commercial: "Cécile Koné", dernierContact: "02/11/2024", effectifEstime: 420, budget: 70_000_000, historiqueAssurance: "Assureur en place: SANLAM (contrat expirant en 03/2025)", zoneGeographique: "Gabon — Port-Gentil", scoring: "Fort" },
+  { id: "PRO-2024-402", nom: "Ibrahim Diallo", type: "Particulier", source: "Recommandation", etape: "Qualifié", valeurEstimee: 950_000, commercial: "Cécile Koné", dernierContact: "30/10/2024", effectifEstime: 1, budget: 1_000_000, historiqueAssurance: "Aucune couverture santé actuelle", zoneGeographique: "Sénégal — Dakar", scoring: "Moyen" },
+  { id: "PRO-2024-403", nom: "Bolloré Transport & Logistics", type: "Entreprise", source: "Site web", etape: "Proposition envoyée", valeurEstimee: 38_000_000, commercial: "Nadège Fotso", dernierContact: "28/10/2024", effectifEstime: 210, budget: 42_000_000, historiqueAssurance: "Historique sinistres transport élevé (2 sinistres majeurs en 2023)", zoneGeographique: "Côte d'Ivoire — Abidjan", scoring: "Fort" },
+  { id: "PRO-2024-404", nom: "Clinique La Providence", type: "Entreprise", source: "Appel entrant", etape: "Négociation", valeurEstimee: 22_500_000, commercial: "Nadège Fotso", dernierContact: "25/10/2024", effectifEstime: 85, budget: 25_000_000, historiqueAssurance: "Auto-assurance partielle actuellement", zoneGeographique: "Côte d'Ivoire — Yamoussoukro", scoring: "Moyen" },
+  { id: "PRO-2024-395", nom: "Ecobank Sénégal", type: "Entreprise", source: "Partenariat courtier", etape: "Gagné", valeurEstimee: 54_000_000, commercial: "Cécile Koné", dernierContact: "18/10/2024", effectifEstime: 340, budget: 55_000_000, historiqueAssurance: "Portefeuille repris d'un courtier concurrent", zoneGeographique: "Sénégal — Dakar", scoring: "Fort" },
+  { id: "PRO-2024-390", nom: "Aminata Cissé", type: "Particulier", source: "Réseaux sociaux", etape: "Perdu", valeurEstimee: 620_000, commercial: "Nadège Fotso", dernierContact: "10/10/2024", effectifEstime: 1, budget: 500_000, historiqueAssurance: "Budget insuffisant pour le niveau de garanties souhaité", zoneGeographique: "Côte d'Ivoire — Bouaké", scoring: "Faible" },
+];
+
+const appelsOffres = [
+  {
+    id: "AO-2024-071", prospectId: "PRO-2024-401", clientNom: "Total Energies Gabon",
+    cahierCharges: "Couverture santé collective 420 salariés + ayants droit, hospitalisation, EVASAN zone CEMAC",
+    garantiesDemandees: "Hospitalisation 100%, Consultation 80%, Pharmacie 70%, EVASAN illimité",
+    historiqueSinistres: "S/P moyen 58% sur les 3 dernières années chez l'assureur sortant",
+    projectionSP: 60, estimationPepm: 42_500, estimationFondsRoulement: 180_000_000, statut: "En cours", dateCreation: "05/10/2024",
+    propositions: [
+      { niveau: "Essentiel", primeProposee: 58_000_000, descriptionGaranties: "Hospitalisation 80%, Consultation 60%, Pharmacie 50%", statut: "Envoyée" },
+      { niveau: "Confort", primeProposee: 70_000_000, descriptionGaranties: "Hospitalisation 100%, Consultation 80%, Pharmacie 70%", statut: "Envoyée" },
+      { niveau: "Premium", primeProposee: 85_000_000, descriptionGaranties: "Hospitalisation 100%, Consultation 100%, Pharmacie 90%, EVASAN illimité", statut: "Envoyée" },
+    ],
+  },
+  {
+    id: "AO-2024-068", prospectId: "PRO-2024-403", clientNom: "Bolloré Transport & Logistics",
+    cahierCharges: "Flotte 60 véhicules + RC transport marchandises, zone CIMA",
+    garantiesDemandees: "Dommages tous accidents, RC transporteur, marchandises transportées",
+    historiqueSinistres: "2 sinistres majeurs en 2023 (incendie entrepôt, collision poids lourd)",
+    projectionSP: 45, estimationPepm: 0, estimationFondsRoulement: 0, statut: "Proposition envoyée", dateCreation: "20/09/2024",
+    propositions: [
+      { niveau: "Essentiel", primeProposee: 32_000_000, descriptionGaranties: "RC transporteur + dommages tous accidents", statut: "Envoyée" },
+      { niveau: "Confort", primeProposee: 38_000_000, descriptionGaranties: "+ marchandises transportées, plafond 500M XAF", statut: "Envoyée" },
+      { niveau: "Premium", primeProposee: 46_000_000, descriptionGaranties: "+ assistance dépannage, véhicule de remplacement", statut: "Brouillon" },
+    ],
+  },
+];
+
+const cotations = [
+  {
+    id: "COT-2024-141", clientNom: "Total Energies Gabon", agePopulationMoyen: 34.5, sexeRatio: "58H/42F", historiqueSinistres: 58, niveauGaranties: "Confort", territorialite: "Zone CEMAC", stopLoss: 25_000_000,
+    primePure: 52_000_000, chargements: 12_500_000, marge: 5_500_000, commission: 7_000_000, pepm: 42_500, tarifFinal: 70_000_000, dateCreation: "05/10/2024",
+  },
+  {
+    id: "COT-2024-140", clientNom: "Clinique La Providence", agePopulationMoyen: 31.2, sexeRatio: "45H/55F", historiqueSinistres: 40, niveauGaranties: "Essentiel", territorialite: "Côte d'Ivoire", stopLoss: 8_000_000,
+    primePure: 17_200_000, chargements: 4_100_000, marge: 1_200_000, commission: 2_250_000, pepm: 22_050, tarifFinal: 22_500_000, dateCreation: "18/10/2024",
+  },
 ];
 
 const policesIard = [
@@ -244,6 +336,34 @@ const journalEntries = [
   { date: "28/10/2024", num: "JNL-001241", libelle: "Primes encaissées — MTN Cameroun", debit: 0, credit: 98_000_000, compte: "701000" },
 ];
 
+const fondsDeRoulement = [
+  { contratId: "CTR-2024-005", montantInitial: 20_000_000, montantConsomme: 14_200_000, seuilAlerte: 4_000_000, statut: "Normal", dateAlimentation: "01/04/2024" },
+  { contratId: "CTR-2024-004", montantInitial: 8_000_000, montantConsomme: 7_100_000, seuilAlerte: 1_500_000, statut: "Alerte", dateAlimentation: "01/01/2024" },
+];
+
+const honorairesGestion = [
+  { contratId: "CTR-2024-005", periode: "Octobre 2024", montantSinistres: 12_400_000, tauxHonoraires: 8, montantHonoraires: 992_000, plafond: 1_500_000, statut: "Facturé" },
+  { contratId: "CTR-2024-004", periode: "Octobre 2024", montantSinistres: 3_800_000, tauxHonoraires: 10, montantHonoraires: 380_000, plafond: 600_000, statut: "En attente" },
+];
+
+const scoringFraude = [
+  { cible: "Assuré", cibleId: "ASS-004", cibleNom: "Ibrahim Diallo", score: 62, motifs: "Fréquence de consultation pharmacie anormalement élevée sur 30 jours", dateEvaluation: "07/10/2024" },
+  { cible: "Prestataire", cibleId: "PRS-005", cibleNom: "Cabinet Dentaire Excellence", score: 78, motifs: "Surtarification récurrente + non-respect des délais de facturation", dateEvaluation: "15/09/2024" },
+];
+
+const auditLogs = [
+  { entite: "PriseEnCharge", entiteId: "PC-2024-0234", action: "Validé", utilisateur: "Grace Etoundi", details: "Accord préalable ACP-2024-011 validé, prise en charge liquidée à 100%" },
+  { entite: "AccordPrealable", entiteId: "ACP-2024-011", action: "Validé", utilisateur: "Grace Etoundi", details: "Analyse médicale et validation financière conformes" },
+  { entite: "AssureSante", entiteId: "ASS-003", action: "Modifié", utilisateur: "Grace Etoundi", details: "Carte bloquée suite à suspension du contrat" },
+  { entite: "Prestataire", entiteId: "PRS-005", action: "Modifié", utilisateur: "Solange Abiodun", details: "Suspension pour surtarification récurrente" },
+];
+
+const notifications = [
+  { destinataireType: "Gestionnaire", destinataireId: "GE", message: "Fonds de roulement CTR-2024-004 sous le seuil d'alerte (1.5M XAF restants)", statut: "Envoyée" },
+  { destinataireType: "Prestataire", destinataireId: "PRS-003", message: "Prise en charge PC-2024-0232 en cours de contrôle médical", statut: "Envoyée" },
+  { destinataireType: "Client", destinataireId: "ASS-002", message: "Votre remboursement de 36 000 XAF a été traité", statut: "Lue" },
+];
+
 const gedDocuments = [
   { id: "DOC-2024-1201", nom: "CTR-2024-001_ACTIVA.pdf", type: "Contrat", entiteLiee: "SABC SA", statutOcr: "Analysé", statutSignature: "Signé", tags: ["Flotte Auto", "ACTIVA"], date: "01/01/2024" },
   { id: "DOC-2024-1202", nom: "Attestation_assurance_CFAO.pdf", type: "Attestation", entiteLiee: "Groupe CFAO", statutOcr: "Analysé", statutSignature: "N/A", tags: ["IARD"], date: "03/03/2024" },
@@ -256,8 +376,17 @@ async function main() {
   console.log("Seeding CourtEVA+ database…");
 
   // Wipe in FK-safe order for idempotent re-runs.
+  await prisma.notification.deleteMany();
+  await prisma.auditLog.deleteMany();
+  await prisma.scoringFraude.deleteMany();
+  await prisma.honorairesGestion.deleteMany();
+  await prisma.fondsDeRoulement.deleteMany();
   await prisma.priseEnCharge.deleteMany();
+  await prisma.accordPrealable.deleteMany();
+  await prisma.ayantDroit.deleteMany();
   await prisma.assureSante.deleteMany();
+  await prisma.grilleTarifaire.deleteMany();
+  await prisma.prestataire.deleteMany();
   await prisma.vehicule.deleteMany();
   await prisma.flotte.deleteMany();
   await prisma.beneficiaire.deleteMany();
@@ -270,6 +399,9 @@ async function main() {
   await prisma.devisOffre.deleteMany();
   await prisma.devis.deleteMany();
   await prisma.sinistre.deleteMany();
+  await prisma.cotation.deleteMany();
+  await prisma.propositionCommerciale.deleteMany();
+  await prisma.appelOffres.deleteMany();
   await prisma.contrat.deleteMany();
   await prisma.commission.deleteMany();
   await prisma.compteBancaire.deleteMany();
@@ -320,12 +452,49 @@ async function main() {
     })),
   });
 
-  await prisma.assureSante.createMany({ data: assures });
+  for (const p of prestataires) {
+    await prisma.prestataire.create({
+      data: {
+        id: p.id, nom: p.nom, type: p.type, pays: p.pays, ville: p.ville, statutConvention: p.statutConvention,
+        dateConventionnement: p.dateConventionnement, delaiPaiementMoyen: p.delaiPaiementMoyen, scoreQualite: p.scoreQualite,
+        grillesTarifaires: { create: p.grilles },
+      },
+    });
+  }
+  const prestataireIdByNom = new Map(prestataires.map((p) => [p.nom, p.id]));
+
+  for (const a of assures) {
+    await prisma.assureSante.create({
+      data: {
+        id: a.id, nom: a.nom, matricule: a.matricule, contratId: a.contratId, beneficiaires: a.beneficiaires,
+        cotisation: a.cotisation, statut: a.statut, dateNaissance: a.dateNaissance, statutMatrimonial: a.statutMatrimonial,
+        numeroAssure: a.numeroAssure, qrCode: a.qrCode, statutCarte: a.statutCarte, dateAffiliation: a.dateAffiliation,
+        ayantsDroit: { create: a.ayantsDroit },
+      },
+    });
+  }
   const assureIdByNom = new Map(assures.map((a) => [a.nom, a.id]));
+
+  for (const acp of accordsPrealables) {
+    await prisma.accordPrealable.create({
+      data: {
+        id: acp.id, assureId: assureIdByNom.get(acp.assureNom)!, type: acp.type, description: acp.description,
+        dateDemande: acp.dateDemande, statutAnalyseMedicale: acp.statutAnalyseMedicale,
+        statutValidationFinanciere: acp.statutValidationFinanciere, decision: acp.decision,
+        montantAutorise: acp.montantAutorise, dateDecision: acp.dateDecision,
+      },
+    });
+  }
+
   await prisma.priseEnCharge.createMany({
     data: prisesEnCharge.map((pc) => ({
-      id: pc.id, prestataire: pc.prestataire, type: pc.type, montant: pc.montant, statut: pc.statut, date: pc.date,
-      assureId: assureIdByNom.get(pc.assureNom)!,
+      id: pc.id, prestataire: pc.prestataireNom, type: pc.type, montant: pc.montant, statut: pc.statut, date: pc.date,
+      assureId: assureIdByNom.get(pc.assureNom)!, prestataireId: prestataireIdByNom.get(pc.prestataireNom),
+      modePaiement: pc.modePaiement, prescriptionRef: pc.prescriptionRef, factureRef: pc.factureRef,
+      statutControleMedical: pc.statutControleMedical, baseRemboursement: pc.baseRemboursement,
+      tauxRemboursement: pc.tauxRemboursement, franchise: pc.franchise, plafondApplique: pc.plafondApplique,
+      resteACharge: pc.resteACharge, ordrePaiement: pc.ordrePaiement, accordPrealableId: pc.accordPrealableId,
+      scoreFraude: pc.scoreFraude,
     })),
   });
 
@@ -347,6 +516,20 @@ async function main() {
   });
 
   await prisma.prospect.createMany({ data: prospects });
+
+  for (const ao of appelsOffres) {
+    await prisma.appelOffres.create({
+      data: {
+        id: ao.id, prospectId: ao.prospectId, clientNom: ao.clientNom, cahierCharges: ao.cahierCharges,
+        garantiesDemandees: ao.garantiesDemandees, historiqueSinistres: ao.historiqueSinistres,
+        projectionSP: ao.projectionSP, estimationPepm: ao.estimationPepm, estimationFondsRoulement: ao.estimationFondsRoulement,
+        statut: ao.statut, dateCreation: ao.dateCreation,
+        propositions: { create: ao.propositions },
+      },
+    });
+  }
+
+  await prisma.cotation.createMany({ data: cotations });
 
   await prisma.policeIard.createMany({
     data: policesIard.map((p) => ({
@@ -378,7 +561,13 @@ async function main() {
   await prisma.journalEntry.createMany({ data: journalEntries });
   await prisma.gedDocument.createMany({ data: gedDocuments });
 
-  console.log(`Seed complete: ${mockUsers.length} users (password: ${DEMO_PASSWORD}), ${clients.length} clients, ${compagnies.length} compagnies, ${contrats.length} contrats, and all secondary domains.`);
+  await prisma.fondsDeRoulement.createMany({ data: fondsDeRoulement });
+  await prisma.honorairesGestion.createMany({ data: honorairesGestion });
+  await prisma.scoringFraude.createMany({ data: scoringFraude });
+  await prisma.auditLog.createMany({ data: auditLogs });
+  await prisma.notification.createMany({ data: notifications });
+
+  console.log(`Seed complete: ${mockUsers.length} users (password: ${DEMO_PASSWORD}), ${clients.length} clients, ${compagnies.length} compagnies, ${contrats.length} contrats, and all secondary domains (health insurance operating model: ${appelsOffres.length} appels d'offres, ${prestataires.length} prestataires, ${accordsPrealables.length} accords préalables).`);
 }
 
 main()

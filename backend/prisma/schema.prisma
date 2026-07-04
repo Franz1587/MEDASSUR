@@ -33,71 +33,128 @@ model Client {
   statut    String
   createdAt DateTime @default(now())
 
-  contrats      Contrat[]
-  devis         Devis[]
-  sinistres     Sinistre[]
-  impayes       Impaye[]
-  policesIard   PoliceIard[]
-  flottes       Flotte[]
+  contrats    Contrat[]
+  devis       Devis[]
+  sinistres   Sinistre[]
+  impayes     Impaye[]
+  policesIard PoliceIard[]
+  flottes     Flotte[]
 }
 
 model Compagnie {
-  id      String @id
-  nom     String
-  pays    String
-  taux    String
-  niveau  String
+  id     String @id
+  nom    String
+  pays   String
+  taux   String
+  niveau String
 
-  contrats      Contrat[]
-  commissions   Commission[]
-  policesIard   PoliceIard[]
-  contratsVie   ContratVie[]
-  flottes       Flotte[]
+  contrats    Contrat[]
+  commissions Commission[]
+  policesIard PoliceIard[]
+  contratsVie ContratVie[]
+  flottes     Flotte[]
 }
 
 model Prospect {
-  id             String   @id
-  nom            String
-  type           String
-  source         String
-  etape          String
-  valeurEstimee  Decimal  @db.Decimal(18, 2)
-  commercial     String
-  dernierContact String
+  id                  String   @id
+  nom                 String
+  type                String
+  source              String
+  etape               String
+  valeurEstimee       Decimal  @db.Decimal(18, 2)
+  commercial          String
+  dernierContact      String
+  // Enrichissement "Production — Prospection" (scoring commercial)
+  effectifEstime      Int?
+  budget              Decimal? @db.Decimal(18, 2)
+  historiqueAssurance String?
+  zoneGeographique    String?
+  scoring             String? // Faible | Moyen | Fort
+
+  appelsOffres AppelOffres[]
+}
+
+// ── Production — Appel d'offres / Cotation (Pricing Engine) ─────────
+model AppelOffres {
+  id                       String  @id
+  prospectId               String
+  clientNom                String
+  cahierCharges            String
+  garantiesDemandees       String
+  historiqueSinistres      String?
+  projectionSP             Decimal @db.Decimal(5, 2)
+  estimationPepm           Decimal @db.Decimal(18, 2)
+  estimationFondsRoulement Decimal @db.Decimal(18, 2)
+  statut                   String
+  dateCreation             String
+
+  prospect     Prospect                 @relation(fields: [prospectId], references: [id])
+  propositions PropositionCommerciale[]
+}
+
+model PropositionCommerciale {
+  id                   String  @id @default(cuid())
+  appelOffresId        String
+  niveau               String // Essentiel | Confort | Premium
+  primeProposee        Decimal @db.Decimal(18, 2)
+  descriptionGaranties String
+  statut               String
+
+  appelOffres AppelOffres @relation(fields: [appelOffresId], references: [id], onDelete: Cascade)
+}
+
+model Cotation {
+  id                  String  @id
+  clientNom           String
+  agePopulationMoyen  Decimal @db.Decimal(5, 2)
+  sexeRatio           String
+  historiqueSinistres Decimal @db.Decimal(18, 2)
+  niveauGaranties     String
+  territorialite      String
+  stopLoss            Decimal @db.Decimal(18, 2)
+  primePure           Decimal @db.Decimal(18, 2)
+  chargements         Decimal @db.Decimal(18, 2)
+  marge               Decimal @db.Decimal(18, 2)
+  commission          Decimal @db.Decimal(18, 2)
+  pepm                Decimal @db.Decimal(18, 2)
+  tarifFinal          Decimal @db.Decimal(18, 2)
+  dateCreation        String
 }
 
 // ── Production ───────────────────────────────────────────────────────
 model Contrat {
-  id          String   @id
+  id          String  @id
   clientId    String
   compagnieId String
   branche     String
   dateDebut   String
   dateFin     String
-  prime       Decimal  @db.Decimal(18, 2)
+  prime       Decimal @db.Decimal(18, 2)
   statut      String
 
-  client        Client          @relation(fields: [clientId], references: [id])
-  compagnie     Compagnie       @relation(fields: [compagnieId], references: [id])
-  renouvellements Renouvellement[]
-  avenants      Avenant[]
-  resiliations  Resiliation[]
-  assures       AssureSante[]
-  impayes       Impaye[]
-  flotte        Flotte?
+  client            Client              @relation(fields: [clientId], references: [id])
+  compagnie         Compagnie           @relation(fields: [compagnieId], references: [id])
+  renouvellements   Renouvellement[]
+  avenants          Avenant[]
+  resiliations      Resiliation[]
+  assures           AssureSante[]
+  impayes           Impaye[]
+  flotte            Flotte?
+  fondsDeRoulement  FondsDeRoulement[]
+  honorairesGestion HonorairesGestion[]
 }
 
 model Devis {
-  id             String   @id
-  clientId       String
-  branche        String
-  primeEstimee   Decimal  @db.Decimal(18, 2)
-  dateCreation   String
-  validite       String
-  statut         String
+  id           String  @id
+  clientId     String
+  branche      String
+  primeEstimee Decimal @db.Decimal(18, 2)
+  dateCreation String
+  validite     String
+  statut       String
 
-  client   Client        @relation(fields: [clientId], references: [id])
-  offres   DevisOffre[]
+  client Client       @relation(fields: [clientId], references: [id])
+  offres DevisOffre[]
 }
 
 model DevisOffre {
@@ -110,13 +167,13 @@ model DevisOffre {
 }
 
 model Renouvellement {
-  id             String  @id
-  contratId      String
-  joursRestants  Int
-  primeActuelle  Decimal @db.Decimal(18, 2)
-  primeProposee  Decimal @db.Decimal(18, 2)
-  sinistralite   String
-  statut         String
+  id            String  @id
+  contratId     String
+  joursRestants Int
+  primeActuelle Decimal @db.Decimal(18, 2)
+  primeProposee Decimal @db.Decimal(18, 2)
+  sinistralite  String
+  statut        String
 
   contrat Contrat @relation(fields: [contratId], references: [id])
 }
@@ -135,43 +192,43 @@ model Avenant {
 }
 
 model Resiliation {
-  id          String  @id
-  contratId   String
-  motif       String
-  dateEffet   String
-  ristourne   Decimal @db.Decimal(18, 2)
-  initiateur  String
-  statut      String
+  id         String  @id
+  contratId  String
+  motif      String
+  dateEffet  String
+  ristourne  Decimal @db.Decimal(18, 2)
+  initiateur String
+  statut     String
 
   contrat Contrat @relation(fields: [contratId], references: [id])
 }
 
 // ── Branches spécialisées ────────────────────────────────────────────
 model PoliceIard {
-  id             String  @id
-  clientId       String
-  sousBranche    String
-  compagnieId    String
-  capitalAssure  Decimal @db.Decimal(18, 2)
-  prime          Decimal @db.Decimal(18, 2)
-  statut         String
+  id            String  @id
+  clientId      String
+  sousBranche   String
+  compagnieId   String
+  capitalAssure Decimal @db.Decimal(18, 2)
+  prime         Decimal @db.Decimal(18, 2)
+  statut        String
 
   client    Client    @relation(fields: [clientId], references: [id])
   compagnie Compagnie @relation(fields: [compagnieId], references: [id])
 }
 
 model ContratVie {
-  id              String  @id
-  assure          String
-  produit         String
-  compagnieId     String
-  capitalGaranti  Decimal @db.Decimal(18, 2)
-  primeAnnuelle   Decimal @db.Decimal(18, 2)
-  dateEffet       String
-  statut          String
+  id             String  @id
+  assure         String
+  produit        String
+  compagnieId    String
+  capitalGaranti Decimal @db.Decimal(18, 2)
+  primeAnnuelle  Decimal @db.Decimal(18, 2)
+  dateEffet      String
+  statut         String
 
-  compagnie      Compagnie      @relation(fields: [compagnieId], references: [id])
-  beneficiaires  Beneficiaire[]
+  compagnie     Compagnie      @relation(fields: [compagnieId], references: [id])
+  beneficiaires Beneficiaire[]
 }
 
 model Beneficiaire {
@@ -225,41 +282,180 @@ model Sinistre {
   client Client @relation(fields: [clientId], references: [id])
 }
 
-// ── Santé ────────────────────────────────────────────────────────────
+// ── Santé — Affiliation & Sinistres santé ────────────────────────────
 model AssureSante {
-  id          String  @id
-  nom         String
-  matricule   String
-  contratId   String
-  beneficiaires Int
-  cotisation  Decimal @db.Decimal(18, 2)
-  statut      String
+  id                String  @id
+  nom               String
+  matricule         String
+  contratId         String
+  beneficiaires     Int
+  cotisation        Decimal @db.Decimal(18, 2)
+  statut            String
+  // Affiliation (bloc 2 du canevas courtage santé)
+  dateNaissance     String?
+  statutMatrimonial String?
+  numeroAssure      String? @unique
+  qrCode            String?
+  statutCarte       String? // Active | Bloquée | Remplacée
+  dateAffiliation   String?
+  dateRadiation     String?
+  motifRadiation    String? // Départ employé | Décès | Retraite
 
-  contrat        Contrat          @relation(fields: [contratId], references: [id])
+  contrat           Contrat           @relation(fields: [contratId], references: [id])
+  ayantsDroit       AyantDroit[]
+  prisesEnCharge    PriseEnCharge[]
+  accordsPrealables AccordPrealable[]
+}
+
+model AyantDroit {
+  id            String @id @default(cuid())
+  assureId      String
+  nom           String
+  lienParente   String
+  dateNaissance String
+  statut        String
+
+  assure AssureSante @relation(fields: [assureId], references: [id], onDelete: Cascade)
+}
+
+// ── Réseau de soins (Conventionnement) ───────────────────────────────
+model Prestataire {
+  id                   String   @id
+  nom                  String
+  type                 String // Hôpital | Clinique | Pharmacie | Laboratoire | Cabinet
+  pays                 String
+  ville                String
+  statutConvention     String // En négociation | Conventionné | Suspendu
+  dateConventionnement String?
+  delaiPaiementMoyen   Int?
+  scoreQualite         Decimal? @db.Decimal(5, 2)
+  motifSuspension      String?
+
+  grillesTarifaires GrilleTarifaire[]
+  prisesEnCharge    PriseEnCharge[]
+}
+
+model GrilleTarifaire {
+  id            String  @id @default(cuid())
+  prestataireId String
+  acte          String
+  plafond       Decimal @db.Decimal(18, 2)
+
+  prestataire Prestataire @relation(fields: [prestataireId], references: [id], onDelete: Cascade)
+}
+
+// ── Sinistres santé — accord préalable & contrôle médical ────────────
+model AccordPrealable {
+  id                         String   @id
+  assureId                   String
+  type                       String // Hospitalisation | Chirurgie | EVASAN
+  description                String
+  dateDemande                String
+  statutAnalyseMedicale      String
+  statutValidationFinanciere String
+  decision                   String // Accordé | Refusé | En attente
+  montantAutorise            Decimal? @db.Decimal(18, 2)
+  dateDecision               String?
+
+  assure         AssureSante     @relation(fields: [assureId], references: [id])
   prisesEnCharge PriseEnCharge[]
 }
 
 model PriseEnCharge {
-  id           String  @id
-  assureId     String
-  prestataire  String
-  type         String
-  montant      Decimal @db.Decimal(18, 2)
-  statut       String
-  date         String
+  id                    String   @id
+  assureId              String
+  prestataire           String
+  type                  String
+  montant               Decimal  @db.Decimal(18, 2)
+  statut                String
+  date                  String
+  // Workflow sinistre santé (bloc 3 du canevas)
+  prestataireId         String?
+  modePaiement          String? // Remboursement | TiersPayant
+  prescriptionRef       String?
+  factureRef            String?
+  statutControleMedical String? // Non requis | En cours | Validé | Rejeté
+  motifRejet            String?
+  baseRemboursement     Decimal? @db.Decimal(18, 2)
+  tauxRemboursement     Decimal? @db.Decimal(5, 2)
+  franchise             Decimal? @db.Decimal(18, 2)
+  plafondApplique       Decimal? @db.Decimal(18, 2)
+  resteACharge          Decimal? @db.Decimal(18, 2)
+  ordrePaiement         String?
+  accordPrealableId     String?
+  scoreFraude           Decimal? @db.Decimal(5, 2)
 
-  assure AssureSante @relation(fields: [assureId], references: [id])
+  assure          AssureSante      @relation(fields: [assureId], references: [id])
+  prestataireRef  Prestataire?     @relation(fields: [prestataireId], references: [id])
+  accordPrealable AccordPrealable? @relation(fields: [accordPrealableId], references: [id])
+}
+
+// ── Financier — auto-gestion santé ───────────────────────────────────
+model FondsDeRoulement {
+  id               String  @id @default(cuid())
+  contratId        String
+  montantInitial   Decimal @db.Decimal(18, 2)
+  montantConsomme  Decimal @db.Decimal(18, 2)
+  seuilAlerte      Decimal @db.Decimal(18, 2)
+  statut           String // Normal | Alerte | Épuisé
+  dateAlimentation String
+
+  contrat Contrat @relation(fields: [contratId], references: [id])
+}
+
+model HonorairesGestion {
+  id                String   @id @default(cuid())
+  contratId         String
+  periode           String
+  montantSinistres  Decimal  @db.Decimal(18, 2)
+  tauxHonoraires    Decimal  @db.Decimal(5, 2)
+  montantHonoraires Decimal  @db.Decimal(18, 2)
+  plafond           Decimal? @db.Decimal(18, 2)
+  statut            String
+
+  contrat Contrat @relation(fields: [contratId], references: [id])
+}
+
+// ── Contrôle médical & fraude ─────────────────────────────────────────
+model ScoringFraude {
+  id             String  @id @default(cuid())
+  cible          String // Assuré | Prestataire
+  cibleId        String
+  cibleNom       String
+  score          Decimal @db.Decimal(5, 2)
+  motifs         String
+  dateEvaluation String
+}
+
+// ── Transversal — traçabilité & notifications ────────────────────────
+model AuditLog {
+  id          String   @id @default(cuid())
+  entite      String
+  entiteId    String
+  action      String // Créé | Modifié | Validé | Rejeté | Clôturé
+  utilisateur String
+  dateAction  DateTime @default(now())
+  details     String?
+}
+
+model Notification {
+  id               String   @id @default(cuid())
+  destinataireType String // Client | Prestataire | Gestionnaire
+  destinataireId   String
+  message          String
+  statut           String // Envoyée | Lue
+  dateEnvoi        DateTime @default(now())
 }
 
 // ── Finance ──────────────────────────────────────────────────────────
 model Commission {
-  id                 String  @id
-  compagnieId        String
-  periode            String
-  primeEncaissee     Decimal @db.Decimal(18, 2)
-  tauxCommission     String
-  montantCommission  Decimal @db.Decimal(18, 2)
-  statut             String
+  id                String  @id
+  compagnieId       String
+  periode           String
+  primeEncaissee    Decimal @db.Decimal(18, 2)
+  tauxCommission    String
+  montantCommission Decimal @db.Decimal(18, 2)
+  statut            String
 
   compagnie Compagnie @relation(fields: [compagnieId], references: [id])
 }
