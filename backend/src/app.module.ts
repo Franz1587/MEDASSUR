@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { PrismaModule } from "./prisma/prisma.module";
 import { AuthModule } from "./auth/auth.module";
+import { AuditModule } from "./audit/audit.module";
 import { ClientsModule } from "./clients/clients.module";
 import { CompagniesModule } from "./compagnies/compagnies.module";
 import { ContratsModule } from "./contrats/contrats.module";
@@ -20,12 +21,21 @@ import { VieModule } from "./vie/vie.module";
 import { FlotteModule } from "./flotte/flotte.module";
 import { ComptabiliteModule } from "./comptabilite/comptabilite.module";
 import { GedModule } from "./ged/ged.module";
+import { AppelOffresModule } from "./appel-offres/appel-offres.module";
+import { CotationModule } from "./cotation/cotation.module";
+import { PrestatairesModule } from "./prestataires/prestataires.module";
+import { AccordPrealableModule } from "./accord-prealable/accord-prealable.module";
+import { FondsDeRoulementModule } from "./fonds-de-roulement/fonds-de-roulement.module";
+import { HonorairesModule } from "./honoraires/honoraires.module";
+import { FraudeModule } from "./fraude/fraude.module";
+import { NotificationsModule } from "./notifications/notifications.module";
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     AuthModule,
+    AuditModule,
     ClientsModule,
     CompagniesModule,
     ContratsModule,
@@ -44,6 +54,14 @@ import { GedModule } from "./ged/ged.module";
     FlotteModule,
     ComptabiliteModule,
     GedModule,
+    AppelOffresModule,
+    CotationModule,
+    PrestatairesModule,
+    AccordPrealableModule,
+    FondsDeRoulementModule,
+    HonorairesModule,
+    FraudeModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

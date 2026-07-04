@@ -6,10 +6,12 @@ export class SanteService {
   constructor(private prisma: PrismaService) {}
 
   findAssures() {
-    return this.prisma.assureSante.findMany({ include: { contrat: true } });
+    return this.prisma.assureSante.findMany({ include: { contrat: true, ayantsDroit: true } });
   }
 
   findPrisesEnCharge() {
-    return this.prisma.priseEnCharge.findMany({ include: { assure: true } });
+    return this.prisma.priseEnCharge.findMany({
+      include: { assure: true, prestataireRef: true, accordPrealable: true },
+    });
   }
 }
