@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Sidebar } from "@/layout/Sidebar";
 import { TopBar } from "@/layout/TopBar";
 import type { View } from "@/layout/navConfig";
+import { useAuth } from "@/auth/AuthContext";
+import { LoginView } from "@/auth/LoginView";
 
 import DashboardView from "@/features/dashboard";
 import ClientsView from "@/features/clients";
@@ -54,6 +56,16 @@ const viewRegistry: Record<View, React.ComponentType> = {
 };
 
 export default function App() {
+  const { currentUser } = useAuth();
+
+  if (!currentUser) return <LoginView />;
+
+  // Keyed by role so switching profiles always lands back on the dashboard
+  // instead of a view the new role may not have access to.
+  return <ErpShell key={currentUser.roleId} />;
+}
+
+function ErpShell() {
   const [view, setView] = useState<View>("dashboard");
   const [collapsed, setCollapsed] = useState(false);
 

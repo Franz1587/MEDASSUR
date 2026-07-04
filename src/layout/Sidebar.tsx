@@ -1,13 +1,20 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronUp, ChevronDown, Shield, LogOut } from "lucide-react";
 import { navGroups, type View } from "@/layout/navConfig";
+import { useAuth } from "@/auth/AuthContext";
 
 export function Sidebar({
   current, onNavigate, collapsed, onToggle,
 }: { current: View; onNavigate: (v: View) => void; collapsed: boolean; onToggle: () => void }) {
+  const { currentUser, currentRole, logout } = useAuth();
   const [open, setOpen] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(navGroups.map((g) => [g.label, true])),
   );
+
+  const allowed = new Set(currentRole?.allowedModules ?? []);
+  const visibleGroups = navGroups
+    .map((g) => ({ ...g, items: g.items.filter((i) => allowed.has(i.id)) }))
+    .filter((g) => g.items.length > 0);
 
   return (
     <div className={`flex flex-col bg-card border-r border-border transition-all duration-300 flex-shrink-0 ${collapsed ? "w-16" : "w-60"}`} style={{ height: "100vh" }}>
@@ -37,7 +44,7 @@ export function Sidebar({
 
       {/* Nav */}
       <div className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5" style={{ scrollbarWidth: "none" }}>
-        {navGroups.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.label}>
             {!collapsed && (
               <button
@@ -76,15 +83,15 @@ export function Sidebar({
       <div className="border-t border-border px-3 py-3 flex-shrink-0">
         <div className={`flex items-center gap-2.5 ${collapsed ? "justify-center" : ""}`}>
           <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center flex-shrink-0">
-            <span className="text-xs font-bold text-primary">AB</span>
+            <span className="text-xs font-bold text-primary">{currentUser?.initiales ?? "—"}</span>
           </div>
           {!collapsed && (
             <>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-foreground truncate">Aristide Bengono</p>
-                <p className="text-xs text-muted-foreground truncate">Administrateur · DG</p>
+                <p className="text-xs font-semibold text-foreground truncate">{currentUser?.nom ?? "Invité"}</p>
+                <p className="text-xs text-muted-foreground truncate">{currentRole?.label ?? ""}</p>
               </div>
-              <button className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={logout} title="Changer de profil" className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
                 <LogOut className="w-3.5 h-3.5" />
               </button>
             </>
