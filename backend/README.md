@@ -47,11 +47,19 @@ e.g. `POST /api/auth/login { "email": "a.bengono@courteva.cm", "password": "cour
 
 ## Status
 
-Clients and Compagnies are fully wired end-to-end (frontend → real API →
-Postgres, including create/update/delete). Every other domain
-(Contrats, Sinistres, Devis, Santé, Commissions, Trésorerie,
-Recouvrement, CRM, IARD, Vie, Flotte, Comptabilité, GED, …) has a real
-NestJS module + Prisma-backed read endpoint and seeded data, but the
-frontend still reads them from `src/data/mock/*.ts` — swap each
-`src/services/<domain>.service.ts` to call `http.get(...)` the same way
-`clients.service.ts` does, one domain at a time.
+All 17 business domains are wired end-to-end (frontend → real API →
+Postgres): Clients, Compagnies and Contrats have full CRUD; Devis,
+Renouvellements, Avenants, Résiliations, Sinistres, Santé, Commissions,
+Trésorerie, Recouvrement, CRM, IARD, Vie, Flotte, Comptabilité and GED
+are read-backed. The backend returns normalized relational data (ids +
+nested client/compagnie/contrat objects); each frontend
+`src/services/<domain>.service.ts` maps that into the denormalized
+display shape the views already expect (see `src/lib/decimal.ts` for
+the Decimal→number conversion, and any `src/services/*.service.ts` for
+the mapping pattern).
+
+Dashboard, Rapports and Admin stay on `src/data/mock/*.ts` — they're BI
+aggregates / admin concepts with no backend model yet. The AI
+assistant / OCR comparateur stay mocked by explicit product decision
+(`src/services/ai.service.ts` is the seam for wiring a real model
+later).
