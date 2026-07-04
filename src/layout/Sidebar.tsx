@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronUp, ChevronDown, Shield, LogOut } from "lucide-react";
+import { ChevronLeft, ChevronUp, ChevronDown, LogOut } from "lucide-react";
 import { navGroups, type View } from "@/layout/navConfig";
 import { useAuth } from "@/auth/AuthContext";
+import logoMark from "@/assets/logo-mark.png";
 
 export function Sidebar({
   current, onNavigate, collapsed, onToggle,
@@ -21,14 +22,14 @@ export function Sidebar({
       {/* Brand */}
       <div className="flex items-center justify-between px-3 py-4 border-b border-border flex-shrink-0">
         {collapsed ? (
-          <button onClick={onToggle} className="w-9 h-9 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center mx-auto hover:bg-primary/30 transition-colors">
-            <Shield className="w-5 h-5 text-primary" />
+          <button onClick={onToggle} className="w-9 h-9 rounded-lg bg-white flex items-center justify-center mx-auto shadow-sm hover:opacity-90 transition-opacity p-1">
+            <img src={logoMark} alt="CIS" className="w-full h-full object-contain" />
           </button>
         ) : (
           <>
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center flex-shrink-0">
-                <Shield className="w-5 h-5 text-primary-foreground" />
+              <div className="w-9 h-9 rounded-lg bg-white flex items-center justify-center flex-shrink-0 shadow-sm p-1">
+                <img src={logoMark} alt="CIS" className="w-full h-full object-contain" />
               </div>
               <div>
                 <p className="text-sm font-bold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>CIS</p>

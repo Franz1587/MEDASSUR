@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Shield, Building2, Users, KeyRound, ArrowLeft } from "lucide-react";
+import { Building2, Users, KeyRound, ArrowLeft } from "lucide-react";
 import { roleList, type RoleId } from "@/auth/roles";
 import { mockUsers } from "@/auth/mockUsers";
 import { useAuth, DEMO_PASSWORD } from "@/auth/AuthContext";
 import { LoginForm } from "@/auth/LoginForm";
 import { ProfessionsCarousel } from "@/auth/ProfessionsCarousel";
+import logoFull from "@/assets/logo-full.png";
+import logoMark from "@/assets/logo-mark.png";
 
 function DemoRoleGrid({ onBack }: { onBack: () => void }) {
   const { login } = useAuth();
@@ -75,14 +77,8 @@ export function LoginView() {
           className="absolute inset-0 opacity-20 pointer-events-none"
           style={{ background: "radial-gradient(circle at 20% 20%, #C9A24A 0%, transparent 45%)" }}
         />
-        <div className="relative flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-primary flex items-center justify-center flex-shrink-0">
-            <Shield className="w-6 h-6 text-primary-foreground" />
-          </div>
-          <div>
-            <p className="text-lg font-bold text-white leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>Court-Insurance</p>
-            <p className="text-xs text-white/50 leading-tight">Suite (CIS)</p>
-          </div>
+        <div className="relative bg-white rounded-2xl px-5 py-4 inline-block shadow-lg w-fit">
+          <img src={logoFull} alt="Court-Insurance Suite (CIS)" className="h-20 w-auto" />
         </div>
 
         <div className="relative space-y-8">
@@ -98,8 +94,8 @@ export function LoginView() {
       {/* Content pane */}
       <div className="flex-1 flex flex-col items-center justify-center p-6">
         <div className="lg:hidden flex items-center gap-2.5 mb-8">
-          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center flex-shrink-0">
-            <Shield className="w-5 h-5 text-primary-foreground" />
+          <div className="bg-white rounded-xl p-1.5 shadow-sm flex-shrink-0">
+            <img src={logoMark} alt="Court-Insurance Suite (CIS)" className="h-8 w-auto" />
           </div>
           <p className="text-base font-bold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>Court-Insurance Suite (CIS)</p>
         </div>
