@@ -31,7 +31,7 @@ export function Sidebar({
                 <Shield className="w-5 h-5 text-primary-foreground" />
               </div>
               <div>
-                <p className="text-sm font-bold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>CourtEVA+</p>
+                <p className="text-sm font-bold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>CIS</p>
                 <p className="text-xs text-muted-foreground leading-tight">Zone CIMA · ERP v2.0</p>
               </div>
             </div>

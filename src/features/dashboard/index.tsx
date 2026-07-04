@@ -78,8 +78,8 @@ export default function DashboardView() {
             <AreaChart data={production}>
               <defs>
                 <linearGradient id="gPrime" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#C9A24A" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#C9A24A" stopOpacity={0} />
+                  <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="gObj" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#0E7490" stopOpacity={0.2} />
@@ -90,7 +90,7 @@ export default function DashboardView() {
               <XAxis dataKey="mois" tick={{ fill: "#6E8BAD", fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: "#6E8BAD", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`} />
               <Tooltip {...ChartTooltipStyle} formatter={(v: number) => [`${fmtM(v)} XAF`]} />
-              <Area type="monotone" dataKey="prime" name="Primes" stroke="#C9A24A" strokeWidth={2} fill="url(#gPrime)" />
+              <Area type="monotone" dataKey="prime" name="Primes" stroke="var(--chart-1)" strokeWidth={2} fill="url(#gPrime)" />
               <Area type="monotone" dataKey="objectif" name="Objectif" stroke="#0E7490" strokeWidth={1.5} strokeDasharray="4 2" fill="url(#gObj)" />
             </AreaChart>
           </ResponsiveContainer>
@@ -133,7 +133,7 @@ export default function DashboardView() {
               <XAxis dataKey="branche" tick={{ fill: "#6E8BAD", fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: "#6E8BAD", fontSize: 10 }} axisLine={false} tickLine={false} />
               <Tooltip {...ChartTooltipStyle} />
-              <Bar dataKey="déclarés" name="Déclarés" fill="#C9A24A" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="déclarés" name="Déclarés" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
               <Bar dataKey="réglés" name="Réglés" fill="#16A34A" radius={[4, 4, 0, 0]} />
               <Bar dataKey="pendants" name="Pendants" fill="#DC2626" radius={[4, 4, 0, 0]} />
             </BarChart>

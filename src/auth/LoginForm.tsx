@@ -23,7 +23,7 @@ export function LoginForm() {
     <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-5">
       <div>
         <h2 className="text-xl font-bold text-foreground">Connexion</h2>
-        <p className="text-sm text-muted-foreground mt-1">Accédez à votre espace CourtEVA+</p>
+        <p className="text-sm text-muted-foreground mt-1">Accédez à votre espace Court-Insurance Suite (CIS)</p>
       </div>
 
       {error && (

@@ -1,15 +1,10 @@
 import { useState } from "react";
-import { Shield, Building2, Users, KeyRound, ArrowLeft, Sparkles } from "lucide-react";
+import { Shield, Building2, Users, KeyRound, ArrowLeft } from "lucide-react";
 import { roleList, type RoleId } from "@/auth/roles";
 import { mockUsers } from "@/auth/mockUsers";
 import { useAuth, DEMO_PASSWORD } from "@/auth/AuthContext";
 import { LoginForm } from "@/auth/LoginForm";
-
-const valueProps = [
-  { label: "19 profils dédiés", desc: "Un espace pensé pour chaque métier du courtage" },
-  { label: "15+ branches d'assurance", desc: "IARD, Vie, Santé, Flotte, Prévoyance…" },
-  { label: "Zone CIMA · 14 pays", desc: "Conforme SYSCOHADA et aux normes CIMA" },
-];
+import { ProfessionsCarousel } from "@/auth/ProfessionsCarousel";
 
 function DemoRoleGrid({ onBack }: { onBack: () => void }) {
   const { login } = useAuth();
@@ -85,31 +80,19 @@ export function LoginView() {
             <Shield className="w-6 h-6 text-primary-foreground" />
           </div>
           <div>
-            <p className="text-lg font-bold text-white leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>CourtEVA+</p>
-            <p className="text-xs text-white/50 leading-tight">Insurance Suite</p>
+            <p className="text-lg font-bold text-white leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>Court-Insurance</p>
+            <p className="text-xs text-white/50 leading-tight">Suite (CIS)</p>
           </div>
         </div>
 
-        <div className="relative space-y-6">
+        <div className="relative space-y-8">
           <h1 className="text-3xl font-bold text-white leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
             La plateforme de courtage nouvelle génération pour l'Afrique
           </h1>
-          <div className="space-y-4">
-            {valueProps.map((v) => (
-              <div key={v.label} className="flex items-start gap-3">
-                <div className="p-1.5 bg-primary/15 rounded-lg border border-primary/25 mt-0.5">
-                  <Sparkles className="w-3.5 h-3.5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">{v.label}</p>
-                  <p className="text-xs text-white/50">{v.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+          <ProfessionsCarousel />
         </div>
 
-        <p className="relative text-xs text-white/30">© 2026 CourtEVA+ Insurance Suite</p>
+        <p className="relative text-xs text-white/30">© 2026 Court-Insurance Suite (CIS)</p>
       </div>
 
       {/* Content pane */}
@@ -118,7 +101,7 @@ export function LoginView() {
           <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center flex-shrink-0">
             <Shield className="w-5 h-5 text-primary-foreground" />
           </div>
-          <p className="text-base font-bold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>CourtEVA+</p>
+          <p className="text-base font-bold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>Court-Insurance Suite (CIS)</p>
         </div>
 
         {mode === "form" ? (

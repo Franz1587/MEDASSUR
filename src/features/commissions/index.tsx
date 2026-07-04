@@ -50,7 +50,7 @@ export default function CommissionsView() {
               <XAxis dataKey="compagnie" tick={{ fill: "#6E8BAD", fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: "#6E8BAD", fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`} />
               <Tooltip {...ChartTooltipStyle} formatter={(v: number) => [`${fmtM(v)} XAF`]} />
-              <Bar dataKey="commission" fill="#C9A24A" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="commission" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

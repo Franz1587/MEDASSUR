@@ -28,7 +28,7 @@ export function TopBar({ current }: { current: View }) {
   return (
     <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-card/60 backdrop-blur-sm flex-shrink-0">
       <div className="flex items-center gap-2 text-sm">
-        <span className="text-muted-foreground text-xs">CourtEVA+</span>
+        <span className="text-muted-foreground text-xs">CIS</span>
         <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/30" />
         <span className="text-foreground font-semibold text-sm">{viewLabels[current]}</span>
       </div>

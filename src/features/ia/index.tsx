@@ -40,7 +40,7 @@ export default function IAView() {
 
   return (
     <div className="p-6 h-full flex flex-col" style={{ minHeight: 0 }}>
-      <ModuleHeader title="CourtEVA+IA — Assistant Intelligent" subtitle="Analyse de contrats · Détection de fraudes · Génération de documents · Assistance métier" icon={Brain} />
+      <ModuleHeader title="CIS IA — Assistant Intelligent" subtitle="Analyse de contrats · Détection de fraudes · Génération de documents · Assistance métier" icon={Brain} />
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-4" style={{ minHeight: 0 }}>
         <div className="lg:col-span-3 bg-card border border-border rounded-xl flex flex-col" style={{ height: "calc(100vh - 300px)" }}>
           <div className="flex-1 overflow-y-auto p-4 space-y-4">

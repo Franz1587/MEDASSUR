@@ -27,7 +27,7 @@ export function PortalShell({ meta }: { meta: PortalMeta }) {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-lg font-bold text-foreground">{meta.label}</h1>
-                <Badge variant="gold">CourtEVA+</Badge>
+                <Badge variant="gold">CIS</Badge>
               </div>
               <p className="text-xs text-muted-foreground">{meta.subtitle}</p>
             </div>
