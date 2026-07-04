@@ -1,6 +1,6 @@
 import type { View } from "@/layout/navConfig";
 
-import DashboardView from "@/features/dashboard";
+import RoleDashboard from "@/features/dashboard/RoleDashboard";
 import ClientsView from "@/features/clients";
 import CompagniesView from "@/features/compagnies";
 import ContratsView from "@/features/contrats";
@@ -25,7 +25,7 @@ import CrmView from "@/features/crm";
 import GedView from "@/features/ged";
 
 export const viewRegistry: Record<View, React.ComponentType> = {
-  dashboard: DashboardView,
+  dashboard: RoleDashboard,
   crm: CrmView,
   clients: ClientsView,
   compagnies: CompagniesView,
