@@ -3585,9 +3585,33 @@ export class DocumentsService {
     const contrat = await this.prisma.contrat.findUnique({ where: { id: contratId }, include: { client: true } });
     if (!contrat) throw new NotFoundException(`Contrat ${contratId} introuvable`);
     const population = await reconstituerPopulation(this.prisma, contratId, filtres.du, filtres.au);
+    // Regroupement par famille, familles triées par ordre alphabétique de
+    // l'assuré principal (2026-09) — voir demande utilisateur : "il faut
+    // que l'application génère les liste en rangeant les famille et non
+    // toute la population, mais les famille (les assuré principaux) par
+    // ordre alphabétique... il faut que les assurés (les participants)
+    // soient rangés par ordre alphabétique [au sein d'une famille]." Le tri
+    // précédent (`familleId ?? ""`) séparait en fait TOUTE la population en
+    // deux blocs (tous les principaux, `familleId` null → "", puis tous
+    // les ayants droit) au lieu de garder chaque famille groupée — corrigé
+    // en calculant la clé de regroupement `familleId ?? id` (même
+    // convention que `ordonnerParFamille`, cartes en masse) et en
+    // résolvant le nom de la racine via une table de correspondance
+    // construite sur la population COMPLÈTE (avant filtrage par statut),
+    // pour que le tri reste correct même si le principal lui-même est
+    // filtré hors de l'export.
+    const parId = new Map(population.map((a) => [a.id, a]));
+    const cleFamilleDe = (a: (typeof population)[number]) => a.familleId ?? a.id;
+    const nomTriDe = (a: (typeof population)[number]) => `${a.nom} ${a.prenom ?? ""}`.trim().toLowerCase();
     const assures = population
       .filter((a) => !filtres.statut || a.statutPeriode === filtres.statut)
-      .sort((a, b) => (a.familleId ?? "").localeCompare(b.familleId ?? "") || (a.typeAssure ?? "").localeCompare(b.typeAssure ?? "") || a.nom.localeCompare(b.nom));
+      .sort((a, b) => {
+        const racineA = parId.get(cleFamilleDe(a)) ?? a;
+        const racineB = parId.get(cleFamilleDe(b)) ?? b;
+        return nomTriDe(racineA).localeCompare(nomTriDe(racineB))
+          || cleFamilleDe(a).localeCompare(cleFamilleDe(b))
+          || nomTriDe(a).localeCompare(nomTriDe(b));
+      });
     const periodeTexte = filtres.du || filtres.au ? ` — période du ${filtres.du ?? "…"} au ${filtres.au ?? "…"}` : "";
     const titre = `Liste des Assurés${filtres.statut ? ` — ${filtres.statut}` : ""}${periodeTexte}`;
     // Police N° = le vrai numéro de police compagnie (2026-09) — voir
