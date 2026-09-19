@@ -1472,12 +1472,21 @@ export class DocumentsService {
   // compte... afin que cette dernière remonte sur leur document (feuille de
   // soins, feuille d'examen...)". Même principe que chargerSignatureMedecin
   // (le compte assuré_principal porte User.assureSanteId, voir
-  // SELECT_SANS_HASH/AuthContext) — jamais celle d'un ayant droit délégué,
-  // qui n'a pas de compte propre distinct dans le modèle actuel.
-  private async chargerSignatureAssure(assureId: string | null | undefined): Promise<Buffer | string | null> {
+  // SELECT_SANS_HASH/AuthContext).
+  // `familleId` (2026-09) — voir demande utilisateur : "la signature de
+  // l'assuré principal ne remonte pas sur les documents électroniques de
+  // ses ayants droits." Un CJ/EF n'a pas de compte portail distinct dans le
+  // modèle actuel (voir schema.prisma, familleId) donc jamais sa propre
+  // signature — repli sur celle du PRINCIPAL de la famille, seul à
+  // disposer d'un compte. Tente d'abord `assureId` (reste correct si un
+  // jour un ayant droit obtient son propre compte), puis `familleId`.
+  private async chargerSignatureAssure(assureId: string | null | undefined, familleId?: string | null): Promise<Buffer | string | null> {
     if (!assureId) return null;
     const u = await this.prisma.user.findFirst({ where: { assureSanteId: assureId }, select: { signature: true } });
-    return this.chargerImage("signatures", u?.signature, UPLOADS_SIGNATURES_DIR);
+    if (u?.signature) return this.chargerImage("signatures", u.signature, UPLOADS_SIGNATURES_DIR);
+    if (!familleId) return null;
+    const uPrincipal = await this.prisma.user.findFirst({ where: { assureSanteId: familleId }, select: { signature: true } });
+    return this.chargerImage("signatures", uPrincipal?.signature, UPLOADS_SIGNATURES_DIR);
   }
 
   private dessinerLogoMark(doc: PDFKit.PDFDocument, x: number, y: number, r: number, primaire: string) {
@@ -2358,7 +2367,7 @@ export class DocumentsService {
       // (aucun encadré ajouté — jamais dans le modèle papier de référence).
       texte("Signature du Patient", 261.8, 786.1 + delta, { taille: 7.5 });
       {
-        const signatureAssure = await this.chargerSignatureAssure(assure.id);
+        const signatureAssure = await this.chargerSignatureAssure(assure.id, assure.familleId);
         if (signatureAssure) { try { doc.image(signatureAssure, 261.8, 793 + delta, { fit: TAILLE_SIGNATURE }); } catch { /* jamais bloquant */ } }
       }
       // Largeur 140 (2026-09, au lieu de 120) — "Cachet et signature du
@@ -2529,7 +2538,7 @@ export class DocumentsService {
       // principe que la Feuille de Soins ci-dessus).
       texte("Signature du Patient", 261.1, 791.1, { taille: 7.5 });
       {
-        const signatureAssure = await this.chargerSignatureAssure(assure.id);
+        const signatureAssure = await this.chargerSignatureAssure(assure.id, assure.familleId);
         if (signatureAssure) { try { doc.image(signatureAssure, 261.1, 795, { fit: TAILLE_SIGNATURE }); } catch { /* jamais bloquant */ } }
       }
       texte("Cachet et signature du Praticien", 416.1, 788.0, { taille: 7.5, w: 150 });
@@ -2874,7 +2883,7 @@ export class DocumentsService {
     doc.text("Signature du Bénéficiaire", left + colW + 10, ySig, { width: colW - 10 });
     const signatureGestionnaire = await this.chargerSignatureUtilisateur(accord.demandeurId);
     if (signatureGestionnaire) { try { doc.image(signatureGestionnaire, left, ySig + 12, { fit: [colW - 20, 40] }); } catch { /* jamais bloquant */ } }
-    const signatureAssure = await this.chargerSignatureAssure(accord.assureId);
+    const signatureAssure = await this.chargerSignatureAssure(accord.assureId, accord.assure.familleId);
     if (signatureAssure) { try { doc.image(signatureAssure, left + colW + 10, ySig + 12, { fit: [colW - 20, 40] }); } catch { /* jamais bloquant */ } }
 
     doc.end();
