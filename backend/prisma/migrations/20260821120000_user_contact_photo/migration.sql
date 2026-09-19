@@ -1,0 +1,3 @@
+ALTER TABLE "User" ADD COLUMN "telephone" TEXT;
+ALTER TABLE "User" ADD COLUMN "adresse" TEXT;
+ALTER TABLE "User" ADD COLUMN "photo" TEXT;

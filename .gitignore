@@ -6,3 +6,15 @@ dist-ssr
 .env
 .env.local
 npm-debug.log*
+comptes_demo_medassur.xlsx
+
+# Clé privée de compte de service Firebase Admin SDK — jamais versionnée
+# (voir fiche technique, section "points de vigilance"). Non couverte par
+# mobile/.gitignore (qui n'exclut que google-services.json).
+mobile/medassur-8323f-firebase-adminsdk-*.json
+
+# Outillage local (binaire Node.js portable, 88 Mo) et artefacts de build
+# mobile (APK compilé, 107 Mo — au-delà de la limite dure de 100 Mo de
+# GitHub) : jamais du code source, à régénérer/retélécharger localement.
+.tools/
+mobile/builds/

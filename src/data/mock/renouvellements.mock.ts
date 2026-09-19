@@ -1,8 +1,0 @@
-export const mockRenouvellements = [
-  { id: "REN-2024-014", contrat: "CTR-2024-004", client: "BGFI Bank Gabon", branche: "Santé Collective", compagnie: "NSIA Vie", dateFin: "31/12/2024", joursRestants: 15, primeActuelle: 32_600_000, primeProposee: 34_800_000, sinistralite: "62%", statut: "À renouveler" },
-  { id: "REN-2024-015", contrat: "CTR-2024-001", client: "SABC SA", branche: "Flotte Auto", compagnie: "ACTIVA Assurances", dateFin: "31/12/2024", joursRestants: 15, primeActuelle: 28_500_000, primeProposee: 29_900_000, sinistralite: "41%", statut: "Relancé" },
-  { id: "REN-2023-241", contrat: "CTR-2023-089", client: "Kofi Asante", branche: "Automobile", compagnie: "UAM Togo", dateFin: "30/06/2024", joursRestants: -8, primeActuelle: 450_000, primeProposee: 480_000, sinistralite: "12%", statut: "Perdu" },
-  { id: "REN-2024-016", contrat: "CTR-2024-006", client: "SOGEA-SATOM CI", branche: "RC Professionnelle", compagnie: "AXA Côte d'Ivoire", dateFin: "31/01/2025", joursRestants: 60, primeActuelle: 18_500_000, primeProposee: 18_500_000, sinistralite: "8%", statut: "À renouveler" },
-  { id: "REN-2024-013", contrat: "CTR-2024-002", client: "Groupe CFAO", branche: "IARD", compagnie: "AXA Côte d'Ivoire", dateFin: "28/02/2025", joursRestants: 90, primeActuelle: 45_200_000, primeProposee: 45_200_000, sinistralite: "35%", statut: "Renouvelé" },
-  { id: "REN-2024-012", contrat: "CTR-2024-005", client: "MTN Cameroun", branche: "Santé Collective", compagnie: "COLINA Assurances", dateFin: "31/03/2025", joursRestants: 120, primeActuelle: 98_000_000, primeProposee: 102_500_000, sinistralite: "58%", statut: "À renouveler" },
-];

@@ -1,7 +1,11 @@
-import { IsEmail, IsString, MinLength } from "class-validator";
+import { IsString, MinLength } from "class-validator";
 
+// email (2026-08) — accepte aussi un matricule pour un compte assure_principal
+// (voir AuthService.login), donc plus de @IsEmail() ici : la résolution
+// email-ou-matricule est entièrement déléguée au service.
 export class LoginDto {
-  @IsEmail()
+  @IsString()
+  @MinLength(3)
   email: string;
 
   @IsString()

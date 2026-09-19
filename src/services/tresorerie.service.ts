@@ -11,6 +11,7 @@ interface ApiCompteBancaire {
 }
 
 interface ApiFluxTresorerie {
+  id: string;
   date: string;
   libelle: string;
   type: string;
@@ -26,4 +27,22 @@ export async function getComptesBancaires(): Promise<CompteBancaire[]> {
 export async function getFluxTresorerie(): Promise<FluxTresorerie[]> {
   const data = await http.get<ApiFluxTresorerie[]>("/tresorerie/flux");
   return data.map((f) => ({ ...f, montant: toNumber(f.montant) }));
+}
+
+export interface FluxUpsertInput {
+  date: string;
+  libelle: string;
+  type: "Encaissement" | "Décaissement";
+  montant: number;
+  compteId: string;
+}
+
+export async function createFlux(payload: FluxUpsertInput): Promise<FluxTresorerie> {
+  const f = await http.post<ApiFluxTresorerie>("/tresorerie/flux", payload);
+  return { ...f, montant: toNumber(f.montant) };
+}
+
+export async function rapprocherFlux(id: string): Promise<FluxTresorerie> {
+  const f = await http.patch<ApiFluxTresorerie>(`/tresorerie/flux/${id}/rapprocher`);
+  return { ...f, montant: toNumber(f.montant) };
 }

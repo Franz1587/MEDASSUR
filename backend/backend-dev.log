@@ -1,0 +1,526 @@
+
+> medassur-backend@0.0.1 dev
+> nest start --watch
+
+[2J[3J[H[[90m06:31:11[0m] Starting compilation in watch mode...
+
+[[90m06:31:21[0m] Found 0 errors. Watching for file changes.
+
+(node:29940) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [NestFactory] Starting Nest application...
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] AppModule dependencies initialized +21ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] PrismaModule dependencies initialized +341ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] PassportModule dependencies initialized +1ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] MouvementsModule dependencies initialized +8ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] ConfigHostModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] DiscoveryModule dependencies initialized +1ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] ConfigModule dependencies initialized +4ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] ConfigModule dependencies initialized +1ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] ScheduleModule dependencies initialized +2ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] ClientsModule dependencies initialized +4ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] CompagniesModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] DevisModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] AvenantsModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] SinistresModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] CommissionsModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] TresorerieModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] RecouvrementModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] CrmModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] ComptabiliteModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] GedModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] AppelOffresModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] CotationModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] PrestatairesModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] AccordPrealableModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] FondsDeRoulementModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] HonorairesModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] FraudeModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] ReglementPrestataireModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] NotificationsModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] GarantieCatalogueModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] ParametresEntrepriseModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] ComptesMobileModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] ActesMedicauxModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] JwtModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] AuditModule dependencies initialized +1ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] SanteModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] ContratsModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] ResiliationsModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] DocumentsModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] AuthModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] FacturesModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [InstanceLoader] RenouvellementsModule dependencies initialized +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] AuthController {/api/auth}: +6ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/auth/login, POST} route +2ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] AuditController {/api/audit}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/audit, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] ClientsController {/api/clients}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/clients, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/clients/:id, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/clients/:id/portfolio, GET} route +1ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/clients, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/clients/:id, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/clients/:id, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/clients/:id/logo, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/clients/:id/logo, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] CompagniesController {/api/compagnies}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/compagnies, GET} route +1ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/compagnies/auto-gestion, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/compagnies/auto-gestion/:clientId, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/compagnies/:id, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/compagnies, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/compagnies/:id, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/compagnies/:id, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/compagnies/:id/logo, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/compagnies/:id/logo, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/compagnies/:id/accessoires, PUT} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/compagnies/:id/surprimes-age, PUT} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/compagnies/:id/clauses-ajustement, PUT} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/compagnies/:id/territorialites, PUT} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/compagnies/:id/taux-couverture, PUT} route +1ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/compagnies/:id/garanties, PUT} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] ContratsController {/api/contrats}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/contrats, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/contrats/:id, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/contrats, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/contrats/:id, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/contrats/:id, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/contrats/:id/garanties, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/contrats/:id/mouvement-population, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/contrats/:id/basculer-population, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/contrats/:id/historique-compagnie, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/contrats/:id/population-historique, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] DevisController {/api/devis}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/devis, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/devis/:id, GET} route +1ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/devis, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/devis/:id, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/devis/:id, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/devis/:id/convertir, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] RenouvellementsController {/api/renouvellements}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/renouvellements, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/renouvellements/relancer-tout, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/renouvellements/:id/relancer, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/renouvellements/:id/renouveler, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/renouvellements/:id/perdu, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] AvenantsController {/api/avenants}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/avenants, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/avenants/:id, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/avenants, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/avenants/:id, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/avenants/:id/appliquer, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/avenants/:id, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] ResiliationsController {/api/resiliations}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/resiliations, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/resiliations, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/resiliations/:id/valider, PATCH} route +1ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/resiliations/:id/effective, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/resiliations/:id, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] SinistresController {/api/sinistres}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sinistres, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sinistres/:id, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sinistres, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sinistres/:id, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sinistres/:id, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] SanteController {/api/sante}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sante/assures, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sante/assures, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sante/assures/import, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sante/assures/:id, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sante/assures/:id/photo, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sante/assures/:id/photo, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sante/assures/:id/carte, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sante/assures/:id/suspendre, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sante/assures/:id/retrait, POST} route +1ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sante/assures/:id/bascule, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sante/assures/:id/mouvements, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sante/assures/:id, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sante/prises-en-charge, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sante/prises-en-charge, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/sante/prises-en-charge/:id, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] CommissionsController {/api/commissions}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/commissions, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/commissions, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/commissions/:id/reverser, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] TresorerieController {/api/tresorerie}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/tresorerie/comptes, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/tresorerie/flux, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/tresorerie/flux, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/tresorerie/flux/:id/rapprocher, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] RecouvrementController {/api/recouvrement}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/recouvrement, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/recouvrement/relancer-tout, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/recouvrement/:id/relancer, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/recouvrement/:id/resoudre, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] CrmController {/api/crm/prospects}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/crm/prospects, GET} route +1ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/crm/prospects/:id, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/crm/prospects, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/crm/prospects/:id, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/crm/prospects/:id, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/crm/prospects/:id/logo, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/crm/prospects/:id/logo, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] ComptabiliteController {/api/comptabilite/journal}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/comptabilite/journal, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/comptabilite/journal, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] GedController {/api/ged/documents}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/ged/documents, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/ged/documents, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/ged/documents/:id, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] AppelOffresController {/api/appel-offres}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/appel-offres, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/appel-offres/:id, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/appel-offres, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/appel-offres/:id, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/appel-offres/:id/propositions, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/appel-offres/:id/propositions/:propId, PATCH} route +1ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/appel-offres/:id/propositions/:propId, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/appel-offres/:id/documents, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/appel-offres/:id/documents/:docId, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] CotationController {/api/cotation}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/cotation, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/cotation/:id, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/cotation, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/cotation/:id, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/cotation/:id, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/cotation/:id/logo, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/cotation/:id/logo, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] PrestatairesController {/api/prestataires}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/prestataires, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/prestataires/:id, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/prestataires, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/prestataires/:id, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/prestataires/:id/suspendre, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/prestataires/:id, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] AccordPrealableController {/api/accord-prealable}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/accord-prealable, GET} route +1ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/accord-prealable/:id, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/accord-prealable, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/accord-prealable/:id/decision, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] FondsDeRoulementController {/api/fonds-de-roulement}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/fonds-de-roulement, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/fonds-de-roulement, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/fonds-de-roulement/:id/consommer, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] HonorairesController {/api/honoraires}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/honoraires, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/honoraires, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/honoraires/:id/facturer, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] FraudeController {/api/fraude}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/fraude, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/fraude/evaluer/assure/:assureId, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] ReglementPrestataireController {/api/reglement-prestataire}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/reglement-prestataire, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/reglement-prestataire/:id, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/reglement-prestataire/generer, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/reglement-prestataire/:id/valider, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/reglement-prestataire/:id/rejeter, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/reglement-prestataire/:id/payer, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] NotificationsController {/api/notifications}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/notifications, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/notifications, POST} route +1ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/notifications/:id/lue, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] GarantieCatalogueController {/api/garantie-catalogue}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/garantie-catalogue, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/garantie-catalogue, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/garantie-catalogue/:id, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] DocumentsController {/api/documents}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/documents/quittance/:contratId, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/documents/quittance-avenant/:avenantId, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/documents/tableau-garanties/:contratId, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/documents/population/:contratId, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/documents/consommations/:contratId, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/documents/accord-prealable/:contratId, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/documents/avenant/:avenantId, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/documents/avis-echeance/:clientId, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/documents/cotation-offre, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/documents/carte/:assureId, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/documents/cartes, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/documents/decompte-facture/:factureId, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/documents/feuille-examen/:assureId, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/documents/feuille-soins/:assureId, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/documents/certificat-prise-en-charge/:accordId, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] ParametresEntrepriseController {/api/parametres-entreprise}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/parametres-entreprise, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/parametres-entreprise, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] ComptesMobileController {/api/comptes-mobile}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/comptes-mobile/generer, POST} route +1ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] ActesMedicauxController {/api/actes-medicaux}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/actes-medicaux, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/actes-medicaux/:id, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/actes-medicaux, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/actes-medicaux/:id, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/actes-medicaux/:id, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RoutesResolver] FacturesController {/api/factures}: +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/factures, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/factures/:id, GET} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/factures, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/factures/:id, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/factures/:id/annuler, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/factures/:id/lignes/apercu, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/factures/:id/lignes, POST} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/factures/:id/lignes/:ligneId, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/factures/:id/lignes/:ligneId/rejeter, PATCH} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:24     LOG [RouterExplorer] Mapped {/api/factures/:id/lignes/:ligneId, DELETE} route +0ms
+[Nest] 29296  - 12/08/2026 06:31:25     LOG [NestApplication] Nest application successfully started +184ms
+MedAssur API listening on http://localhost:3001/api
+[2J[3J[H[[90m06:56:54[0m] File change detected. Starting incremental compilation...
+
+[[90m06:56:59[0m] Found 0 errors. Watching for file changes.
+
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [NestFactory] Starting Nest application...
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] AppModule dependencies initialized +19ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] PrismaModule dependencies initialized +533ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] PassportModule dependencies initialized +1ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] MouvementsModule dependencies initialized +6ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] ConfigHostModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] DiscoveryModule dependencies initialized +1ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] ConfigModule dependencies initialized +2ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] ConfigModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] ScheduleModule dependencies initialized +1ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] ClientsModule dependencies initialized +9ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] CompagniesModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] DevisModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] AvenantsModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] SinistresModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] CommissionsModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] TresorerieModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] RecouvrementModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] CrmModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] ComptabiliteModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] GedModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] AppelOffresModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] CotationModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] PrestatairesModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] AccordPrealableModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] FondsDeRoulementModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] HonorairesModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] FraudeModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] ReglementPrestataireModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] NotificationsModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] GarantieCatalogueModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] ParametresEntrepriseModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] ComptesMobileModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] ActesMedicauxModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] JwtModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] AuditModule dependencies initialized +1ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] SanteModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] ContratsModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] ResiliationsModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] DocumentsModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] AuthModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] FacturesModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [InstanceLoader] RenouvellementsModule dependencies initialized +0ms
+[Nest] 19996  - 12/08/2026 06:57:05     LOG [RoutesResolver] AuthController {/api/auth}: +6ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/auth/login, POST} route +2ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] AuditController {/api/audit}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/audit, GET} route +1ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] ClientsController {/api/clients}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/clients, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/clients/:id, GET} route +1ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/clients/:id/portfolio, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/clients, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/clients/:id, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/clients/:id, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/clients/:id/logo, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/clients/:id/logo, DELETE} route +1ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] CompagniesController {/api/compagnies}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/compagnies, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/compagnies/auto-gestion, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/compagnies/auto-gestion/:clientId, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/compagnies/:id, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/compagnies, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/compagnies/:id, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/compagnies/:id, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/compagnies/:id/logo, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/compagnies/:id/logo, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/compagnies/:id/accessoires, PUT} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/compagnies/:id/surprimes-age, PUT} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/compagnies/:id/clauses-ajustement, PUT} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/compagnies/:id/territorialites, PUT} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/compagnies/:id/taux-couverture, PUT} route +1ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/compagnies/:id/garanties, PUT} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] ContratsController {/api/contrats}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/contrats, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/contrats/:id, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/contrats, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/contrats/:id, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/contrats/:id, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/contrats/:id/garanties, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/contrats/:id/mouvement-population, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/contrats/:id/basculer-population, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/contrats/:id/historique-compagnie, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/contrats/:id/population-historique, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] DevisController {/api/devis}: +1ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/devis, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/devis/:id, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/devis, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/devis/:id, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/devis/:id, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/devis/:id/convertir, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] RenouvellementsController {/api/renouvellements}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/renouvellements, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/renouvellements/relancer-tout, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/renouvellements/:id/relancer, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/renouvellements/:id/renouveler, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/renouvellements/:id/perdu, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] AvenantsController {/api/avenants}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/avenants, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/avenants/:id, GET} route +1ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/avenants, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/avenants/:id, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/avenants/:id/appliquer, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/avenants/:id, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] ResiliationsController {/api/resiliations}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/resiliations, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/resiliations, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/resiliations/:id/valider, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/resiliations/:id/effective, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/resiliations/:id, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] SinistresController {/api/sinistres}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sinistres, GET} route +1ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sinistres/:id, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sinistres, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sinistres/:id, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sinistres/:id, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] SanteController {/api/sante}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sante/assures, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sante/assures, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sante/assures/import, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sante/assures/:id, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sante/assures/:id/photo, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sante/assures/:id/photo, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sante/assures/:id/carte, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sante/assures/:id/suspendre, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sante/assures/:id/retrait, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sante/assures/:id/bascule, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sante/assures/:id/mouvements, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sante/assures/:id, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sante/prises-en-charge, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sante/prises-en-charge, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/sante/prises-en-charge/:id, PATCH} route +1ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] CommissionsController {/api/commissions}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/commissions, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/commissions, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/commissions/:id/reverser, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] TresorerieController {/api/tresorerie}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/tresorerie/comptes, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/tresorerie/flux, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/tresorerie/flux, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/tresorerie/flux/:id/rapprocher, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] RecouvrementController {/api/recouvrement}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/recouvrement, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/recouvrement/relancer-tout, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/recouvrement/:id/relancer, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/recouvrement/:id/resoudre, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] CrmController {/api/crm/prospects}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/crm/prospects, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/crm/prospects/:id, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/crm/prospects, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/crm/prospects/:id, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/crm/prospects/:id, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/crm/prospects/:id/logo, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/crm/prospects/:id/logo, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] ComptabiliteController {/api/comptabilite/journal}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/comptabilite/journal, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/comptabilite/journal, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] GedController {/api/ged/documents}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/ged/documents, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/ged/documents, POST} route +1ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/ged/documents/:id, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] AppelOffresController {/api/appel-offres}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/appel-offres, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/appel-offres/:id, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/appel-offres, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/appel-offres/:id, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/appel-offres/:id/propositions, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/appel-offres/:id/propositions/:propId, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/appel-offres/:id/propositions/:propId, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/appel-offres/:id/documents, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/appel-offres/:id/documents/:docId, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] CotationController {/api/cotation}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/cotation, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/cotation/:id, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/cotation, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/cotation/:id, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/cotation/:id, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/cotation/:id/logo, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/cotation/:id/logo, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] PrestatairesController {/api/prestataires}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/prestataires, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/prestataires/:id, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/prestataires, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/prestataires/:id, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/prestataires/:id/suspendre, PATCH} route +1ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/prestataires/:id, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] AccordPrealableController {/api/accord-prealable}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/accord-prealable, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/accord-prealable/:id, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/accord-prealable, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/accord-prealable/:id/decision, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] FondsDeRoulementController {/api/fonds-de-roulement}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/fonds-de-roulement, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/fonds-de-roulement, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/fonds-de-roulement/:id/consommer, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] HonorairesController {/api/honoraires}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/honoraires, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/honoraires, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/honoraires/:id/facturer, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] FraudeController {/api/fraude}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/fraude, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/fraude/evaluer/assure/:assureId, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] ReglementPrestataireController {/api/reglement-prestataire}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/reglement-prestataire, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/reglement-prestataire/:id, GET} route +1ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/reglement-prestataire/generer, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/reglement-prestataire/:id/valider, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/reglement-prestataire/:id/rejeter, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/reglement-prestataire/:id/payer, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] NotificationsController {/api/notifications}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/notifications, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/notifications, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/notifications/:id/lue, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] GarantieCatalogueController {/api/garantie-catalogue}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/garantie-catalogue, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/garantie-catalogue, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/garantie-catalogue/:id, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] DocumentsController {/api/documents}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/documents/quittance/:contratId, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/documents/quittance-avenant/:avenantId, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/documents/tableau-garanties/:contratId, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/documents/population/:contratId, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/documents/consommations/:contratId, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/documents/accord-prealable/:contratId, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/documents/avenant/:avenantId, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/documents/avis-echeance/:clientId, GET} route +1ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/documents/cotation-offre, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/documents/carte/:assureId, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/documents/cartes, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/documents/decompte-facture/:factureId, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/documents/feuille-examen/:assureId, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/documents/feuille-soins/:assureId, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/documents/certificat-prise-en-charge/:accordId, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] ParametresEntrepriseController {/api/parametres-entreprise}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/parametres-entreprise, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/parametres-entreprise, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] ComptesMobileController {/api/comptes-mobile}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/comptes-mobile/generer, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] ActesMedicauxController {/api/actes-medicaux}: +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/actes-medicaux, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/actes-medicaux/:id, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/actes-medicaux, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/actes-medicaux/:id, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/actes-medicaux/:id, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RoutesResolver] FacturesController {/api/factures}: +1ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/factures, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/factures/:id, GET} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/factures, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/factures/:id, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/factures/:id/annuler, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/factures/:id/lignes/apercu, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/factures/:id/lignes, POST} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/factures/:id/lignes/:ligneId, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/factures/:id/lignes/:ligneId/rejeter, PATCH} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [RouterExplorer] Mapped {/api/factures/:id/lignes/:ligneId, DELETE} route +0ms
+[Nest] 19996  - 12/08/2026 06:57:06     LOG [NestApplication] Nest application successfully started +186ms
+MedAssur API listening on http://localhost:3001/api

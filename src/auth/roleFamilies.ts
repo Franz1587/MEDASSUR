@@ -3,7 +3,7 @@ import type { RoleId } from "@/auth/roles";
 export type RoleFamily = "direction" | "production" | "sinistres_sante" | "finance" | "commercial";
 
 /**
- * Groups the 12 internal roles into 5 dashboard families. External roles
+ * Groups the 10 internal roles into 5 dashboard families. External roles
  * (courtier_partenaire, compagnie_assurance, prestataire_sante, expert_*,
  * client_*) are intentionally absent — they use PortalShell, not the ERP
  * dashboard, and RoleDashboard falls back to the generic DashboardView
@@ -16,8 +16,6 @@ export const roleFamilies: Partial<Record<RoleId, RoleFamily>> = {
 
   gestionnaire_production: "production",
   gestionnaire_entreprises: "production",
-  gestionnaire_vie: "production",
-  gestionnaire_flotte: "production",
 
   gestionnaire_sinistres: "sinistres_sante",
   gestionnaire_sante: "sinistres_sante",

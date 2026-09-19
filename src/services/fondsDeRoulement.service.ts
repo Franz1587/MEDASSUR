@@ -13,9 +13,8 @@ interface ApiFondsDeRoulement {
   contrat: { client: { nom: string } };
 }
 
-export async function getFondsDeRoulement(): Promise<FondsDeRoulement[]> {
-  const data = await http.get<ApiFondsDeRoulement[]>("/fonds-de-roulement");
-  return data.map((f) => ({
+function mapFonds(f: ApiFondsDeRoulement): FondsDeRoulement {
+  return {
     id: f.id,
     contratId: f.contratId,
     clientNom: f.contrat.client.nom,
@@ -24,5 +23,27 @@ export async function getFondsDeRoulement(): Promise<FondsDeRoulement[]> {
     seuilAlerte: toNumber(f.seuilAlerte),
     statut: f.statut,
     dateAlimentation: f.dateAlimentation,
-  }));
+  };
+}
+
+export async function getFondsDeRoulement(): Promise<FondsDeRoulement[]> {
+  const data = await http.get<ApiFondsDeRoulement[]>("/fonds-de-roulement");
+  return data.map(mapFonds);
+}
+
+export interface FondsUpsertInput {
+  contratId: string;
+  montantInitial: number;
+  seuilAlerte: number;
+  dateAlimentation: string;
+}
+
+export async function createFonds(payload: FondsUpsertInput): Promise<FondsDeRoulement> {
+  const f = await http.post<ApiFondsDeRoulement>("/fonds-de-roulement", payload);
+  return mapFonds(f);
+}
+
+export async function consommerFonds(id: string, montant: number): Promise<FondsDeRoulement> {
+  const f = await http.patch<ApiFondsDeRoulement>(`/fonds-de-roulement/${id}/consommer`, { montant });
+  return mapFonds(f);
 }

@@ -42,7 +42,7 @@ export class FraudeService {
     const montantTotal = prises.reduce((sum, p) => sum + Number(p.montant), 0);
     if (montantTotal > 2_000_000) {
       score += 15;
-      motifs.push(`Montant cumulé élevé (${montantTotal.toLocaleString("fr-FR")} XAF)`);
+      motifs.push(`Montant cumulé élevé (${montantTotal.toLocaleString("fr-FR")} FCFA)`);
     }
 
     score = Math.min(score, 100);

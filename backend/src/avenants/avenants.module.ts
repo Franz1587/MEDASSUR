@@ -5,5 +5,6 @@ import { AvenantsController } from "./avenants.controller";
 @Module({
   providers: [AvenantsService],
   controllers: [AvenantsController],
+  exports: [AvenantsService],
 })
 export class AvenantsModule {}

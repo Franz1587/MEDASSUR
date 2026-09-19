@@ -40,3 +40,17 @@ export async function getRecouvrementKanban(): Promise<Record<string, string[]>>
   }
   return columns;
 }
+
+export async function relancerImpaye(id: string): Promise<Impaye> {
+  const i = await http.patch<ApiImpaye>(`/recouvrement/${id}/relancer`);
+  return mapImpaye(i);
+}
+
+export async function relancerTousLesImpayes(): Promise<{ relances: number }> {
+  return http.post<{ relances: number }>("/recouvrement/relancer-tout");
+}
+
+export async function resoudreImpaye(id: string): Promise<Impaye> {
+  const i = await http.patch<ApiImpaye>(`/recouvrement/${id}/resoudre`);
+  return mapImpaye(i);
+}

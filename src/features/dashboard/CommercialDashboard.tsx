@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { Target, TrendingUp, FileText } from "lucide-react";
+import { toast } from "sonner";
 import { StatCard } from "@/components/shared/StatCard";
 import { Badge } from "@/components/shared/Badge";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
+import { useShellNavigation } from "@/layout/ShellNavigationContext";
+import { useAuth } from "@/auth/AuthContext";
 import { fmtM } from "@/lib/format";
 import { getProspects } from "@/services/crm.service";
-import { getDevis } from "@/services/devis.service";
+import { getCotations } from "@/services/cotation.service";
 import type { Prospect } from "@/types/crm";
-import type { Devis } from "@/types/devis";
+import type { Cotation } from "@/types/cotation";
 
 const etapes = ["Nouveau", "Qualifié", "Proposition envoyée", "Négociation", "Gagné"];
 const etapeStyle: Record<string, string> = {
@@ -19,14 +22,22 @@ const etapeStyle: Record<string, string> = {
 };
 
 export default function CommercialDashboard() {
-  const [prospects, setProspects] = useState<Prospect[]>([]);
-  const [devis, setDevis] = useState<Devis[]>([]);
+  const { setView } = useShellNavigation();
+  const { currentUser } = useAuth();
+  const [allProspects, setAllProspects] = useState<Prospect[]>([]);
+  const [allCotations, setAllCotations] = useState<Cotation[]>([]);
 
   useEffect(() => {
-    getProspects().then(setProspects);
-    getDevis().then(setDevis);
+    getProspects().then(setAllProspects);
+    getCotations().then(setAllCotations);
   }, []);
 
+  const prospects = allProspects.filter((p) => p.gestionnaireId === currentUser?.id);
+  // Tableau de bord personnel (2026-08) — voir demande utilisateur : "le
+  // tableau de bord [doit] faire remonter les informations en fonction du
+  // profil de l'utilisateur." Mêmes cotations que ProductionDashboard,
+  // filtrées cette fois sur l'agent COMMERCIAL connecté.
+  const cotations = allCotations.filter((c) => c.gestionnaireId === currentUser?.id);
   const actifs = prospects.filter((p) => p.etape !== "Gagné" && p.etape !== "Perdu");
   const pipelineValue = actifs.reduce((a, b) => a + b.valeurEstimee, 0);
   const gagnes = prospects.filter((p) => p.etape === "Gagné").length;
@@ -34,11 +45,15 @@ export default function CommercialDashboard() {
 
   return (
     <div className="p-6 space-y-6">
-      <ModuleHeader title="Tableau de Bord — Commercial" subtitle="Pipeline CRM et suivi des devis" icon={Target} />
+      <ModuleHeader
+        title="Tableau de Bord — Commercial"
+        subtitle="Mon pipeline CRM et mes cotations en cours"
+        icon={Target}
+      />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Pipeline actif" value={`${fmtM(pipelineValue)} XAF`} icon={Target} />
+        <StatCard title="Pipeline actif" value={`${fmtM(pipelineValue)} FCFA`} icon={Target} />
         <StatCard title="Prospects en cours" value={String(actifs.length)} icon={Target} />
-        <StatCard title="Taux de transformation" value={`${tauxTransfo}%`} icon={TrendingUp} trend={{ label: "+4%", up: true }} />
+        <StatCard title="Taux de transformation" value={`${tauxTransfo}%`} icon={TrendingUp} />
         <StatCard title="Affaires gagnées" value={String(gagnes)} icon={Target} accent="bg-green-500/10" />
       </div>
 
@@ -56,9 +71,9 @@ export default function CommercialDashboard() {
                   </div>
                   <div className="space-y-1.5">
                     {items.slice(0, 3).map((p) => (
-                      <div key={p.id} className="bg-secondary/30 rounded-lg p-2.5">
+                      <div key={p.id} onClick={() => { setView("crm"); toast.success("Navigation vers CRM"); }} className="bg-secondary/30 rounded-lg p-2.5 cursor-pointer hover:bg-secondary/45 transition-colors">
                         <p className="text-xs font-semibold text-foreground truncate">{p.nom}</p>
-                        <p className="text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(p.valeurEstimee)}</p>
+                        <p className="text-xs text-muted-foreground med-num">{fmtM(p.valeurEstimee)}</p>
                       </div>
                     ))}
                   </div>
@@ -72,18 +87,18 @@ export default function CommercialDashboard() {
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-border flex items-center gap-2">
           <FileText className="w-4 h-4 text-primary" />
-          <h3 className="font-semibold text-foreground text-sm">Devis récents</h3>
+          <h3 className="font-semibold text-foreground text-sm">Mes cotations récentes</h3>
         </div>
         <div className="divide-y divide-border/50">
-          {devis.slice(0, 5).map((d) => (
-            <div key={d.id} className="flex items-center justify-between px-4 py-3 hover:bg-secondary/30 transition-colors">
+          {cotations.slice(0, 5).map((c) => (
+            <div key={c.id} onClick={() => setView("cotation")} className="flex items-center justify-between px-4 py-3 hover:bg-secondary/30 transition-colors cursor-pointer">
               <div>
-                <p className="text-sm font-semibold text-foreground">{d.client}</p>
-                <p className="text-xs text-muted-foreground">{d.branche}</p>
+                <p className="text-sm font-semibold text-foreground">{c.clientNom}</p>
+                <p className="text-xs text-muted-foreground">{c.branche}{c.compagnie ? ` · ${c.compagnie.nom}` : ""}</p>
               </div>
               <div className="text-right space-y-1">
-                <p className="text-xs font-semibold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(d.primeEstimee)} XAF</p>
-                <Badge variant={d.statut === "Accepté" ? "success" : d.statut === "Refusé" ? "danger" : "info"}>{d.statut}</Badge>
+                <p className="text-xs font-semibold text-foreground med-num">{fmtM(c.primeTTC)} FCFA</p>
+                <Badge variant="info">{c.dateCreation}</Badge>
               </div>
             </div>
           ))}
@@ -92,3 +107,5 @@ export default function CommercialDashboard() {
     </div>
   );
 }
+
+

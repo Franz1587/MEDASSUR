@@ -1,0 +1,30 @@
+-- AlterTable
+ALTER TABLE "Client" ADD COLUMN     "adresse" TEXT,
+ADD COLUMN     "boitePostale" TEXT,
+ADD COLUMN     "categorieMorale" TEXT,
+ADD COLUMN     "dateNaissance" TEXT,
+ADD COLUMN     "effectif" INTEGER,
+ADD COLUMN     "employeur" TEXT,
+ADD COLUMN     "formeJuridique" TEXT,
+ADD COLUMN     "lieuNaissance" TEXT,
+ADD COLUMN     "nationalite" TEXT,
+ADD COLUMN     "nif" TEXT,
+ADD COLUMN     "pieceIdentiteNumero" TEXT,
+ADD COLUMN     "pieceIdentiteType" TEXT,
+ADD COLUMN     "prenom" TEXT,
+ADD COLUMN     "profession" TEXT,
+ADD COLUMN     "rccm" TEXT,
+ADD COLUMN     "representantEmail" TEXT,
+ADD COLUMN     "representantFonction" TEXT,
+ADD COLUMN     "representantNom" TEXT,
+ADD COLUMN     "representantTel" TEXT,
+ADD COLUMN     "secteurActivite" TEXT,
+ADD COLUMN     "sexe" TEXT,
+ADD COLUMN     "situationMatrimoniale" TEXT,
+ADD COLUMN     "telSecondaire" TEXT,
+ADD COLUMN     "ville" TEXT;
+
+-- AlterTable
+ALTER TABLE "Contrat" ADD COLUMN     "extensionsTerritorialite" TEXT[],
+ADD COLUMN     "garanties" TEXT,
+ADD COLUMN     "paysSouscription" TEXT;

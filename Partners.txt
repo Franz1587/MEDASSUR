@@ -1,0 +1,5 @@
+X-Api-Key: msp_live_PTrhGtidwRceK3JXjv6EovpG4TXY8Z-neOenuG5Der0
+
+
+
+Base URL : https://srv1634445.hstgr.cloud/functions/v1/partner-api

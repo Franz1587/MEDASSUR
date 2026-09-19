@@ -33,8 +33,10 @@ export default function IAView() {
     const next: ChatMessage[] = [...messages, { role: "user", content: msg }];
     setMessages(next);
     setInput("");
-    chatAssistant(msg).then((reply) => {
+    chatAssistant(msg, messages).then((reply) => {
       setMessages([...next, { role: "assistant", content: reply }]);
+    }).catch(() => {
+      setMessages([...next, { role: "assistant", content: "Désolé, une erreur est survenue. Réessayez dans un instant." }]);
     });
   };
 

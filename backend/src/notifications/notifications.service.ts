@@ -6,8 +6,15 @@ import { PrismaService } from "../prisma/prisma.service";
 export class NotificationsService {
   constructor(private prisma: PrismaService) {}
 
-  findAll() {
-    return this.prisma.notification.findMany({ orderBy: { dateEnvoi: "desc" } });
+  // Réservé au destinataire concerné — jamais toutes les notifications de
+  // tous les utilisateurs (voir NotificationsController, destinataireId =
+  // l'utilisateur authentifié).
+  findPourUtilisateur(destinataireId: string, limit = 50) {
+    return this.prisma.notification.findMany({
+      where: { destinataireId },
+      orderBy: { dateEnvoi: "desc" },
+      take: limit,
+    });
   }
 
   create(destinataireType: string, destinataireId: string, message: string) {
@@ -16,7 +23,11 @@ export class NotificationsService {
     });
   }
 
-  marquerLue(id: string) {
-    return this.prisma.notification.update({ where: { id }, data: { statut: "Lue" } });
+  marquerLue(id: string, destinataireId: string) {
+    return this.prisma.notification.updateMany({ where: { id, destinataireId }, data: { statut: "Lue" } });
+  }
+
+  marquerToutesLues(destinataireId: string) {
+    return this.prisma.notification.updateMany({ where: { destinataireId, statut: "Envoyée" }, data: { statut: "Lue" } });
   }
 }

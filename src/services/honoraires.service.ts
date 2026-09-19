@@ -14,9 +14,8 @@ interface ApiHonoraires {
   contrat: { client: { nom: string } };
 }
 
-export async function getHonoraires(): Promise<HonorairesGestion[]> {
-  const data = await http.get<ApiHonoraires[]>("/honoraires");
-  return data.map((h) => ({
+function mapHonoraires(h: ApiHonoraires): HonorairesGestion {
+  return {
     id: h.id,
     contratId: h.contratId,
     clientNom: h.contrat.client.nom,
@@ -26,5 +25,28 @@ export async function getHonoraires(): Promise<HonorairesGestion[]> {
     montantHonoraires: toNumber(h.montantHonoraires),
     plafond: h.plafond !== undefined && h.plafond !== null ? toNumber(h.plafond) : undefined,
     statut: h.statut,
-  }));
+  };
+}
+
+export async function getHonoraires(): Promise<HonorairesGestion[]> {
+  const data = await http.get<ApiHonoraires[]>("/honoraires");
+  return data.map(mapHonoraires);
+}
+
+export interface HonorairesUpsertInput {
+  contratId: string;
+  periode: string;
+  montantSinistres: number;
+  tauxHonoraires: number;
+  plafond?: number;
+}
+
+export async function createHonoraires(payload: HonorairesUpsertInput): Promise<HonorairesGestion> {
+  const h = await http.post<ApiHonoraires>("/honoraires", payload);
+  return mapHonoraires(h);
+}
+
+export async function facturerHonoraires(id: string): Promise<HonorairesGestion> {
+  const h = await http.patch<ApiHonoraires>(`/honoraires/${id}/facturer`);
+  return mapHonoraires(h);
 }

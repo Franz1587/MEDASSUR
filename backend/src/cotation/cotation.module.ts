@@ -5,5 +5,6 @@ import { CotationController } from "./cotation.controller";
 @Module({
   providers: [CotationService],
   controllers: [CotationController],
+  exports: [CotationService],
 })
 export class CotationModule {}

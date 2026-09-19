@@ -1,26 +1,42 @@
 import { useEffect, useState } from "react";
-import {
-  Target, FileText, AlertTriangle, Stethoscope, Truck, BookOpen,
-  CreditCard, Search, Handshake, Building2, type LucideIcon,
-} from "lucide-react";
+import photo01 from "@/assets/carousel/photo-01.png";
+import photo02 from "@/assets/carousel/photo-02.png";
+import photo03 from "@/assets/carousel/photo-03.png";
+import photo04 from "@/assets/carousel/photo-04.png";
+import photo05 from "@/assets/carousel/photo-05.png";
 
-interface Profession {
-  icon: LucideIcon;
-  title: string;
-  desc: string;
+interface Slide {
+  image: string;
+  alt: string;
+  position: string;
 }
 
-const professions: Profession[] = [
-  { icon: Target, title: "Commercial", desc: "Pipeline CRM et devis multi-compagnies en quelques clics" },
-  { icon: FileText, title: "Gestionnaire Production", desc: "Contrats, renouvellements et avenants centralisés" },
-  { icon: AlertTriangle, title: "Gestionnaire Sinistres", desc: "De la déclaration au règlement, un dossier entièrement tracé" },
-  { icon: Stethoscope, title: "Gestionnaire Santé", desc: "Prises en charge et remboursements simplifiés" },
-  { icon: Truck, title: "Gestionnaire Flotte", desc: "Suivi véhicule par véhicule, sinistres compris" },
-  { icon: BookOpen, title: "Comptable", desc: "Comptabilité SYSCOHADA et trésorerie en temps réel" },
-  { icon: CreditCard, title: "Agent de Recouvrement", desc: "Relances automatisées, multi-canaux, Mobile Money inclus" },
-  { icon: Search, title: "Expert Automobile", desc: "Expertise terrain digitalisée, rapports en un clic" },
-  { icon: Handshake, title: "Courtier Partenaire", desc: "Un espace dédié pour vos clients référés et vos commissions" },
-  { icon: Building2, title: "Compagnie d'Assurance", desc: "Produits, propositions reçues et affaires en cours" },
+const slides: Slide[] = [
+  {
+    image: photo01,
+    alt: "Consultation medicale couverte par assurance sante",
+    position: "50% 38%",
+  },
+  {
+    image: photo02,
+    alt: "Famille africaine en clinique pour prise en charge sante",
+    position: "50% 35%",
+  },
+  {
+    image: photo03,
+    alt: "Personnel soignant et patient a l hopital",
+    position: "50% 46%",
+  },
+  {
+    image: photo04,
+    alt: "Admission et dossier assurance maladie",
+    position: "50% 36%",
+  },
+  {
+    image: photo05,
+    alt: "Parcours de soins et couverture assurance sante",
+    position: "50% 38%",
+  },
 ];
 
 const INTERVAL_MS = 3200;
@@ -29,31 +45,32 @@ export function ProfessionsCarousel() {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    const id = setInterval(() => setIndex((i) => (i + 1) % professions.length), INTERVAL_MS);
+    const id = setInterval(() => setIndex((i) => (i + 1) % slides.length), INTERVAL_MS);
     return () => clearInterval(id);
   }, []);
 
-  const current = professions[index];
+  const current = slides[index];
 
   return (
-    <div className="space-y-4">
-      <p className="text-xs font-bold text-white/40 uppercase tracking-widest">Un métier, une interface</p>
-      <div key={index} className="flex items-start gap-3 animate-[fadeIn_0.5s_ease]">
-        <div className="p-2.5 bg-primary/15 rounded-xl border border-primary/25 flex-shrink-0">
-          <current.icon className="w-5 h-5 text-primary" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-base font-semibold text-white">{current.title}</p>
-          <p className="text-sm text-white/50 mt-0.5">{current.desc}</p>
-        </div>
+    <div className="relative h-full w-full">
+      <div className="absolute inset-0 overflow-hidden">
+        <img
+          key={index}
+          src={current.image}
+          alt={current.alt}
+          className="w-full h-full object-cover animate-[fadeIn_0.6s_ease,kenBurns_3.2s_ease-out]"
+          style={{ objectPosition: current.position }}
+          loading="eager"
+        />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#082b49]/52 via-transparent to-[#083a61]/38" />
       </div>
-      <div className="flex items-center gap-1.5">
-        {professions.map((p, i) => (
+      <div className="absolute left-6 bottom-6 flex items-center gap-1.5 z-10">
+        {slides.map((s, i) => (
           <button
-            key={p.title}
+            key={s.alt}
             onClick={() => setIndex(i)}
-            aria-label={p.title}
-            className={`h-1.5 rounded-full transition-all ${i === index ? "w-6 bg-primary" : "w-1.5 bg-white/20 hover:bg-white/30"}`}
+            aria-label={s.alt}
+            className={`h-1.5 rounded-full transition-all ${i === index ? "w-7 bg-white" : "w-2 bg-white/45 hover:bg-white/70"}`}
           />
         ))}
       </div>
@@ -61,6 +78,11 @@ export function ProfessionsCarousel() {
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(4px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes kenBurns {
+          from { transform: scale(1.01); }
+          to { transform: scale(1.035); }
         }
       `}</style>
     </div>

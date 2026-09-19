@@ -1,0 +1,81 @@
+{
+  "expo": {
+    "name": "MEDASSUR",
+    "slug": "medassur",
+    "scheme": "medassur",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.medassur.app"
+    },
+    "android": {
+      "package": "com.medassur.app",
+      "googleServicesFile": "./google-services.json",
+      "adaptiveIcon": {
+        "backgroundColor": "#0a426f",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#0a426f"
+        }
+      ],
+      "expo-secure-store",
+      "expo-sharing",
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "MEDASSUR a besoin d'accéder à vos photos pour joindre des documents (ordonnances, factures, examens).",
+          "cameraPermission": "MEDASSUR a besoin de la caméra pour photographier vos documents médicaux."
+        }
+      ],
+      "react-native-blob-util",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-foreground.png",
+          "color": "#0a426f"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "MEDASSUR a besoin de votre position pour vous situer sur la carte du réseau de soins."
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "https://medassur.cloud/api",
+      "eas": {
+        "projectId": "4c8e319c-7107-412f-b2f1-53cc15d4c8e4"
+      }
+    },
+    "owner": "oscar_franz-2",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/4c8e319c-7107-412f-b2f1-53cc15d4c8e4"
+    }
+  }
+}

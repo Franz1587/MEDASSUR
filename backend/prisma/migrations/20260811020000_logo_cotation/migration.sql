@@ -1,0 +1,1 @@
+ALTER TABLE "Cotation" ADD COLUMN "logo" TEXT;

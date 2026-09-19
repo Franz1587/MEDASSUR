@@ -1,0 +1,3 @@
+ALTER TABLE "QuittanceLibreTranche" ADD COLUMN "primeNette" DECIMAL(18,2) NOT NULL DEFAULT 0;
+ALTER TABLE "QuittanceLibreTranche" ADD COLUMN "accessoires" DECIMAL(18,2) NOT NULL DEFAULT 0;
+ALTER TABLE "QuittanceLibreTranche" ADD COLUMN "taxe" DECIMAL(18,2) NOT NULL DEFAULT 0;

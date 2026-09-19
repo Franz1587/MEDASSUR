@@ -1,0 +1,19 @@
+<svg width="1200" height="760" viewBox="0 0 1200 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g1" x1="40" y1="40" x2="1160" y2="720" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0A426F"/>
+      <stop offset="0.55" stop-color="#0D73BF"/>
+      <stop offset="1" stop-color="#23C6B4"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="760" rx="44" fill="url(#g1)"/>
+  <circle cx="174" cy="146" r="120" fill="white" fill-opacity="0.11"/>
+  <circle cx="1060" cy="610" r="180" fill="white" fill-opacity="0.08"/>
+  <rect x="120" y="172" width="960" height="416" rx="28" fill="white" fill-opacity="0.13"/>
+  <rect x="188" y="246" width="360" height="46" rx="12" fill="white" fill-opacity="0.26"/>
+  <rect x="188" y="322" width="276" height="28" rx="10" fill="white" fill-opacity="0.2"/>
+  <rect x="188" y="372" width="300" height="28" rx="10" fill="white" fill-opacity="0.2"/>
+  <rect x="188" y="422" width="240" height="28" rx="10" fill="white" fill-opacity="0.2"/>
+  <rect x="664" y="236" width="336" height="286" rx="22" fill="#0A426F" fill-opacity="0.55"/>
+  <path d="M730 366L808 442L934 312" stroke="white" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

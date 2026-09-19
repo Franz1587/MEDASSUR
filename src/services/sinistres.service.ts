@@ -11,6 +11,7 @@ interface ApiSinistre {
   statut: string;
   priorite: string;
   client: { nom: string };
+  gestionnaireId?: string | null;
 }
 
 function mapSinistre(s: ApiSinistre): Sinistre {
@@ -23,6 +24,7 @@ function mapSinistre(s: ApiSinistre): Sinistre {
     montant: toNumber(s.montant),
     statut: s.statut,
     priorite: s.priorite,
+    gestionnaireId: s.gestionnaireId ?? null,
   };
 }
 
@@ -40,4 +42,28 @@ export async function getSinistresKanban(): Promise<Record<string, string[]>> {
     (columns[s.statut] ??= []).push(s.id);
   }
   return columns;
+}
+
+export interface SinistreUpsertInput {
+  clientId: string;
+  branche: string;
+  date: string;
+  description: string;
+  montant: number;
+  statut: string;
+  priorite: "Normal" | "Haute" | "Urgent";
+}
+
+export async function createSinistre(payload: SinistreUpsertInput): Promise<Sinistre> {
+  const s = await http.post<ApiSinistre>("/sinistres", payload);
+  return mapSinistre(s);
+}
+
+export async function updateSinistreStatut(id: string, statut: string): Promise<Sinistre> {
+  const s = await http.patch<ApiSinistre>(`/sinistres/${id}`, { statut });
+  return mapSinistre(s);
+}
+
+export async function deleteSinistre(id: string): Promise<{ id: string }> {
+  return http.delete<{ id: string }>(`/sinistres/${id}`);
 }

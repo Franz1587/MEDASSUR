@@ -1,0 +1,26 @@
+# EAS Build archive — voir demande utilisateur : l'upload échouait
+# régulièrement (ECONNRESET) sur une archive de 314 Mo. Le dossier "mobile"
+# n'a pas son propre .git (c'est un sous-dossier du dépôt racine
+# D:\PROJET MEDASSUR\MEDASSUR), donc l'exclusion automatique basée sur
+# .gitignore ne s'appliquait pas de façon fiable — node_modules (359 Mo)
+# partait dans l'archive alors qu'EAS réinstalle les dépendances lui-même
+# depuis package.json/package-lock.json à chaque build.
+node_modules/
+.expo/
+dist/
+web-build/
+.git/
+.kotlin/
+android/
+ios/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+.DS_Store
+*.pem
+.env*.local
+*.tsbuildinfo
+builds/

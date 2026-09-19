@@ -1,0 +1,87 @@
+// Catalogue officiel des motifs de rejet de facture/montant (2026-09) — voir
+// demande utilisateur : "je t'ai envoyé le fichier avec les motifs de rejet
+// de facture ou des montants durant la saisie des lignes de facture" et
+// "MOTIFS DE REJET DE FACTURE.pdf" fourni comme modèle à reproduire
+// exactement. Remplace la liste générique à 11 entrées qui existait
+// jusqu'ici dans FactureSaisie.tsx/RemboursementSaisie.tsx (dupliquée,
+// inventée) — texte et ordre alphabétique identiques au document source,
+// jamais reformulés. "AUTRE" (poste 20 du document) exige un champ de
+// saisie libre complémentaire (voir MOTIF_REJET_AUTRE et note du document :
+// "Nécessité d'avoir alors un champ de saisie libre").
+export const MOTIF_REJET_AUTRE = "AUTRE";
+
+export const MOTIFS_REJET_FACTURE: string[] = [
+  "ABSENCE DE COMPTE RENDU DE LA MISE EN OBSERVATION",
+  "ABSENCE DE COMPTE RENDU D'HOSPITALISATION",
+  "ABSENCE DE LA NATURE DE LA MALADIE",
+  "ABSENCE DE LA PRESCRIPTION ORIGINALE",
+  "ABSENCE DE PRESCRIPTION MEDICALE",
+  "ABSENCE DE PRESCRIPTION(S) MEDICALE(S)",
+  "ABSENCE DE RECU DE CAISSE",
+  "ABSENCE DE RECU DE CONSULTATION",
+  "ABSENCE DE VIGNETTE DES MEDICAMENTS",
+  "ACHAT ANTERIEUR A LA DATE DE LA PRESCRIPTION",
+  "ACTE ANTERIEUR A LA DATE D'EFFET DU CONTRAT",
+  "ACTE HORS PERIODE DE COUVERTURE",
+  "ACTE(S) OU PRESTATION(S) EXCLU(S)",
+  "ACTES ENGAGE PDT LE DELAI DE CARENCE",
+  "ACTES HORS TERRITORIALITE",
+  "ACTES NON REMBOURSES AU TITRE DU CONTRAT D'ASSURANCE",
+  "AFFECTION EXCLUE DE LA GARANTIE",
+  "AFFECTION NON PRECISEE",
+  "AGE LIMITE ATTEINT/REVOLU",
+  MOTIF_REJET_AUTRE,
+  "DEDUCTION DE 10% SELON LA CONVENTION",
+  "DEDUCTION DE 15% SELON LA CONVENTION",
+  "DEDUCTION DE 5% SELON LA CONVENTION",
+  "DEDUCTION DE 8% SELON LA CONVENTION",
+  "DEDUCTION DU TICKET MODERATEUR",
+  "DEDUCTION SELON LE NOMBRE DE JOUR D'HOSPITALISATION/ABSENCE DE DEMANDE DE PROLONGATION",
+  "DEDUCTION TAXE DE GARDE",
+  "DEFAUT DE CACHET PHARMACIE",
+  "DEFAUT DE PRESCRIPTION",
+  "DELAI DE DECLARATION DEPASSE",
+  "DOSSIER EN ATTENTE D'UN ACCORD DE REGLEMENT",
+  "FACTURE ILLISIBLE",
+  "FOURNIR LA(ES) PRESCRIPTION(S) MEDICALE(S)",
+  "FOURNIR L'AVIS DE REGLEMENT DE LA CFE",
+  "FOURNIR LE(S) ORIGINAL(AUX)",
+  "GARANTIE NON SOUSCRITE",
+  "INCOHERENCE ENTRE AFFECTION ET PRESCRIPTION",
+  "MEDICAMENT NON PRESCRIT",
+  "MEDICAMENT(S) NON REMBOURSE(S) AU TITRE DU CONTRAT D'ASSURANCE",
+  "MONTANT A JUSTIFIER",
+  "NON IDENTIFICATION DU PRESCRIPTEUR",
+  "PERSONNE NON ASSUREE",
+  "PLAFOND ACTE MEDICAL DEPASSE",
+  "PLAFOND ANNUEL GARANTI ATTEINT",
+  "PRECISER LA NATURE DE LA MALADIE",
+  "PRESCRIPTEUR NON AUTORISE",
+  "PRESTATIONS NON JUSTIFIEES",
+  "PRODUIT(S) NON REMBOURSABLE(S)",
+  "REMBOURSEMENT SELON CONVENTION",
+  "REMBOURSEMENT SELON LA LETTRE D= 1750 FCFA",
+  "REMBOURSEMENT SELON LA LETTRE D= 2000 FCFA",
+  "REMBOURSEMENT SELON LA LETTRE D= 2800 FCFA",
+  "REMBOURSEMENT SELON LA QUANTITE PRESCRITE",
+  "REMBOURSEMENT SELON PRISE EN CHARGE",
+  "REMBOURSEMENT SELON TARIF CONVENT SECU. SOCIALE FR",
+  "REMBOURSEMENT SELON TARIF NOMENCLATURE GENERALE/NOMENCLATURE CONTRAT",
+  "SERINGUE(S) NON REMBOURSEE(S)",
+  "SURCHARGE DE LA FACTURE",
+  "SURCHARGE SUR LA PRESCRIPTION MEDICALE",
+  "TICKET DE PHARMACIE ABSENT",
+  "TICKET DE PHARMACIE IMPRECIS/NON DETAILLE",
+  "TICKET MODERATEUR NON REMBOURSABLE",
+  "TRAITEMENT SUPERIEUR A LA DUREE PRESCRITE",
+];
+
+// Reconstitue la sélection catalogue/texte libre à partir d'un motif déjà
+// enregistré (édition d'une ligne, ou anciennes lignes saisies avant ce
+// catalogue — texte libre non reconnu = traité comme "AUTRE"). Partagé par
+// FactureSaisie.tsx et RemboursementSaisie.tsx.
+export function mapMotifRejet(valeur?: string | null): { motifRejetSaisie: string; motifRejetAutre: string } {
+  if (!valeur) return { motifRejetSaisie: "", motifRejetAutre: "" };
+  if (MOTIFS_REJET_FACTURE.includes(valeur) && valeur !== MOTIF_REJET_AUTRE) return { motifRejetSaisie: valeur, motifRejetAutre: "" };
+  return { motifRejetSaisie: MOTIF_REJET_AUTRE, motifRejetAutre: valeur };
+}

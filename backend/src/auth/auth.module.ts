@@ -13,12 +13,16 @@ import { JwtStrategy } from "./jwt.strategy";
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>("JWT_SECRET") ?? "courteva-dev-secret-change-in-production",
+        secret: config.get<string>("JWT_SECRET") ?? "medassur-dev-secret-change-in-production",
         signOptions: { expiresIn: "8h" },
       }),
     }),
   ],
   providers: [AuthService, JwtStrategy],
   controllers: [AuthController],
+  // JwtModule exporté (2026-09) — réutilisé par SocietesModule pour émettre
+  // un token de "mode assistance" (voir SocietesService.assistance), avec
+  // exactement le même secret/signature que la connexion normale.
+  exports: [JwtModule],
 })
 export class AuthModule {}

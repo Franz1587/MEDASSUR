@@ -1,0 +1,2 @@
+ALTER TABLE "Client" ADD COLUMN "logo" TEXT;
+ALTER TABLE "Prospect" ADD COLUMN "logo" TEXT;

@@ -16,6 +16,11 @@ export function useSimulatedProcessing<T>() {
     fn().then((data) => {
       setResult(data);
       setStatus("done");
+    }).catch(() => {
+      // Repli sur "idle" plutôt que de rester bloqué sur le spinner
+      // indéfiniment (2026-09) — l'appelant est responsable d'afficher son
+      // propre message d'erreur (toast) avant/pendant ce catch.
+      setStatus("idle");
     });
   };
 

@@ -1,0 +1,1 @@
+ALTER TABLE "GarantieCatalogue" ADD COLUMN "ordre" INTEGER NOT NULL DEFAULT 0;

@@ -1,15 +1,21 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import type { Request } from "express";
 import { NotificationsService } from "./notifications.service";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+
+type AuthRequest = Request & { user: { userId: string } };
 
 @Controller("notifications")
 @UseGuards(JwtAuthGuard)
 export class NotificationsController {
   constructor(private readonly service: NotificationsService) {}
 
+  // Toujours filtré sur l'utilisateur authentifié — jamais les
+  // notifications de tout le monde (bulle de notification, voir
+  // AdminShell.tsx).
   @Get()
-  findAll() {
-    return this.service.findAll();
+  findAll(@Req() req: AuthRequest) {
+    return this.service.findPourUtilisateur(req.user.userId);
   }
 
   @Post()
@@ -18,7 +24,12 @@ export class NotificationsController {
   }
 
   @Patch(":id/lue")
-  marquerLue(@Param("id") id: string) {
-    return this.service.marquerLue(id);
+  marquerLue(@Param("id") id: string, @Req() req: AuthRequest) {
+    return this.service.marquerLue(id, req.user.userId);
+  }
+
+  @Patch("toutes-lues")
+  marquerToutesLues(@Req() req: AuthRequest) {
+    return this.service.marquerToutesLues(req.user.userId);
   }
 }

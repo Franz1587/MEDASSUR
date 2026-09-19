@@ -2,9 +2,19 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// DIRECT_URL (2026-09, déploiement Supabase) — Supabase recommande deux
+// chaînes de connexion distinctes pour Prisma : `DATABASE_URL` (via le
+// pooler PgBouncer, port 6543, `?pgbouncer=true`) utilisée par
+// l'application à l'exécution — supporte de nombreuses connexions courtes
+// concurrentes ; `DIRECT_URL` (connexion directe, port 5432) réservée aux
+// migrations (`prisma migrate deploy`), car PgBouncer en mode transaction
+// ne supporte pas les "prepared statements" dont Prisma Migrate a besoin.
+// En local (Postgres sans pooler), les deux pointent simplement vers la
+// même base — voir .env.example.
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────
@@ -15,7 +25,533 @@ model User {
   email        String   @unique
   initiales    String
   passwordHash String
+  // Changement de mot de passe imposé (2026-09) — voir demande utilisateur :
+  // "la saisie du mot de passe pour la première fois ne demande pas de
+  // réinitialiser le mot de passe à la première connexion... pour une
+  // meilleure sécurité". true dès qu'un mot de passe est fixé PAR QUELQU'UN
+  // D'AUTRE que le titulaire du compte (création initiale, réinitialisation
+  // admin après perte, régénération des accès mobile...) — voir tous les
+  // points d'écriture de passwordHash. Remis à false uniquement quand le
+  // titulaire choisit lui-même son mot de passe (UsersService.
+  // changerMotDePasse, seul endroit qui exige l'ancien mot de passe).
+  doitChangerMotDePasse Boolean @default(false)
   createdAt    DateTime @default(now())
+
+  // Coordonnées personnelles + photo de profil (2026-08) — voir demande
+  // utilisateur : "voir plus de détails d'un utilisateur, ajouter les
+  // coordonnées personnels, y compris la photo de profil". `photo` est un
+  // nom de fichier sous backend/uploads/photos-users/ (même principe que
+  // AssureSante.photo, voir SanteService.uploadPhoto).
+  telephone String?
+  adresse   String?
+  photo     String?
+
+  // Agence de rattachement (2026-09) — voir demande utilisateur : "lier un
+  // agent de saisie à une agence du client... afin que ce soit cette
+  // agence qui remonte sur le décompte". Facultatif — un agent sans agence
+  // assignée laisse le champ "Agence" du Décompte/Règlement à "—" comme
+  // avant, jamais de valeur inventée.
+  agenceId String?
+  agence   Agence? @relation(fields: [agenceId], references: [id])
+
+  // Signature électronique (2026-09) — voir demande utilisateur : "il faut
+  // que le médecin puisse dans son compte mettre sa signature... la
+  // signature se charge dans le compte de l'utilisateur (agent du client,
+  // l'assuré, le médecin, le souscripteur)... elle pourra s'ajouter
+  // systématiquement dans tous les documents où sa signature sera
+  // nécessaire." Nom de fichier sous Supabase Storage/uploads/signatures/,
+  // même principe que `photo`. Capturée soit par upload direct d'une image,
+  // soit via le flux QR code (voir SignatureToken ci-dessous) — jetable/
+  // remplaçable, jamais versionnée.
+  signature String?
+
+  // Dernière connexion (2026-09) — voir demande utilisateur : "un écran lui
+  // permettant de voir les performances d'utilisation de l'application"
+  // (Super Admin). Mise à jour à chaque connexion réussie (voir
+  // AuthService.login) — sert de proxy d'activité réelle par société,
+  // faute d'un vrai outil d'analytics branché sur ce projet.
+  derniereConnexion DateTime?
+
+  // Notification push (2026-09) — voir demande utilisateur : "l'application
+  // mobile doit pouvoir activer les notifications sur le smartphone afin
+  // que l'assuré soit informé des nouvelles entrées même quand il n'est pas
+  // dans l'application". Jeton Expo Push du dernier appareil mobile
+  // enregistré (voir PortailMembreController.enregistrerPushToken) — un
+  // seul par compte (repli MVP : l'assuré principal n'utilise typiquement
+  // qu'un téléphone ; passer à une table dédiée le jour où le multi-appareil
+  // devient réel). Écrasé à chaque connexion mobile, jamais lu/écrit côté web.
+  pushToken String?
+
+  // Droits par utilisateur (2026-08) — voir demande utilisateur : "c'est
+  // l'administrateur qui donne les droits aux fonctionnalités... un
+  // utilisateur a accès aux fonctionnalités qu'on lui aura attribué".
+  // Liste des View (frontend, src/layout/navConfig.ts) accessibles à CET
+  // utilisateur précis — remplace roleId.allowedModules (src/auth/roles.ts)
+  // comme source d'autorité pour le filtrage de la nav une fois l'utilisateur
+  // connecté ; roleId reste le modèle par défaut proposé à la création d'un
+  // nouvel utilisateur (voir UsersService.create), mais n'est plus consulté
+  // ensuite pour le filtrage réel.
+  modules      String[] @default([])
+
+  // Rattachement portail client (2026-08) — voir demande utilisateur : un
+  // compte client_entreprise/client_particulier ne doit voir QUE les
+  // contrats de SON client (Contrat.clientId), jamais ceux des autres
+  // souscripteurs. Null pour tous les comptes internes (agents/gestionnaires).
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id])
+
+  // Rattachement portail assuré (2026-08) — même principe que clientId
+  // ci-dessus, mais pour un compte assure_principal : ne rattache qu'à SA
+  // propre fiche AssureSante (voir demande utilisateur : "écran externe
+  // dédié à l'assuré principal"). Null pour tous les autres comptes.
+  assureSanteId String?      @unique
+  assureSante   AssureSante? @relation(fields: [assureSanteId], references: [id])
+
+  // Rattachement portail prestataire (2026-08) — même principe que
+  // clientId/assureSanteId ci-dessus, pour un compte prestataire_sante :
+  // ne rattache qu'à SON propre établissement (voir demande utilisateur :
+  // "portail externe dédié au prestataire médical", modelé sur SI Médical/
+  // EYONE). Null pour tous les autres comptes. Plus @unique depuis 2026-09
+  // (voir migration 20260912090000_prestataire_multi_comptes) — un
+  // établissement porte désormais PLUSIEURS comptes génériques par poste
+  // (Accueil/Vendeur, Facturation, Médecin/Pharmacien), voir demande
+  // utilisateur : "Service Accueil... Service Facturation... Médecin...
+  // pour les pharmacies... remplacer service.accueil par vendeur et
+  // medecin par pharmacien".
+  prestataireId String?
+  prestataire   Prestataire? @relation(fields: [prestataireId], references: [id])
+
+  // Rattachement portail médecin (2026-08) — même principe que clientId/
+  // assureSanteId/prestataireId ci-dessus, pour un compte médecin
+  // prescripteur : accès distinct de celui de sa/ses structure(s)
+  // (Prestataire), voir demande utilisateur : "le médecin doit avoir ses
+  // accès différents de ceux de la clinique ou l'hôpital... c'est
+  // sensible". Null pour tous les autres comptes.
+  medecinId String?  @unique
+  medecin   Medecin? @relation(fields: [medecinId], references: [id])
+
+  // Rattachement société (2026-09) — Phase 1 d'un chantier multi-tenant en
+  // plusieurs phases (voir demande utilisateur : "créer les sociétés
+  // d'assurances qui vont utiliser l'application comme outil métier...
+  // isolation complète par société, en plusieurs phases"). NULL = compte
+  // super_admin (niveau plateforme, au-dessus de toute société) ; renseigné
+  // = compte appartenant à CETTE société (tout le reste du personnel
+  // interne/portails). Le cloisonnement RÉEL des données métier par
+  // société (Client/Contrat/Prestataire/Facture...) est la Phase 2, pas
+  // encore faite — voir SocieteAssurance ci-dessous.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+
+  prospects        Prospect[]
+  sinistres        Sinistre[]
+  prisesEnCharge   PriseEnCharge[]
+  factures         Facture[]
+  remboursements   Remboursement[]
+  quittancesLibres QuittanceLibre[]
+  accordsPrealables AccordPrealable[]
+  // Tableau de bord personnel (2026-08) — voir demande utilisateur : "le
+  // tableau de bord [doit] faire remonter les informations en fonction du
+  // profil de l'utilisateur et non toutes les données." Même principe que
+  // les relations ci-dessus (Prospect, Facture...) — extension du modèle
+  // de propriété par utilisateur à Contrat/Cotation, qui n'en avaient pas
+  // encore, pour que "Renouvellements urgents"/"Cotations récentes" côté
+  // Production/Commercial ne montrent plus TOUT le portefeuille de la
+  // compagnie mais seulement celui de l'agent connecté.
+  contrats  Contrat[]
+  cotations Cotation[]
+  courriers        Courrier[]
+  demandesClient      DemandeClient[] @relation("DemandeClientDemandeur")
+  demandesClientTraitees DemandeClient[] @relation("DemandeClientGestionnaire")
+  documentSignatures  DocumentSignature[]
+  signatureTokens     SignatureToken[]
+  prospectsHistorique ProspectHistorique[]
+  communications      Communication[]
+  gedDocumentsDemandes GedDocument[]
+  bordereauxReglementCrees BordereauReglement[]
+
+  @@index([prestataireId])
+  @@index([societeId])
+  @@index([agenceId])
+}
+
+// Plan d'abonnement (2026-09) — voir demande utilisateur : "il revient au
+// super Admin de donner accès à ces modules là en fonction du type
+// d'abonnement souscrit." Catalogue de types d'abonnement gérable par le
+// Super Admin (créer/modifier/supprimer des plans nommés, ex. "Essentiel"/
+// "Business"/"Premium"), chacun listant les modules qu'il inclut — sert de
+// modèle GÉNÉRIQUE pré-remplissant SocieteAssurance.modules à l'affectation
+// d'un plan à une société (même principe que RoleModuleTemplate →
+// User.modules), librement personnalisable ensuite au cas par cas.
+model PlanAbonnement {
+  id        String   @id @default(cuid())
+  nom       String   @unique
+  modules   String[] @default([])
+  ordre     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  // Tarif de référence (2026-09) — voir demande utilisateur : "un écran de
+  // facturation afin de gérer... le paiement de licence d'utilisation par
+  // mois, trimestre, semestre, année". Prix MENSUEL de référence ; converti
+  // au cycle choisi par chaque société (voir SocieteAssurance.
+  // cycleFacturation, FactureAbonnementService.calculerMontantPeriode).
+  // Null = plan sans tarif fixe (facturation entièrement au cas par cas via
+  // SocieteAssurance.prixAbonnement).
+  prixMensuel Decimal? @db.Decimal(18, 2)
+
+  societes SocieteAssurance[]
+}
+
+// ── Sociétés d'assurance (2026-09) — Super Admin / plateforme ─────────
+// Voir demande utilisateur : "Je veux que tu créer un compte, et un
+// interface pour le super Admin. Le super Admin est le propriétaire de
+// l'application. C'est lui qui crée les sociétés d'assurances qui vont
+// utiliser l'application comme outil métier... il a la main sur toutes
+// les fonctionnalités de l'outil et peut y accéder en assistance." Chaque
+// société est un tenant MedAssur — une compagnie/un courtier qui utilise
+// l'application comme SON outil métier, avec (à terme, Phase 2) ses
+// propres clients/contrats/prestataires/factures totalement étanches des
+// autres sociétés. Phase 1 (actuelle) : le modèle + le rattachement
+// User.societeId + l'écran Super Admin de création/gestion — sans encore
+// cloisonner les données métier existantes (qui restent un jeu partagé,
+// voir migration `20260901_societe_assurance` : une société "bootstrap"
+// reprend l'identité de l'unique ParametresEntreprise déjà en place et
+// tous les utilisateurs existants lui sont rattachés, pour ne rien casser
+// en attendant la Phase 2).
+model SocieteAssurance {
+  id              String   @id @default(cuid())
+  nom             String
+  email           String?
+  telephone       String?
+  ville           String?
+  pays            String   @default("Gabon")
+  // Actif | Suspendu — une société suspendue voit ses comptes bloqués à la
+  // connexion (même esprit que Prestataire.statutConvention "Suspendu").
+  statut          String   @default("Actif")
+  motifSuspension String?
+  createdAt       DateTime @default(now())
+
+  // Abonnement (2026-09) — voir demande utilisateur : "c'est normalement le
+  // Super Admin qui donne accès aux fonctionnalités ou modules... en
+  // fonction du type d'abonnement souscrit." planAbonnementId pré-remplit
+  // `modules` au choix du plan (voir PlanAbonnementService), mais `modules`
+  // reste la SEULE source d'autorité consultée en pratique (même principe
+  // que RoleModuleTemplate → User.modules) : un plan reste librement
+  // personnalisable au cas par cas pour cette société précise sans devoir
+  // créer un nouveau plan pour un seul client. Plafonne ce que les
+  // administrateurs DE CETTE société peuvent accorder à leurs propres
+  // utilisateurs (voir UsersService.plafonnerModules) — jamais contourné
+  // depuis l'intérieur de la société elle-même.
+  planAbonnementId String?
+  planAbonnement   PlanAbonnement? @relation(fields: [planAbonnementId], references: [id])
+  modules          String[]        @default([])
+
+  // Facturation de la licence (2026-09) — voir demande utilisateur : "un
+  // écran de facturation afin de gérer... les frais d'installation et
+  // surtout le paiement de licence d'utilisation par mois, trimestre,
+  // semestre, année (selon le mode de souscription)". cycleFacturation
+  // pilote la fréquence des factures d'abonnement générées (voir
+  // FactureAbonnementService) ; prixAbonnement surcharge le tarif du plan
+  // pour CETTE société (négociation au cas par cas), null = dérivé de
+  // planAbonnement.prixMensuel × durée du cycle. fraisInstallation = frais
+  // ponctuel facturé à la mise en service, indépendant du cycle récurrent.
+  cycleFacturation  String   @default("Mensuel") // Mensuel | Trimestriel | Semestriel | Annuel
+  prixAbonnement    Decimal? @db.Decimal(18, 2)
+  fraisInstallation Decimal? @db.Decimal(18, 2)
+
+  facturesAbonnement FactureAbonnement[]
+
+  // Nature juridique de la société utilisatrice (2026-09) — voir demande
+  // utilisateur : "il faut pouvoir dire le type de société qui va utiliser
+  // l'application : un courtier... une mutuelle... une compagnie
+  // d'assurance." Courtier = comportement historique (place des contrats
+  // auprès de plusieurs Compagnie externes, en tire une commission) — seul
+  // modèle connu de l'application avant cette date. Mutuelle/Compagnie =
+  // fonctionnement IPM/payeur direct, sans assureur externe réel — voir
+  // compagnieInterneId ci-dessous.
+  type String @default("Courtier") // Courtier | Mutuelle | Compagnie
+
+  // Compagnie interne auto-provisionnée (2026-09) — pour une société
+  // Mutuelle/Compagnie, chaque Contrat doit toujours pointer vers UNE
+  // Compagnie (colonne requise, voir Contrat.compagnieId) alors qu'il
+  // n'existe aucun assureur externe réel : cette ligne, créée
+  // automatiquement à la création de la société (voir SocietesService.
+  // create), en tient lieu — masquée du sélecteur Compagnie du formulaire
+  // Contrat, assignée automatiquement à sa place. Reste éditable comme une
+  // Compagnie normale (raison sociale, RCCM, banque... pour le papier à
+  // en-tête des propres documents de cette société). Null pour une société
+  // Courtier. Relation nommée : distincte de Compagnie.societeId/societe
+  // (rattachement tenant-scoping "cette compagnie appartient à cette
+  // société", potentiellement plusieurs par société) — ici, UNE relation
+  // 1:1 "cette société EST cette compagnie".
+  compagnieInterneId String?    @unique
+  compagnieInterne   Compagnie? @relation("CompagnieInterne", fields: [compagnieInterneId], references: [id])
+
+  users User[]
+  clients Client[]
+  compagnies Compagnie[]
+  prospects Prospect[]
+  appelsOffres AppelOffres[]
+  cotations Cotation[]
+  contrats Contrat[]
+  quittanceLibres QuittanceLibre[]
+  sinistres Sinistre[]
+  assureSantes AssureSante[]
+  prestataires Prestataire[]
+  medecins Medecin[]
+  accordPrealables AccordPrealable[]
+  prisesEnCharge PriseEnCharge[]
+  factures Facture[]
+  remboursements Remboursement[]
+  relevePrestataires RelevePrestataire[]
+  decomptes Decompte[]
+  bordereauReglements BordereauReglement[]
+  banques Banque[]
+  lettreCheques LettreCheque[]
+  factureProductions FactureProduction[]
+  courriers Courrier[]
+  conversations Conversation[]
+  gedDocuments GedDocument[]
+  comptesBancaires CompteBancaire[]
+  fluxTresorerie FluxTresorerie[]
+  impayes Impaye[]
+  journalEntries JournalEntry[]
+  communications Communication[]
+  demandesClient DemandeClient[]
+  fondsDeRoulement FondsDeRoulement[]
+  honorairesGestion HonorairesGestion[]
+  courrierTypes CourrierType[]
+  avenants Avenant[]
+  prescriptions Prescription[]
+  scoringFraudes ScoringFraude[]
+  facturesEnAttente FactureEnAttente[]
+  prestataireAlias PrestataireAlias[]
+  lotsCheques LotCheques[]
+  agences Agence[]
+
+  @@index([planAbonnementId])
+}
+
+// Facture de la PLATEFORME à une société (2026-09) — voir demande
+// utilisateur : "un écran de facturation afin de gérer de facture des frais
+// d'installation et surtout de paiement de licence d'utilisation". Sans
+// rapport avec le modèle `Facture` métier santé (prises en charge) — celle-
+// ci est la facturation de MedAssur ENVERS ses sociétés clientes, gérée
+// exclusivement par le Super Admin (voir FactureAbonnementService),
+// jamais rattachée à TENANT_MODELS (aucun écran société ne la consulte à ce
+// jour). Paiement enregistré manuellement (aucune passerelle de paiement
+// branchée sur ce projet — même principe que EncaissementPrime/
+// QuittanceLibre côté métier).
+// Facture multi-lignes avec fiscalité gabonaise (2026-09) — voir demande
+// utilisateur : "revoir le formulaire de facturation... enrichir comme un
+// vrai formulaire dédié à la facturation... TVA (18%), TPS (9.5%), CSS
+// (1%), on doit pouvoir sélectionner les taxes à activer... plusieurs
+// lignes de type facturation." Chaque taxe est INDÉPENDANTE (taux nul =
+// désactivée pour cette facture précise, montant nul) — jamais implicite,
+// toujours le choix explicite de qui facture. `montantHT` = somme des
+// lignes ; `montantTTC` = montantHT + les 3 taxes activées ; c'est
+// `montantTTC` qui fait foi pour le statut Payée/impayé (voir
+// FactureAbonnementService).
+model FactureAbonnement {
+  id        String @id @default(cuid())
+  // Numéro séquentiel plateforme (2026-09) — voir demande utilisateur : un
+  // "vrai formulaire de facturation" a un numéro de pièce, pas seulement un
+  // id technique. Continu à travers toutes les sociétés (une seule série,
+  // comme une facture fournisseur classique), jamais réutilisé.
+  numero    Int      @default(autoincrement())
+  societeId String
+  societe   SocieteAssurance @relation(fields: [societeId], references: [id], onDelete: Cascade)
+
+  type          String // "Installation" | "Abonnement" | "Autre"
+  // Période couverte (type = "Abonnement") — texte libre format JJ/MM/AAAA,
+  // même convention que le reste de l'application (voir Contrat.dateDebut).
+  periodeDebut  String?
+  periodeFin    String?
+
+  montantHT  Decimal @db.Decimal(18, 2) @default(0)
+  // Taux nul = taxe DÉSACTIVÉE pour cette facture (voir demande
+  // utilisateur : "on doit pouvoir sélectionner les taxes à activer") —
+  // jamais un défaut implicite ; le taux ET le montant sont figés à
+  // l'émission (une facture déjà émise ne doit jamais bouger si le taux
+  // légal change plus tard).
+  tauxTva    Decimal? @db.Decimal(5, 2)
+  montantTva Decimal  @db.Decimal(18, 2) @default(0)
+  tauxTps    Decimal? @db.Decimal(5, 2)
+  montantTps Decimal  @db.Decimal(18, 2) @default(0)
+  tauxCss    Decimal? @db.Decimal(5, 2)
+  montantCss Decimal  @db.Decimal(18, 2) @default(0)
+  montantTTC Decimal  @db.Decimal(18, 2) @default(0)
+
+  statut        String   @default("Emise") // Emise | Payee | Annulee
+  dateEmission  String
+  dateEcheance  String
+  datePaiement    String?
+  modePaiement    String? // Virement | Chèque | Espèces | Mobile Money
+  referencePaiement String?
+  note          String?
+  createdAt     DateTime @default(now())
+
+  lignes FactureAbonnementLigne[]
+
+  @@index([societeId])
+}
+
+// Ligne de facture (2026-09) — voir demande utilisateur : "on doit pouvoir
+// ajouter plusieurs lignes de type facturation. Une facturation à plusieurs
+// lignes." `montant` = quantite × prixUnitaire, figé à la création (le
+// catalogue ModulePrix peut changer après coup sans jamais altérer une
+// facture déjà émise).
+model FactureAbonnementLigne {
+  id                  String @id @default(cuid())
+  factureAbonnementId String
+  factureAbonnement   FactureAbonnement @relation(fields: [factureAbonnementId], references: [id], onDelete: Cascade)
+
+  // Rubrique d'origine (2026-09) — voir demande utilisateur : "le type de
+  // facture n'est pas les rubriques de facture. les rubriques font
+  // référence aux différentes lignes de facturation (installation,
+  // licence, carte, récupération de données...)." Référence SOUPLE (pas de
+  // clé étrangère stricte) vers RubriqueFacturation.code — une ligne déjà
+  // émise garde son code même si la rubrique catalogue est renommée/
+  // supprimée ensuite ; null = ligne libre, sans rubrique choisie.
+  rubriqueCode String?
+  designation  String
+  quantite     Decimal @db.Decimal(10, 2) @default(1)
+  prixUnitaire Decimal @db.Decimal(18, 2)
+  montant      Decimal @db.Decimal(18, 2)
+  ordre        Int     @default(0)
+
+  @@index([factureAbonnementId])
+}
+
+// Catalogue des rubriques de facturation (2026-09) — voir demande
+// utilisateur : "les rubriques font référence aux différentes lignes de
+// facturation (installation, licence, carte, récupération de données...)"
+// — gérable par le Super Admin (ajouter/modifier/retirer), sert de modèle
+// pour pré-remplir une ligne de facture (voir FactureAbonnementLigne.
+// rubriqueCode) sans jamais imposer un catalogue figé.
+model RubriqueFacturation {
+  code       String   @id
+  libelle    String
+  prixDefaut Decimal? @db.Decimal(18, 2)
+  ordre      Int      @default(0)
+  actif      Boolean  @default(true)
+  createdAt  DateTime @default(now())
+}
+
+// Catalogue de prix PAR module/fonctionnalité (2026-09) — voir demande
+// utilisateur : "l'application doit pouvoir évaluer un coût pour chaque
+// fonctionnalité (rendre paramétrable) afin que l'option d'abonnement
+// s'enrichisse en fonction des fonctionnalités cochées." Une ligne par clé
+// de module (voir src/auth/moduleGroups.ts GROUPES_MODULES côté frontend,
+// ALL_VIEWS côté backend role-modules.ts) — le prix d'un abonnement composé
+// à la carte se calcule en sommant les prix des modules cochés (voir
+// FactureAbonnementService.calculerPrixModules), converti en FCFA via
+// TauxChange. Module absent du catalogue = prix nul (gratuit/inclus par
+// défaut), jamais une erreur bloquante.
+model ModulePrix {
+  module    String   @id
+  prix      Decimal  @db.Decimal(12, 2)
+  // EUR | USD — voir demande utilisateur : "faire une correspondance en
+  // euro/dollars et convertir en FCFA (XAF)".
+  devise    String   @default("EUR")
+  updatedAt DateTime @updatedAt
+}
+
+// Taux de change vers le FCFA (XAF), 2026-09 — voir demande utilisateur :
+// "convertir en FCFA (XAF)". Aucun fournisseur de cours de change branché
+// sur ce projet (même limite que les autres intégrations externes
+// absentes ici — SMS/email/paiement) : taux saisi et maintenu MANUELLEMENT
+// par le Super Admin, pas un flux temps réel. EUR est légalement fixe pour
+// le XAF (parité BEAC 1 EUR = 655,957 XAF) — laissé éditable quand même
+// pour rester cohérent avec USD (qui, lui, flotte réellement).
+model TauxChange {
+  devise      String   @id // "EUR" | "USD"
+  tauxVersXaf Decimal  @db.Decimal(10, 4)
+  updatedAt   DateTime @updatedAt
+}
+
+// Tarification par personne assurée (2026-09) — voir demande utilisateur :
+// "en plus de la tarification liée aux fonctionnalités, il y a la licence
+// annuelle par assuré. C'est un montant minimum de 5000 pour assuré y
+// compris les ayants droit... on facture la carte par assuré et ayant
+// droit. Le montant par défaut est 2500 par personne. Mais il faut laisser
+// le montant paramétrable." Deux tarifs PAR TÊTE (assuré principal ET
+// chaque ayant droit comptent chacun comme une personne, voir
+// AssureSante — chaque CJ/EF est sa propre ligne), distincts de
+// ModulePrix (qui tarife les FONCTIONNALITÉS, pas la population). Ligne
+// UNIQUE globale à la plateforme (comme TauxChange) — voir
+// FactureAbonnementService.compterPersonnes/lignesParDefaut.
+model ParametresFacturationPlateforme {
+  id String @id @default("default")
+
+  // "Montant MINIMUM de 5000" — un vrai plancher légal/commercial, pas
+  // seulement une valeur de départ : voir UpsertParametresFacturationDto
+  // (validation @Min(5000)), jamais contournable même par le Super Admin
+  // via ce formulaire.
+  licenceAnnuellePersonne Decimal @db.Decimal(12, 2) @default(5000)
+  // Pas de plancher imposé ici (voir demande utilisateur : "il faut
+  // laisser le montant paramétrable", sans mention de minimum).
+  carteParPersonne        Decimal @db.Decimal(12, 2) @default(2500)
+
+  updatedAt DateTime @updatedAt
+}
+
+// ── Communications externes (2026-08) ─────────────────────────────────
+// Voir demande utilisateur : "l'application doit pouvoir rendre possible
+// l'envoi des mails, sms et whatsapp. et recevoir des retours sous forme
+// de notification et message interne." AUCUN fournisseur SMS/Email/
+// WhatsApp n'est branché sur ce projet (même situation que
+// comptes-mobile/envoi.util.ts) — chaque envoi est journalisé ici avec
+// `statut: "Simulé"`, prêt à devenir un vrai envoi le jour où un
+// fournisseur (Twilio, Meta WhatsApp Business API, SMTP...) est connecté.
+// "Détecter si un numéro a un compte WhatsApp" n'est pas réalisable sans
+// un tel fournisseur — jamais simulé comme si c'était vérifié.
+model Communication {
+  id                  String   @id @default(cuid())
+  // Isolation multi-tenant (2026-09) — comblé après coup, voir Conversation
+  // ci-dessus pour le détail du bug (interrogé sans filtrage).
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  canal               String // "Email" | "SMS" | "WhatsApp"
+  destinataireType    String // "Prestataire" | "Client" | "AssureSante" | "Prospect" | "Libre"
+  destinataireId      String?
+  destinataireNom     String
+  destinataireContact String // email ou numéro réellement visé
+  objet               String?
+  contenu             String
+  pieceJointe         String? // nom de fichier sous backend/uploads/communications/
+  statut              String   @default("Simulé") // "Simulé" | "Échec"
+  // Déclencheur (2026-08) — "Manuel" (composé depuis l'écran) ou le nom
+  // d'une automatisation (ex. "NouveauContrat" — voir CommunicationsService.
+  // notifierPrestatairesNouveauContrat), pour distinguer l'activité
+  // commerciale manuelle du bruit automatisé dans le journal.
+  declencheur         String   @default("Manuel")
+  retour              String?
+  retourDate          DateTime?
+  auteurId            String?
+  createdAt           DateTime @default(now())
+
+  auteur User? @relation(fields: [auteurId], references: [id])
+
+  @@index([destinataireType, destinataireId])
+  @@index([canal])
+  @@index([societeId])
+}
+
+// Modèle de droits PAR TYPE D'UTILISATEUR (rôle) — voir demande utilisateur :
+// "on peut créer des champs génériques à attribuer aux types d'utilisateur,
+// mais on peut aussi de façon spécifique donner des droits supplémentaires à
+// un utilisateur bien spécifique". Deux niveaux distincts : ce modèle est le
+// niveau GÉNÉRIQUE (par rôle, modifiable depuis l'écran Administration →
+// "Rôles"), tandis que User.modules reste le niveau SPÉCIFIQUE (par
+// utilisateur, modifiable via "Droits"). Remplace l'ancienne constante
+// ROLE_MODULES codée en dur (backend/src/auth/role-modules.ts, conservée
+// comme repli si une ligne manque) — n'est consulté qu'à la création d'un
+// nouvel utilisateur (UsersService.create) ou via le bouton "Réinitialiser
+// au modèle du rôle" ; ne change jamais les droits d'un utilisateur déjà
+// créé tant que l'admin ne le demande pas explicitement.
+model RoleModuleTemplate {
+  roleId  String   @id
+  modules String[] @default([])
 }
 
 // ── CRM / Clients / Compagnies ──────────────────────────────────────
@@ -24,43 +560,295 @@ model User {
 // seed data stays 1:1 with src/data/mock/*.ts.
 model Client {
   id        String   @id
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   nom       String
-  type      String
+  type      String // "Entreprise" | "Particulier"
   pays      String
   contact   String
   tel       String
   email     String
   statut    String
   createdAt DateTime @default(now())
+  // Nom de fichier sous backend/uploads/logos-clients/ — voir
+  // CompagnieService.uploadLogo pour le même pattern. Null = pas de logo,
+  // le nom du souscripteur fait office d'identité visuelle à la place.
+  logo      String?
 
-  contrats    Contrat[]
-  devis       Devis[]
-  sinistres   Sinistre[]
-  impayes     Impaye[]
-  policesIard PoliceIard[]
-  flottes     Flotte[]
+  // ── Coordonnées détaillées (souscripteur avancé, 2026-08) ──────────
+  ville         String?
+  adresse       String?
+  boitePostale  String?
+  telSecondaire String?
+
+  // ── Personne morale (type = "Entreprise") ───────────────────────────
+  // Société privée | Société publique | Parapublique | Administration
+  // publique | Ministère | Organisme | Association | Autre
+  categorieMorale      String?
+  formeJuridique       String?
+  rccm                 String?
+  nif                  String?
+  secteurActivite      String?
+  effectif             Int?
+  representantNom      String?
+  representantFonction String?
+  representantTel      String?
+  representantEmail    String?
+
+  // ── Personne physique (type = "Particulier") ────────────────────────
+  prenom                String?
+  dateNaissance         String?
+  lieuNaissance         String?
+  sexe                  String? // M | F
+  nationalite           String?
+  situationMatrimoniale String?
+  profession            String?
+  employeur             String?
+  pieceIdentiteType     String? // CNI | Passeport | Permis de conduire | Carte consulaire
+  pieceIdentiteNumero   String?
+
+  contrats           Contrat[]
+  sinistres          Sinistre[]
+  impayes            Impaye[]
+  facturesProduction FactureProduction[]
+  courriers          Courrier[]
+  // Comptes du portail client rattachés à ce souscripteur (2026-08).
+  utilisateursPortail User[]
+  demandesClient      DemandeClient[]
+
+  // Auto-Gestion (2026-08) — souscripteur auto-assureur : un client peut
+  // avoir au plus un profil "compagnie virtuelle" paramétré avec les mêmes
+  // règles qu'une vraie compagnie (voir model Compagnie.clientId).
+  compagnieAutoGestion Compagnie?
+
+  // Relevés de facture prestataire (2026-08) — voir model RelevePrestataire.
+  relevesPrestataire RelevePrestataire[]
+
+  // Dossier de prospection d'origine (2026-08) — voir model Prospect.clientId,
+  // renseigné une fois l'affaire gagnée et le client réellement créé.
+  prospectOrigine Prospect?
+
+  @@index([societeId])
 }
 
 model Compagnie {
-  id     String @id
-  nom    String
-  pays   String
-  taux   String
-  niveau String
+  id   String  @id
 
-  contrats    Contrat[]
-  commissions Commission[]
-  policesIard PoliceIard[]
-  contratsVie ContratVie[]
-  flottes     Flotte[]
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  nom  String
+  pays String
+  logo String? // nom de fichier sous backend/uploads/logos/
+  // Code interne de la compagnie (2026-08) — repris tel quel sur le
+  // Décompte de Remboursement Maladie ("Compagnie <code> <nom>", voir
+  // DocumentsService.renderDecompteFacture) ; purement déclaratif, jamais
+  // utilisé dans un calcul, à la différence de `id` (clé technique).
+  // DISTINCT du préfixe de numéro de police ci-dessous — les deux ne
+  // coïncident pas systématiquement (voir demande utilisateur : ex. BGFI
+  // ASSURANCES code=100 mais préfixe police=R060).
+  code String?
+
+  // Préfixe des numéros de police (2026-08) — chaîne fixe propre à la
+  // compagnie (ex. "1000" pour NSIA, "R060" pour BGFI ASSURANCES — peut
+  // contenir des lettres), suivie d'un suffixe numérique croissant à
+  // l'infini (voir ContratsService.prochainNumeroPolice). Le point de
+  // départ EFFECTIF de la numérotation, contrairement à `code` ci-dessus.
+  prefixeNumeroPolice String?
+
+  // Code du courtier auprès de CETTE compagnie (2026-08) — voir demande
+  // utilisateur : "Bordereau de Production" ("Code Assuré", identique sur
+  // toutes les lignes d'une même section compagnie) : le numéro
+  // d'immatriculation/agent sous lequel le courtier est enregistré chez
+  // cette compagnie précise, DISTINCT de `code` (déclaratif compagnie) et
+  // de `prefixeNumeroPolice` (numérotation des polices).
+  codeCourtier String?
+
+  // Auto-Gestion (2026-08) — clientId renseigné = cette ligne n'est pas une
+  // vraie compagnie mais le profil "compagnie virtuelle" d'un souscripteur
+  // auto-assureur (voir Client.compagnieAutoGestion). Toutes les règles
+  // ci-dessous (commission, accessoires, surprimes d'âge, etc.) et tout le
+  // reste de la chaîne (Contrat.compagnieId, calcul de prime) fonctionnent
+  // à l'identique, sans distinction — findAll() exclut ces lignes pour que
+  // l'écran Compagnies et le sélecteur "Gestion classique" du Contrat ne
+  // listent que les vraies compagnies (voir CompagniesService).
+  clientId String? @unique
+  client   Client? @relation(fields: [clientId], references: [id])
+
+  // Taux de commission par branche — repris automatiquement dans le
+  // formulaire Contrat/Avenant selon la branche choisie (voir
+  // CalculPrimeSection.tsx), reste librement modifiable ensuite.
+  tauxCommissionMaladie    Decimal? @db.Decimal(5, 2)
+  tauxCommissionAssistance Decimal? @db.Decimal(5, 2)
+
+  contrats      Contrat[]
+  commissionReversements CommissionReversement[]
+  exercices     Exercice[]
+  lettresCheque LettreCheque[]
+
+  // Côté inverse de SocieteAssurance.compagnieInterneId (2026-09) — voir
+  // ce champ. Non-null uniquement quand CETTE ligne est la compagnie
+  // interne auto-provisionnée d'une société Mutuelle/Compagnie.
+  societeInterneDe SocieteAssurance? @relation("CompagnieInterne")
+
+  // ── Règles paramétrables par compagnie (2026-08) ─────────────────────
+  // Accessoires : montant forfaitaire suggéré selon la tranche de Prime
+  // Nette (voir CalculPrimeSection.tsx). Surprimes d'âge : majoration par
+  // tranche d'âge, appliquée optionnellement (case à cocher) dans le calcul
+  // de prime (voir CalculPrimeSection.tsx). Clauses d'ajustement S/P :
+  // donnée de référence consultée par le gestionnaire, pas câblée dans un
+  // calcul automatique (le ratio S/P se négocie au renouvellement à partir
+  // d'un historique, non disponible en direct à la création d'un contrat).
+  // Territorialités/taux de couverture : barème de prestations propre à
+  // chaque compagnie, consultable dans sa fiche et suggéré (non imposé)
+  // dans le formulaire Contrat.
+  accessoires       CompagnieAccessoireTranche[]
+  surprimesAge      CompagnieSurprimeAge[]
+  clausesAjustement CompagnieClauseAjustement[]
+  territorialites   CompagnieTerritorialite[]
+  tauxCouverture    CompagnieTauxCouverture[]
+
+  // Valeurs par défaut reprises pour pré-remplir une nouvelle Cotation pour
+  // cette compagnie (voir CotationService) — librement modifiables ensuite
+  // au cas par cas, comme le reste des règles paramétrables ci-dessus.
+  plafondFamilialDefaut Decimal? @db.Decimal(18, 2)
+  limiteAgeAdulteDefaut Int?
+  limiteAgeEnfantDefaut Int?
+
+  // ── Appels d'offres / Cotation (2026-08) ─────────────────────────────
+  cotations             Cotation[]
+  documentsAppelOffres  AppelOffresDocument[]
+  garantiesCatalogue    GarantieCatalogue[]
+
+  // ── Papier en-tête / pied de page légal (2026-08) ────────────────────
+  // Repris sur les documents imprimés SUR LE PAPIER DE LA COMPAGNIE (ex.
+  // Facture Production) — jamais sur les documents MedAssur (qui utilisent
+  // ParametresEntreprise). Champs libres, texte exact tel qu'imprimé sur le
+  // papier en-tête fourni par chaque compagnie (raison sociale, forme
+  // juridique/capital, RCCM/statistique, coordonnées).
+  raisonSociale String?
+  capitalSocial String?
+  rccm          String?
+  statistique   String?
+  adresseSiege  String?
+  boitePostale  String?
+  ville         String?
+  telephone     String?
+  fax           String?
+  emailContact  String?
+  siteWeb       String?
+
+  // Pied de page légal — texte EXACT, verbatim, tel qu'imprimé sur le
+  // papier en-tête réel de la compagnie (voir demande utilisateur : "une
+  // réplique à 100% identique à l'original", "même détails, même forme,
+  // même texte"). Imprimé TEL QUEL sur la Facture Production (voir
+  // DocumentsService.renderFactureProduction) — prioritaire sur une
+  // reconstruction à partir des champs structurés ci-dessus (qui restent
+  // utiles comme référence/admin mais ne peuvent pas restituer fidèlement
+  // la formulation propre à chaque compagnie).
+  piedDePageLegal String?
+
+  // Coordonnées bancaires (2026-08) — reprises sur la Facture Production
+  // ("N° Compte BICIG 40001 09070 07000032701 72" sur le modèle fourni).
+  banqueNom          String?
+  banqueNumeroCompte String?
+
+  // Note de paiement par défaut (2026-08) — texte type (délai/conditions de
+  // règlement) pré-rempli à la création d'une Facture Production pour cette
+  // compagnie, tout en restant éditable au cas par cas (voir demande
+  // utilisateur : "récupérer le texte du modèle, le rendre éditable, mais
+  // le texte doit être pré-rempli").
+  notePaiementDefaut String?
+
+  facturesProduction FactureProduction[]
+
+  @@index([societeId])
+}
+
+model CompagnieAccessoireTranche {
+  id          String   @id @default(cuid())
+  compagnieId String
+  borneMin    Decimal  @db.Decimal(18, 2)
+  borneMax    Decimal? @db.Decimal(18, 2) // null = "et plus" / "au-delà de"
+  montant     Decimal  @db.Decimal(18, 2)
+  ordre       Int      @default(0)
+
+  compagnie Compagnie @relation(fields: [compagnieId], references: [id], onDelete: Cascade)
+}
+
+model CompagnieSurprimeAge {
+  id           String   @id @default(cuid())
+  compagnieId  String
+  ageMin       Int
+  ageMax       Int? // null = "et plus"
+  tauxPourcent Decimal  @db.Decimal(5, 2)
+  ordre        Int      @default(0)
+
+  compagnie Compagnie @relation(fields: [compagnieId], references: [id], onDelete: Cascade)
+}
+
+model CompagnieClauseAjustement {
+  id             String   @id @default(cuid())
+  compagnieId    String
+  spMin          Decimal  @db.Decimal(5, 2)
+  spMax          Decimal? @db.Decimal(5, 2) // null = "et plus"
+  tauxAjustement Decimal  @db.Decimal(5, 2) // signé : positif = majoration, négatif = minoration
+  description    String?
+  ordre          Int      @default(0)
+
+  compagnie Compagnie @relation(fields: [compagnieId], references: [id], onDelete: Cascade)
+}
+
+model CompagnieTerritorialite {
+  id          String @id @default(cuid())
+  compagnieId String
+  libelle     String
+  ordre       Int    @default(0)
+
+  compagnie Compagnie @relation(fields: [compagnieId], references: [id], onDelete: Cascade)
+}
+
+model CompagnieTauxCouverture {
+  id                  String @id @default(cuid())
+  compagnieId         String
+  tauxAmbulatoire     String
+  tauxHospitalisation String
+  ordre               Int    @default(0)
+
+  compagnie Compagnie @relation(fields: [compagnieId], references: [id], onDelete: Cascade)
 }
 
 model Prospect {
   id                  String   @id
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   nom                 String
   type                String
   source              String
   etape               String
+  // Valeur estimée de la prime nette annuelle (2026-08) — voir demande
+  // utilisateur : "on doit pouvoir renseigner la valeur estimée de la
+  // prime nette" ; base de calcul de la commission possible par
+  // compagnie (voir CrmService.suggestionsCommission).
   valeurEstimee       Decimal  @db.Decimal(18, 2)
   commercial          String
   dernierContact      String
@@ -70,13 +858,89 @@ model Prospect {
   historiqueAssurance String?
   zoneGeographique    String?
   scoring             String? // Faible | Moyen | Fort
+  // Nom de fichier sous backend/uploads/logos-prospects/ — utilisé sur le
+  // document de cotation (voir DocumentsService.renderCotationOffre) à la
+  // place du nom du client dans l'en-tête ; null = repli sur le nom.
+  logo                String?
+  // Propriétaire du dossier — permet à un dashboard de n'afficher que
+  // l'activité de l'utilisateur connecté plutôt que tout le portefeuille.
+  gestionnaireId      String?
 
+  // Date de création (2026-08) — jusqu'ici absente, indispensable pour les
+  // statistiques d'évolution par exercice (voir demande utilisateur :
+  // "l'application doit pouvoir faire analyse statistique sur l'évolution
+  // de prospects... lesquels ont été perdus pour un exercice donné").
+  createdAt DateTime @default(now())
+
+  // Personne ressource (2026-08) — voir demande utilisateur : "il faut
+  // ajouter la personne ressource avec qui on échange, son contact, son
+  // adresse mail" — distincte de `commercial` (l'agent MedAssur en charge),
+  // c'est l'interlocuteur CÔTÉ PROSPECT.
+  contactNom       String?
+  contactFonction  String?
+  contactTelephone String?
+  contactEmail     String?
+
+  // Type de contrat envisagé (2026-08) — voir demande utilisateur :
+  // "le type de contrat, maladie et assistance ou maladie simple" —
+  // détermine quels taux de commission (Compagnie.tauxCommissionMaladie/
+  // tauxCommissionAssistance) s'appliquent dans la suggestion.
+  typeContrat String? // "MaladieEtAssistance" | "MaladieSeule"
+
+  // Conversion en client (2026-08) — voir demande utilisateur : "lesquels
+  // sont devenus des clients". Renseigné en liant un Client existant
+  // (créé via le parcours Souscripteurs habituel) une fois l'affaire
+  // gagnée — voir CrmService.lierClient. Jamais renseigné automatiquement :
+  // la création du Client reste un acte métier distinct (contrat, pièces,
+  // etc.), ce lien ne fait qu'enregistrer QUE ce prospect a bien abouti.
+  clientId String? @unique
+  client   Client? @relation(fields: [clientId], references: [id])
+
+  // Historique du dossier (2026-08) — voir demande utilisateur :
+  // "l'application doit permettre de renseigner les informations sur
+  // l'évolution d'un dossier de prospection".
+  historique ProspectHistorique[]
+
+  gestionnaire User?         @relation(fields: [gestionnaireId], references: [id])
   appelsOffres AppelOffres[]
+
+  @@index([societeId])
+}
+
+// Historique d'un dossier de prospection (2026-08) — un événement par
+// changement d'étape (automatique, voir CrmService.update) ou par note
+// libre ajoutée manuellement (voir CrmService.ajouterNote). Alimente à la
+// fois l'affichage "évolution du dossier" et les statistiques d'exercice
+// (date réelle du passage à "Gagné"/"Perdu", plus fiable qu'une simple
+// lecture de `etape` à l'instant présent).
+model ProspectHistorique {
+  id          String   @id @default(cuid())
+  prospectId  String
+  date        DateTime @default(now())
+  auteurId    String?
+  type        String // "ChangementEtape" | "Note"
+  etapeAvant  String?
+  etapeApres  String?
+  description String
+
+  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  auteur   User?    @relation(fields: [auteurId], references: [id])
+
+  @@index([prospectId])
 }
 
 // ── Production — Appel d'offres / Cotation (Pricing Engine) ─────────
 model AppelOffres {
   id                       String  @id
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   prospectId               String
   clientNom                String
   cahierCharges            String
@@ -90,202 +954,997 @@ model AppelOffres {
 
   prospect     Prospect                 @relation(fields: [prospectId], references: [id])
   propositions PropositionCommerciale[]
+  cotations    Cotation[]
+  documents    AppelOffresDocument[]
+
+  @@index([societeId])
+}
+
+// Pièce jointe à un appel d'offres (cahier des charges reçu du prospect,
+// offre transmise par une compagnie, etc.) — stockage réel sur disque
+// (backend/uploads/appel-offres/), même mécanique que Compagnie.logo
+// (voir CompagniesService.uploadLogo), à la différence de GedDocument qui
+// ne stocke aucun fichier réel (métadonnées seules).
+model AppelOffresDocument {
+  id            String   @id @default(cuid())
+  appelOffresId String
+  nom           String // nom d'origine du fichier
+  fichier       String // nom stocké sous backend/uploads/appel-offres/
+  type          String // "Cahier des charges" | "Offre compagnie" | "Autre"
+  compagnieId   String? // compagnie concernée, si type = "Offre compagnie"
+  tailleOctets  Int
+  createdAt     DateTime @default(now())
+
+  appelOffres AppelOffres @relation(fields: [appelOffresId], references: [id], onDelete: Cascade)
+  compagnie   Compagnie?  @relation(fields: [compagnieId], references: [id])
 }
 
 model PropositionCommerciale {
   id                   String  @id @default(cuid())
   appelOffresId        String
-  niveau               String // Essentiel | Confort | Premium
+  niveau               String // Essentiel | Confort | Premium (ou libellé libre)
   primeProposee        Decimal @db.Decimal(18, 2)
   descriptionGaranties String
   statut               String
 
   appelOffres AppelOffres @relation(fields: [appelOffresId], references: [id], onDelete: Cascade)
+  // Offres (Cotation) regroupées dans cette proposition — une proposition
+  // peut combiner les offres de plusieurs compagnies différentes (ex.
+  // Maladie chez une compagnie + Assistance chez une autre).
+  cotations   Cotation[]
 }
 
+// Une Cotation représente l'offre concrète d'une compagnie pour une branche
+// donnée (Maladie ou Assistance) — copie fidèle du document réel transmis
+// par l'assureur (voir documents.service.ts renderCotationOffre), pas un
+// simulateur actuariel abstrait. Une compagnie répondant à un appel
+// d'offres produit typiquement 2 cotations (une par branche).
 model Cotation {
-  id                  String  @id
-  clientNom           String
-  agePopulationMoyen  Decimal @db.Decimal(5, 2)
-  sexeRatio           String
-  historiqueSinistres Decimal @db.Decimal(18, 2)
-  niveauGaranties     String
-  territorialite      String
-  stopLoss            Decimal @db.Decimal(18, 2)
-  primePure           Decimal @db.Decimal(18, 2)
-  chargements         Decimal @db.Decimal(18, 2)
-  marge               Decimal @db.Decimal(18, 2)
-  commission          Decimal @db.Decimal(18, 2)
-  pepm                Decimal @db.Decimal(18, 2)
-  tarifFinal          Decimal @db.Decimal(18, 2)
-  dateCreation        String
+  id                 String   @id
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  branche            String // "Maladie" | "Assistance"
+  clientNom          String
+  population         Int
+  territorialite     String
+  // Barème de prestations — mêmes champs et même usage que sur Contrat
+  // (paires suggérées via Compagnie.tauxCouverture, éditables ensuite).
+  tauxCouvertureAmbulatoire     String?
+  tauxCouvertureHospitalisation String?
+  exclusions         String?
+  clauseAjustement   String? // texte récapitulatif, pré-rempli depuis CompagnieClauseAjustement
+  limiteAgeAdulte    Int?
+  limiteAgeEnfant    Int?
+  plafondFamilial    Decimal? @db.Decimal(18, 2)
+  conditionsFermete  String?
+  primeNette         Decimal  @db.Decimal(18, 2)
+  montantCartes      Decimal  @db.Decimal(18, 2) @default(0)
+  montantAccessoires Decimal  @db.Decimal(18, 2) @default(0)
+  montantTaxe        Decimal  @db.Decimal(18, 2)
+  primeTTC           Decimal  @db.Decimal(18, 2)
+  dateCreation       String
+  // Nom de fichier sous backend/uploads/logos-cotations/ — logo du client
+  // pour les cotations SANS appel d'offres (donc sans Prospect à rattacher,
+  // voir Prospect.logo) : un client saisi en texte libre depuis l'écran
+  // Cotation reste éligible au même affichage sur le document généré.
+  // Résolution complète voir DocumentsService.renderCotationOffre :
+  // appelOffres.prospect.logo a priorité, ce champ sert de repli.
+  logo               String?
+
+  // Rattachements optionnels (2026-08) — une cotation reste utilisable de
+  // façon autonome (aucun des trois renseigné), mais représente
+  // typiquement l'offre d'une compagnie pour un appel d'offres précis,
+  // éventuellement regroupée ensuite dans une proposition.
+  appelOffresId String?
+  compagnieId   String?
+  propositionId String?
+
+  // Tableau de bord personnel (2026-08) — voir demande utilisateur : "le
+  // tableau de bord [doit] faire remonter les informations en fonction du
+  // profil de l'utilisateur et non toutes les données." Même principe que
+  // Contrat.gestionnaireId — null pour les cotations déjà existantes.
+  gestionnaireId String?
+
+  appelOffres AppelOffres?            @relation(fields: [appelOffresId], references: [id])
+  compagnie   Compagnie?              @relation(fields: [compagnieId], references: [id])
+  proposition PropositionCommerciale? @relation(fields: [propositionId], references: [id])
+  gestionnaire User?                  @relation(fields: [gestionnaireId], references: [id])
+  garanties   CotationGarantieLigne[]
+
+  @@index([societeId])
+}
+
+// Ligne du tableau de garanties/plafonds tel que transmis par la compagnie
+// pour cette cotation précise — pré-remplie depuis GarantieCatalogue (voir
+// Compagnie.garantiesCatalogue) mais librement éditable ensuite, puisque
+// l'offre réelle négociée peut différer du catalogue par défaut.
+model CotationGarantieLigne {
+  id         String @id @default(cuid())
+  cotationId String
+  categorie  String // regroupement d'affichage, ex. "Médecine", "Garanties plafonnées"
+  libelle    String
+  plafond    String // texte libre : formats trop hétérogènes entre assureurs pour un chiffre strict
+  // Taux de remboursement par type de structure (ex. AXA "Hôpitaux publics,
+  // C.N.SS..." vs "Clinique et secteur privé..."), même principe que
+  // Garantie.tauxAssure/tauxAyantsDroit sur Contrat — texte libre ici (pas
+  // Decimal) car ces valeurs sont souvent des phrases entières ("100% du
+  // barème AXA Gabon"), pas un simple pourcentage. Optionnels : la plupart
+  // des garanties n'ont qu'un seul plafond, sans distinction de structure.
+  tauxStructurePrivee   String?
+  tauxStructurePublique String?
+  ordre      Int    @default(0)
+
+  cotation Cotation @relation(fields: [cotationId], references: [id], onDelete: Cascade)
 }
 
 // ── Production ───────────────────────────────────────────────────────
+// `id` est la référence technique interne (code numérique, voir
+// ContratsService.genererIdContrat) — affichée dans plusieurs écrans/
+// modales, mais ce n'est PAS le "N° Police" (voir `numeroPolice`
+// ci-dessous, le champ réellement montré/imprimé comme référence de la
+// police d'assurance auprès de la compagnie).
 model Contrat {
   id          String  @id
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   clientId    String
   compagnieId String
-  branche     String
+  branche     String // "Maladie" (santé de base) | "Assistance" (évacuation sanitaire)
   dateDebut   String
   dateFin     String
+  // Contrat de test (2026-09) — voir demande utilisateur : "je veux que tu
+  // crées une famille test dans l'écran de tous les prestataires... aucune
+  // saisie test... ne devra remonter vers la base de données facturation
+  // de la ruche excellence... restera uniquement dans l'écran du
+  // prestataire sans impacter la comptabilité et la facturation réelle."
+  // Exclu par défaut de ContratsService.findAll() (donc invisible dans
+  // tout Combobox/écran interne qui liste les contrats) et de l'éligibilité
+  // au règlement (voir ReglementPrestataireService) — un prestataire peut
+  // toujours saisir des prestations sur l'assuré de ce contrat (recherché
+  // par nom/matricule, jamais par contrat), il les voit dans SON PROPRE
+  // écran, mais elles ne peuvent jamais être réglées ni apparaître dans
+  // la comptabilité de la société.
+  estTest     Boolean @default(false)
   prime       Decimal @db.Decimal(18, 2)
   statut      String
 
+  // Numéro de police (2026-08) — référence propre à CHAQUE compagnie
+  // (jamais l'id technique CTR-... du contrat), auto-générée à la création
+  // à partir du dernier numéro déjà utilisé pour cette compagnie (voir
+  // ContratsService.prochainNumeroPolice), mais reste éditable pour la
+  // reprise d'antériorité (numéro déjà attribué par la compagnie avant
+  // bascule sur ce logiciel). Unique PAR compagnie, pas globalement — deux
+  // compagnies différentes peuvent avoir des séries qui se recoupent.
+  numeroPolice String?
+
+  // Date de création réelle (2026-08) — absente jusqu'ici (seul Avenant
+  // portait un createdAt), nécessaire pour dater l'ÉMISSION de l'affaire
+  // nouvelle sur le Bordereau de Production/Émission (voir demande
+  // utilisateur), distincte de dateDebut (date d'effet, pas forcément le
+  // jour de saisie réelle).
+  createdAt DateTime @default(now())
+
+  // Libellé produit (2026-08) — voir demande utilisateur : "Bordereau de
+  // Production"/"BORDEREAU D'EMISSION DE PRIMES" y fait figurer un
+  // "Produit" propre à CE contrat (ex. "PEC UPEGA COLLEGE 1"), distinct de
+  // `branche` (Maladie|Assistance) — deux contrats du même client peuvent
+  // porter des produits différents (collèges/populations distinctes).
+  // Facultatif ; si vide, affiché comme "PEC {nom du client}" à l'export
+  // sans jamais être persisté tel quel (voir BordereauxService.production).
+  produit String?
+
+  // ── Cycle de vie du contrat (2026-08) ────────────────────────────────
+  // Périodicité : influe sur le rythme de renouvellement de l'exercice.
+  // Le prorata de prime, lui, se calcule toujours au jour (joursCouverts/365)
+  // quelle que soit la périodicité — voir ContratsService.withComputedPrime.
+  periodicite    String @default("Annuel") // Mensuel | Trimestriel | Semestriel | Annuel
+  typeAffaire    String @default("Affaire Nouvelle") // marqueur d'origine, ne change jamais
+  exerciceNumero Int    @default(1)
+
+  // Dérogation de saisie post-résiliation (2026-09) — voir demande
+  // utilisateur : "si un contrat est résilié, toutes sa population passe
+  // en inactif. Seules les prestations faites avant la date de
+  // résiliation peuvent être saisies... sauf si l'administrateur ouvre
+  // temporairement." `dateFin` sert déjà de date de résiliation (voir
+  // AvenantsService.appliquer, type Résiliation). false = comportement
+  // normal (blocage des prestations/prises en charge datées après
+  // `dateFin` sur un contrat Résilié) ; true = dérogation temporaire
+  // activée par un administrateur (bouton dédié sur la fiche du contrat),
+  // à désactiver manuellement une fois la saisie terminée.
+  saisieApresResiliationAutorisee Boolean @default(false)
+
+  // ── Territorialité (bloc "Maladie vs Assistance", 2026-08) ──────────
+  // Maladie: territorialité = pays de souscription + extensions couvertes
+  // par le contrat santé de base. Assistance: extensionsTerritorialite
+  // liste les pays/zones vers lesquels une évacuation sanitaire est
+  // couverte depuis le pays de souscription.
+  paysSouscription         String?
+  extensionsTerritorialite String[]
+
+  // Assistance liée (2026-08) — dès que la territorialité d'un contrat
+  // Maladie dépasse "Gabon Uniquement", un contrat Assistance devient
+  // obligatoire et partage EXACTEMENT la même population que son contrat
+  // Maladie (voir SanteService/ContratsService) : un contrat Assistance
+  // lié n'a jamais sa propre ligne AssureSante, sa population est lue par
+  // filtrage sur contratMaladieLieId — ce qui rend toute duplication
+  // structurellement impossible pour ce cas.
+  contratMaladieLieId String?
+  contratMaladieLie   Contrat?  @relation("ContratMaladieAssistance", fields: [contratMaladieLieId], references: [id])
+  contratsAssistanceLies Contrat[] @relation("ContratMaladieAssistance")
+
+  // ── Garanties (2026-08) ──────────────────────────────────────────────
+  // Résumé global affiché en tête du tableau de garanties (ex: "Taux
+  // Ambulatoires : 80%/100%") — le détail rubrique par rubrique est dans
+  // la relation `garanties` ci-dessous (modèle Garantie).
+  tauxCouvertureAmbulatoire     String?
+  tauxCouvertureHospitalisation String?
+  // Déclinaison structure publique/privée du même résumé global (2026-08)
+  // — affichée en 2 lignes sur la carte d'assurance (voir
+  // DocumentsService.ajouterCarteRectoVerso) pour indiquer au personnel
+  // soignant le taux à appliquer selon le type d'établissement, et utilisée
+  // par PriseEnChargeService pour calculer automatiquement le
+  // remboursement selon le secteur du Prestataire consulté. Texte libre au
+  // format "80%" (pas de prose) pour rester parsable par le calcul.
+  tauxAmbulatoirePublique     String?
+  tauxAmbulatoirePrivee       String?
+  tauxHospitalisationPublique String?
+  tauxHospitalisationPrivee   String?
+  // Taux ayants droit distincts (2026-08) — VRAIMENT en option (voir
+  // demande utilisateur : "la règle est que le taux de l'assuré principal
+  // est celui qui s'applique également à ces ayants droit") : par défaut
+  // ces 4 champs restent vides et un CJ/EF suit exactement le même taux que
+  // l'assuré principal (les 4 champs ci-dessus). Ce n'est QUE si l'un
+  // d'entre eux est explicitement renseigné qu'il prend le pas sur son
+  // équivalent principal pour un ayant droit — voir
+  // SanteService.tauxParSecteur.
+  tauxAmbulatoirePubliqueAyantDroit     String?
+  tauxAmbulatoirePriveeAyantDroit       String?
+  tauxHospitalisationPubliqueAyantDroit String?
+  tauxHospitalisationPriveeAyantDroit   String?
+
+  // ── Calcul de la prime — modèle détaillé (2026-08, v2) ───────────────
+  // Modélisé sur le tableau de calcul de prime fourni par l'utilisateur :
+  // population décomposée par catégorie (chacune avec sa prime unitaire)
+  // → Total Nette Prestation → ajustements (mino/majo, réduction
+  // commerciale) → primeNette → + accessoires (montant forfaitaire,
+  // PAS un taux) + taxe (8% fixe Gabon) + commission → prime (= Prime
+  // Totale TTC, champ existant ci-dessus, lu partout ailleurs dans l'app).
+  nombreAssuresPrincipaux      Int?
+  primeUnitaireAssurePrincipal Decimal? @db.Decimal(18, 2)
+  nombreConjoints              Int?
+  primeUnitaireConjoint        Decimal? @db.Decimal(18, 2)
+  nombreEnfants                Int?
+  primeUnitaireEnfant          Decimal? @db.Decimal(18, 2)
+  nombreCouples                Int?
+  primeUnitaireCouple          Decimal? @db.Decimal(18, 2)
+
+  tauxTerritorialite Decimal? @db.Decimal(5, 2)
+  limiteAgeAdulte    Int?
+  limiteAgeEnfant    Int?
+  // Seuil étendu pour un enfant encore scolarisé (ex. 28 ans) — ne
+  // s'applique qu'aux AssureSante EF marqués `scolarise: true`, sinon
+  // limiteAgeEnfant reste la règle. Voir age-limite.util.ts.
+  limiteAgeEnfantScolarise Int?
+  limitePersFamille  Int?
+  plafondAdherent    Decimal? @db.Decimal(18, 2)
+  plafondFamille     Decimal? @db.Decimal(18, 2)
+  plafondPolice      Decimal? @db.Decimal(18, 2)
+  // Plafond de chambre par jour (2026-08) — voir demande utilisateur : le
+  // fichier envoyé aux prestataires à chaque nouveau contrat doit porter
+  // "le taux ambulatoire, le taux en hospitalisation et le plafond de
+  // chambre par jour". Distinct de plafondFamille/plafondPolice (enveloppe
+  // globale) : ici, un montant journalier applicable à l'hébergement.
+  plafondChambreJour Decimal? @db.Decimal(18, 2)
+
+  tauxMinoMajoration       Decimal? @db.Decimal(5, 2)
+  tauxReductionCommerciale Decimal? @db.Decimal(5, 2)
+  montantAccessoires       Decimal? @db.Decimal(18, 2) // montant forfaitaire (communiqué par la compagnie ou saisi manuellement) — PAS un taux
+  tauxCommission           Decimal? @db.Decimal(5, 2)
+  montantCommission        Decimal? @db.Decimal(18, 2)
+  montantTaxe              Decimal? @db.Decimal(18, 2) // = primeNette × 8% (taux fixe Gabon)
+  primeNette               Decimal? @db.Decimal(18, 2) // Total Nette Prestation, ajustée mino/majo + réduction commerciale
+  primeTotaleHT            Decimal? @db.Decimal(18, 2)
+  // Taux de chargement (2026-08) — appliqué aux sinistres pour obtenir la
+  // colonne "S/P avec chargement" du rapport Statistiques (voir
+  // StatistiquesService) : sinistresCharges = sinistres × (1 + taux/100).
+  // Distinct de tauxCommission/tauxTaxe (qui portent sur la PRIME) — celui-ci
+  // porte sur les SINISTRES, à titre de marge de sécurité actuarielle
+  // (frais de gestion, IBNR…). Nul = pas de colonne "avec chargement" affichée.
+  tauxChargement           Decimal? @db.Decimal(5, 2)
+  // Numéro de quittance (Affaire Nouvelle) — assigné une seule fois, à la
+  // première génération du document, via le compteur global CompteurDocument.
+  numeroQuittance          Int?
+
+  // Tableau de bord personnel (2026-08) — voir demande utilisateur : "le
+  // tableau de bord [doit] faire remonter les informations en fonction du
+  // profil de l'utilisateur et non toutes les données." L'agent qui a créé
+  // le contrat (ContratsController.create, req.user) — null pour les
+  // contrats déjà existants avant cette évolution ou repris par import,
+  // simplement absents des vues personnelles "Mes renouvellements", jamais
+  // réattribués après coup.
+  gestionnaireId String?
+
   client            Client              @relation(fields: [clientId], references: [id])
   compagnie         Compagnie           @relation(fields: [compagnieId], references: [id])
-  renouvellements   Renouvellement[]
+  gestionnaire      User?               @relation(fields: [gestionnaireId], references: [id])
   avenants          Avenant[]
-  resiliations      Resiliation[]
   assures           AssureSante[]
   impayes           Impaye[]
-  flotte            Flotte?
   fondsDeRoulement  FondsDeRoulement[]
   honorairesGestion HonorairesGestion[]
+  garanties         Garantie[]
+  exercices         Exercice[]
+  factures          Facture[]
+  remboursements    Remboursement[]
+  facturesProduction FactureProduction[]
+  facturesProductionLignes FactureProductionLigne[]
+  demandesClient    DemandeClient[]
+  encaissements     EncaissementPrime[]
+  quittancesLibres  QuittanceLibre[]
+
+  @@unique([compagnieId, numeroPolice])
+
+  @@index([societeId])
 }
 
-model Devis {
-  id           String  @id
-  clientId     String
-  branche      String
-  primeEstimee Decimal @db.Decimal(18, 2)
-  dateCreation String
-  validite     String
-  statut       String
-
-  client Client       @relation(fields: [clientId], references: [id])
-  offres DevisOffre[]
-}
-
-model DevisOffre {
-  id           String  @id @default(cuid())
-  devisId      String
-  compagnieNom String
-  prime        Decimal @db.Decimal(18, 2)
-
-  devis Devis @relation(fields: [devisId], references: [id], onDelete: Cascade)
-}
-
-model Renouvellement {
-  id            String  @id
-  contratId     String
-  joursRestants Int
-  primeActuelle Decimal @db.Decimal(18, 2)
-  primeProposee Decimal @db.Decimal(18, 2)
-  sinistralite  String
-  statut        String
+// Encaissement de prime (2026-08) — voir demande utilisateur : "Bordereau
+// d'Encaissement de Prime... retrace tout les primes encaissée (ce que les
+// clients ont véritablement payé par rapport aux primes émises)". Chaque
+// ligne = un paiement reçu du souscripteur pour CE contrat, saisi
+// manuellement par la comptabilité (aucun autre flux ne le déclenche
+// aujourd'hui) — distinct de BordereauReglement/LettreCheque, qui paient
+// les PRESTATAIRES (flux inverse).
+model EncaissementPrime {
+  id               String   @id @default(cuid())
+  contratId        String
+  montant          Decimal  @db.Decimal(18, 2)
+  dateEncaissement String
+  modePaiement     String? // Virement | Chèque | Espèces | Mobile Money
+  // Banque du chèque/virement (2026-08) — voir demande utilisateur : "quand
+  // on choisi comme mode de paiement chèque ou virement qu'on puisse
+  // choisir la banque". Sans objet pour Espèces/Mobile Money (jamais
+  // renseigné dans ces cas — voir QuittancesLibresService.payerTranche).
+  banqueId          String?
+  referencePaiement String?
+  note             String?
+  createdAt        DateTime @default(now())
 
   contrat Contrat @relation(fields: [contratId], references: [id])
+  banque  Banque? @relation(fields: [banqueId], references: [id])
+  // Encaissement issu du paiement d'une tranche de Quittance Libre
+  // (2026-08) — voir model QuittanceLibreTranche.encaissementId. Null pour
+  // un encaissement saisi directement (hors plan de quittancement).
+  trancheQuittanceLibre QuittanceLibreTranche?
+
+  @@index([contratId])
+  @@index([banqueId])
 }
 
-model Avenant {
-  id          String  @id
+// ── Quittance Libre (2026-08) ─────────────────────────────────────────
+// Voir demande utilisateur : "il faut qu'on puisse quittancer librement
+// même au cours d'un exercice sans que cela ne soit forcément lié à un
+// avenant. Car il existe ce qu'on appelle une quittance Libre. La
+// quittance libre est une quittance qui sert à échelonner le paiement
+// d'une prime annuelle en plusieurs tranches (égale par le nombre de
+// trimestre, de semestre, ou n'importe quel montant selon la capacité
+// financière du client). Mais l'application doit faire un décompte entre
+// ce qui est payé et ce qui reste à payer." Distinct de Avenant/Quittance
+// (document généré à la volée à partir de la prime totale d'un Contrat ou
+// d'un Avenant, voir DocumentsService.renderQuittance/renderQuittanceAvenant) :
+// ici, un VRAI plan de paiement échelonné, rattaché directement au Contrat
+// (jamais à un Avenant), déclenchable à tout moment de l'exercice. Chaque
+// tranche payée crée un vrai EncaissementPrime (voir ci-dessus) — le
+// paiement d'une tranche alimente donc automatiquement la Trésorerie/le
+// Bordereau d'Encaissement existants, sans registre de paiement parallèle.
+model QuittanceLibre {
+  id              String   @id
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  contratId       String
+  // Montant total à échelonner — généralement Contrat.primeNette au moment
+  // de la création, mais éditable (quittancement partiel d'une prime déjà
+  // en partie réglée autrement).
+  montantTotal    Decimal  @db.Decimal(18, 2)
+  dateCreation    String
+  statut          String   @default("En cours") // En cours | Soldée | Annulée
+  motifAnnulation String?
+  gestionnaireId  String?
+  createdAt       DateTime @default(now())
+
+  contrat      Contrat                 @relation(fields: [contratId], references: [id])
+  gestionnaire User?                   @relation(fields: [gestionnaireId], references: [id])
+  tranches     QuittanceLibreTranche[]
+
+  @@index([contratId])
+
+  @@index([societeId])
+}
+
+model QuittanceLibreTranche {
+  id               String  @id @default(cuid())
+  quittanceLibreId String
+  numero           Int
+  montant          Decimal @db.Decimal(18, 2)
+  dateEcheance     String
+
+  // Décomposition traçable de `montant` (2026-08) — voir demande
+  // utilisateur : "l'application doit pouvoir retracer pour chaque tranche
+  // la prime nette, les accessoires et la taxe de 8% qui correspondent...
+  // car chaque tranche est exactement la prime TTC divisée par le nombre de
+  // tranche." Calculée une seule fois à la création (QuittancesLibresService.
+  // create), au prorata du poids de cette tranche dans `montantTotal`, à
+  // partir des VRAIES valeurs du Contrat au moment de la création — pas
+  // recalculée après coup (le contrat peut évoluer via avenant ensuite).
+  // primeNette + accessoires + taxe = montant, à l'arrondi près.
+  primeNette   Decimal @db.Decimal(18, 2) @default(0)
+  accessoires  Decimal @db.Decimal(18, 2) @default(0)
+  taxe         Decimal @db.Decimal(18, 2) @default(0)
+
+  // Numéro de quittance propre à CETTE tranche (2026-08) — voir demande
+  // utilisateur : "il faut que la quittance libre fasse réellement remonter
+  // le calcul de la tranche qui a été payée et non le calcul de la prime
+  // annuelle." Chaque tranche imprimée obtient son propre numéro, tiré de
+  // la même séquence globale que Contrat.numeroQuittance/Avenant.
+  // numeroQuittance (DocumentsService.prochainNumeroQuittance) — assigné
+  // paresseusement à la première impression, puis stable (même principe que
+  // ces deux champs).
+  numeroQuittance Int?
+
+  // Non-null dès que la tranche est payée (voir QuittancesLibresService.
+  // payerTranche, qui crée l'EncaissementPrime en même temps) — le statut
+  // "payée/impayée" d'une tranche se DÉDUIT de ce lien, jamais un champ
+  // booléen séparé qui pourrait diverger de la réalité de l'encaissement.
+  encaissementId String? @unique
+
+  quittanceLibre QuittanceLibre     @relation(fields: [quittanceLibreId], references: [id], onDelete: Cascade)
+  encaissement   EncaissementPrime? @relation(fields: [encaissementId], references: [id])
+
+  @@index([quittanceLibreId])
+}
+
+// Historique des exercices d'un contrat (2026-08) — une ligne à la
+// souscription (numero=1) et une nouvelle à chaque avenant Renouvellement.
+// Les dates/prime "courantes" restent dupliquées sur Contrat (déjà lues
+// partout ailleurs dans l'app) ; cette table porte l'historique complet.
+// Pas de contrainte d'unicité sur [contratId, numero] — un avenant
+// "Changement de Compagnie" scinde l'exercice en cours en deux lignes de
+// même numero mais de compagnieId/bornes de dates différentes (voir
+// AvenantsService.appliquer), pour garder l'historique "quelle compagnie à
+// quelle période" consultable sans jamais l'écraser.
+model Exercice {
+  id          String  @id @default(cuid())
   contratId   String
-  type        String
-  description String
-  primeAvant  Decimal @db.Decimal(18, 2)
-  primeApres  Decimal @db.Decimal(18, 2)
-  dateEffet   String
+  numero      Int
+  dateDebut   String
+  dateFin     String
+  periodicite String
+  prime       Decimal @db.Decimal(18, 2)
   statut      String
+  createdAt   DateTime @default(now())
 
-  contrat Contrat @relation(fields: [contratId], references: [id])
+  compagnieId String?
+  compagnie   Compagnie? @relation(fields: [compagnieId], references: [id])
+
+  // ── Prime détaillée de CET exercice (2026-09) — voir demande utilisateur :
+  // "dans le cadre de la récupération des données, on puisse aller saisir
+  // les primes sur les anciennes périodes afin de rendre possible le calcul
+  // du S/P à ces périodes." Même modèle que le bloc "Calcul de la prime"
+  // du Contrat (voir plus haut, nombreAssuresPrincipaux etc.) mais posé ICI
+  // pour que chaque exercice (= période passée, renouvellement) garde sa
+  // PROPRE prime plutôt que de dépendre de l'état courant du contrat —
+  // voir ContratsService.mettreAJourPrimeExercice et StatistiquesService
+  // (qui somme les primeNette des exercices recouvrant la période demandée
+  // au lieu de toujours lire Contrat.primeNette). Nullable : un exercice
+  // sans détail saisi reste rétro-compatible (le champ `prime` global
+  // ci-dessus reste utilisable tel quel, comportement inchangé).
+  nombreAssuresPrincipaux      Int?
+  primeUnitaireAssurePrincipal Decimal? @db.Decimal(18, 2)
+  nombreConjoints              Int?
+  primeUnitaireConjoint        Decimal? @db.Decimal(18, 2)
+  nombreEnfants                Int?
+  primeUnitaireEnfant          Decimal? @db.Decimal(18, 2)
+  nombreCouples                Int?
+  primeUnitaireCouple          Decimal? @db.Decimal(18, 2)
+  tauxMinoMajoration       Decimal? @db.Decimal(5, 2)
+  tauxReductionCommerciale Decimal? @db.Decimal(5, 2)
+  montantAccessoires       Decimal? @db.Decimal(18, 2)
+  tauxCommission           Decimal? @db.Decimal(5, 2)
+  montantCommission        Decimal? @db.Decimal(18, 2)
+  montantTaxe              Decimal? @db.Decimal(18, 2)
+  primeNette               Decimal? @db.Decimal(18, 2)
+  primeTotaleHT            Decimal? @db.Decimal(18, 2)
+
+  // N° Sinistre de CET exercice (2026-09) — voir demande utilisateur : "une
+  // façon de retracer par une seule référence le montant total des
+  // sinistres d'un contrat au cours d'un exercice" : jusqu'ici
+  // Decompte.numeroSinistre était généré un par un (un décompte = une
+  // référence), donc DIFFÉRENT pour chaque facture/assuré d'un même
+  // contrat sur la même période — ce champ porte désormais la référence
+  // UNIQUE partagée par tous les décomptes de ce contrat tombant dans cet
+  // exercice (voir DocumentsService.obtenirOuCreerNumeroSinistre). Nullable :
+  // généré paresseusement au premier décompte de l'exercice, jamais à la
+  // création de l'Exercice lui-même (un exercice sans aucun sinistre n'a
+  // besoin d'aucune référence).
+  numeroSinistre String?
+
+  contrat Contrat @relation(fields: [contratId], references: [id], onDelete: Cascade)
 }
 
-model Resiliation {
-  id         String  @id
+// Rubrique de garantie détaillée (bloc "Garanties", 2026-08) — modélisé
+// sur un tableau de garanties réel (rubriques groupées par catégorie,
+// avec un taux de couverture distinct Assuré / Ayants droit et un
+// plafond de remboursement en texte libre car les unités varient :
+// montant/an, montant/2 ans, "BTAM", "frais réels selon barème"…
+model Garantie {
+  id                String  @id @default(cuid())
+  contratId         String
+  categorie         String // Consultation/Divers | Dentisterie | Hospitalisation | Maternité | Optique | Kinésithérapie & Cure thermale | Transport | Autre
+  libelle           String
+  tauxAssure        Decimal? @db.Decimal(5, 2)
+  tauxAyantsDroit   Decimal? @db.Decimal(5, 2)
+  plafond           String?
+  // Enveloppe partagée exploitable en calcul (2026-08) — le texte libre
+  // `plafond` reste l'affichage ; ces champs numériques permettent de
+  // sommer la consommation réelle (prises en charge) et de bloquer au
+  // dépassement, au cours de l'exercice courant du contrat. Plusieurs
+  // rubriques de la même catégorie peuvent partager le même plafondMontant
+  // (ex: Dentisterie — Orthodontie + Soins conservateurs, Consultation exclue).
+  plafondMontant    Decimal? @db.Decimal(18, 2)
+  plafondPeriode    String? // "An" | "2 Ans" | …
+
+  contrat Contrat @relation(fields: [contratId], references: [id], onDelete: Cascade)
+}
+
+// Catalogue paramétrable de familles/rubriques de garanties (Paramètres,
+// 2026-08) — référentiel réutilisable indépendant des contrats : une
+// rubrique créée ici devient disponible pour être rattachée à n'importe
+// quel contrat depuis l'onglet Garanties.
+model GarantieCatalogue {
+  id                    String   @id @default(cuid())
+  // Le contrat d'Assistance a des garanties structurellement différentes du
+  // contrat Maladie (pas de taux Structures Privées/Publiques — juste une
+  // rubrique + un plafond, souvent "prise en charge intégrale").
+  branche               String   @default("Maladie") // "Maladie" | "Assistance"
+  categorie             String
+  libelle               String
+  tauxAssureDefaut      Decimal? @db.Decimal(5, 2)
+  tauxAyantsDroitDefaut Decimal? @db.Decimal(5, 2)
+  plafondDefaut         String?
+  // Pré-remplissage des mêmes champs sur CotationGarantieLigne (texte libre,
+  // voir ce modèle pour le détail) — distinct de tauxAssureDefaut/
+  // tauxAyantsDroitDefaut ci-dessus qui restent un pourcentage Contrat.
+  tauxStructurePriveeDefaut   String?
+  tauxStructurePubliqueDefaut String?
+  // Ordre d'affichage au sein d'une (compagnieId, branche) — sans ce champ,
+  // le tri retombe sur categorie/libelle alphabétique, ce qui casse l'ordre
+  // Médecine/Pharmacie/Hospitalisation/Garanties plafonnées (ou Rubriques
+  // A/B/C/D chez NSIA) montré dans les offres réelles des compagnies.
+  ordre                 Int      @default(0)
+  createdAt             DateTime @default(now())
+
+  // Compagnie propriétaire de cette ligne (2026-08) — null = suggestion
+  // générique partagée (comportement historique) ; renseigné = tableau de
+  // garanties propre à cette compagnie, tel que transmis dans ses offres
+  // (voir Cotation/CotationGarantieLigne, pré-remplies depuis ces lignes).
+  compagnieId String?
+  compagnie   Compagnie? @relation(fields: [compagnieId], references: [id], onDelete: Cascade)
+}
+
+// Nomenclature des actes médicaux et paramédicaux (2026-08, source : tarif
+// prestataire) — référentiel utilisé pour la saisie des Factures/
+// Remboursements (PriseEnCharge) et des demandes d'Accord Préalable, plutôt
+// qu'un champ "type" en texte libre : garantit des libellés cohérents pour
+// les statistiques, et un prix par défaut pour accélérer la saisie.
+model ActeMedical {
+  id         String  @id @default(cuid())
+  libelle    String
+  // Regroupement métier tel que fourni par le tarif (ex. "ACTES
+  // CARDIOLOGIE", "EXAMENS LABORATOIRE", "SOINS DENTAIRES & CONSERVATEURS")
+  // — plus fin que GarantieCatalogue.categorie, d'où categorieGarantie
+  // ci-dessous pour le rattachement au tableau de garanties du contrat.
+  famille    String
+  prixDefaut Decimal @db.Decimal(18, 2)
+  // Rattache l'acte à une catégorie du tableau de garanties (voir
+  // GarantieCatalogue/Garantie.categorie) pour que la saisie d'une facture
+  // impute automatiquement le bon plafond de rubrique — nullable, toute
+  // famille n'a pas forcément d'équivalent direct dans le tableau standard.
+  categorieGarantie String?
+  // TPS (2026-08) — actes exonérés de la taxe même chez un prestataire
+  // assujetti (chambre/hébergement, médicaments) : voir Prestataire.
+  // tpsAssujetti et SanteService.calculerTps.
+  exonereTps Boolean @default(false)
+
+  // Codification à la lettre clé (2026-08) — paramétrée UNE FOIS ici, à la
+  // création/modification de l'acte dans le catalogue (voir demande
+  // utilisateur : "ce sont des actes qui sont paramétrés et lors du
+  // paramétrage de ces actes, on indique si c'est un K ou KC... le système
+  // remonte son coefficient"). Quand renseigné, prixDefaut est recalculé
+  // automatiquement (coefficient × LettreCle.valeurUnitaire) et n'est plus
+  // saisi à la main — voir ActesMedicauxService.
+  lettreCleCode String?
+  lettreCle     LettreCle? @relation(fields: [lettreCleCode], references: [code])
+  coefficient   Decimal?   @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now())
+
+  prisesEnCharge         PriseEnCharge[]
+  accordPrealableLignes  AccordPrealableLigne[]
+  prescriptionLignes     PrescriptionLigne[]
+
+  @@unique([libelle, famille])
+  @@index([famille])
+}
+
+// Codification des affections CNAMGS (2026-08) — voir demande utilisateur :
+// "implémenter dans la base de données les codes d'affection suivants"
+// (804317157-CODIFICATION-DES-AFFECTIONS.pdf). Alimente le champ "Code
+// affection" de l'écran Médecin prescripteur (voir Prescription.
+// codeAffection) — catalogue de référence, jamais de saisie libre.
+model CodeAffection {
+  code     String @id
+  libelle  String
+  // Regroupement (ex. "MALADIES INFECTIEUSES ET PARASITAIRES") — pour
+  // structurer le Combobox par chapitre plutôt qu'une liste plate de ~140
+  // entrées.
+  chapitre String
+
+  prescriptions   Prescription[]
+  prisesEnCharge  PriseEnCharge[]
+
+  @@index([chapitre])
+}
+
+// Nomenclature à lettres clés (2026-08) — deuxième mode de tarification
+// d'un acte, alternatif au montant forfaitaire de ActeMedical.prixDefaut :
+// montant = coefficient (saisi pour l'acte précis) × valeurUnitaire (tarif
+// du point, fixé ici pour la lettre). Catalogue paramétrable et
+// extensible (voir demande utilisateur) — code = la lettre clé elle-même
+// (K, KC, KA, K Loc, AMI, AMY…), unique et libre à enrichir.
+//
+// KC/KA/K Loc (chirurgien / anesthésiste / location du bloc opératoire)
+// sont un cas particulier : à la saisie d'un acte chirurgical, seul le
+// coefficient du KC est renseigné — celui du KA en est dérivé (KC/2) et
+// celui du K Loc également (KC+KA), voir FactureSaisie.tsx / AccordPrealable.
+// Cette règle porte sur le COEFFICIENT saisi pour l'acte, pas sur
+// valeurUnitaire (chaque lettre garde sa propre valeur, indépendante).
+model LettreCle {
+  code           String   @id
+  libelle        String
+  valeurUnitaire Decimal  @db.Decimal(18, 2)
+  // Rattachement à la rubrique de garantie (Garantie.categorie, ou
+  // "Chirurgie"/"EVASAN" — mêmes types qu'AccordPrealable.type) et à la
+  // spécialité médicale — listes à choix multiple (voir demande
+  // utilisateur : "lier cela à toutes les garanties"/"toutes les
+  // spécialités"). Tableau vide = s'applique à toutes (aucune restriction).
+  categoriesGarantie String[] @default([])
+  specialites        String[] @default([])
+  actif              Boolean  @default(true)
+  createdAt          DateTime @default(now())
+
+  actesMedicaux ActeMedical[]
+}
+
+// En production assurancielle un contrat ne connaît que deux mouvements :
+// l'Affaire Nouvelle (mise en place, modèle Contrat) et l'Avenant (tout ce
+// qui se passe ensuite pendant la vie du contrat). Renouvellement et
+// Résiliation sont des TYPES d'avenant, pas des concepts à part — 6 valeurs
+// possibles (2026-08) : Renouvellement, Incorporation, Retrait, "Ajustement
+// de Prime", "Régularisation de Prime", "Résiliation". La restriction aux 6
+// valeurs se fait côté DTO (CreateAvenantDto), pas en contrainte DB.
+// Les écrans "Renouvellements"/"Résiliations" restent (vues de travail
+// utiles) mais sont de simples lectures/écritures sur cette même table —
+// voir RenouvellementsService/ResiliationsService.
+model Avenant {
+  id              String   @id
+  // Isolation multi-tenant (2026-09) — comblé après coup, voir Conversation
+  // ci-dessus pour le détail du bug (interrogé sans filtrage, y compris
+  // via findUnique(id) sans vérification d'appartenance).
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  contratId       String
+  type            String
+  description     String
+  primeAvant      Decimal  @db.Decimal(18, 2)
+  primeApres      Decimal  @db.Decimal(18, 2)
+  dateEffet       String
+  // Renouvellement uniquement : nouvelle date d'échéance du contrat
+  // (dateEffet sert alors de nouvelle date de début d'exercice).
+  dateFin         String?
+  statut          String // Brouillon | Validé | Appliqué | Relancé | Perdu (worklist Renouvellement)
+  exerciceNumero  Int?
+  createdAt       DateTime @default(now()) // sert à numéroter l'avenant dans le document généré
+  numeroQuittance Int? // assigné une seule fois, à la première génération du document
+
+  // ── Calcul de la prime — mêmes champs qu'un Contrat (2026-08) ─────────
+  // La fenêtre "Créer un avenant" utilise EXACTEMENT le même système de
+  // calcul que la création de contrat (voir prime.util.ts,
+  // withComputedPrime) — seule différence : ça s'applique à un contrat déjà
+  // existant. Renseignés pour Renouvellement / Ajustement de Prime /
+  // Régularisation de Prime ; appliquer() recopie ces valeurs sur le Contrat.
+  nombreAssuresPrincipaux      Int?
+  primeUnitaireAssurePrincipal Decimal? @db.Decimal(18, 2)
+  nombreConjoints              Int?
+  primeUnitaireConjoint        Decimal? @db.Decimal(18, 2)
+  nombreEnfants                Int?
+  primeUnitaireEnfant          Decimal? @db.Decimal(18, 2)
+  nombreCouples                Int?
+  primeUnitaireCouple          Decimal? @db.Decimal(18, 2)
+  tauxMinoMajoration           Decimal? @db.Decimal(5, 2)
+  tauxReductionCommerciale     Decimal? @db.Decimal(5, 2)
+  montantAccessoires           Decimal? @db.Decimal(18, 2)
+  tauxCommission               Decimal? @db.Decimal(5, 2)
+  primeNette                   Decimal? @db.Decimal(18, 2)
+  primeTotaleHT                Decimal? @db.Decimal(18, 2)
+  montantTaxe                  Decimal? @db.Decimal(18, 2)
+  montantCommission            Decimal? @db.Decimal(18, 2)
+
+  // ── Renouvellement (ex-modèle Renouvellement) ─────────────────────────
+  sinistralite String?
+
+  // ── Résiliation (ex-modèle Resiliation) ───────────────────────────────
+  motif      String?
+  ristourne  Decimal? @db.Decimal(18, 2)
+  initiateur String?
+
+  // ── Changement de Compagnie (2026-08) ─────────────────────────────────
+  // Pas de relation Prisma stricte (comme primeAvant/primeApres, un simple
+  // instantané) — voir AvenantsService.appliquer, qui scinde l'Exercice en
+  // cours à dateEffet pour garder l'historique "quelle compagnie à quelle
+  // période" consultable après le changement.
+  compagnieAvantId String?
+  compagnieApresId String?
+
+  contrat        Contrat         @relation(fields: [contratId], references: [id])
+  avenantAssures AvenantAssure[]
+  facturesProductionLignes FactureProductionLigne[]
+
+  @@index([societeId])
+}
+
+// Trace structurée, personne par personne, des avenants Incorporation/Retrait
+// — voir MouvementsService.appliquerMouvement, point d'entrée UNIQUE pour
+// toute variation de population sur un contrat existant (écran Contrats
+// "Gérer les assurés" ET actions individuelles depuis Participants). Permet
+// de retrouver, par contrat et par période (dateEffet), la liste exacte des
+// personnes incorporées/retirées — la simple description texte de l'Avenant
+// ne suffisait pas à ça. Pas de relation FK stricte vers AssureSante : cet
+// historique doit survivre à une éventuelle suppression physique de la ligne
+// (voir SanteService.removeAssure, conservé pour la correction de saisie).
+model AvenantAssure {
+  id         String @id
+  avenantId  String
   contratId  String
-  motif      String
+  assureId   String
+  nom        String
+  prenom     String?
+  matricule  String?
+  typeAssure String?
+  action     String // Incorporation | Retrait
   dateEffet  String
-  ristourne  Decimal @db.Decimal(18, 2)
-  initiateur String
-  statut     String
 
-  contrat Contrat @relation(fields: [contratId], references: [id])
+  avenant Avenant @relation(fields: [avenantId], references: [id], onDelete: Cascade)
+
+  @@index([contratId, dateEffet])
+  @@index([assureId])
 }
 
-// ── Branches spécialisées ────────────────────────────────────────────
-model PoliceIard {
-  id            String  @id
-  clientId      String
-  sousBranche   String
-  compagnieId   String
-  capitalAssure Decimal @db.Decimal(18, 2)
-  prime         Decimal @db.Decimal(18, 2)
-  statut        String
-
-  client    Client    @relation(fields: [clientId], references: [id])
-  compagnie Compagnie @relation(fields: [compagnieId], references: [id])
+// Compteur global d'émission de pièces (quittances/avenants) — une seule
+// ligne ("quittance"), incrémentée atomiquement à chaque première génération
+// de document pour un contrat/avenant donné (numéro stable ensuite).
+model CompteurDocument {
+  id     String @id
+  valeur Int
 }
 
-model ContratVie {
-  id             String  @id
-  assure         String
-  produit        String
-  compagnieId    String
-  capitalGaranti Decimal @db.Decimal(18, 2)
-  primeAnnuelle  Decimal @db.Decimal(18, 2)
-  dateEffet      String
-  statut         String
+// File d'attente — import global de factures "tous contrats confondus"
+// (2026-08) — voir demande utilisateur : "il faut juste faire remonter le
+// numéro matricule et l'application fera un matching avec les matricules
+// de la population globale de tous les contrats... l'application seulement
+// faire remonter les factures des matricules trouvés et mettre les autres
+// en attente que les bonnes populations soient chargées dans les autres
+// contrats... l'application devra systématiquement synchroniser". Une
+// ligne de facture dont le matricule n'existe pas ENCORE dans aucun
+// contrat (sa population n'a pas encore été reprise) est stockée ici TELLE
+// QUELLE (jamais perdue/rejetée) — voir ImportService.synchroniserFactures
+// EnAttente, qui la rejoue automatiquement dès que le matricule apparaît
+// dans la population d'un contrat.
+model FactureEnAttente {
+  id               String   @id @default(cuid())
+  // Isolation multi-tenant (2026-09) — comblé après coup, voir Conversation
+  // ci-dessus pour le détail du bug (interrogé sans filtrage).
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  matricule        String
+  prestataire      String
+  referenceFacture String
+  dateReception    String
+  typePrestation   String
+  datePrestation   String
+  acteMedical      String
+  montant          Decimal  @db.Decimal(18, 2)
+  quantite         Int?
+  statut           String?
+  motifRejet       String?
+  createdAt        DateTime @default(now())
 
-  compagnie     Compagnie      @relation(fields: [compagnieId], references: [id])
-  beneficiaires Beneficiaire[]
+  @@index([matricule])
+  @@index([societeId])
 }
 
-model Beneficiaire {
-  id           String @id @default(cuid())
-  contratVieId String
-  nom          String
-  lien         String
-  quotePart    Int
+// Ligne unique ("default") — identité du courtier/assureur exploitant cette
+// instance de l'application, utilisée dans toute la génération de documents
+// et de cartes (en-têtes, couleurs, coordonnées) à la place de valeurs
+// codées en dur, pour que chaque société qui déploie l'application puisse
+// personnaliser son propre habillage sans toucher au code.
+model ParametresEntreprise {
+  id                String   @id
+  nom               String   @default("MedAssur")
+  sousTitre         String   @default("Courtier d'Assurances")
+  adresse           String?
+  boitePostale      String   @default("BP 2000")
+  ville             String   @default("Libreville")
+  pays              String   @default("GABON")
+  telephone         String   @default("+241 01 00 00 00")
+  email             String   @default("contact@medassur.ga")
+  siteWeb           String   @default("www.medassur.ga")
+  couleurPrimaire   String   @default("#0f4c81")
+  couleurSecondaire String   @default("#1f9d55")
+  // Code d'agence du courtier (2026-08) — repris sur le Décompte de
+  // Remboursement Maladie ("Agence : <codeAgence> <nom>", voir
+  // DocumentsService.renderDecompteFacture). MedAssur n'a qu'une seule
+  // agence à ce jour ; champ global plutôt que par Facture/Client.
+  codeAgence        String   @default("001")
 
-  contratVie ContratVie @relation(fields: [contratVieId], references: [id], onDelete: Cascade)
+  // Logo réel de la société (2026-09) — voir demande utilisateur : "on
+  // doit pouvoir mettre le logo de l'entreprise. C'est ce logo qui remonte
+  // sur les quittances, les courriers, les prises en charge, les
+  // factures, les règlements, les cartes." Nom de fichier sous
+  // uploads/logos-entreprises/ (même patron que Compagnie.logo). Absent =
+  // repli sur le texte nom/sousTitre déjà en place, jamais bloquant.
+  logo String?
+
+  // Préfixe du matricule assuré (2026-09) — voir demande utilisateur :
+  // exemple LA RUCHE EXCELLENCE → préfixe "LRX", matricule auto-généré
+  // "LRX-00000A". Absent = comportement historique inchangé
+  // (MAT-<aléatoire>, voir SanteMatriculeUtil.prochainMatricule).
+  prefixeMatricule String?
+
+  // Modèle de carte choisi (2026-09) — voir demande utilisateur : "pour
+  // chaque client... on puisse définir ou garder le modèle de carte pour
+  // les assurés et les ayants droit." Catalogue PARTAGÉ entre toutes les
+  // sociétés (voir ModeleCarte, géré par le Super Admin) — null = modèle
+  // "classique" (dessin généré actuel, comportement historique).
+  modeleCarteId String?
+  modeleCarte   ModeleCarte? @relation(fields: [modeleCarteId], references: [id])
+
+  // Texte du VERSO de carte éditable (2026-09) — voir demande utilisateur :
+  // "il faudrait que l'application puisse générer ces deux blocs de texte
+  // au lieu de les laisser figés... éditables afin qu'on puisse changer
+  // les informations à tout moment." Le verso d'un modèle importé
+  // (ModeleCarte.imageVerso) reste normalement une image fixe — ces 2
+  // champs, quand renseignés, sont dessinés PAR-DESSUS cette image (même
+  // principe que le logo/lien MedAssur déjà superposés en style
+  // "la-ruche") plutôt que figés dans le fichier. Absents (défaut) =
+  // comportement inchangé, l'image importée reste telle quelle.
+  carteVersoIntro      String?
+  carteVersoTelephone  String?
+  // 3ᵉ bloc éditable (2026-09) — voir demande utilisateur : "il faut
+  // aussi rendre ce texte éditable" (le paragraphe d'explication du QR
+  // Code, en bas du verso).
+  carteVersoQrExplication String?
+
+  // Page de garde du rapport Statistiques, personnalisable par société
+  // (2026-09) — voir demande utilisateur : "le fichier statistique... doit
+  // être exactement comme celui de MedAssur. Il faut seulement rendre
+  // possible la personnalisation de la page de garde par client (compagnie,
+  // courtier, mutuelle)." Nom de fichier sous uploads/pages-garde-
+  // statistiques/ — image pleine page (fond) utilisée comme 1ère page du
+  // PDF/Word ; les champs dynamiques (client, police, période) restent
+  // superposés PAR-DESSUS (même principe que ModeleCarte ci-dessous).
+  // Absent = page de garde générée par défaut (comportement historique).
+  statistiquesPageGarde String?
+
+  updatedAt         DateTime @updatedAt
 }
 
-model Flotte {
-  id          String  @id
-  clientId    String
-  contratId   String  @unique
-  compagnieId String
-  nbVehicules Int
-  primeTotal  Decimal @db.Decimal(18, 2)
-  statut      String
+// Catalogue des modèles de carte importables (2026-09) — voir demande
+// utilisateur : "on peut importer les modèles et l'application place le
+// modèle comme choix pour chaque société." Un modèle = une image de fond
+// recto + une image de fond verso (uploads/modeles-carte/) ; les champs
+// dynamiques (photo, QR, identité, matricule, taux de couverture) restent
+// superposés aux mêmes positions qu'aujourd'hui par DocumentsService.
+// ajouterCarteRectoVerso, quel que soit le modèle choisi. La ligne
+// id="classique" (seedée, jamais supprimable) représente le dessin généré
+// historique — aucune image, comportement inchangé pour toute société qui
+// ne choisit rien.
+model ModeleCarte {
+  id          String   @id @default(cuid())
+  nom         String
+  description String?
+  imageRecto  String?
+  imageVerso  String?
+  // Style de recto CODÉ (2026-09) — voir demande utilisateur (LA RUCHE
+  // EXCELLENCE) : "il faut les redesign en copie conforme à l'original."
+  // Une image recto fournie contient parfois un exemple de données déjà
+  // imprimé dedans (matricule/nom fictifs) — inutilisable comme fond réel,
+  // la vraie donnée se superposerait par-dessus illisiblement. Dans ce
+  // cas, le recto est reconstruit EN CODE (comme le dessin "classique"
+  // l'a toujours été) plutôt qu'importé comme image ; ce champ identifie
+  // QUEL dessin coder utiliser. null/"classique" = dessin générique
+  // historique. Volontairement un identifiant technique libre (pas une
+  // liste fermée) — chaque nouveau style ajouté ici a sa propre fonction
+  // dans DocumentsService.ajouterCarteRectoVerso, pas un champ exposé au
+  // Super Admin dans le formulaire (trop technique pour une saisie libre).
+  styleCode   String?
+  actif       Boolean  @default(true)
+  createdAt   DateTime @default(now())
 
-  client    Client     @relation(fields: [clientId], references: [id])
-  contrat   Contrat    @relation(fields: [contratId], references: [id])
-  compagnie Compagnie  @relation(fields: [compagnieId], references: [id])
-  vehicules Vehicule[]
-}
-
-model Vehicule {
-  id              String  @id @default(cuid())
-  flotteId        String
-  immatriculation String
-  modele          String
-  conducteur      String
-  valeurVenale    Decimal @db.Decimal(18, 2)
-  statut          String
-
-  flotte Flotte @relation(fields: [flotteId], references: [id], onDelete: Cascade)
+  parametresEntreprises ParametresEntreprise[]
 }
 
 // ── Sinistres ────────────────────────────────────────────────────────
 model Sinistre {
-  id          String  @id
-  clientId    String
-  branche     String
-  date        String
-  description String
-  montant     Decimal @db.Decimal(18, 2)
-  statut      String
-  priorite    String
+  id             String  @id
 
-  client Client @relation(fields: [clientId], references: [id])
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  clientId       String
+  branche        String
+  date           String
+  description    String
+  montant        Decimal @db.Decimal(18, 2)
+  statut         String
+  priorite       String
+  gestionnaireId String?
+
+  client       Client @relation(fields: [clientId], references: [id])
+  gestionnaire User?  @relation(fields: [gestionnaireId], references: [id])
+
+  @@index([societeId])
 }
 
 // ── Santé — Affiliation & Sinistres santé ────────────────────────────
 model AssureSante {
   id                String  @id
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   nom               String
+  prenom            String?
+  telephone         String?
   matricule         String
   contratId         String
   beneficiaires     Int
@@ -300,40 +1959,489 @@ model AssureSante {
   dateAffiliation   String?
   dateRadiation     String?
   motifRadiation    String? // Départ employé | Décès | Retraite
+  photo             String? // nom de fichier sous backend/uploads/photos/
 
-  contrat           Contrat           @relation(fields: [contratId], references: [id])
-  ayantsDroit       AyantDroit[]
+  // ── Famille (2026-08) ────────────────────────────────────────────────
+  // Chaque personne (AS/CJ/EF) est sa propre ligne AssureSante — familleId
+  // NULL = cette ligne EST la racine de famille (Assuré Principal) ; sinon
+  // = id de sa racine. Le téléphone n'est renseigné que sur la racine (un
+  // numéro = une famille, contrainte unique partielle ajoutée à la main
+  // dans la migration — voir SanteService.resolveTelephone) ; un CJ/EF
+  // hérite du téléphone de sa racine à l'affichage plutôt que de dupliquer
+  // la valeur. onDelete Cascade : radier la racine radie toute la famille.
+  familleId String?
+  famille   AssureSante?  @relation("Famille", fields: [familleId], references: [id], onDelete: Cascade)
+  membres   AssureSante[] @relation("Famille")
+
+  // ── Import population — fichier compagnie/courtier (2026-08) ────────
+  // Format retenu : N° Matricule;Nom;Prénom;Type(M/F);Date de
+  // naissance;Affiliation(AS/CJ/EF);N° de Téléphone;Photo — chaque colonne
+  // dans son propre champ. Chaque ligne (AS ou CJ/EF) devient sa propre
+  // ligne AssureSante (voir SanteService.importPopulation).
+  nationalite            String? // legacy — non utilisé par le format d'import actuel
+  sexe                   String? // M | F — éditable individuellement (profil Participants)
+  typeAssure             String? // AS (Assuré principal) | CJ (Conjoint) | EF (Enfant)
+  // Enfant (EF) encore scolarisé : ouvre droit à Contrat.limiteAgeEnfantScolarise
+  // au lieu de limiteAgeEnfant — sans effet pour AS/CJ. Voir age-limite.util.ts.
+  scolarise              Boolean @default(false)
+  periodeCouverture      String? // legacy
+  referenceContratSource String? // legacy
+  produit                String? // legacy
+  adresse                String? // éditable individuellement (profil Participants)
+
+  // ── Fiche détaillée individuelle (2026-08) ───────────────────────────
+  // Coordonnées propres à CHAQUE personne (contrairement à `telephone`,
+  // porté uniquement par la racine de famille) — un CJ/EF majeur peut avoir
+  // son propre email/numéro fixe indépendamment du téléphone familial.
+  nomJeuneFille  String?
+  lieuNaissance  String?
+  email          String?
+  telephoneFixe  String?
+  autreNumero    String?
+  fax            String?
+
+  // ── Passeport médical (2026-09) ──────────────────────────────────────
+  // voir demande utilisateur : "enrichir avec les fonctionnalités de
+  // passeport médical de EYONE et de Medinova de WTW" — informations
+  // d'urgence saisies par l'assuré/l'ayant droit lui-même (jamais déduites
+  // ni inventées), consultables même sans connexion depuis l'appli mobile.
+  // Listes libres (pas de nomenclature médicale imposée) — chaque personne
+  // saisit ce qui la concerne dans ses propres mots.
+  groupeSanguin         String?
+  allergies             String[] @default([])
+  antecedentsMedicaux   String[] @default([])
+  traitementsEnCours    String[] @default([])
+  contactUrgenceNom     String?
+  contactUrgenceTelephone String?
+
+  contrat           Contrat             @relation(fields: [contratId], references: [id])
   prisesEnCharge    PriseEnCharge[]
+  remboursementsBeneficiaire Remboursement[]
   accordsPrealables AccordPrealable[]
+  // Compte du portail assuré (2026-08) — remplace l'ancien CompteAssureMobile
+  // (jamais branché à une vraie connexion) : un vrai compte User connectable,
+  // voir User.assureSanteId et ComptesMobileService.generer().
+  compteUtilisateur User?
+  decomptes         Decompte[]
+  courriers         Courrier[]
+  demandesRetrait   DemandeClient[]
+  // E-carnet Santé (2026-08) — voir demande utilisateur : "il faut créer
+  // dans le compte assuré une rubrique appelée E-carnet Santé... rubrique
+  // Ordonnance et rubrique Examens & Compte rendu" — documents filés par
+  // l'assuré lui-même quand le prestataire ne les a pas saisis
+  // systématiquement (photo → PDF, voir CarnetSanteDocument).
+  carnetSante       CarnetSanteDocument[]
+
+  @@unique([contratId, matricule])
+
+  @@index([societeId])
 }
 
-model AyantDroit {
-  id            String @id @default(cuid())
-  assureId      String
-  nom           String
-  lienParente   String
-  dateNaissance String
-  statut        String
+// Demande de mouvement de population initiée depuis le portail client
+// (2026-08) — voir demande utilisateur : "des actions... comme des
+// incorporations et retrait, mais la validation finale revient au
+// gestionnaire côté assurance". Circuit VOLONTAIREMENT distinct d'Avenant :
+// une demande reste "En attente" tant qu'un gestionnaire ne l'a pas
+// tranchée ; ce n'est qu'une fois "Accordée" qu'elle est transformée en
+// mouvement réel via MouvementsService.appliquerMouvement (même mécanisme
+// que l'écran interne "Gérer les assurés"), qui crée alors le véritable
+// Avenant/AssureSante — avenantId trace ce résultat a posteriori.
+model DemandeClient {
+  id            String   @id @default(cuid())
+  // Isolation multi-tenant (2026-09) — comblé après coup, voir Conversation
+  // ci-dessus pour le détail du bug (interrogé sans filtrage).
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  contratId     String
+  clientId      String
+  demandeurId   String
+  dateDemande   String
+  type          String // "Incorporation" | "Retrait"
+  statut        String   @default("En attente") // En attente | Accordée | Refusée
+  dateTraitement String?
+  gestionnaireId String?
+  motifRefus    String?
+  // Une fois "Accordée", référence l'Avenant réellement généré par
+  // MouvementsService.appliquerMouvement — pas de relation Prisma (même
+  // principe qu'AvenantAssure, qui garde volontairement ses références en
+  // texte libre pour survivre à une suppression en amont). Peut porter
+  // plusieurs id séparés par une virgule si l'incorporation d'un assuré
+  // principal ET de ses ayants droit a nécessité deux mouvements (voir
+  // DemandesClientService.decider).
+  avenantId     String?
 
-  assure AssureSante @relation(fields: [assureId], references: [id], onDelete: Cascade)
+  // ── Incorporation (2026-08) — une demande peut incorporer PLUSIEURS
+  // personnes à la fois : un assuré principal ET ses ayants droit (voir
+  // demande utilisateur : "s'il s'agit d'un assuré principal il faut
+  // rendre possible aussi l'ajout de ses ayants droit"). Voir
+  // DemandeClientBeneficiaire ci-dessous.
+  beneficiaires DemandeClientBeneficiaire[]
+
+  // ── Retrait (reste single-cible, non demandé en multiple) ────────────
+  assureId      String?
+  motifRetrait  String?
+
+  contrat     Contrat @relation(fields: [contratId], references: [id])
+  client      Client  @relation(fields: [clientId], references: [id])
+  demandeur   User    @relation("DemandeClientDemandeur", fields: [demandeurId], references: [id])
+  gestionnaire User?  @relation("DemandeClientGestionnaire", fields: [gestionnaireId], references: [id])
+  assureRetrait AssureSante? @relation(fields: [assureId], references: [id])
+
+  @@index([contratId])
+  @@index([clientId])
+  @@index([societeId])
+}
+
+// Une personne à incorporer au sein d'une DemandeClient (2026-08) — voir
+// demande utilisateur : l'incorporation d'un conjoint/enfant se rattache à
+// une famille précise, et l'incorporation d'un assuré principal peut
+// s'accompagner de ses ayants droit dans la MÊME demande. Champs calqués
+// sur MouvementsService.AjoutMouvement (même conversion directe à
+// l'approbation, voir DemandesClientService.decider).
+model DemandeClientBeneficiaire {
+  id              String  @id @default(cuid())
+  demandeClientId String
+  demandeClient   DemandeClient @relation(fields: [demandeClientId], references: [id], onDelete: Cascade)
+
+  nom           String
+  prenom        String?
+  dateNaissance String?
+  typeAssure    String // AS | CJ | EF
+  sexe          String?
+  telephone     String?
+  adresse       String?
+  scolarise     Boolean?
+  // Photo (2026-08) — voir demande utilisateur : "rendre possible l'ajout
+  // des photos pour rendre possible l'édition des cartes côté assurance".
+  // Même dossier que AssureSante.photo (uploads/photos/) : transmise telle
+  // quelle à l'AssureSante réellement créée à l'approbation, sans copie.
+  photo         String?
+
+  // Rattachement familial pour un CJ/EF — soit une famille déjà existante
+  // sur le contrat (familleId = id d'un AssureSante AS réel), soit
+  // l'assuré principal ajouté DANS CETTE MÊME demande (familleRefLocale),
+  // résolu à son id réel une fois celui-ci créé.
+  familleId        String?
+  familleRefLocale Boolean @default(false)
+
+  @@index([demandeClientId])
 }
 
 // ── Réseau de soins (Conventionnement) ───────────────────────────────
 model Prestataire {
   id                   String   @id
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   nom                  String
-  type                 String // Hôpital | Clinique | Pharmacie | Laboratoire | Cabinet
+  // Hôpital | Clinique | Cabinet | Médecin (indépendant) | Centre de
+  // Kinésithérapie | Opticien | Pharmacie | Laboratoire
+  type                 String
+  // Secteur d'appartenance (2026-08) — distinct de `type` (catégorie
+  // d'établissement) : détermine quel taux du Contrat (structure
+  // publique/privée) s'applique lors du calcul d'une PriseEnCharge.
+  secteur              String? // Public | Privé
+  // Titre professionnel (2026-08) — pertinent seulement pour type =
+  // "Médecin" (praticien indépendant) : Professeur | Docteur.
+  titre                String?
+  // Spécialité médicale/paramédicale (2026-08) — texte libre (liste de
+  // suggestions côté frontend, voir src/lib/specialitesSante.ts) :
+  // complète `type` (catégorie d'établissement) sans imposer de
+  // nomenclature stricte en base, la liste réelle évoluant plus vite que
+  // les migrations.
+  specialite           String?
   pays                 String
   ville                String
+  telephone            String?
+  adresse              String?
   statutConvention     String // En négociation | Conventionné | Suspendu
   dateConventionnement String?
   delaiPaiementMoyen   Int?
   scoreQualite         Decimal? @db.Decimal(5, 2)
   motifSuspension      String?
 
+  // Géolocalisation (2026-08) — voir demande utilisateur : "Réseau de
+  // soins... on doit pouvoir géolocaliser un prestataire". Résolue par
+  // géocodage de l'adresse/ville (PrestatairesService.geolocaliser, API
+  // Nominatim/OpenStreetMap — gratuite, sans clé), jamais saisie à la main ;
+  // null tant qu'un géocodage n'a pas encore été déclenché ou a échoué.
+  latitude  Float?
+  longitude Float?
+  // Tentative de géocodage sans résultat (2026-08) — voir demande
+  // utilisateur : "grâce à la liste présente, aller sur Google Maps ou
+  // n'importe quelle solution récupérer les coordonnées géographiques
+  // réelles et authentiques de chaque prestataire". Distingue "jamais
+  // essayé" (latitude null, drapeau false — encore candidat au lot suivant)
+  // de "essayé, adresse introuvable" (latitude toujours null, drapeau true
+  // — le géocodage en masse ne le retente plus indéfiniment ; seule une
+  // relance manuelle via le bouton "Localiser" de la fiche le retente).
+  geolocalisationEchec Boolean @default(false)
+
+  // Médecins intervenant dans cet établissement (2026-08) — remplace
+  // l'ancienne auto-relation "etablissementId" (un médecin rattaché à UN
+  // SEUL établissement) : voir demande utilisateur : "un même médecin peut
+  // faire des prestations dans plusieurs structures médicales", donc une
+  // vraie relation plusieurs-à-plusieurs. Voir model Medecin/
+  // MedecinPrestataire ci-dessous (nouveau module "Professionnel de
+  // santé", rubrique Système).
+  medecins MedecinPrestataire[]
+  gedDocuments GedDocument[]
+
+  // Visibilité du portail prestataire (2026-08) — voir demande utilisateur :
+  // "on doit pouvoir définir les garanties qui doivent s'afficher en
+  // fonction du type de prestataire. Et même en fonction des actes qui
+  // doivent remonter vers l'écran d'un prestataire, c'est ainsi qu'une
+  // pharmacie, un laboratoire n'aura pas besoin de consultation." Tableau
+  // vide = aucune restriction (comportement historique, tous les
+  // prestataires existants) ; sinon limite respectivement les catégories de
+  // garanties affichées à l'identification (voir Garantie.categorie) et les
+  // groupes d'actes proposés en "Nouvelle prestation" (voir
+  // backend/src/actes-medicaux/groupes-actes.util.ts) côté portail
+  // prestataire (PortailPrestataireController).
+  garantiesVisibles       String[] @default([])
+  categoriesActesVisibles String[] @default([])
+
+  // Numérotation des factures saisies depuis le portail prestataire
+  // (2026-08) — voir demande utilisateur : "il faut revoir le principe de
+  // génération du numéro de facture depuis l'écran du prestataire... un
+  // acronyme avec toutes les premières lettres du nom du prestataire...
+  // Exemple CHU de Libreville: CHUL-00001, la référence se génère à
+  // l'infini, mais l'acronyme reste inchangé". Compteur dédié (jamais
+  // décrémenté, même si une facture est ensuite annulée) pour garantir une
+  // séquence strictement croissante par établissement — voir
+  // FacturesService.genererReferencePortail.
+  compteurFacture Int @default(0)
+
+  // TPS (2026-08) — 9,5% de la base de remboursement assurance, prélevée
+  // uniquement chez les prestataires assujettis, et seulement sur la
+  // fenêtre [tpsDateEffet, tpsDateArret] (arrêt optionnel = toujours
+  // actif une fois la date d'effet passée). Voir SanteService.calculerTps.
+  tpsAssujetti Boolean @default(false)
+  tpsDateEffet String?
+  tpsDateArret String?
+
   grillesTarifaires GrilleTarifaire[]
   prisesEnCharge    PriseEnCharge[]
   bordereaux        BordereauReglement[]
+  accordsPrealables AccordPrealable[]
+  factures          Facture[]
+  lettresCheque     LettreCheque[]
+  courriers         Courrier[]
+  // Comptes du portail prestataire (2026-08, plusieurs par établissement
+  // depuis 2026-09) — voir User.prestataireId.
+  comptesUtilisateur User[]
+  relevesPrestataire RelevePrestataire[]
+  // Médecin prescripteur (2026-08) — contributions de traitement (totales
+  // ou partielles) de cette structure sur des lignes prescrites ailleurs
+  // (voir model PrescriptionLigneTraitement).
+  traitementsBons PrescriptionLigneTraitement[]
+
+  // Alias de reprise d'antériorité (2026-08 — voir PrestataireAlias
+  // ci-dessous).
+  aliases PrestataireAlias[]
+
+  @@index([societeId])
+}
+
+// Alias de nom — reprise d'antériorité (2026-08) — voir demande
+// utilisateur : "Centre diagnostic de Libreville = Polyclinique centre
+// diagnostic. Pour les autres prestataires, il faut les créer et rendre
+// possible l'import des données." Un ancien système désigne parfois un
+// prestataire déjà réel sous un AUTRE nom que celui enregistré ici —
+// jamais détectable par une simple correspondance de nom (voir
+// ImportService.resoudrePrestataire) : la correspondance est déclarée une
+// fois, ici, puis réutilisée pour tout import futur portant ce même
+// libellé d'origine. Distinct des prestataires réellement introuvables,
+// qui sont AUTO-CRÉÉS plutôt que bloqués (voir même méthode).
+model PrestataireAlias {
+  id            String   @id @default(cuid())
+  // Isolation multi-tenant (2026-09) — comblé après coup : `nomOrigine`
+  // était @unique GLOBALEMENT et résolu par un simple findFirst SANS
+  // filtrage, avec un `include: { prestataire: true }` (le middleware ne
+  // protège pas les relations imbriquées) — un alias d'une AUTRE société
+  // pouvait donc rattacher un import à SON prestataire.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  nomOrigine    String
+  prestataireId String
+  prestataire   Prestataire @relation(fields: [prestataireId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+
+  // `nomOrigine` reste unique PAR société (plus globalement) — deux
+  // sociétés peuvent légitimement avoir chacune un prestataire dont le nom
+  // d'origine (fichier importé) coïncide.
+  @@unique([societeId, nomOrigine])
+  @@index([societeId])
+}
+
+// ── Professionnel de santé (2026-08) — voir demande utilisateur : "il faut
+// à présent rendre possible l'ajout d'un médecin et sa spécialité dans le
+// prestataire... créer un onglet professionnel de santé [rubrique Système].
+// C'est ici que l'on pourra créer des médecins, puis les lier à une
+// clinique, hôpital... car un même médecin peut faire des prestations dans
+// plusieurs structures médicales." Modèle séparé de Prestataire (qui reste
+// la STRUCTURE — hôpital/clinique/cabinet) : un Medecin est une PERSONNE,
+// liée à zéro, une ou plusieurs structures via MedecinPrestataire.
+model Medecin {
+  id            String  @id @default(cuid())
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  nom           String
+  prenom        String?
+  titre         String? // Professeur | Docteur
+  specialite    String?
+  // Code praticien = numéro à l'ordre des médecins (2026-08) — voir demande
+  // utilisateur : "il faut rendre possible le fait qu'on puisse [ajouter]
+  // son code praticien (qui est également son numéro à l'ordre des
+  // médecins)".
+  codePraticien String?
+  telephone     String?
+  email         String?
+  actif         Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  structures MedecinPrestataire[]
+  // Règlements établis à l'ordre de ce médecin (2026-08) — voir demande
+  // utilisateur : "lorsqu'on fait un règlement pour une structure médicale,
+  // que le règlement se fasse à l'ordre d'un médecin intervenant dans la
+  // structure" (voir BordereauReglement.medecinId ci-dessous).
+  bordereaux BordereauReglement[]
+  // Prescriptions rédigées en tant que médecin prescripteur (2026-08) —
+  // voir model Prescription ci-dessous.
+  prescriptions Prescription[]
+  // Consultations assignées par l'accueil (2026-09) — voir
+  // PriseEnCharge.medecinId ci-dessus.
+  prisesEnCharge PriseEnCharge[]
+  // Compte du portail médecin (2026-08) — voir User.medecinId.
+  compteUtilisateur User?
+
+  @@index([nom])
+
+  @@index([societeId])
+}
+
+// Rattachement plusieurs-à-plusieurs Médecin ↔ Prestataire (structure)
+// (2026-08) — un médecin peut intervenir dans plusieurs établissements, un
+// établissement héberge plusieurs médecins.
+model MedecinPrestataire {
+  medecinId     String
+  prestataireId String
+  medecin       Medecin     @relation(fields: [medecinId], references: [id], onDelete: Cascade)
+  prestataire   Prestataire @relation(fields: [prestataireId], references: [id], onDelete: Cascade)
+
+  @@id([medecinId, prestataireId])
+}
+
+// Prescription du médecin prescripteur (2026-08) — voir demande utilisateur
+// (correction) : "la prescription n'est pas l'origine de la feuille de
+// soins, c'est la CONSULTATION qui en est l'origine... la feuille de soins
+// qui se génère dès la création d'une prestation de type consultation doit
+// être complétée par la prescription pour devenir l'ordonnance... lorsque
+// le médecin fera sa prescription, c'est à ce moment que la feuille de
+// soins va se compléter". Donc : PAS de document/numéro propre pour
+// l'ordonnance — `priseEnChargeId` pointe vers la VRAIE ligne "Consultation"
+// déjà facturée (via l'écran "Nouvelle prestation" existant), dont le
+// numéro de Feuille de Soins (désormais stable, voir PriseEnCharge.
+// numeroFeuilleSoins) devient celui de l'ordonnance. Le bon d'examen, lui,
+// n'a pas d'équivalent "déjà facturé" (l'examen se fera ailleurs, plus
+// tard) — il garde son propre numéro généré à la prescription.
+model Prescription {
+  id                String   @id @default(cuid())
+  // Isolation multi-tenant (2026-09) — comblé après coup : la recherche
+  // d'un bon d'examen/ordonnance par numéro (rechercherBon()) et le
+  // traitement d'une ligne (traiter()) se faisaient sans AUCUNE
+  // vérification d'appartenance — un prestataire d'une société pouvait
+  // consulter/traiter le bon d'un patient d'une AUTRE société. Voir
+  // Conversation ci-dessus pour le détail du mécanisme.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  priseEnChargeId   String   @unique
+  priseEnCharge     PriseEnCharge @relation("PrescriptionOrigine", fields: [priseEnChargeId], references: [id])
+  medecinId         String
+  medecin           Medecin  @relation(fields: [medecinId], references: [id])
+  // Motifs de consultation (2026-08) — voir demande utilisateur :
+  // "l'application doit pouvoir faire remonter une liste des motifs, avec
+  // la possibilité d'en ajouter plusieurs" — plusieurs motifs par
+  // consultation (voir src/lib/motifsConsultation.ts pour les suggestions
+  // proposées côté frontend, texte libre toujours possible).
+  motifsConsultation String[]
+  // Code affection CNAMGS (2026-08) — voir model CodeAffection, catalogue
+  // de référence (804317157-CODIFICATION-DES-AFFECTIONS.pdf), jamais de
+  // saisie libre.
+  codeAffection     String?
+  affection         CodeAffection? @relation(fields: [codeAffection], references: [code])
+  // Numéro du bon d'examen (2026-08) — réutilise la numérotation des
+  // Feuilles d'Examen déjà en place (DocumentsService.prochainNumeroFormulaire
+  // "feuille-examen", FE-000001/2026). Absent si aucune ligne Examen.
+  numeroBonExamen   String?  @unique
+  createdAt         DateTime @default(now())
+
+  lignes PrescriptionLigne[]
+
+  @@index([societeId])
+}
+
+// Ligne prescrite — médicament (complète la Feuille de Soins de la
+// consultation d'origine) ou examen (bon d'examen) (2026-08). Traitement
+// PARTIEL multi-prestataire possible (2026-08) — voir demande utilisateur :
+// "si la première pharmacie avait servi une quantité insuffisante en
+// fonction de la disponibilité de son stock par rapport au nombre prescrit,
+// alors la deuxième pharmacie pourra servir le reste." `quantiteTraitee`
+// cumule la quantité déjà livrée tous prestataires confondus ; le détail
+// (qui a livré combien, quelle facture) vit dans PrescriptionLigneTraitement
+// ci-dessous — une ligne prescrite peut désormais être livrée par PLUSIEURS
+// prestataires, chacun via sa propre Facture réelle.
+model PrescriptionLigne {
+  id             String @id @default(cuid())
+  prescriptionId String
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  type           String // "Medicament" | "Examen"
+  acteMedicalId  String?
+  acteMedical    ActeMedical? @relation(fields: [acteMedicalId], references: [id])
+  // Dénormalisé (2026-08) — reste lisible même si l'acte catalogue est
+  // renommé/retiré ensuite (même principe que PriseEnCharge.prestataire).
+  libelle        String
+  quantite       Int    @default(1)
+  // Posologie (2026-08) — pertinent seulement pour type = "Medicament".
+  posologie      String?
+  quantiteTraitee Int   @default(0)
+  statut         String @default("EnAttente") // EnAttente | PartiellementTraite | Traite — dérivé de quantiteTraitee vs quantite, voir PrescriptionsService
+
+  traitements PrescriptionLigneTraitement[]
+
+  @@index([prescriptionId])
+}
+
+// Un enregistrement par prestataire ayant livré tout ou partie d'une ligne
+// prescrite (2026-08) — voir PrescriptionLigne.quantiteTraitee ci-dessus.
+// `priseEnChargeId` pointe vers la VRAIE ligne de Facture créée pour CETTE
+// contribution (facturation/quote-part propres à ce prestataire, à cette
+// quantité).
+model PrescriptionLigneTraitement {
+  id                   String   @id @default(cuid())
+  prescriptionLigneId  String
+  prescriptionLigne    PrescriptionLigne @relation(fields: [prescriptionLigneId], references: [id], onDelete: Cascade)
+  prestataireId        String
+  prestataire          Prestataire @relation(fields: [prestataireId], references: [id])
+  priseEnChargeId      String   @unique
+  priseEnCharge        PriseEnCharge @relation(fields: [priseEnChargeId], references: [id])
+  quantite             Int
+  dateTraitement       DateTime @default(now())
+
+  @@index([prescriptionLigneId])
 }
 
 model GrilleTarifaire {
@@ -348,6 +2456,15 @@ model GrilleTarifaire {
 // ── Sinistres santé — accord préalable & contrôle médical ────────────
 model AccordPrealable {
   id                         String   @id
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   assureId                   String
   type                       String // Hospitalisation | Chirurgie | EVASAN
   description                String
@@ -357,13 +2474,127 @@ model AccordPrealable {
   decision                   String // Accordé | Refusé | En attente
   montantAutorise            Decimal? @db.Decimal(18, 2)
   dateDecision               String?
+  // Motif de la décision (2026-08) — voir demande utilisateur : "si c'est
+  // pas accordé il doit donner la raison". Alimenté par la décision
+  // automatique IA (voir MessagerieAgentIaService.decider_chambre_
+  // hospitalisation) — nom du prestataire/patient ne correspondant pas,
+  // prestataire non conventionné, plafond appliqué... Reste vide pour une
+  // décision manuelle classique (le gestionnaire tranche déjà en connaissance
+  // de cause).
+  motifDecision              String?
+  // Validité du certificat (2026-08) — par défaut calculée à l'impression
+  // (dateDecision ou dateDemande + 30 jours, voir DocumentsService.
+  // renderCertificatPriseEnCharge), mais modifiable ici pour prolonger un
+  // dossier sans repasser par toute la décision (voir demande utilisateur :
+  // "actualisation des délais de validité").
+  dateValidite               String?
+
+  // Une demande de prise en charge (entente préalable) n'est instruite que
+  // sur présentation d'une prescription (ordonnance) ET d'un devis chiffré
+  // du coût de l'acte à couvrir (2026-08) — distinct de montantAutorise
+  // ci-dessus, qui n'est arrêté qu'à la décision.
+  prescriptionRef String?
+  montantDevis    Decimal? @db.Decimal(18, 2)
+  // Canal d'origine de la demande — portail prestataire/assuré (dépôt
+  // distant) ou saisie directe par un agent gestionnaire sinistre santé.
+  origine         String   @default("Agent") // Portail Prestataire | Portail Assuré | Agent
+
+  // Demandeur (2026-08) — la personne qui a réellement établi/demandé la
+  // prise en charge, imprimée sur le Certificat de Prise en Charge (voir
+  // demande utilisateur : "le nom de la personne qui a établi la prise en
+  // charge", pas juste le canal `origine`). Capturé automatiquement à la
+  // création depuis l'utilisateur connecté (voir AccordPrealableController.
+  // create) — nullable pour les dossiers créés avant ce champ.
+  demandeurId String?
+
+  // Pièces jointes (2026-08) — image ou document (tout type) de
+  // l'ordonnance et du devis, stockées sous uploads/accords-prealables/ (voir
+  // AccordPrealableService.uploadDocument, même principe que
+  // AssureSante.photo). Facultatives en saisie Agent ; la demande ne peut
+  // pas franchir l'étape "analyse médicale validée" sans elles quand
+  // origine est un portail externe (voir AccordPrealableService.decider).
+  ordonnanceFichier String?
+  devisFichier      String?
+
+  // Toute entente préalable se rapporte à un prestataire précis (clinique,
+  // hôpital, cabinet médical, dentiste, ophtalmologue, laboratoire,
+  // opticien…) — même principe que PriseEnCharge.prestataire/prestataireId :
+  // texte libre obligatoire (toujours renseigné, même hors catalogue), lien
+  // optionnel vers le catalogue Prestataire quand il y est.
+  prestataire   String
+  prestataireId String?
+
+  // Dénormalisé à la création (2026-08), même principe qu'AvenantAssure.
+  // contratId : doit rester rattaché au contrat réellement en vigueur au
+  // moment de la demande, indépendamment d'une bascule ultérieure de
+  // l'assuré vers un autre contrat (voir MouvementsService.basculerVersContrat).
+  contratId String
+
+  // Agent interne qui a pris ce dossier en charge (2026-09) — voir demande
+  // utilisateur : "étendre le fait de prendre en main un dossier aux agents
+  // de saisie, gestionnaire sinistre et gestionnaires production". Même
+  // principe que Conversation.assigneAId (champ simple, sans relation
+  // Prisma nommée — même convention) : null = encore dans la file partagée,
+  // visible/réclamable par tout gestionnaire habilité au module "Prise en
+  // charge" ; une fois pris, sert aussi à ne plus relancer (voir
+  // AccordPrealableService.prendre).
+  assigneAId String?
 
   assure         AssureSante     @relation(fields: [assureId], references: [id])
+  prestataireRef Prestataire?    @relation(fields: [prestataireId], references: [id])
+  demandeur      User?           @relation(fields: [demandeurId], references: [id])
   prisesEnCharge PriseEnCharge[]
+  lignes         AccordPrealableLigne[]
+
+  @@index([contratId])
+  @@index([assigneAId])
+
+  @@index([societeId])
+}
+
+// Lignes d'une demande de prise en charge (2026-08) — une prise en charge
+// peut couvrir plusieurs actes liés, comme une facture (voir demande
+// utilisateur : "il ne faut pas oublier que la prise en charge peut avoir
+// plusieurs lignes d'acte comme la facture"). Cas typique : un acte KC
+// (chirurgien) génère 3 lignes (KC/KA/K Loc) — le prestataire indique
+// souvent des frais réels distincts pour chacune sur son devis, d'où la
+// saisie ligne par ligne même si le plafond de référence de chaque ligne
+// est déjà calculé automatiquement (voir demande utilisateur : "la saisie
+// se fait aussi par ligne même si le système calcule automatiquement").
+// AccordPrealable.montantDevis/description restent en plus, dénormalisés
+// (somme des lignes / résumé), pour la compatibilité avec les dossiers
+// créés avant ce modèle (une seule valeur, aucune ligne).
+model AccordPrealableLigne {
+  id                 String   @id @default(cuid())
+  accordPrealableId  String
+  accordPrealable    AccordPrealable @relation(fields: [accordPrealableId], references: [id], onDelete: Cascade)
+  acteMedicalId      String?
+  acteMedical        ActeMedical? @relation(fields: [acteMedicalId], references: [id])
+  lettreCleCode      String?
+  coefficient        Decimal? @db.Decimal(10, 2)
+  description        String
+  // Plafond pris en charge par l'assurance pour cette ligne (coefficient ×
+  // valeur unitaire de la lettre, ou acte.prixDefaut) — figé à la saisie,
+  // jamais recalculé en direct (voir montantDevisPourActe côté frontend).
+  plafondReference   Decimal  @db.Decimal(18, 2)
+  // Frais réels annoncés par le prestataire sur son devis, ligne par ligne
+  // — peut dépasser plafondReference, l'excédent restant à la charge du
+  // bénéficiaire (voir demande utilisateur).
+  montantDevis       Decimal  @db.Decimal(18, 2)
+  createdAt          DateTime @default(now())
 }
 
 model PriseEnCharge {
   id                    String   @id
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   assureId              String
   prestataire           String
   type                  String
@@ -377,6 +2608,36 @@ model PriseEnCharge {
   factureRef            String?
   statutControleMedical String? // Non requis | En cours | Validé | Rejeté
   motifRejet            String?
+  // Rejet partiel (2026-08) — une partie seulement des frais réels peut
+  // être contestée par le contrôle médical (le reste continue de suivre le
+  // calcul normal taux/plafond). Retiré des frais réels AVANT le calcul de
+  // la part assurance (voir SanteService.calculerPartAssuranceLigne) :
+  // montant effectif = montant - montantRejete. Distinct de statut =
+  // "Rejeté" (rejet total de la ligne, motifRejet seul suffit alors).
+  montantRejete         Decimal? @db.Decimal(18, 2)
+  // Annulation d'une ligne (2026-08) — voir demande utilisateur : "on doit
+  // pouvoir annuler une prestation faite par erreur". Distinct de "Rejeté"
+  // (décision médicale/financière de l'assurance sur une prestation
+  // réellement faite) : "Annulé" = erreur de saisie du prestataire, la
+  // prestation n'a jamais eu lieu. La ligne n'est jamais supprimée (voir
+  // demande utilisateur : "garder l'historique") — exclue des totaux
+  // facturés (relevé, décompte) mais reste visible avec son motif.
+  motifAnnulation       String? // motif de l'annulation, présent seulement si statut = "Annulé"
+  // Quantité (2026-08) — nombre d'unités facturées sur cette ligne (ex.
+  // nombre de séances de kinésithérapie) : montant = quantité × prix
+  // unitaire, que la ligne soit tarifée au forfait (ActeMedical.prixDefaut)
+  // ou à la codification (coefficient × LettreCle.valeurUnitaire) ci-dessous
+  // — voir demande utilisateur.
+  quantite              Int?     @default(1)
+  // Codification à la lettre clé (2026-08) — nomenclature à coefficient
+  // (ex. KC 30 = 30 × valeur du KC) alternative à la saisie par montant
+  // forfaitaire d'un ActeMedical du catalogue. lettreCleCode/coefficient
+  // sont conservés pour la traçabilité/l'audit ; montant reste la source
+  // de vérité pour tout le moteur de calcul en aval (taux%, plafond, TPS…),
+  // calculé côté client au moment de la saisie (coefficient × valeurUnitaire
+  // × quantité) puis transmis comme n'importe quel montant forfaitaire.
+  lettreCleCode         String?
+  coefficient           Decimal? @db.Decimal(10, 2)
   baseRemboursement     Decimal? @db.Decimal(18, 2)
   tauxRemboursement     Decimal? @db.Decimal(5, 2)
   franchise             Decimal? @db.Decimal(18, 2)
@@ -386,16 +2647,396 @@ model PriseEnCharge {
   accordPrealableId     String?
   scoreFraude           Decimal? @db.Decimal(5, 2)
   bordereauId           String?
+  gestionnaireId        String?
+
+  // Dossier sinistre santé (2026-08) — repris sur le Décompte de
+  // Remboursement Maladie (voir DocumentsService.renderDecompteFacture).
+  // Portés par la ligne (et non la Facture) car une même Facture tiers
+  // payant peut regrouper plusieurs bénéficiaires/épisodes de soins ; le
+  // décompte est généré par bénéficiaire, à partir des lignes qui
+  // partagent le même nSinistre.
+  nSinistre     String?
+  nDeclaration  String?
+  // "Affection Courante" | "Affection Longue" (2026-08) — voir demande
+  // utilisateur : "il fallait créer une rubrique nature de l'affection
+  // dans la saisie de la facture... ça permettra à l'application d'avoir
+  // des données statistiques réels de santé... sans faire remonter ses
+  // données dans les documents statistiques. Mais ça permettrait de
+  // pouvoir connaître les cas graves, ceux qui pourraient plomber le
+  // contrat maladie." Renseigné à CHAQUE ligne de saisie (interne ou
+  // portail prestataire), jamais affiché tel quel sur le Décompte (voir
+  // DocumentsService.renderDecompteFacture, qui affiche toujours "Affection
+  // Courante" par confidentialité) — usage strictement interne/statistique.
+  natureMaladie String?
+  // Code CNAMGS (2026-08) — même catalogue que Prescription.codeAffection
+  // (voir model CodeAffection), saisi à chaque ligne pour alimenter les
+  // mêmes statistiques de santé internes, jamais de saisie libre.
+  codeAffection String?
+  affection     CodeAffection? @relation(fields: [codeAffection], references: [code])
+
+  // TPS (2026-08) — 9,5% de baseRemboursement, calculée et figée à la
+  // saisie (voir SanteService.calculerTps) : dépend de Prestataire.
+  // tpsAssujetti/tpsDateEffet/tpsDateArret ET de ActeMedical.exonereTps au
+  // moment de la ligne, donc jamais recalculée en direct depuis ces
+  // réglages qui peuvent changer ensuite — sans quoi l'état de
+  // prélèvement TPS (par mois de règlement) ne refléterait plus
+  // fidèlement l'historique. Net à payer = baseRemboursement - montantTps.
+  montantTps Decimal? @db.Decimal(18, 2)
+
+  // Dénormalisé à la création (2026-08), même principe qu'AvenantAssure.
+  // contratId : doit rester rattaché au contrat réellement en vigueur au
+  // moment de la prise en charge, indépendamment d'une bascule ultérieure
+  // de l'assuré vers un autre contrat (voir MouvementsService.basculerVersContrat)
+  // — sans quoi tout l'historique de consommation semblerait rétroactivement
+  // appartenir au nouveau contrat.
+  contratId String
+
+  // Pièces jointes d'une demande de remboursement soumise depuis le portail
+  // assuré (2026-08) — même convention que AccordPrealable.ordonnanceFichier/
+  // devisFichier : noms de fichiers sous backend/uploads/remboursements/.
+  prescriptionFichier String?
+  factureFichier      String?
+  quittanceFichier    String?
+  autreFichier        String?
+
+  // Ligne rattachée à une Facture tiers payant (2026-08) — null pour les
+  // Remboursements (assuré ayant avancé les frais) saisis via le modèle
+  // Remboursement ci-dessous, ou pour une demande de remboursement
+  // autonome soumise depuis le portail assuré (jamais rattachée à un
+  // en-tête, voir PortailMembreController.creerRemboursement).
+  factureId String?
+  // Déclaration de remboursement multi-lignes (2026-08) — voir demande
+  // utilisateur : "la saisie de remboursement se fait comme celle de la
+  // facture... on doit avoir le même écran de saisie de facture avec les
+  // mêmes règles d'ajout des actes et des personnes ayant consommé".
+  // Null pour une facture tiers payant (factureId non-null à la place) OU
+  // pour une demande autonome soumise depuis le portail assuré (voir
+  // ci-dessus) — mutuellement exclusif avec factureId en pratique.
+  remboursementId String?
+  // Lien optionnel vers le catalogue ActeMedical — permet la saisie
+  // assistée (montant par défaut) et le rattachement au bon plafond de
+  // rubrique ; `type` reste la donnée de calcul faisant foi (texte libre,
+  // conservé même si l'acte du catalogue change/disparaît).
+  acteMedicalId String?
+
+  // Médecin assigné à la consultation par l'accueil (2026-09) — voir
+  // demande utilisateur : "si un médecin n'a pas été sélectionné pour
+  // recevoir le patient... il ne doit pas le voir dans sa file des
+  // patients à recevoir... il faut qu'au niveau de l'accueil, le médecin
+  // ait été lié à la prestation consultation qui doit se faire." Renseigné
+  // UNIQUEMENT pour une ligne de type Consultation (voir PortailPrestataireService)
+  // — c'est ce champ, et lui seul, que PrescriptionsService.fileAttente
+  // filtre désormais pour n'exposer une ligne qu'au médecin réellement
+  // choisi, jamais à tout médecin de la structure (comportement précédent).
+  medecinId String?
+  medecin   Medecin?            @relation(fields: [medecinId], references: [id])
 
   assure          AssureSante         @relation(fields: [assureId], references: [id])
   prestataireRef  Prestataire?        @relation(fields: [prestataireId], references: [id])
   accordPrealable AccordPrealable?    @relation(fields: [accordPrealableId], references: [id])
   bordereau       BordereauReglement? @relation(fields: [bordereauId], references: [id])
+  gestionnaire    User?               @relation(fields: [gestionnaireId], references: [id])
+  facture         Facture?            @relation(fields: [factureId], references: [id], onDelete: Cascade)
+  remboursement   Remboursement?      @relation(fields: [remboursementId], references: [id], onDelete: Cascade)
+  acteMedical     ActeMedical?        @relation(fields: [acteMedicalId], references: [id])
+
+  // Heure de saisie (2026-08) — voir demande utilisateur : "l'application
+  // doit pouvoir tenir compte de l'heure de la création d'une prestation"
+  // (Feuille de Soins, champ "Date et Heure" + cases Tarif jour/nuit) : ce
+  // modèle n'avait jamais eu de createdAt (id généré à la main, pas de
+  // @default(cuid())) — ajouté ici, jamais rétroactivement fiable sur les
+  // lignes déjà existantes au moment de la migration (horodatage de la
+  // migration, pas de la vraie saisie), mais exact pour toute nouvelle
+  // ligne à partir de maintenant.
+  createdAt DateTime @default(now())
+
+  // Numéro de Feuille de Soins STABLE (2026-08) — voir demande utilisateur
+  // (correction) : "la consultation est l'origine de la feuille de soins...
+  // lorsque le médecin fera sa prescription, la feuille de soins va se
+  // compléter" — le numéro doit donc rester le MÊME entre le premier rendu
+  // PDF et la prescription qui vient le compléter ensuite, jamais régénéré
+  // à chaque impression (contrairement au comportement précédent de
+  // renderFeuilleSoinsLigne). Généré une fois, au tout premier besoin (PDF
+  // OU prescription, selon ce qui arrive en premier) — voir DocumentsService.
+  // numeroFeuilleSoinsDe.
+  numeroFeuilleSoins String? @unique
+
+  // Médecin prescripteur (2026-08) — présent quand cette ligne EST la
+  // consultation d'origine d'une prescription (voir Prescription.
+  // priseEnChargeId), ou quand elle provient du TRAITEMENT (total ou
+  // partiel) d'une ligne prescrite ailleurs (voir PrescriptionLigneTraitement)
+  // — deux relations 1-1 distinctes, jamais les deux à la fois en pratique.
+  prescriptionOrigine         Prescription?                @relation("PrescriptionOrigine")
+  prescriptionLigneTraitement PrescriptionLigneTraitement?
+
+  @@index([contratId])
+  @@index([factureId])
+  @@index([remboursementId])
+  @@index([medecinId])
+  @@index([codeAffection])
+
+  @@index([societeId])
+}
+
+// ── Facture (tiers payant, 2026-08) ───────────────────────────────────
+// En-tête d'une facture papier soumise par un prestataire : regroupe
+// plusieurs lignes PriseEnCharge (modePaiement="TiersPayant") saisies sans
+// quitter l'écran, jusqu'à épuisement de la facture — voir
+// FacturesService/écran src/features/prises-en-charge. Le règlement
+// (BordereauReglement) continue de fonctionner exactement comme avant, en
+// regroupant les PriseEnCharge par prestataireId — aucune dépendance à ce
+// modèle n'y a été ajoutée.
+model Facture {
+  id               String   @id
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  prestataireId    String
+  contratId        String
+  dateReception    String
+  referenceFacture String
+  statut           String   @default("En saisie") // En saisie | Soumise | Annulée
+  // Une facture annulée n'est jamais supprimée (traçabilité) et reste dans
+  // la liste du prestataire, mais ne peut plus être ni complétée ni liée à
+  // un nouveau règlement (voir FacturesService.annuler).
+  motifAnnulation  String?
+  gestionnaireId   String?
+  createdAt        DateTime @default(now())
+
+  // Relevé de facture prestataire (2026-08) — voir demande utilisateur :
+  // "l'application regroupe systématiquement les factures saisies par
+  // souscripteur et crée les lots automatiquement, attendant simplement que
+  // le prestataire appuie sur le bouton créer". Null tant que cette Facture
+  // n'a pas encore rejoint un relevé — exclue des regroupements proposés
+  // (RelevesPrestataireService.apercu) une fois renseignée, jamais réutilisée
+  // dans un autre relevé.
+  releveId String?
+
+  prestataire  Prestataire     @relation(fields: [prestataireId], references: [id])
+  contrat      Contrat         @relation(fields: [contratId], references: [id])
+  gestionnaire User?           @relation(fields: [gestionnaireId], references: [id])
+  releve       RelevePrestataire? @relation(fields: [releveId], references: [id])
+  lignes       PriseEnCharge[]
+  decomptes    Decompte[]
+  // Une déclaration (= Facture) peut regrouper plusieurs numéros de facture
+  // prestataire (2026-08) — `referenceFacture` reste la référence
+  // principale saisie à la création ; celles-ci sont des références
+  // additionnelles ajoutées après coup si la saisie a été traitée en
+  // batch. La recherche par référence doit matcher l'une ou l'autre (voir
+  // FacturesService.rechercherParReference).
+  numerosSupplementaires NumeroFacture[]
+  gedDocuments GedDocument[]
+
+  @@index([prestataireId])
+  @@index([contratId])
+
+  @@index([societeId])
+}
+
+model NumeroFacture {
+  id        String @id @default(cuid())
+  factureId String
+  numero    String
+
+  facture Facture @relation(fields: [factureId], references: [id], onDelete: Cascade)
+
+  @@unique([factureId, numero])
+  @@index([numero])
+}
+
+// ── Remboursement (assuré/souscripteur, 2026-08) ─────────────────────
+// En-tête d'une déclaration de remboursement — voir demande utilisateur :
+// "le remboursement ne se fait pas à l'ordre d'un prestataire, mais plutôt
+// à l'ordre de l'assuré ou de son souscripteur selon les clauses
+// contractuelles... la saisie de remboursement se fait comme celle de la
+// facture, car il peut arriver que plusieurs membres de la famille de
+// l'assuré ou plusieurs employés d'un souscripteur soient concernés". Même
+// principe que Facture (regroupe plusieurs PriseEnCharge saisies sans
+// quitter l'écran) mais SANS prestataire : le paiement va à l'assuré
+// principal ou au souscripteur (client) du contrat, jamais à un
+// prestataire — voir écran src/features/prises-en-charge/RemboursementSaisie.tsx.
+model Remboursement {
+  id     String @id
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  // "AssurePrincipal" | "Souscripteur" — détermine à l'ordre de qui le
+  // paiement est émis (voir demande utilisateur ci-dessus). Le choix des
+  // bénéficiaires possibles pour chaque LIGNE (assuré/ayant droit ayant
+  // consommé le soin) reste le même dans les deux cas : tous les assurés du
+  // contrat (voir RemboursementsService, même recherche que FactureSaisie).
+  beneficiaire      String
+  // Requis seulement si beneficiaire = "AssurePrincipal" — la personne à
+  // l'ordre de qui le chèque/virement est émis (pas nécessairement celle
+  // qui a consommé chaque soin, voir PriseEnCharge.assureId par ligne).
+  assurePrincipalId String?
+  contratId         String
+  dateDeclaration   String
+  statut            String   @default("En saisie") // En saisie | Soumise | Annulée
+  motifAnnulation   String?
+  gestionnaireId    String?
+  createdAt         DateTime @default(now())
+
+  assurePrincipal AssureSante? @relation(fields: [assurePrincipalId], references: [id])
+  contrat         Contrat      @relation(fields: [contratId], references: [id])
+  gestionnaire    User?        @relation(fields: [gestionnaireId], references: [id])
+  lignes          PriseEnCharge[]
+
+  @@index([contratId])
+  @@index([assurePrincipalId])
+
+  @@index([societeId])
+}
+
+// ── Relevé de facture prestataire (2026-08) ──────────────────────────
+// Voir demande utilisateur : "dans l'onglet gestionnaire financière on aura
+// une rubrique relevé de facture, là on fera un regroupement de factures
+// saisies sur période par souscripteur. L'application regroupe
+// systématiquement les factures saisies par souscripteur et crée les lots
+// automatiquement, attendant simplement que le prestataire appuie sur le
+// bouton créer pour générer le relevé de facture à transmettre
+// électroniquement et physiquement par le prestataire à l'assurance."
+// Le "lot" proposé avant création n'existe qu'en mémoire (voir
+// RelevesPrestataireService.apercu, qui regroupe les Facture sans releveId
+// par (clientId, période dérivée de dateReception)) — ce modèle ne
+// persiste qu'une fois le prestataire a réellement cliqué "Créer".
+model RelevePrestataire {
+  id            String   @id
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  numero        String   @unique
+  prestataireId String
+  clientId      String
+  // Ex. "Août 2026" — même période que celle utilisée pour regrouper les
+  // Facture proposées (voir RelevesPrestataireService).
+  periode       String
+  dateCreation  String
+  montantTotal  Decimal  @db.Decimal(18, 2)
+  nbFactures    Int
+  createdAt     DateTime @default(now())
+
+  prestataire Prestataire @relation(fields: [prestataireId], references: [id])
+  client      Client      @relation(fields: [clientId], references: [id])
+  factures    Facture[]
+
+  @@index([prestataireId])
+  @@index([clientId])
+
+  @@index([societeId])
+}
+
+// ── Décompte de Remboursement Maladie (2026-08) ──────────────────────
+// Un décompte = le relevé de remboursement d'UN bénéficiaire pour UNE
+// Facture (voir DocumentsService.renderDecompteFacture, qui regroupe les
+// lignes PriseEnCharge de la Facture par assureId). Persisté ici pour que
+// `numero` soit attribué une seule fois — première génération du PDF — et
+// réutilisé à chaque réimpression, jamais régénéré (voir
+// DocumentsService.obtenirOuCreerDecompte). `numero` provient de la
+// séquence Postgres `decompte_numero_seq` (voir migration), qui garantit
+// l'unicité même sous accès concurrents (contrairement à un
+// count()+1 applicatif) et ne se remet jamais à zéro.
+model Decompte {
+  id           String   @id @default(cuid())
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  numero       String   @unique
+  // N° Sinistre — référence de dossier sinistre auto-générée par
+  // l'application (séquence `sinistre_numero_seq`, voir migration),
+  // globale et partagée par tous les contrats confondus (pas un numéro
+  // par police) : distincte de `numero` (qui identifie CE décompte),
+  // affichée sur le Décompte et le Règlement.
+  numeroSinistre String
+  factureId      String
+  assureId       String
+  dateEmission   String
+  // Initiales de l'agent de saisie (Facture.gestionnaire au moment de la
+  // création du décompte) — figées ici plutôt que relues en direct sur
+  // `facture.gestionnaire` à chaque impression : cette référence doit
+  // rester celle du créateur d'origine, peu importe qui réimprime le
+  // document ou toute évolution future du gestionnaire de la Facture.
+  initialesAgent String?
+  createdAt      DateTime @default(now())
+
+  facture Facture     @relation(fields: [factureId], references: [id], onDelete: Cascade)
+  assure  AssureSante @relation(fields: [assureId], references: [id])
+
+  @@unique([factureId, assureId])
+
+  @@index([societeId])
+}
+
+// E-carnet Santé (2026-08) — voir demande utilisateur : "il faut créer dans
+// le compte assuré une rubrique appelée E-carnet Santé. Dans cette rubrique,
+// on pourra retrouver une rubrique ordonnance et une rubrique Examens &
+// Compte rendu. Si les informations ne sont pas systématiquement
+// renseignées dans l'application par les structures médicales, l'assuré
+// pourra lui-même filmer [photographier]... l'application doit fonctionner
+// comme des scan existant dans les téléphones mobiles pour créer
+// systématiquement des documents au format pdf." v1 : photo → PDF une page
+// (voir DocumentsService), classé par rubrique. OCR explicitement hors
+// périmètre pour cette version (confirmé par l'utilisateur).
+model CarnetSanteDocument {
+  id        String   @id @default(cuid())
+  assureId  String
+  // "Ordonnance" | "Examens" — voir demande utilisateur ci-dessus.
+  rubrique  String
+  // Nom de fichier PDF sous backend/uploads/carnet-sante/ — le PDF est
+  // généré à l'upload depuis la photo (voir CarnetSanteService), jamais la
+  // photo brute conservée telle quelle.
+  fichier   String
+  libelle   String?
+  dateAjout DateTime @default(now())
+
+  assure AssureSante @relation(fields: [assureId], references: [id])
+
+  @@index([assureId])
 }
 
 // ── Règlement des factures prestataires (bordereaux) ─────────────────
+// Un règlement (bordereau) est l'ensemble des décomptes d'un prestataire
+// réglés ensemble : ses PriseEnCharge couvrent, pour chaque (Facture,
+// assureId) distinct qu'elles touchent, un Décompte (voir modèle
+// ci-dessus) — pas de lien direct en base, ce sont les mêmes lignes qui
+// relient les deux. `numero` provient de `reglement_numero_seq` (voir
+// migration), même principe que Decompte.numero.
 model BordereauReglement {
   id                String   @id
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  numero            String   @unique
   prestataireId     String
   periode           String
   nbPrisesEnCharge  Int
@@ -406,13 +3047,187 @@ model BordereauReglement {
   datePaiement      String?
   referenceVirement String?
 
+  // Règlement comptable (2026-08) — un bordereau "Validé" rejoint une
+  // LettreCheque (voir ci-dessous) quand la comptabilité l'agrège avec
+  // d'autres bordereaux du même prestataire pour émettre un seul chèque ;
+  // l'émission de la lettre chèque marque alors ce bordereau "Payé" et
+  // renseigne `referenceVirement` avec la référence du chèque, remplaçant
+  // la saisie libre de `payer()` par une vraie traçabilité bancaire.
+  lettreChequeId String?
+
+  // Règlement à l'ordre d'un médecin (2026-08) — voir demande utilisateur :
+  // "lorsqu'on fait un règlement pour une structure médicale, que le
+  // règlement se fasse à l'ordre d'un médecin intervenant dans la
+  // structure". Optionnel — un règlement reste par défaut à l'ordre de la
+  // structure elle-même (prestataire) si aucun médecin n'est précisé.
+  medecinId String?
+
+  // Traçabilité (2026-09) — voir demande utilisateur : "il faut que le
+  // système puisse retracer qui fait quoi dans l'application". Gestionnaire
+  // qui a établi/validé ce bordereau, capturé depuis l'utilisateur connecté
+  // à la création (voir ReglementPrestataireService.genererBordereau) —
+  // imprimé sur le Règlement à la place de la mention fixe "OL" du modèle
+  // papier (voir DocumentsService.renderReglement). Nullable pour les
+  // bordereaux créés avant ce champ.
+  creeParId String?
+
   prestataire    Prestataire     @relation(fields: [prestataireId], references: [id])
+  medecin        Medecin?        @relation(fields: [medecinId], references: [id])
+  creePar        User?           @relation(fields: [creeParId], references: [id])
   prisesEnCharge PriseEnCharge[]
+  lettreCheque   LettreCheque?   @relation(fields: [lettreChequeId], references: [id])
+
+  @@index([societeId])
+  @@index([creeParId])
+}
+
+// ── Règlement comptable (lettre chèque) — 2026-08 ─────────────────────
+// Second palier du règlement : une fois un ou plusieurs BordereauReglement
+// "Validé" (montant confirmé, voir ReglementPrestataireService.valider) du
+// même prestataire (généralement de la même compagnie), la comptabilité
+// les regroupe sur une seule LettreCheque — l'instrument de paiement réel,
+// avec un numéro de chèque tiré d'un lot pré-paramétré par banque (voir
+// LotCheques). Émettre une LettreCheque marque automatiquement les
+// bordereaux couverts "Payé" (voir ReglementComptableService.
+// genererLettreCheque).
+model Banque {
+  id           String   @id @default(cuid())
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  nom          String
+  codeBanque   String?
+  compteNumero String?
+  // Coordonnées de l'agence (2026-09) — voir demande utilisateur : "ce
+  // n'est toujours pas identique" sur la Lettre chèque (voir
+  // DocumentsService.renderLettreCheque) : l'encadré gauche du modèle de
+  // référence ("CE-060809 Payable en France / 18 RUE DE LA BANQUE / PARIS
+  // 15ème / TEL...") restait presque vide faute de ces champs — jamais de
+  // valeur inventée à la place. Facultatifs, remplis une fois par agence
+  // bancaire lors du paramétrage (voir Banques > Nouvelle banque).
+  adresse      String?
+  ville        String?
+  telephone    String?
+  statut       String   @default("Actif") // Actif | Inactif
+  createdAt    DateTime @default(now())
+
+  lots          LotCheques[]
+  lettresCheque LettreCheque[]
+  encaissements EncaissementPrime[]
+
+  @@index([societeId])
+}
+
+// Agence (2026-09) — voir demande utilisateur : "il faut rendre possible le
+// fait que l'application permette de lier un agent de saisie à une agence
+// du client (compagnie, courtier, mutuelle) afin que ce soit cette agence
+// qui remonte sur le décompte." Une agence est une antenne/succursale de la
+// SOCIÉTÉ elle-même (le courtier/compagnie/mutuelle qui exploite
+// l'application, voir SocieteAssurance) — PAS de la compagnie d'assurance
+// externe portant le risque. Correspond au champ "Agence" du modèle papier
+// de référence ("Modèle Règlement.pdf" : "Agence : 212 LA RUCHE
+// EXCELLENCE" — LA RUCHE EXCELLENCE étant le courtier lui-même), jusqu'ici
+// toujours affiché "—" sur le Décompte/Règlement, faute d'équivalent
+// applicatif. Un agent de saisie (User.agenceId) est rattaché à UNE
+// agence ; les documents impriment l'agence du gestionnaire qui a établi
+// le dossier (Facture.gestionnaireId / BordereauReglement.creeParId).
+model Agence {
+  id        String   @id @default(cuid())
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  nom       String
+  // Code d'agence (2026-09) — optionnel, reprend au besoin la numérotation
+  // historique du modèle papier ("212") ; purement déclaratif.
+  code      String?
+  createdAt DateTime @default(now())
+
+  agents User[]
+
+  @@index([societeId])
+}
+
+// Un lot de numéros de chèque pré-paramétré pour une banque (ex. 50 à la
+// fois) — `numeroProchain` avance à chaque LettreCheque émise sur ce lot ;
+// il passe "Épuisé" dès que `numeroProchain` dépasserait `numeroFin` (voir
+// ReglementComptableService, qui bloque alors toute nouvelle génération
+// sur cette banque avec le message "Veuillez utiliser une nouvelle série
+// de chèques" tant qu'aucun autre lot Actif n'existe).
+model LotCheques {
+  id             String   @id @default(cuid())
+  // Isolation multi-tenant (2026-09) — comblé après coup : banqueId venait
+  // brut du client (DTO), jamais vérifié appartenir à la société de
+  // l'appelant — une écriture cross-société réelle (consommation/avancée
+  // de la séquence de chèques d'une AUTRE société), pas seulement une
+  // lecture. Voir Conversation ci-dessus pour le détail du mécanisme.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  banqueId       String
+  numeroDebut    Int
+  numeroFin      Int
+  numeroProchain Int
+  statut         String   @default("Actif") // Actif | Épuisé
+  createdAt      DateTime @default(now())
+
+  banque        Banque         @relation(fields: [banqueId], references: [id])
+  lettresCheque LettreCheque[]
+
+  @@index([banqueId])
+  @@index([societeId])
+}
+
+// `numero` — séquence interne jamais dupliquée (`lettre_cheque_numero_seq`,
+// voir migration), même principe que Decompte.numero / BordereauReglement.
+// numero. `compagnieId` optionnel : une lettre chèque peut regrouper des
+// bordereaux dont les lignes touchent plusieurs compagnies si l'utilisateur
+// n'a pas filtré par compagnie à la génération.
+model LettreCheque {
+  id            String   @id @default(cuid())
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  numero        String   @unique
+  banqueId      String
+  lotChequesId  String
+  numeroCheque  Int
+  compagnieId   String?
+  prestataireId String
+  montantTotal  Decimal  @db.Decimal(18, 2)
+  statut        String   @default("Émise") // Émise | Annulée
+  dateEmission  String
+  createdAt     DateTime @default(now())
+
+  banque      Banque               @relation(fields: [banqueId], references: [id])
+  lot         LotCheques           @relation(fields: [lotChequesId], references: [id])
+  compagnie   Compagnie?           @relation(fields: [compagnieId], references: [id])
+  prestataire Prestataire          @relation(fields: [prestataireId], references: [id])
+  bordereaux  BordereauReglement[]
+
+  @@index([banqueId])
+  @@index([prestataireId])
+  @@index([compagnieId])
+
+  @@index([societeId])
 }
 
 // ── Financier — auto-gestion santé ───────────────────────────────────
 model FondsDeRoulement {
   id               String  @id @default(cuid())
+  // Isolation multi-tenant (2026-09) — comblé après coup, voir Conversation
+  // ci-dessus pour le détail du bug (interrogé sans filtrage).
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   contratId        String
   montantInitial   Decimal @db.Decimal(18, 2)
   montantConsomme  Decimal @db.Decimal(18, 2)
@@ -421,10 +3236,16 @@ model FondsDeRoulement {
   dateAlimentation String
 
   contrat Contrat @relation(fields: [contratId], references: [id])
+
+  @@index([societeId])
 }
 
 model HonorairesGestion {
   id                String   @id @default(cuid())
+  // Isolation multi-tenant (2026-09) — comblé après coup, voir Conversation
+  // ci-dessus pour le détail du bug (interrogé sans filtrage).
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   contratId         String
   periode           String
   montantSinistres  Decimal  @db.Decimal(18, 2)
@@ -434,17 +3255,25 @@ model HonorairesGestion {
   statut            String
 
   contrat Contrat @relation(fields: [contratId], references: [id])
+
+  @@index([societeId])
 }
 
 // ── Contrôle médical & fraude ─────────────────────────────────────────
 model ScoringFraude {
   id             String  @id @default(cuid())
+  // Isolation multi-tenant (2026-09) — comblé après coup, voir Conversation
+  // ci-dessus pour le détail du bug (interrogé sans filtrage).
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   cible          String // Assuré | Prestataire
   cibleId        String
   cibleNom       String
   score          Decimal @db.Decimal(5, 2)
   motifs         String
   dateEvaluation String
+
+  @@index([societeId])
 }
 
 // ── Transversal — traçabilité & notifications ────────────────────────
@@ -456,6 +3285,15 @@ model AuditLog {
   utilisateur String
   dateAction  DateTime @default(now())
   details     String?
+
+  // Isolation multi-tenant (2026-09) — comblé après coup, comme User (voir
+  // tenant-models.ts) : sans ce champ, l'écran interne "Journal des
+  // opérations" d'une société montrait l'activité de TOUTES les sociétés.
+  // Sert aussi de source pour le tableau de bord "performance d'utilisation"
+  // du Super Admin (activité agrégée PAR société, voir demande utilisateur).
+  societeId String?
+
+  @@index([societeId])
 }
 
 model Notification {
@@ -467,38 +3305,179 @@ model Notification {
   dateEnvoi        DateTime @default(now())
 }
 
-// ── Finance ──────────────────────────────────────────────────────────
-model Commission {
-  id                String  @id
-  compagnieId       String
-  periode           String
-  primeEncaissee    Decimal @db.Decimal(18, 2)
-  tauxCommission    String
-  montantCommission Decimal @db.Decimal(18, 2)
-  statut            String
+// Messagerie (2026-08) — voir demande utilisateur : "il faut créer pour
+// tous les acteurs ou utilisateur un onglet de Messagerie permettant, aux
+// assurés, au client et aux prestataire de discuter directement avec
+// l'assurance depuis l'application... l'application doit garder
+// l'historique de ses échanges et donner systématiquement un objet dès
+// l'ouverture de la discussion. Les personnes externes peuvent... discuter
+// directement avec un agent IA ou un agent réel de l'assurance." Mêmes
+// conventions que Notification ci-dessus (pas de FK vers User — juste des
+// id en texte libre, voir demandesClient.service.ts pour le même repli
+// "fan-out par rôle" utilisé pour router vers la file interne).
+model Conversation {
+  id            String   @id @default(cuid())
 
-  compagnie Compagnie @relation(fields: [compagnieId], references: [id])
+  // Isolation multi-tenant (2026-09, Phase 2 — comblé après coup, 2026-09
+  // suite) -- voir SocieteAssurance / User.societeId. Absent depuis la
+  // création du modèle (2026-08) : chaque société voyait la file de
+  // messagerie de TOUTES les sociétés (conversations ET compteur de
+  // messages non lus, affiché sur chaque écran via AdminShell.tsx) --
+  // corrigé en ajoutant ce champ + "Conversation" à TENANT_MODELS, même
+  // mécanisme que tous les autres modèles cloisonnés. Nullable en base
+  // (conversations antérieures au correctif, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/
+  // ecrit a la main dans MessagerieService.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  objet         String
+  demandeurId   String
+  demandeurRole String
+  // "IA" | "Humain" — choix initial fait par le demandeur externe.
+  canal         String
+  // Ouverte | EnCoursIA | EnCoursHumain | Resolue | Fermee
+  statut        String   @default("Ouverte")
+  // Agent interne qui a pris la conversation en charge (null = encore
+  // dans la file partagée, voir demandesClient.service.ts pour le même
+  // principe de file sans verrou d'assignation).
+  assigneAId    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  messages Message[]
+
+  @@index([demandeurId])
+  @@index([assigneAId])
+  @@index([societeId])
 }
 
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  // null = message généré par l'agent IA (voir MessagerieAgentIaService).
+  auteurId       String?
+  // "Utilisateur" | "IA" | "Agent"
+  auteurType     String
+  contenu        String
+  pieceJointe    String?
+  dateEnvoi      DateTime @default(now())
+  lu             Boolean  @default(false)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+}
+
+// Signature électronique des documents (2026-08) — voir demande utilisateur :
+// "je veux une signature électronique unique (QR code) pour chaque document
+// créé ou édité dans l'application peu importe depuis quel portail cela ait
+// été fait. Dans cette dernière doit se cacher les informations de qui a
+// créé l'opération, quand cela a été fait... une authentification
+// infaillible de chaque prestation faite. Tout document... doit être signé
+// par un QR code." (Exception explicite : les cartes santé ont déjà leur
+// propre QR — voir AssureSante.qrCode — jamais concernées ici.)
+//
+// Une signature = un enregistrement immuable en base (jamais modifié après
+// coup), horodaté serveur — c'est CE enregistrement qui fait foi, pas une
+// simple signature cryptographique auto-portée (HMAC) qui resterait
+// vérifiable même après falsification du payload si le secret fuitait :
+// vérifier un document revient à retrouver CET id en base (voir
+// DocumentsController.verifierSignature / QR "MEDASSUR-DOC:{id}") — c'est
+// ce qui rend la vérification "infaillible" au sens demandé : personne ne
+// peut fabriquer un enregistrement DocumentSignature a posteriori sans
+// laisser de trace (pas d'update possible, voir DocumentSignatureService).
+model DocumentSignature {
+  id           String   @id @default(cuid())
+  // Type métier du document (ex. "Décompte de remboursement", "Certificat
+  // de prise en charge", "Facture prestation"...) — texte libre, un
+  // libellé par méthode de rendu (voir DocumentsService).
+  documentType String
+  // Référence métier du document signé (ex. FAC-2026-XXXXXX, PEC-2026-XXXXXX)
+  // — permet de retrouver TOUTES les signatures d'un même document au fil
+  // de ses éditions (une génération = une signature, jamais réécrite).
+  documentRef  String
+  // Auteur de CETTE édition/génération — User.id si le compte existe encore
+  // au moment de la vérification (relation facultative, jamais bloquante :
+  // la signature reste valide même si le compte est supprimé depuis).
+  acteurId     String?
+  acteur       User?    @relation(fields: [acteurId], references: [id])
+  acteurNom    String
+  acteurRole   String
+  // D'où l'opération a été faite (2026-08) — voir demande utilisateur : "si
+  // l'opération a été faite par un utilisateur depuis un portail externe".
+  // "Interne" | "Portail Client" | "Portail Assuré" | "Portail Prestataire".
+  origine      String
+  dateSignature DateTime @default(now())
+
+  @@index([documentType, documentRef])
+}
+
+// ── Finance ──────────────────────────────────────────────────────────
+// Commissions (2026-08, refonte) — voir demande utilisateur : "c'est le
+// courtier qui est le bénéficiaire des commissions et elles sont calculées
+// sur la base des taux commissions paramétrés pour chaque branche... et
+// calculé sur la base des primes nettes générées par contrat". Les montants
+// (prime nette, taux, commission) ne sont donc plus saisis à la main ici :
+// ils sont recalculés à la volée à partir de Contrat (même source que
+// BordereauxService.production, pour rester cohérent avec le Bordereau de
+// Production — voir demande utilisateur : "total cohérence entre les
+// fonctionnalités... suite logique et interconnexion"). Seul le statut de
+// reversement (la compagnie a-t-elle physiquement reversé la commission au
+// courtier) est un fait réel qui doit être mémorisé quelque part.
+model CommissionReversement {
+  id          String   @id @default(cuid())
+  compagnieId String
+  // Période mensuelle ("Octobre 2024") — dérivée automatiquement de la
+  // recherche du/au côté écran (voir CommissionsService.libellePeriode),
+  // jamais resaisie à la main : sert juste de clé stable pour retrouver ce
+  // même statut la prochaine fois que ce mois est recherché.
+  periode         String
+  statut          String @default("Reversé")
+  dateReversement String
+  createdAt       DateTime @default(now())
+
+  compagnie Compagnie @relation(fields: [compagnieId], references: [id])
+
+  @@unique([compagnieId, periode])
+}
+
+// Isolation multi-tenant (2026-09) — comblé après coup, comme Conversation
+// ci-dessus : ces 4 modèles (Trésorerie, Recouvrement, Comptabilité) étaient
+// interrogés SANS AUCUN filtrage (`findMany()` nu, voir TresorerieService/
+// RecouvrementService/ComptabiliteService) — toute société voyait la
+// trésorerie, les impayés et le journal comptable de TOUTES les sociétés.
+// Voir demande utilisateur : "chaque société à son interface... il ne doit
+// nullement avoir de chevauchement de données entre société."
 model CompteBancaire {
-  id     String  @id
+  id        String  @id
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   banque String
   pays   String
   devise String
   solde  Decimal @db.Decimal(18, 2)
+
+  @@index([societeId])
 }
 
 model FluxTresorerie {
   id        String  @id @default(cuid())
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   date      String
   libelle   String
   type      String
   montant   Decimal @db.Decimal(18, 2)
   rapproche Boolean
+
+  @@index([societeId])
 }
 
 model Impaye {
   id          String  @id
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   clientId    String
   contratId   String
   montantDu   Decimal @db.Decimal(18, 2)
@@ -509,26 +3488,356 @@ model Impaye {
 
   client  Client  @relation(fields: [clientId], references: [id])
   contrat Contrat @relation(fields: [contratId], references: [id])
+
+  @@index([societeId])
 }
 
 model JournalEntry {
   id      String  @id @default(cuid())
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   date    String
   num     String
   libelle String
   debit   Decimal @db.Decimal(18, 2)
   credit  Decimal @db.Decimal(18, 2)
   compte  String
+
+  @@index([societeId])
 }
 
 // ── GED ──────────────────────────────────────────────────────────────
+// Étendue (2026-09) — voir demande utilisateur : "activer la fonctionnalité
+// de GED afin qu'on puisse importer les factures et les courriers des
+// prestataires... archivage des documents qui rentrent et qui sortent...
+// mode OCR grâce à l'agent IA... enregistrement automatique du document
+// avec un résumé et en créant l'objet en lisant le contenu... suivi et
+// comparaison des factures enregistrées par la GED et celles traitées et
+// saisies". Avant cette extension, le modèle n'avait ni fichier réel, ni
+// sens (entrant/sortant), ni aucun champ extrait par IA — un simple
+// classeur d'étiquettes saisies à la main (voir GedService d'origine).
 model GedDocument {
   id              String   @id
+  // Isolation multi-tenant (2026-09) — comblé après coup, voir Conversation
+  // ci-dessus pour le détail du bug (interrogé sans filtrage).
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   nom             String
   type            String
   entiteLiee      String
+  // "En attente" (import juste reçu, lecture IA pas encore terminée) |
+  // "Analysé" (lecture IA terminée avec succès) | "Échec" (illisible —
+  // format non supporté par la vision de Claude, ou fichier corrompu).
   statutOcr       String
   statutSignature String
   tags            String[]
   date            String
+
+  // Fichier réel (2026-09) — nom stocké sous uploads/ged/ (disque local) ou
+  // Supabase Storage (catégorie "ged") selon StorageService.actif, même
+  // principe que les autres pièces jointes de l'application (accords
+  // préalables, signatures...). Absent uniquement pour les quelques
+  // documents créés avant cette extension (jamais réédités).
+  fichier String?
+
+  // Sens du document (2026-09) — "Entrant" (reçu de l'extérieur : facture
+  // ou courrier d'un prestataire, par exemple) | "Sortant" (envoyé par
+  // l'entreprise). Aucun concept équivalent n'existait avant cette
+  // extension — voir demande utilisateur : "permettre l'archivage des
+  // documents qui rentrent et qui sortent de l'entreprise, pour un
+  // meilleur suivi documentaire."
+  sens String @default("Entrant")
+
+  // Lecture automatique par l'agent IA (2026-09) — voir
+  // GedAnalyseService.analyser. `objet`/`resume` sont le résultat de la
+  // lecture réelle du contenu (jamais une valeur devinée si l'IA n'a pas pu
+  // lire le fichier — restent alors null, `nom` sert de repli à l'écran).
+  objet  String?
+  resume String?
+
+  // Rapprochement facture prestataire (2026-09) — voir demande utilisateur :
+  // "comparaison entre les factures enregistrées par la GED et celles
+  // traitées et saisies afin de dire lesquelles ont été traitées totalement
+  // et lesquelles l'ont été partiellement." `referenceExtraite`/
+  // `montantExtrait` viennent de la lecture IA (jamais garantis exacts —
+  // l'OCR peut se tromper, d'où le rapprochement manuel possible en plus de
+  // l'automatique, voir GedService.rapprocherFacture) ; `factureId` n'est
+  // renseigné qu'une fois un rapprochement (auto ou manuel) confirmé.
+  prestataireId     String?
+  prestataire       Prestataire? @relation(fields: [prestataireId], references: [id])
+  referenceExtraite String?
+  montantExtrait    Decimal?     @db.Decimal(18, 2)
+  factureId         String?
+  facture           Facture?     @relation(fields: [factureId], references: [id])
+  // "Sans objet" (document qui n'est pas une facture prestataire — un
+  // courrier, par exemple) | "Non traité" (facture importée, aucune saisie
+  // correspondante trouvée) | "Traité partiellement" (saisie trouvée mais
+  // encore "En saisie", ou montant saisi ≠ montant lu) | "Traité totalement"
+  // (saisie "Soumise" avec un montant qui correspond).
+  statutTraitement String @default("Sans objet")
+
+  demandeurId String?
+  demandeur   User?   @relation(fields: [demandeurId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([societeId])
+  @@index([prestataireId])
+  @@index([factureId])
+  @@index([statutTraitement])
+}
+
+// ── Facture Production (2026-08) ────────────────────────────────────
+// Facture de production émise par opération (nouveau contrat, avenant…),
+// GÉNÉRÉE MANUELLEMENT à la demande depuis son propre écran (voir demande
+// utilisateur — pas de déclenchement automatique à la sauvegarde d'un
+// contrat/avenant). Imprimée sur le papier en-tête de la COMPAGNIE (pied de
+// page/RIB = champs Compagnie ajoutés ci-dessus), jamais sur celui de
+// MedAssur — voir DocumentsService.renderFactureProduction.
+model FactureProduction {
+  id          String @id @default(cuid())
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  // Numéro séquentiel, atomique (CompteurDocument id="facture-production"),
+  // affiché "FACTURE N°{numero}/{année d'émission}" comme sur le modèle NSIA.
+  numero      Int
+  compagnieId String
+  clientId    String
+  contratId   String?
+
+  dateEmission String
+  lieuEmission String @default("Libreville")
+
+  // Références facultatives (Bon de Réception/Commande du client) — visibles
+  // sur le modèle NSIA quand renseignées, omises sinon.
+  referenceBonReception String?
+  referenceBonCommande  String?
+
+  objet         String
+  // Type de paiement (2026-08, voir demande utilisateur : "marquer... le
+  // type de paiement... plusieurs échéanciers comme un paiement unique en
+  // une seule fois... sur le modèle c'est représenté par 'PRIME PREMIERE
+  // ECHEANCE'") — "Paiement intégral" | "1ère échéance" | "2ème échéance" |
+  // "3ème échéance" | "4ème échéance". Affiché sous le titre de la facture
+  // (voir DocumentsService.renderFactureProduction) et repris en suffixe
+  // des libellés de ligne auto-remplis dès que ≠ "Paiement intégral".
+  typePaiement  String  @default("Paiement intégral")
+  notePaiement  String?
+  statut        String @default("Émise")
+  createdAt     DateTime @default(now())
+
+  compagnie Compagnie              @relation(fields: [compagnieId], references: [id])
+  client    Client                 @relation(fields: [clientId], references: [id])
+  contrat   Contrat?               @relation(fields: [contratId], references: [id])
+  lignes    FactureProductionLigne[]
+
+  @@index([societeId])
+}
+
+model FactureProductionLigne {
+  id                  String   @id @default(cuid())
+  factureProductionId String
+  // Ex. "POLICE MALADIE N°1000652 (Non Cadres)" — libellé souligné sur le PDF.
+  libelle             String
+  periodeDebut        String?
+  periodeFin          String?
+  montant             Decimal  @db.Decimal(18, 2)
+  ordre               Int      @default(0)
+
+  // Mouvement d'origine (2026-08, voir demande utilisateur : sélection par
+  // souscripteur → auto-remplissage des mouvements pas encore facturés).
+  // contratId seul = ligne "Affaire Nouvelle" (la souscription du contrat
+  // elle-même) ; contratId + avenantId = ligne d'un avenant précis. Sert à
+  // exclure ces mouvements des suggestions une fois déjà facturés (voir
+  // FactureProductionService.mouvementsNonFactures) — jamais renseigné pour
+  // une ligne saisie librement.
+  contratId String?
+  avenantId String?
+
+  factureProduction FactureProduction @relation(fields: [factureProductionId], references: [id], onDelete: Cascade)
+  contrat           Contrat?          @relation(fields: [contratId], references: [id])
+  avenant           Avenant?          @relation(fields: [avenantId], references: [id])
+}
+
+// ── Courrier Maladie (2026-08) ──────────────────────────────────────
+// Éditeur façon Word (voir demande utilisateur) pour la correspondance liée
+// à la santé (factures, prises en charge…). Modèles paramétrables
+// (CourrierType) avec jetons de substitution, référence auto-générée
+// incluant les initiales de l'agent connecté (voir CourrierService.create,
+// User.initiales déjà existant).
+model CourrierType {
+  id          String  @id @default(cuid())
+  // Isolation multi-tenant (2026-09) — comblé après coup, voir Conversation
+  // ci-dessus pour le détail du bug (interrogé sans filtrage). Chaque
+  // société a ses propres modèles de courrier (marque/ton propres), jamais
+  // un catalogue partagé comme ActeMedical/CodeAffection.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  libelle     String
+  // Corps HTML modèle — jetons {{DESTINATAIRE}}, {{DATE}}, {{REFERENCE}},
+  // {{OBJET}} substitués à la création d'un courrier à partir de ce type
+  // (voir CourrierService.create). Sous-ensemble HTML volontairement limité
+  // (voir RichTextEditor.tsx / DocumentsService.renderCourrier) : <p>,
+  // <b>/<strong>, <i>/<em>, <u>, <ul>/<ol>/<li>, style text-align/font-size.
+  corpsModele String
+  actif       Boolean @default(true)
+
+  courriers Courrier[]
+
+  @@index([societeId])
+}
+
+model Courrier {
+  id        String   @id @default(cuid())
+
+  // Isolation multi-tenant (2026-09, Phase 2) -- voir SocieteAssurance /
+  // User.societeId. Nullable en base (donnees anterieures au cloisonnement,
+  // voir migration 20260906130000_societe_scoping, backfill vers
+  // 'societe-bootstrap') mais injecte/filtre automatiquement par le
+  // middleware Prisma (voir PrismaService, TenantContext) -- jamais lu/ecrit
+  // a la main dans les services metier.
+  societeId String?
+  societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
+  // Format COUR-{année}-{6 car. aléatoires}-{INITIALES} — voir
+  // CourrierService.create (initiales = User.initiales de l'agent connecté).
+  reference String   @unique
+  typeId    String?
+  objet     String
+
+  destinataireNom     String
+  destinataireAdresse String?
+
+  // Lien facultatif vers un dossier existant — préremplit le destinataire à
+  // la création et permet la recherche multi-critères (voir demande
+  // utilisateur : "recherche... avec tous les critères").
+  clientId      String?
+  prestataireId String?
+  assureId      String?
+
+  corps       String // HTML produit par l'éditeur (RichTextEditor.tsx)
+  auteurId    String
+  dateCreation String
+  statut      String @default("Généré")
+
+  type        CourrierType? @relation(fields: [typeId], references: [id])
+  client      Client?       @relation(fields: [clientId], references: [id])
+  prestataire Prestataire?  @relation(fields: [prestataireId], references: [id])
+  assure      AssureSante?  @relation(fields: [assureId], references: [id])
+  auteur      User          @relation(fields: [auteurId], references: [id])
+
+  @@index([societeId])
+}
+
+// ── Règles & Consignes (2026-08) ────────────────────────────────────
+// Règles et consignes d'utilisation de l'assurance maladie, mises en place
+// côté assurance (zone "Système") et diffusées en LECTURE SEULE au portail
+// client — voir demande utilisateur : "on fera remonter toutes les règles
+// et consigne pour utiliser l'assurance maladie... c'est eux qui vont
+// mettre en place cela; le client n'aura cela qu'en lecture seul et pourra
+// télécharger les documents joints par l'assurance". Global (pas de
+// rattachement Client/Contrat) — s'applique à tous les souscripteurs.
+model RegleConsigne {
+  id        String   @id @default(cuid())
+  titre     String
+  contenu   String   @db.Text
+  // Document joint facultatif (PDF/Word/etc.) — nom de fichier sous
+  // uploads/regles-consignes/, même principe qu'AccordPrealable.ordonnanceFichier.
+  fichier   String?
+  ordre     Int      @default(0)
+  actif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ── Signature électronique — capture par QR code (2026-09) ─────────
+// Jeton court, à usage unique, qui permet à un téléphone/tablette (qui
+// scanne le QR affiché sur l'écran de bureau de l'utilisateur, voir
+// UsersController) d'ouvrir une page de signature PUBLIQUE (sans être
+// connecté sur cet appareil) puis d'enregistrer le tracé dans le BON
+// compte, celui qui a généré le jeton — voir demande utilisateur :
+// "l'application devra générer un QR code qui sera scanné... on signe et
+// on valide, la signature se charge dans le compte de l'utilisateur."
+model SignatureToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// ── Base de connaissance de l'agent IA Ariana (2026-09) ─────────────
+// Voir demande utilisateur : "afin de faire évoluer l'agent IA Ariana...
+// et affiner son niveau d'analyse, je lui donne ses documents pour se
+// former" (Code CIMA 2019 + Manuel Assurance Santé CIMA Gabon), et
+// séparément : "qu'elle apprenne de la gestion qui se fera dans
+// l'application... que cela affine sa capacité à interagir". Ariana tourne
+// sur l'API Claude — aucun réentraînement de modèle n'est possible depuis
+// cette application ; ceci est donc une mémoire consultée par un OUTIL
+// (voir MessagerieAgentIaService.consulter_base_connaissance), jamais
+// injectée en bloc dans le prompt (les 608 pages du Code CIMA ne
+// tiendraient de toute façon pas dans un contexte raisonnable) — une vraie
+// recherche par mots-clés qui ramène seulement les passages pertinents à
+// LA question posée. Deux origines dans la même table (même mécanisme de
+// recherche) :
+// - "Reglementation" : chunks des documents de référence fournis (voir
+//   scratch-seed-ariana-connaissance.js, exécuté une fois à l'ingestion).
+// - "CasResolu" : résumé automatique généré à la clôture d'une conversation
+//   (voir MessagerieService.changerStatut → statut "Resolue"), c'est la
+//   partie "apprend de la gestion réelle" — jamais les données personnelles
+//   de l'assuré telles quelles, un résumé du TYPE de situation et de sa
+//   résolution.
+model ArianaConnaissance {
+  id        String   @id @default(cuid())
+  categorie String // "Reglementation" | "CasResolu"
+  source    String // ex. "Code CIMA 2019", "Manuel Assurance Santé CIMA Gabon", "Conversation résolue"
+  titre     String
+  contenu   String
+  // Isolation multi-tenant (2026-09) — un cas résolu de LA RUCHE EXCELLENCE
+  // n'a pas à nourrir les réponses données à une autre société ; les
+  // documents réglementaires (Reglementation), eux, restent valables pour
+  // tous (CIMA s'applique à toute la zone) — societeId NULL = valable pour
+  // tous, jamais filtré par le middleware Prisma standard (voir
+  // recherche dédiée dans consulter_base_connaissance, pas un findMany
+  // générique).
+  societeId String?
+  createdAt DateTime @default(now())
+
+  @@index([categorie])
+  @@index([societeId])
+}
+
+// ── Idempotence (mode hors-ligne, 2026-09) ──────────────────────────────
+// Fondation transversale pour la synchronisation hors-ligne (web + mobile) :
+// voir demande utilisateur "l'application puisse... travailler en off-line...
+// une fois la connexion rétablie, les données saisie en off-ligne pourront
+// migrer vers le serveur", avec l'exigence explicite d'un "système intégré
+// de veille de saisie de doublons... gérer les doublons, les supprimer et
+// faire une unicité des données". Plutôt qu'une détection de doublons a
+// posteriori (fragile : deux saisies légitimes peuvent se ressembler), la
+// prévention se fait à la source : chaque écriture émise par un client
+// (web/mobile) porte une clé unique générée UNE SEULE FOIS à la création de
+// l'action (avant tout envoi), conservée telle quelle à travers les
+// tentatives/rejeux (perte réseau, relance après reconnexion). Voir
+// IdempotenceInterceptor (src/idempotence) : si la même clé revient (ex. la
+// requête a en fait réussi côté serveur mais la réponse s'est perdue avant
+// d'arriver au client hors-ligne, qui rejoue l'action au retour du réseau),
+// la réponse déjà produite est renvoyée telle quelle SANS ré-exécuter la
+// logique métier — aucune double création possible.
+model RequeteIdempotente {
+  id        String   @id @default(cuid())
+  cle       String   @unique
+  reponse   Json
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "Prestataire" ADD COLUMN "compteurFacture" INTEGER NOT NULL DEFAULT 0;

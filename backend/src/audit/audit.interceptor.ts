@@ -30,7 +30,23 @@ export class AuditInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap((result: unknown) => {
-        const entiteId = String((result as { id?: unknown } | undefined)?.id ?? req.params?.id ?? "n/a");
+        // Priorité au PREMIER paramètre de l'URL (2026-08) — pas forcément
+        // nommé ":id" (ex. LettresClesController utilise ":code"), et pas
+        // forcément le dernier sur une sous-route imbriquée (ex. POST
+        // /factures/:id/lignes, PATCH /factures/:id/lignes/:ligneId) : c'est
+        // le dossier PARENT qui est modifié, pas le sous-objet créé/modifié/
+        // renvoyé par la réponse — Express peuple req.params dans l'ordre
+        // d'apparition du pattern, donc le premier paramètre est toujours
+        // celui du segment le plus à gauche (le parent). Sans cette
+        // priorité, "dernière modification de la facture X" ratait tout
+        // ajout/édition de ligne (voir demande utilisateur : traçabilité
+        // par dossier). Repli sur l'identifiant du résultat ("id" ou "code"
+        // selon le modèle) seulement pour une création à la racine (POST
+        // sans paramètre dans l'URL), où il n'y a pas encore d'autre
+        // identifiant connu.
+        const premierParam = req.params ? Object.values(req.params)[0] : undefined;
+        const resultRecord = result as Record<string, unknown> | undefined;
+        const entiteId = String(premierParam ?? resultRecord?.id ?? resultRecord?.code ?? "n/a");
         this.auditLogService.log(entite, entiteId, action, utilisateur).catch(() => {});
       }),
     );

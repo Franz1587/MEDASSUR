@@ -10,14 +10,14 @@ interface ApiRenouvellement {
   primeProposee: string | number;
   sinistralite: string;
   statut: string;
-  contrat: { branche: string; dateFin: string; client: { nom: string }; compagnie: { nom: string } };
+  contrat: { clientId: string; branche: string; dateFin: string; gestionnaireId?: string | null; client: { nom: string }; compagnie: { nom: string } };
 }
 
-export async function getRenouvellements(): Promise<Renouvellement[]> {
-  const data = await http.get<ApiRenouvellement[]>("/renouvellements");
-  return data.map((r) => ({
+function mapRenouvellement(r: ApiRenouvellement): Renouvellement {
+  return {
     id: r.id,
     contrat: r.contratId,
+    clientId: r.contrat.clientId,
     client: r.contrat.client.nom,
     branche: r.contrat.branche,
     compagnie: r.contrat.compagnie.nom,
@@ -27,5 +27,33 @@ export async function getRenouvellements(): Promise<Renouvellement[]> {
     primeProposee: toNumber(r.primeProposee),
     sinistralite: r.sinistralite,
     statut: r.statut,
-  }));
+    // Tableau de bord personnel (2026-08) — voir demande utilisateur : "le
+    // tableau de bord [doit] faire remonter les informations en fonction
+    // du profil de l'utilisateur."
+    gestionnaireId: r.contrat.gestionnaireId ?? null,
+  };
+}
+
+export async function getRenouvellements(): Promise<Renouvellement[]> {
+  const data = await http.get<ApiRenouvellement[]>("/renouvellements");
+  return data.map(mapRenouvellement);
+}
+
+export async function relancerRenouvellement(id: string): Promise<Renouvellement> {
+  const r = await http.patch<ApiRenouvellement>(`/renouvellements/${id}/relancer`);
+  return mapRenouvellement(r);
+}
+
+export async function relancerTousLesRenouvellements(): Promise<{ relances: number }> {
+  return http.post<{ relances: number }>("/renouvellements/relancer-tout");
+}
+
+export async function renouvelerContrat(id: string): Promise<Renouvellement> {
+  const r = await http.patch<ApiRenouvellement>(`/renouvellements/${id}/renouveler`);
+  return mapRenouvellement(r);
+}
+
+export async function marquerRenouvellementPerdu(id: string, initiateur?: string): Promise<Renouvellement> {
+  const r = await http.patch<ApiRenouvellement>(`/renouvellements/${id}/perdu`, { initiateur });
+  return mapRenouvellement(r);
 }

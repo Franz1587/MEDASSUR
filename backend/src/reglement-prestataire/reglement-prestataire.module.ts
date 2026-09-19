@@ -5,5 +5,6 @@ import { ReglementPrestataireController } from "./reglement-prestataire.controll
 @Module({
   providers: [ReglementPrestataireService],
   controllers: [ReglementPrestataireController],
+  exports: [ReglementPrestataireService],
 })
 export class ReglementPrestataireModule {}
