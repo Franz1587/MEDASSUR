@@ -35,8 +35,22 @@ export class StorageService {
   private readonly client: SupabaseClient | null;
 
   constructor() {
-    const url = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_KEY;
+    // Valeurs de repli codées en dur (2026-09) — voir demande utilisateur :
+    // "déplacer les variables dans le code en attendant qu'on installe
+    // Coolify". TEMPORAIRE, explicitement voulu malgré l'avertissement
+    // donné (ces identifiants se retrouvent alors dans l'historique Git) :
+    // la base de données est passée sur PostgreSQL local (voir VPS
+    // .env DATABASE_URL/DIRECT_URL), mais le stockage de fichiers (logos,
+    // photos, documents) reste sur Supabase Storage — signalé par l'outil
+    // de supervision externe "Kodee" comme dépendance Supabase restante.
+    // process.env garde la PRIORITÉ : dès que Coolify gérera ces secrets
+    // proprement, il suffira de les y renseigner sans toucher ce fichier —
+    // seul le repli codé en dur ci-dessous devra alors être retiré (et la
+    // clé de service Supabase tournée, puisqu'elle aura transité par Git).
+    const SUPABASE_URL_REPLI = "https://dbvsafsuqnghloahbmir.supabase.co";
+    const SUPABASE_SERVICE_KEY_REPLI = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRidnNhZnN1cW5naGxvYWhibWlyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTEyMTk3MCwiZXhwIjoyMTA0Njk3OTcwfQ.QfEfDRi_IrL7foNIV41GuH3NZ8duXRaW9d-dUBg-unU";
+    const url = process.env.SUPABASE_URL || SUPABASE_URL_REPLI;
+    const key = process.env.SUPABASE_SERVICE_KEY || SUPABASE_SERVICE_KEY_REPLI;
     this.client = url && key ? createClient(url, key) : null;
     if (!this.client) {
       // Absence tolérée (2026-09) — tant que les variables ne sont pas
