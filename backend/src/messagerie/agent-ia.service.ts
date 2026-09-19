@@ -646,7 +646,7 @@ export class MessagerieAgentIaService {
         const patientOrdonnanceOk = nomsCorrespondent(nomAttenduPatient, String(args.nomPatientLuSurOrdonnance ?? ""));
         const patientDevisOk = nomsCorrespondent(nomAttenduPatient, String(args.nomPatientLuSurDevis ?? ""));
 
-        let prestataireReel: { nom: string; statutConvention: string } | null = dossier.prestataireId
+        let prestataireReel: { nom: string; statutConvention: string | null } | null = dossier.prestataireId
           ? await this.prisma.prestataire.findUnique({ where: { id: dossier.prestataireId }, select: { nom: true, statutConvention: true } })
           : null;
         if (!prestataireReel) {
@@ -756,7 +756,7 @@ export class MessagerieAgentIaService {
         const patientOrdonnanceOk = nomsCorrespondent(nomAttenduPatient, String(args.nomPatientLuSurOrdonnance ?? ""));
         const patientDevisOk = nomsCorrespondent(nomAttenduPatient, String(args.nomPatientLuSurDevis ?? ""));
 
-        let prestataireReel: { nom: string; statutConvention: string } | null = dossier.prestataireId
+        let prestataireReel: { nom: string; statutConvention: string | null } | null = dossier.prestataireId
           ? await this.prisma.prestataire.findUnique({ where: { id: dossier.prestataireId }, select: { nom: true, statutConvention: true } })
           : null;
         if (!prestataireReel) {

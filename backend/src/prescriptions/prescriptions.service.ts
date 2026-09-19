@@ -241,7 +241,7 @@ export class PrescriptionsService {
     const prestataire = await this.prisma.prestataire.findUniqueOrThrow({ where: { id: prestataireId } });
 
     if (params.type === "Ordonnance") {
-      if (!TYPES_TRAITANT_ORDONNANCE.includes(prestataire.type)) {
+      if (!TYPES_TRAITANT_ORDONNANCE.includes(prestataire.type ?? "")) {
         throw new ForbiddenException("Ce type d'établissement ne peut pas traiter d'ordonnance.");
       }
       const ligne = await this.prisma.priseEnCharge.findUnique({
@@ -266,7 +266,7 @@ export class PrescriptionsService {
       };
     }
 
-    if (!TYPES_TRAITANT_EXAMEN.includes(prestataire.type)) {
+    if (!TYPES_TRAITANT_EXAMEN.includes(prestataire.type ?? "")) {
       throw new ForbiddenException("Ce type d'établissement ne peut pas traiter de bon d'examen.");
     }
     const prescription = await this.prisma.prescription.findUnique({
@@ -308,7 +308,7 @@ export class PrescriptionsService {
     const prestataire = await this.prisma.prestataire.findUniqueOrThrow({ where: { id: prestataireId } });
 
     if (params.type === "Ordonnance") {
-      if (!TYPES_TRAITANT_ORDONNANCE.includes(prestataire.type)) {
+      if (!TYPES_TRAITANT_ORDONNANCE.includes(prestataire.type ?? "")) {
         throw new ForbiddenException("Ce type d'établissement ne peut pas traiter d'ordonnance.");
       }
       const prescriptions = await this.prisma.prescription.findMany({
@@ -329,7 +329,7 @@ export class PrescriptionsService {
       }));
     }
 
-    if (!TYPES_TRAITANT_EXAMEN.includes(prestataire.type)) {
+    if (!TYPES_TRAITANT_EXAMEN.includes(prestataire.type ?? "")) {
       throw new ForbiddenException("Ce type d'établissement ne peut pas traiter de bon d'examen.");
     }
     const prescriptions = await this.prisma.prescription.findMany({

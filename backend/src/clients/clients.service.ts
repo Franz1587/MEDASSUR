@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import ExcelJS from "exceljs";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateClientDto } from "./dto/create-client.dto";
 import { UpdateClientDto } from "./dto/update-client.dto";
@@ -98,24 +99,20 @@ export class ClientsService {
   }
 
   async create(dto: CreateClientDto) {
-    const email = this.normalize(dto.email);
-    const tel = this.normalizePhone(dto.tel);
+    // Seul `nom` est obligatoire (2026-09) — email/tel/type peuvent être
+    // absents, voir demande utilisateur : "il ne faut pas rendre les
+    // autres données obligatoire pour enregistrer... un souscripteur."
+    const email = dto.email ? this.normalize(dto.email) : undefined;
+    const tel = dto.tel ? this.normalizePhone(dto.tel) : undefined;
     const nom = this.normalize(dto.nom);
 
-    const existing = await this.prisma.client.findFirst({
-      where: {
-        OR: [
-          { email: { equals: email, mode: "insensitive" } },
-          { tel },
-          {
-            AND: [
-              { nom: { equals: nom, mode: "insensitive" } },
-              { type: dto.type },
-            ],
-          },
-        ],
-      },
-    });
+    const conditionsDoublon: Prisma.ClientWhereInput[] = [
+      { nom: { equals: nom, mode: "insensitive" }, type: dto.type },
+    ];
+    if (email) conditionsDoublon.push({ email: { equals: email, mode: "insensitive" } });
+    if (tel) conditionsDoublon.push({ tel });
+
+    const existing = await this.prisma.client.findFirst({ where: { OR: conditionsDoublon } });
 
     if (existing) {
       throw new BadRequestException(

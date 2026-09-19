@@ -3,30 +3,39 @@ import { Transform } from "class-transformer";
 import { normaliserTelephone } from "../../lib/telephone.util";
 
 export class CreateClientDto {
+  // Seul champ réellement obligatoire à la saisie (2026-09) — voir demande
+  // utilisateur : "à part le nom... il ne faut pas rendre les autres
+  // données obligatoire pour enregistrer ou modifier un souscripteur."
   @IsString()
   nom: string;
 
+  @IsOptional()
   @IsIn(["Entreprise", "Particulier"])
-  type: string;
+  type?: string;
 
+  @IsOptional()
   @IsString()
-  pays: string;
+  pays?: string;
 
+  @IsOptional()
   @IsString()
-  contact: string;
+  contact?: string;
 
   // Points retirés à la saisie (2026-08) — voir demande utilisateur :
   // "tous les numéros de l'application doivent s'écrire... après retrait
   // des '.' dans les numéros".
+  @IsOptional()
   @IsString()
   @Transform(({ value }) => normaliserTelephone(value))
-  tel: string;
+  tel?: string;
 
+  @ValidateIf((o) => !!o.email)
   @IsEmail()
-  email: string;
+  email?: string;
 
+  @IsOptional()
   @IsIn(["Actif", "Inactif"])
-  statut: string;
+  statut?: string;
 
   // ── Coordonnées détaillées ──────────────────────────────────────────
   @IsOptional()

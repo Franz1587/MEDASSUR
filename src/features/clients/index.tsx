@@ -181,15 +181,7 @@ export default function ClientsView() {
   };
 
   const validateForm = () => {
-    if (!form.nom || !form.pays || !form.contact || !form.tel || !form.email) {
-      return "Nom, pays, contact, téléphone et email sont obligatoires.";
-    }
-    if (form.type === "Entreprise" && !form.categorieMorale) {
-      return "La catégorie de personne morale est obligatoire pour un souscripteur Entreprise.";
-    }
-    if (form.type === "Particulier" && (!form.prenom || !form.dateNaissance)) {
-      return "Prénom et date de naissance sont obligatoires pour un souscripteur Particulier.";
-    }
+    if (!form.nom) return "Le nom est obligatoire.";
     return null;
   };
 

@@ -264,7 +264,7 @@ interface DocContrat {
   primeUnitaireAssurePrincipal: Prisma.Decimal | null; primeUnitaireConjoint: Prisma.Decimal | null;
   primeUnitaireEnfant: Prisma.Decimal | null; primeUnitaireCouple: Prisma.Decimal | null;
   numeroQuittance: number | null;
-  client: { id: string; nom: string; pays: string; ville?: string | null; adresse?: string | null; boitePostale?: string | null; tel: string };
+  client: { id: string; nom: string; pays: string | null; ville?: string | null; adresse?: string | null; boitePostale?: string | null; tel: string | null };
   compagnie: { id: string; nom: string; pays: string };
   garanties: { categorie: string; libelle: string; tauxAssure: Prisma.Decimal | null; plafond: string | null }[];
 }
@@ -636,7 +636,7 @@ export class DocumentsService {
     doc.font("Helvetica-Bold").fontSize(9).text(contrat.client.nom, rightColX, sy, { width: colWidth });
     sy += doc.heightOfString(contrat.client.nom, { width: colWidth }) + 4;
     sy = champ(doc, rightColX, sy, "BP :", contrat.client.boitePostale ?? "—", 30, colWidth - 30);
-    sy = champ(doc, rightColX, sy, contrat.client.ville ?? "", contrat.client.pays, colWidth / 2, colWidth / 2);
+    sy = champ(doc, rightColX, sy, contrat.client.ville ?? "", contrat.client.pays ?? "", colWidth / 2, colWidth / 2);
     sy = champ(doc, rightColX, sy, "TEL :", `${contrat.client.tel ?? ""}    Fax :`, 30, colWidth - 30);
 
     y = Math.max(yy, sy) + 8;
@@ -796,7 +796,7 @@ export class DocumentsService {
     doc.font("Helvetica").fontSize(7).text(`BP : ${contrat.client.boitePostale ?? "—"}     ADRESSE : ${contrat.client.adresse ?? "—"}`, midX + 4, ry + 4, { width: rightCellW });
     ry += rowH[1];
     champ(doc, left + 4, ry + 4, "ECHEANCE :", dateFin, 60, leftCellW - 60, { boldLabel: true, boldValeur: true, fontSize: 8 });
-    doc.font("Helvetica").fontSize(7).text(`VILLE : ${contrat.client.ville ?? "—"}     PAYS : ${contrat.client.pays}     TEL : ${contrat.client.tel ?? "—"}`, midX + 4, ry + 4, { width: rightCellW });
+    doc.font("Helvetica").fontSize(7).text(`VILLE : ${contrat.client.ville ?? "—"}     PAYS : ${contrat.client.pays ?? "—"}     TEL : ${contrat.client.tel ?? "—"}`, midX + 4, ry + 4, { width: rightCellW });
     doc.fontSize(8).font("Helvetica-Bold").text("ASSURE (S)", midX + 4, ry + 16);
     ry += rowH[2];
     champ(doc, left + 4, ry + 4, "DUREE CONTRAT :", `${jours} Jour(s)`, 80, leftCellW - 80, { boldLabel: true, fontSize: 8 });
@@ -4665,7 +4665,7 @@ export class DocumentsService {
       const rowH = 14;
       if (y + rowH > doc.page.height - 50) { doc.addPage(); y = 40; drawHeader(); doc.font("Helvetica").fontSize(7.5); }
       let cx = left;
-      const vals = [pr.nom, pr.type, pr.ville ?? "—", pr.adresse ?? "—", pr.telephone ?? "—"];
+      const vals = [pr.nom, pr.type ?? "—", pr.ville ?? "—", pr.adresse ?? "—", pr.telephone ?? "—"];
       for (let i = 0; i < cols.length; i++) { doc.text(vals[i], cx + 3, y + 3, { width: cols[i].w - 6 }); cx += cols[i].w; }
       doc.moveTo(left, y + rowH).lineTo(right, y + rowH).strokeColor("#eee").stroke();
       y += rowH;
@@ -4688,7 +4688,7 @@ export class DocumentsService {
     doc.fontSize(13).font("Helvetica-Bold").fillColor("#000").text(pr.nom, left, 65, { width, align: "right" });
     let y = 100;
     const champs: [string, string][] = [
-      ["Type :", pr.type], ["Secteur :", pr.secteur ?? "—"], ["Spécialité :", pr.specialite ?? "—"],
+      ["Type :", pr.type ?? "—"], ["Secteur :", pr.secteur ?? "—"], ["Spécialité :", pr.specialite ?? "—"],
       ["Ville :", pr.ville ?? "—"], ["Adresse :", pr.adresse ?? "—"], ["Téléphone :", pr.telephone ?? "—"],
       ["Statut conventionnement :", pr.statutConvention ?? "—"],
     ];
@@ -4844,7 +4844,7 @@ export class DocumentsService {
     const bpY = 134 + Math.max(nomHauteur, 14) + 4;
     doc.font("Helvetica").fontSize(12);
     doc.text("BP:", recipientX, bpY);
-    doc.text(lettre.prestataire.ville, recipientX, bpY + 15);
+    doc.text(lettre.prestataire.ville ?? "", recipientX, bpY + 15);
 
     let y = 230;
     doc.font("Helvetica-Bold").fontSize(12).text("Objet : Lettre d'accompagnement d'un chèque", left, y, { width });
@@ -5061,7 +5061,7 @@ export class DocumentsService {
 
   private dessinerEtatFactures(
     doc: PDFKit.PDFDocument, titre: string, sousTitre: string,
-    prestataire: { nom: string; adresse: string | null; ville: string; telephone: string | null; pays: string | null },
+    prestataire: { nom: string; adresse: string | null; ville: string | null; telephone: string | null; pays: string | null },
     lignes: LigneEtatFacture[],
     p: { nom: string; boitePostale: string; ville: string; pays: string; telephone: string; email?: string | null },
   ) {

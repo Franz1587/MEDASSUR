@@ -61,7 +61,7 @@ export class CompagniesService {
     if (!client) throw new NotFoundException(`Client ${clientId} introuvable`);
     const id = `AUTO-${randomUUID().slice(0, 6).toUpperCase()}`;
     try {
-      await this.prisma.compagnie.create({ data: { id, nom: client.nom, pays: client.pays, clientId } });
+      await this.prisma.compagnie.create({ data: { id, nom: client.nom, pays: client.pays || "Gabon", clientId } });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
         throw new ConflictException(`Le souscripteur ${client.nom} est déjà en auto-gestion.`);

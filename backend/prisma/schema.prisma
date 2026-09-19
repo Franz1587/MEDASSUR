@@ -570,12 +570,17 @@ model Client {
   societeId String?
   societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   nom       String
-  type      String // "Entreprise" | "Particulier"
-  pays      String
-  contact   String
-  tel       String
-  email     String
-  statut    String
+  // Seul champ réellement obligatoire à la saisie (2026-09) — voir demande
+  // utilisateur : "à part le nom... il ne faut pas rendre les autres
+  // données obligatoire pour enregistrer ou modifier un souscripteur."
+  // Nullable en base : le formulaire peut être enregistré incomplet, à
+  // compléter plus tard.
+  type      String? // "Entreprise" | "Particulier"
+  pays      String?
+  contact   String?
+  tel       String?
+  email     String?
+  statut    String? // Actif | Inactif — défaut "Actif" côté service si omis
   createdAt DateTime @default(now())
   // Nom de fichier sous backend/uploads/logos-clients/ — voir
   // CompagnieService.uploadLogo pour le même pattern. Null = pas de logo,
@@ -2140,9 +2145,14 @@ model Prestataire {
   societeId String?
   societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   nom                  String
+  // Seul champ réellement obligatoire à la saisie (2026-09) — voir demande
+  // utilisateur : "à part le nom... il ne faut pas rendre les autres
+  // données obligatoire pour enregistrer ou modifier un prestataire."
+  // `secteur` ci-dessous reste une EXCEPTION délibérée (voir son
+  // commentaire) — tous les autres champs sont nullables en base.
   // Hôpital | Clinique | Cabinet | Médecin (indépendant) | Centre de
   // Kinésithérapie | Opticien | Pharmacie | Laboratoire
-  type                 String
+  type                 String?
   // Secteur d'appartenance (2026-08) — distinct de `type` (catégorie
   // d'établissement) : détermine quel taux du Contrat (structure
   // publique/privée) s'applique lors du calcul d'une PriseEnCharge.
@@ -2156,11 +2166,11 @@ model Prestataire {
   // nomenclature stricte en base, la liste réelle évoluant plus vite que
   // les migrations.
   specialite           String?
-  pays                 String
-  ville                String
+  pays                 String?
+  ville                String?
   telephone            String?
   adresse              String?
-  statutConvention     String // En négociation | Conventionné | Suspendu
+  statutConvention     String? // En négociation | Conventionné | Suspendu
   dateConventionnement String?
   delaiPaiementMoyen   Int?
   scoreQualite         Decimal? @db.Decimal(5, 2)

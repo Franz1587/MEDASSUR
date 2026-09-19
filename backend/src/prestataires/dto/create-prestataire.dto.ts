@@ -3,14 +3,20 @@ import { Transform } from "class-transformer";
 import { normaliserTelephone } from "../../lib/telephone.util";
 
 export class CreatePrestataireDto {
+  // Seul champ réellement obligatoire à la saisie (2026-09) — voir demande
+  // utilisateur : "à part le nom... il ne faut pas rendre les autres
+  // données obligatoire pour enregistrer ou modifier un prestataire."
+  // `secteur` ci-dessous reste une EXCEPTION délibérée (voir son
+  // commentaire).
   @IsString()
   nom: string;
 
   // "Médecin" retiré (2026-08) — les médecins ont désormais leur propre
   // modèle dédié (voir schema.prisma Medecin, module backend/src/medecins),
   // distinct des structures gérées ici.
+  @IsOptional()
   @IsIn(["Hôpital", "Clinique", "Cabinet", "Centre de Kinésithérapie", "Opticien", "Pharmacie", "Laboratoire", "Dépôt pharmaceutique", "Centre d'Imagerie", "Cabinet Dentaire"])
-  type: string;
+  type?: string;
 
   // Détermine le taux de Contrat appliqué lors du calcul d'une
   // PriseEnCharge (voir SanteService.tauxParSecteur) — distinct de `type`.
@@ -29,11 +35,13 @@ export class CreatePrestataireDto {
   @IsString()
   specialite?: string;
 
+  @IsOptional()
   @IsString()
-  pays: string;
+  pays?: string;
 
+  @IsOptional()
   @IsString()
-  ville: string;
+  ville?: string;
 
   // Points retirés à la saisie (2026-08) — voir demande utilisateur :
   // "077.66.00.01... doivent devenir 077660001".
@@ -46,8 +54,9 @@ export class CreatePrestataireDto {
   @IsString()
   adresse?: string;
 
+  @IsOptional()
   @IsIn(["En négociation", "Conventionné", "Suspendu"])
-  statutConvention: string;
+  statutConvention?: string;
 
   @IsOptional()
   @IsString()

@@ -6,9 +6,11 @@ export class CreateAssureDto {
   @IsString()
   nom: string;
 
-  @IsOptional()
+  // Nom et prénom sont les DEUX seuls champs obligatoires pour un assuré
+  // (2026-09) — voir demande utilisateur : "à part le nom et prénom pour
+  // les assurés... il ne faut pas rendre les autres données obligatoire."
   @IsString()
-  prenom?: string;
+  prenom: string;
 
   @IsOptional()
   @IsString()

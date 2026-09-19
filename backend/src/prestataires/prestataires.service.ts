@@ -101,7 +101,7 @@ export class PrestatairesService {
   // désormais pointer vers le même établissement — le "poste" d'un compte
   // se déduit du préfixe de son email (aucune colonne dédiée), voir
   // POSTES_COMPTE_PORTAIL ci-dessous.
-  private postesPourType(type: string): { id: string; label: string; prefixe: string }[] {
+  private postesPourType(type: string | null): { id: string; label: string; prefixe: string }[] {
     const pharmacie = type === "Pharmacie" || type === "Dépôt pharmaceutique";
     return [
       { id: "accueil", label: pharmacie ? "Vendeur" : "Service Accueil", prefixe: pharmacie ? "vendeur" : "service.accueil" },
@@ -435,7 +435,7 @@ export class PrestatairesService {
   }
 
   private async geocoderPrestataire(
-    p: { nom: string; adresse: string | null; ville: string; pays: string },
+    p: { nom: string; adresse: string | null; ville: string | null; pays: string | null },
   ): Promise<{ trouve: { lat: number; lon: number; ville: string | null } | null; erreur: boolean }> {
     const requetes = [p.adresse, p.nom].filter((s): s is string => !!s?.trim()).map((s) => [s, p.ville, p.pays].filter(Boolean).join(", "));
     let erreurRencontree = false;
@@ -452,7 +452,7 @@ export class PrestatairesService {
   // les adresses (villes) des prestataires". N'écrase que si Nominatim
   // renvoie une localité différente et non vide — jamais de correction
   // fantaisiste au-delà de ce que l'API retourne réellement.
-  private villeCorrigee(actuelle: string, trouveeParGeocodage: string | null): string | undefined {
+  private villeCorrigee(actuelle: string | null, trouveeParGeocodage: string | null): string | undefined {
     const v = trouveeParGeocodage?.trim();
     return v && v !== actuelle ? v : undefined;
   }

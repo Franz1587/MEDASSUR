@@ -68,8 +68,8 @@ export default function PrestataireForm({ prestataire, onClose, onSaved }: { pre
   };
 
   const handleSubmit = async () => {
-    if (!form.nom.trim() || !form.pays.trim() || !form.ville.trim()) {
-      toast.error("Nom, pays et ville sont obligatoires.");
+    if (!form.nom.trim()) {
+      toast.error("Le nom est obligatoire.");
       return;
     }
     // Secteur obligatoire (2026-08) — voir demande utilisateur : "le taux

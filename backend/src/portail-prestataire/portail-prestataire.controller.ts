@@ -598,7 +598,7 @@ export class PortailPrestataireController {
   @Get("bons/:prescriptionId/feuille-soins")
   async feuilleSoinsBon(@Param("prescriptionId") prescriptionId: string, @Req() req: PortailPrestataireRequest, @Res() res: Response) {
     const prestataire = await this.prisma.prestataire.findUniqueOrThrow({ where: { id: this.prestataireIdDe(req) } });
-    if (!TYPES_TRAITANT_ORDONNANCE.includes(prestataire.type)) throw new ForbiddenException("Ce type d'établissement ne peut pas traiter d'ordonnance.");
+    if (!TYPES_TRAITANT_ORDONNANCE.includes(prestataire.type ?? "")) throw new ForbiddenException("Ce type d'établissement ne peut pas traiter d'ordonnance.");
     const prescription = await this.prisma.prescription.findUnique({ where: { id: prescriptionId }, select: { priseEnChargeId: true } });
     if (!prescription) throw new NotFoundException(`Bon ${prescriptionId} introuvable`);
     // Prix visibles ici : cette route est déjà réservée aux établissements
@@ -610,13 +610,13 @@ export class PortailPrestataireController {
     // et non la totalité comme si c'est lui qui avait tout traité" — ce
     // document est CELUI DE ce prestataire précis (pendant qu'il traite le
     // bon), jamais la vue complète que voient le médecin ou l'assuré.
-    return this.documents.renderFeuilleSoinsLigne(prescription.priseEnChargeId, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId, masquerPrixPharmacie: !TYPES_TRAITANT_ORDONNANCE.includes(prestataire.type) }, { id: prestataire.id, nom: prestataire.nom });
+    return this.documents.renderFeuilleSoinsLigne(prescription.priseEnChargeId, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId, masquerPrixPharmacie: !TYPES_TRAITANT_ORDONNANCE.includes(prestataire.type ?? "") }, { id: prestataire.id, nom: prestataire.nom });
   }
 
   @Get("bons/:prescriptionId/feuille-examen")
   async feuilleExamenBon(@Param("prescriptionId") prescriptionId: string, @Req() req: PortailPrestataireRequest, @Res() res: Response) {
     const prestataire = await this.prisma.prestataire.findUniqueOrThrow({ where: { id: this.prestataireIdDe(req) } });
-    if (!TYPES_TRAITANT_EXAMEN.includes(prestataire.type)) throw new ForbiddenException("Ce type d'établissement ne peut pas traiter de bon d'examen.");
+    if (!TYPES_TRAITANT_EXAMEN.includes(prestataire.type ?? "")) throw new ForbiddenException("Ce type d'établissement ne peut pas traiter de bon d'examen.");
     // Même principe que feuilleSoinsBon ci-dessus — uniquement les examens
     // que CE prestataire a lui-même traités.
     return this.documents.renderFeuilleExamenPrescription(prescriptionId, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId, masquerPrixPharmacie: true }, { id: prestataire.id, nom: prestataire.nom });
