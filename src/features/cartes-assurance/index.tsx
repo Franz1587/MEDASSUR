@@ -50,6 +50,10 @@ export default function CartesAssuranceView() {
   const [filtrePhoto, setFiltrePhoto] = useState<"tous" | "avec" | "sans">("tous");
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  // Recto seul vs recto-verso (2026-09) — voir demande utilisateur : "pour
+  // la génération des cartes en masse pour un contrat bien spécifique, il
+  // faut prévoir une génération uniquement avec le recto sans les verso."
+  const [rectoUniquement, setRectoUniquement] = useState(false);
   const [showImportDiffere, setShowImportDiffere] = useState(false);
 
   useEffect(() => {
@@ -133,7 +137,7 @@ export default function CartesAssuranceView() {
     if (selected.length === 0) return;
     try {
       setBusy(true);
-      await genererCartesEnMasse({ assureIds: selected });
+      await genererCartesEnMasse({ assureIds: selected, rectoUniquement });
       toast.success(`${selected.length} carte(s) générée(s).`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Génération impossible.");
@@ -144,11 +148,11 @@ export default function CartesAssuranceView() {
 
   const handleGenererContrat = async () => {
     if (!contratId) return;
-    const ok = window.confirm(`Générer les cartes de tous les assurés actifs de ${contratId} (${population.length}+) ?`);
+    const ok = window.confirm(`Générer les cartes (${rectoUniquement ? "recto seul" : "recto-verso"}) de tous les assurés actifs de ${contratId} (${population.length}+) ?`);
     if (!ok) return;
     try {
       setBusy(true);
-      await genererCartesEnMasse({ contratId });
+      await genererCartesEnMasse({ contratId, rectoUniquement });
       toast.success("Cartes générées pour tout le contrat.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Génération impossible.");
@@ -232,7 +236,11 @@ export default function CartesAssuranceView() {
                 <input type="checkbox" checked={toutSelectionne} onChange={toggleTout} disabled={filtered.length === 0} />
                 {filtered.length} résultat(s) — tout {toutSelectionne ? "désélectionner" : "sélectionner"}
               </label>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1.5 text-[12px] text-muted-foreground cursor-pointer select-none">
+                  <input type="checkbox" checked={rectoUniquement} onChange={(e) => setRectoUniquement(e.target.checked)} />
+                  Recto seul (sans verso)
+                </label>
                 <Btn variant="secondary" disabled={busy || selected.length === 0} onClick={handleGenererSelection}><Printer className="w-4 h-4" />Générer la sélection ({selected.length})</Btn>
                 <Btn variant="primary" disabled={busy || population.length === 0} onClick={handleGenererContrat}><Printer className="w-4 h-4" />Générer tout le contrat</Btn>
               </div>

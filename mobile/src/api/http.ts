@@ -55,6 +55,33 @@ export class ApiError extends Error {
 // mise en file d'attente).
 const methodeEstLecture = (init?: RequestInit) => !init?.method || init.method === "GET";
 
+const attendre = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+// Relance sur échec réseau transitoire (2026-09) — voir demande utilisateur :
+// "les mise à jour ne remonte pas systématiquement vers la version mobile...
+// sans désinstaller et réinstaller." Cause : une simple coupure passagère
+// (réseau mobile instable, ou le backend qui redémarre le temps d'un
+// déploiement) fait échouer `fetch` UNE fois — `request()` traitait ça
+// exactement comme "hors-ligne" et servait le cache disque (voir
+// lireCache), qui ne se met alors à jour QU'AU PROCHAIN appel réussi sur CE
+// MÊME chemin. Si l'écran n'est pas revisité entre-temps, la donnée reste
+// périmée indéfiniment — seule la réinstallation (qui vide le cache
+// disque) "corrigeait" ça en forçant un nouvel appel réseau partout.
+// Quelques tentatives rapprochées avant d'abandonner évitent qu'un simple
+// aléa réseau soit confondu avec une vraie coupure.
+async function fetchAvecRelance(url: string, init: RequestInit, tentatives: number): Promise<Response> {
+  let derniereErreur: unknown;
+  for (let i = 0; i <= tentatives; i++) {
+    try {
+      return await fetch(url, init);
+    } catch (err) {
+      derniereErreur = err;
+      if (i < tentatives) await attendre(400 * (i + 1));
+    }
+  }
+  throw derniereErreur;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = await getAccessToken();
   const headers: Record<string, string> = {
@@ -65,7 +92,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const lecture = methodeEstLecture(init);
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, { ...init, headers });
+    res = await fetchAvecRelance(`${API_URL}${path}`, { ...init, headers }, lecture ? 2 : 1);
   } catch (err) {
     if (lecture) {
       const encache = await lireCache<T>(path);

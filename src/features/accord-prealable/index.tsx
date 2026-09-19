@@ -87,9 +87,9 @@ function calculerRembLigne(
       tauxHospitalisationPubliqueAyantDroit?: string | null; tauxHospitalisationPriveeAyantDroit?: string | null;
     } | null;
   },
-): { remb: number | null; reste: number | null } {
-  if (ctx.categorieGarantie && RUBRIQUES_PLAFONNEES.includes(ctx.categorieGarantie)) return { remb: null, reste: null };
-  if (!ctx.secteur || !ctx.contrat) return { remb: null, reste: null };
+): { remb: number | null; reste: number | null; taux: number | null } {
+  if (ctx.categorieGarantie && RUBRIQUES_PLAFONNEES.includes(ctx.categorieGarantie)) return { remb: null, reste: null, taux: null };
+  if (!ctx.secteur || !ctx.contrat) return { remb: null, reste: null, taux: null };
   const estHospitalisation = !ctx.categorieGarantie || ctx.categorieGarantie === "Hospitalisation";
   const estPublic = ctx.secteur === "Public";
   let taux: number | null = null;
@@ -105,9 +105,9 @@ function calculerRembLigne(
       : (estPublic ? ctx.contrat.tauxAmbulatoirePublique : ctx.contrat.tauxAmbulatoirePrivee);
     taux = parseTauxPourcent(texte);
   }
-  if (taux == null) return { remb: null, reste: null };
+  if (taux == null) return { remb: null, reste: null, taux: null };
   const remb = Math.round(Math.min(l.montantDevis, l.plafondReference) * (taux / 100));
-  return { remb, reste: l.montantDevis - remb };
+  return { remb, reste: l.montantDevis - remb, taux };
 }
 
 function sommeConnue(valeurs: (number | null)[]): number | null {
@@ -994,6 +994,7 @@ export default function AccordPrealableView() {
                           <th className="text-left px-2.5 py-1.5">Acte</th>
                           <th className="text-right px-2.5 py-1.5">Plafond assurance</th>
                           <th className="text-right px-2.5 py-1.5">Frais réels</th>
+                          <th className="text-right px-2.5 py-1.5">Taux</th>
                           <th className="text-right px-2.5 py-1.5">Remb. estimé</th>
                           <th className="text-right px-2.5 py-1.5">Reste à charge</th>
                           <th className="px-2.5 py-1.5"></th>
@@ -1001,7 +1002,7 @@ export default function AccordPrealableView() {
                       </thead>
                       <tbody className="divide-y divide-border/50">
                         {lignesForm.map((l, i) => {
-                          const { remb, reste } = lignesCalcCreate[i];
+                          const { remb, reste, taux } = lignesCalcCreate[i];
                           return (
                             <tr key={i}>
                               <td className="px-2.5 py-1.5 text-foreground">{l.description}{l.lettreCleCode && <span className="text-[10.5px] text-muted-foreground"> · {l.lettreCleCode}</span>}</td>
@@ -1009,6 +1010,7 @@ export default function AccordPrealableView() {
                               <td className="px-2.5 py-1.5 text-right">
                                 <input type="number" value={l.montantDevis} onChange={(e) => handleChangerMontantLigne(i, Number(e.target.value))} className="w-28 text-right border border-border rounded-md px-2 py-1 bg-background text-foreground" />
                               </td>
+                              <td className="px-2.5 py-1.5 text-right text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{taux != null ? `${taux}%` : "—"}</td>
                               <td className="px-2.5 py-1.5 text-right text-emerald-700" style={{ fontFamily: "'DM Mono', monospace" }}>{remb != null ? fmtM(remb) : "—"}</td>
                               <td className="px-2.5 py-1.5 text-right text-amber-700" style={{ fontFamily: "'DM Mono', monospace" }}>{reste != null ? fmtM(reste) : "—"}</td>
                               <td className="px-2.5 py-1.5 text-right">
@@ -1023,6 +1025,7 @@ export default function AccordPrealableView() {
                           <td className="px-2.5 py-1.5 text-foreground">Total</td>
                           <td className="px-2.5 py-1.5 text-right text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(totalPlafondCreate)}</td>
                           <td className="px-2.5 py-1.5 text-right text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(totalDevisCreate)}</td>
+                          <td />
                           <td className="px-2.5 py-1.5 text-right text-emerald-700" style={{ fontFamily: "'DM Mono', monospace" }}>{totalRembCreate != null ? fmtM(totalRembCreate) : "—"}</td>
                           <td className="px-2.5 py-1.5 text-right text-amber-700" style={{ fontFamily: "'DM Mono', monospace" }}>{totalResteCreate != null ? fmtM(totalResteCreate) : "—"}</td>
                           <td />
@@ -1211,6 +1214,7 @@ export default function AccordPrealableView() {
                           <th className="text-left px-2.5 py-1.5">Acte</th>
                           <th className="text-right px-2.5 py-1.5">Plafond assurance</th>
                           <th className="text-right px-2.5 py-1.5">Frais réels</th>
+                          <th className="text-right px-2.5 py-1.5">Taux</th>
                           <th className="text-right px-2.5 py-1.5">Remb. estimé</th>
                           <th className="text-right px-2.5 py-1.5">Reste à charge</th>
                           <th className="px-2.5 py-1.5"></th>
@@ -1218,7 +1222,7 @@ export default function AccordPrealableView() {
                       </thead>
                       <tbody className="divide-y divide-border/50">
                         {editLignesForm.map((l, i) => {
-                          const { remb, reste } = lignesCalcEdit[i];
+                          const { remb, reste, taux } = lignesCalcEdit[i];
                           return (
                             <tr key={i}>
                               <td className="px-2.5 py-1.5 text-foreground">{l.description}{l.lettreCleCode && <span className="text-[10.5px] text-muted-foreground"> · {l.lettreCleCode}</span>}</td>
@@ -1226,6 +1230,7 @@ export default function AccordPrealableView() {
                               <td className="px-2.5 py-1.5 text-right">
                                 <input type="number" value={l.montantDevis} onChange={(e) => handleChangerMontantLigneEdit(i, Number(e.target.value))} className="w-28 text-right border border-border rounded-md px-2 py-1 bg-background text-foreground" />
                               </td>
+                              <td className="px-2.5 py-1.5 text-right text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{taux != null ? `${taux}%` : "—"}</td>
                               <td className="px-2.5 py-1.5 text-right text-emerald-700" style={{ fontFamily: "'DM Mono', monospace" }}>{remb != null ? fmtM(remb) : "—"}</td>
                               <td className="px-2.5 py-1.5 text-right text-amber-700" style={{ fontFamily: "'DM Mono', monospace" }}>{reste != null ? fmtM(reste) : "—"}</td>
                               <td className="px-2.5 py-1.5 text-right">
@@ -1240,6 +1245,7 @@ export default function AccordPrealableView() {
                           <td className="px-2.5 py-1.5 text-foreground">Total</td>
                           <td className="px-2.5 py-1.5 text-right text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(totalPlafondEdit)}</td>
                           <td className="px-2.5 py-1.5 text-right text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(totalDevisEdit)}</td>
+                          <td />
                           <td className="px-2.5 py-1.5 text-right text-emerald-700" style={{ fontFamily: "'DM Mono', monospace" }}>{totalRembEdit != null ? fmtM(totalRembEdit) : "—"}</td>
                           <td className="px-2.5 py-1.5 text-right text-amber-700" style={{ fontFamily: "'DM Mono', monospace" }}>{totalResteEdit != null ? fmtM(totalResteEdit) : "—"}</td>
                           <td />

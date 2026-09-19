@@ -1498,7 +1498,7 @@ export class DocumentsService {
     doc.restore();
   }
 
-  private async ajouterCarteRectoVerso(doc: PDFKit.PDFDocument, assure: CarteAssureData, p: ParametresEntreprise) {
+  private async ajouterCarteRectoVerso(doc: PDFKit.PDFDocument, assure: CarteAssureData, p: ParametresEntreprise, rectoUniquement = false) {
     const typeLabel = TYPE_ASSURE_LABELS[assure.typeAssure ?? ""] ?? assure.typeAssure ?? "—";
     const primaire = p.couleurPrimaire, secondaire = p.couleurSecondaire;
 
@@ -1763,6 +1763,11 @@ export class DocumentsService {
     doc.fillColor(couleurValeurTaux).text(valeurHospitalisation, { lineBreak: false });
 
     // ── Verso ──────────────────────────────────────────────────────────
+    // Génération recto seul (2026-09) — voir demande utilisateur : "pour la
+    // génération des cartes en masse... prévoir une génération uniquement
+    // avec le recto sans le verso." Ne saute QUE la page verso — le recto
+    // ci-dessus est déjà entièrement dessiné à ce stade.
+    if (rectoUniquement) return;
     doc.addPage({ size: [CARD_WIDTH, CARD_HEIGHT], margin: 0 });
     doc.rect(0, 0, CARD_WIDTH, CARD_HEIGHT).fill("#ffffff");
     if (fondVerso) {
@@ -1874,7 +1879,7 @@ export class DocumentsService {
   // type/naissance, quelques dizaines d'octets par assuré — négligeable même
   // à 20 000+ personnes), puis on rehydrate les données complètes par lots
   // de 500 dans cet ordre, sans jamais charger toutes les cartes en mémoire.
-  async renderCartesEnMasse(dto: { contratId?: string; assureIds?: string[] }, res: Response) {
+  async renderCartesEnMasse(dto: { contratId?: string; assureIds?: string[]; rectoUniquement?: boolean }, res: Response) {
     if (!dto.contratId && (!dto.assureIds || dto.assureIds.length === 0)) {
       throw new BadRequestException("Précisez un contratId ou une liste d'assureIds.");
     }
@@ -1892,7 +1897,7 @@ export class DocumentsService {
 
     const doc = new PDFDocument({ size: [CARD_WIDTH, CARD_HEIGHT], margin: 0, autoFirstPage: false });
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", 'inline; filename="Cartes-Assurance.pdf"');
+    res.setHeader("Content-Disposition", `inline; filename="Cartes-Assurance${dto.rectoUniquement ? "-Recto" : ""}.pdf"`);
     doc.pipe(res);
 
     let nombreCartes = 0;
@@ -1908,7 +1913,7 @@ export class DocumentsService {
       for (const id of lotIds) {
         const a = parId.get(id);
         if (!a) continue;
-        await this.ajouterCarteRectoVerso(doc, a, p);
+        await this.ajouterCarteRectoVerso(doc, a, p, dto.rectoUniquement);
         nombreCartes++;
       }
     }
@@ -2813,8 +2818,21 @@ export class DocumentsService {
     enteteGris("DELIVRE PAR", left + colW + 4, y, colW - 4, 14);
     encadre(left, y, colW - 4, boxH3);
     encadre(left + colW + 4, y, colW - 4, boxH3);
-    const codeActe = accord.lignes[0]?.acteMedical?.libelle ?? accord.lignes[0]?.description ?? accord.description;
-    doc.font("Helvetica").fontSize(8).text(`Code: ${codeActe}`, left + 8, y + 20, { width: colW - 20 });
+    // Rubrique de garantie (2026-09) — voir demande utilisateur : "dans
+    // cette rubrique c'est le groupement de l'acte qui doit remonter ici,
+    // en d'autres termes la rubrique de garanties qui englobe l'acte
+    // (famille de garantie)... et non les actes proprement dits." Une
+    // prise en charge pouvant couvrir plusieurs actes de rubriques
+    // différentes, toutes les rubriques distinctes sont listées — repli
+    // sur la famille brute du catalogue si l'acte n'a pas de rubrique de
+    // garantie rattachée (voir schema.prisma ActeMedical.categorieGarantie,
+    // nullable), puis sur la description libre si aucun acte du catalogue
+    // n'est renseigné.
+    const rubriquesGarantie = Array.from(new Set(
+      accord.lignes.map((l) => l.acteMedical?.categorieGarantie ?? l.acteMedical?.famille ?? null).filter((v): v is string => !!v),
+    ));
+    const objetPriseEnCharge = rubriquesGarantie.length > 0 ? rubriquesGarantie.join(", ") : (accord.lignes[0]?.description ?? accord.description);
+    doc.font("Helvetica").fontSize(8).text(`Code: ${objetPriseEnCharge}`, left + 8, y + 20, { width: colW - 20 });
     doc.text(`Nom: ${p.nom}`, left + colW + 8, y + 18, { width: colW - 20 });
     doc.text(`Adresse: ${p.ville}\n${p.pays}`, left + colW + 8, y + 29, { width: colW - 20 });
     y += boxH3 + 10;

@@ -195,11 +195,16 @@ export default function PopulationPanel({ contrat, onUpdated }: Props) {
     setDetailId(null);
   };
 
-  const genererCartes = async () => {
-    if (!window.confirm(`Générer les cartes de tous les assurés actifs de ${contrat.numeroPolice || contrat.id} (${population.length} personne(s)) ?`)) return;
+  // Recto seul vs recto-verso (2026-09) — voir demande utilisateur : "pour
+  // la génération des cartes en masse pour un contrat bien spécifique, il
+  // faut prévoir une génération uniquement avec le recto sans les verso et
+  // une génération avec les recto-verso comme c'est déjà le cas."
+  const genererCartes = async (rectoUniquement: boolean) => {
+    const mode = rectoUniquement ? "recto seul" : "recto-verso";
+    if (!window.confirm(`Générer les cartes (${mode}) de tous les assurés actifs de ${contrat.numeroPolice || contrat.id} (${population.length} personne(s)) ?`)) return;
     try {
       setBusyCartes(true);
-      await genererCartesEnMasse({ contratId: contrat.id });
+      await genererCartesEnMasse({ contratId: contrat.id, rectoUniquement });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erreur de génération des cartes.");
     } finally {
@@ -336,9 +341,15 @@ export default function PopulationPanel({ contrat, onUpdated }: Props) {
                 Tout sélectionner
               </label>
             )}
-            <button type="button" disabled={busyCartes || population.length === 0} onClick={genererCartes} className="text-[11px] text-primary hover:underline disabled:text-muted-foreground disabled:no-underline inline-flex items-center gap-1">
-              <IdCard className="w-3.5 h-3.5" />Générer les cartes du contrat
-            </button>
+            <div className="flex items-center gap-1">
+              <IdCard className="w-3.5 h-3.5 text-muted-foreground" />
+              <button type="button" disabled={busyCartes || population.length === 0} onClick={() => genererCartes(false)} className="text-[11px] text-primary hover:underline disabled:text-muted-foreground disabled:no-underline px-1">
+                Cartes (recto-verso)
+              </button>
+              <button type="button" disabled={busyCartes || population.length === 0} onClick={() => genererCartes(true)} className="text-[11px] text-primary hover:underline disabled:text-muted-foreground disabled:no-underline px-1">
+                Cartes (recto seul)
+              </button>
+            </div>
             <div className="flex items-center gap-1">
               <Download className="w-3.5 h-3.5 text-muted-foreground" />
               {exportsBoutons.map((e) => (

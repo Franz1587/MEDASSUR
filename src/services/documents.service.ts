@@ -115,7 +115,7 @@ export function openCarteAssurance(assureId: string): Promise<void> {
   return openDocument(`/documents/carte/${assureId}`);
 }
 
-export async function genererCartesEnMasse(payload: { contratId?: string; assureIds?: string[] }): Promise<void> {
+export async function genererCartesEnMasse(payload: { contratId?: string; assureIds?: string[]; rectoUniquement?: boolean }): Promise<void> {
   const token = getAccessToken();
   const res = await fetch(`${API_URL}/documents/cartes`, {
     method: "POST",
