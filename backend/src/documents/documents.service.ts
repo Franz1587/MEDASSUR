@@ -1930,7 +1930,7 @@ export class DocumentsService {
   private async genererFormulaire(
     kind: "soins" | "examen", numero: string, pec: FormulairePec, lignes: LigneFormulaire[], res: Response,
     documentRef?: string, utilisateur?: { id: string | null; nom: string; roleId: string; masquerPrixPharmacie?: boolean },
-    prestataireFiltre?: { id: string; nom: string },
+    prestataireFiltre?: { id: string; nom: string; secteur?: string | null },
   ) {
     const p = await this.parametresEntreprise.findOne();
     const logoImage = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
@@ -1939,7 +1939,18 @@ export class DocumentsService {
     const estAyantDroit = assure.familleId !== null;
     const nomPrincipal = estAyantDroit && assure.famille ? `${assure.famille.nom} ${assure.famille.prenom ?? ""}`.trim() : `${assure.nom} ${assure.prenom ?? ""}`.trim();
     const contrat = assure.contrat;
-    const secteurPublic = pec.prestataireRef?.secteur === "Public";
+    // Secteur RÉELLEMENT déterminant du taux (2026-09) — voir demande
+    // utilisateur : "il faut que l'application actualise les taux en
+    // fonction du type de structure... même si à la base il avait été créé
+    // avec le taux de la structure publique." `prestataireFiltre` = la
+    // structure qui imprime/consulte CE bon EN CE MOMENT (portail
+    // prestataire) — prioritaire sur `pec.prestataireRef`, la structure
+    // d'origine (figée à la création du bon) utilisée seulement en repli
+    // (médecin/assuré, qui n'ont pas de "structure courante").
+    const secteurEffectif = prestataireFiltre && prestataireFiltre.secteur !== undefined
+      ? prestataireFiltre.secteur
+      : pec.prestataireRef?.secteur;
+    const secteurPublic = secteurEffectif === "Public";
     const tauxAmbulatoire = (estAyantDroit
       ? (secteurPublic ? contrat.tauxAmbulatoirePubliqueAyantDroit : contrat.tauxAmbulatoirePriveeAyantDroit)
       : (secteurPublic ? contrat.tauxAmbulatoirePublique : contrat.tauxAmbulatoirePrivee)) ?? contrat.tauxCouvertureAmbulatoire ?? null;
@@ -1947,8 +1958,23 @@ export class DocumentsService {
       ? (secteurPublic ? contrat.tauxHospitalisationPubliqueAyantDroit : contrat.tauxHospitalisationPriveeAyantDroit)
       : (secteurPublic ? contrat.tauxHospitalisationPublique : contrat.tauxHospitalisationPrivee)) ?? contrat.tauxCouvertureHospitalisation ?? null;
     const lignePrincipale = lignes[0] as LigneFormulaire | undefined;
-    const ticketModerateurPct = lignePrincipale?.tauxRemboursement !== null && lignePrincipale?.tauxRemboursement !== undefined
-      ? String(Math.round(100 - lignePrincipale.tauxRemboursement)) : null;
+    // Ticket modérateur = 100 - taux applicable (2026-09) — recalculé
+    // depuis tauxAmbulatoire/tauxHospitalisation ci-dessus (donc lui aussi
+    // sensible à `secteurEffectif`), plutôt que depuis la valeur figée en
+    // base sur la ligne (tauxRemboursement, calculée UNE SEULE FOIS à la
+    // création du bon et jamais mise à jour si un autre secteur traite
+    // ensuite). Repli sur la valeur figée seulement si le contrat n'a pas
+    // de taux configuré pour ce secteur (jamais bloquant).
+    const parseTaux = (s: string | null): number | null => {
+      if (!s) return null;
+      const m = /(\d+(?:[.,]\d+)?)/.exec(s);
+      return m ? Number(m[1].replace(",", ".")) : null;
+    };
+    const tauxApplicable = parseTaux(pec.type === "Hospitalisation" ? tauxHospitalisation : tauxAmbulatoire);
+    const ticketModerateurPct = tauxApplicable !== null
+      ? String(Math.round(100 - tauxApplicable))
+      : (lignePrincipale?.tauxRemboursement !== null && lignePrincipale?.tauxRemboursement !== undefined
+        ? String(Math.round(100 - lignePrincipale.tauxRemboursement)) : null);
     const codePraticien = medecin?.codePraticien || (medecin ? refNumerique(medecin.id) : null);
     const codeEtablissement = pec.prestataireRef ? refNumerique(pec.prestataireRef.id) : null;
     const codeAffection = lignePrincipale?.codeAffection ?? null;
@@ -2595,7 +2621,7 @@ export class DocumentsService {
     return { pec: pecFinal as unknown as FormulairePec, lignes };
   }
 
-  async renderFeuilleSoinsLigne(priseEnChargeId: string, res: Response, utilisateur: { id: string | null; nom: string; roleId: string; masquerPrixPharmacie?: boolean }, prestataireFiltre?: { id: string; nom: string }) {
+  async renderFeuilleSoinsLigne(priseEnChargeId: string, res: Response, utilisateur: { id: string | null; nom: string; roleId: string; masquerPrixPharmacie?: boolean }, prestataireFiltre?: { id: string; nom: string; secteur?: string | null }) {
     const { pec, lignes } = await this.lignesFormulaireDe(priseEnChargeId, "soins", prestataireFiltre?.id);
     const numero = await this.numeroFeuilleSoinsDe(priseEnChargeId);
     await this.genererFormulaire("soins", numero, pec, lignes, res, priseEnChargeId, utilisateur, prestataireFiltre);
@@ -2615,7 +2641,7 @@ export class DocumentsService {
   // fourni uniquement quand CE prestataire imprime son propre bon d'examen
   // pendant son traitement, jamais pour le médecin/l'assuré (voir demande
   // utilisateur citée plus haut).
-  async renderFeuilleExamenPrescription(prescriptionId: string, res: Response, utilisateur: { id: string | null; nom: string; roleId: string; masquerPrixPharmacie?: boolean }, prestataireFiltre?: { id: string; nom: string }) {
+  async renderFeuilleExamenPrescription(prescriptionId: string, res: Response, utilisateur: { id: string | null; nom: string; roleId: string; masquerPrixPharmacie?: boolean }, prestataireFiltre?: { id: string; nom: string; secteur?: string | null }) {
     const prescription = await this.prisma.prescription.findUnique({
       where: { id: prescriptionId },
       include: {

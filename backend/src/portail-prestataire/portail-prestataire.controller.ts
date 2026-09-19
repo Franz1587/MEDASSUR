@@ -610,7 +610,12 @@ export class PortailPrestataireController {
     // et non la totalité comme si c'est lui qui avait tout traité" — ce
     // document est CELUI DE ce prestataire précis (pendant qu'il traite le
     // bon), jamais la vue complète que voient le médecin ou l'assuré.
-    return this.documents.renderFeuilleSoinsLigne(prescription.priseEnChargeId, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId, masquerPrixPharmacie: !TYPES_TRAITANT_ORDONNANCE.includes(prestataire.type ?? "") }, { id: prestataire.id, nom: prestataire.nom });
+    // `secteur` transmis (2026-09) — voir demande utilisateur : "il faut
+    // que l'application actualise les taux en fonction du type de
+    // structure... même si à la base il avait été créé avec le taux de la
+    // structure publique" — voir DocumentsService.genererFormulaire,
+    // `secteurEffectif`.
+    return this.documents.renderFeuilleSoinsLigne(prescription.priseEnChargeId, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId, masquerPrixPharmacie: !TYPES_TRAITANT_ORDONNANCE.includes(prestataire.type ?? "") }, { id: prestataire.id, nom: prestataire.nom, secteur: prestataire.secteur });
   }
 
   @Get("bons/:prescriptionId/feuille-examen")
@@ -619,7 +624,7 @@ export class PortailPrestataireController {
     if (!TYPES_TRAITANT_EXAMEN.includes(prestataire.type ?? "")) throw new ForbiddenException("Ce type d'établissement ne peut pas traiter de bon d'examen.");
     // Même principe que feuilleSoinsBon ci-dessus — uniquement les examens
     // que CE prestataire a lui-même traités.
-    return this.documents.renderFeuilleExamenPrescription(prescriptionId, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId, masquerPrixPharmacie: true }, { id: prestataire.id, nom: prestataire.nom });
+    return this.documents.renderFeuilleExamenPrescription(prescriptionId, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId, masquerPrixPharmacie: true }, { id: prestataire.id, nom: prestataire.nom, secteur: prestataire.secteur });
   }
 
   @Post("bons/traiter")
