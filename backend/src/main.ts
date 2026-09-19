@@ -2,10 +2,12 @@ import * as path from "path";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { NestExpressApplication } from "@nestjs/platform-express";
+import { SwaggerModule } from "@nestjs/swagger";
 import { json, type Request, type Response, type NextFunction } from "express";
 import { AppModule } from "./app.module";
 import { UPLOADS_ROOT } from "./uploads-dir.util";
 import { StorageService } from "./storage/storage.service";
+import { buildOpenApiDocument, protegerSwagger } from "./swagger.util";
 
 const MIME_PAR_EXTENSION: Record<string, string> = {
   ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
@@ -79,6 +81,14 @@ async function bootstrap() {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     next();
   });
+  // Documentation OpenAPI/Swagger (2026-09) — voir swagger.util.ts. Chemin
+  // explicite "api/docs" (pas affecté par setGlobalPrefix, qui ne s'applique
+  // qu'aux routes déclarées via les contrôleurs Nest) — déjà sous /api,
+  // donc jamais intercepté par le fallback SPA du frontend plus bas.
+  // Protection Basic Auth posée juste avant : jamais le même mécanisme que
+  // l'authentification applicative (JWT), voir protegerSwagger.
+  app.use("/api/docs", protegerSwagger);
+  SwaggerModule.setup("api/docs", app, buildOpenApiDocument(app));
   app.setGlobalPrefix("api");
   // Frontend statique servi par ce même process (2026-09, déploiement VPS) —
   // voir mémoire "project-deploiement-vps". Actif seulement si FRONTEND_DIST_DIR

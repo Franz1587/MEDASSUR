@@ -30,6 +30,7 @@ import { StorageService } from "../storage/storage.service";
 import { genererGraphiqueBarres, genererGraphiqueBarresEtiquetees, genererGraphiqueCamembert } from "./graphiques.util";
 import { montantEnLettresFcfa } from "../lib/montant-en-lettres.util";
 import { TAUX_TPS } from "../sante/sante.service";
+import { reconstituerPopulation } from "../mouvements/population-historique.util";
 import type { Prisma, ParametresEntreprise } from "@prisma/client";
 
 // Groupes d'actes considérés "Examen" (bon d'examen) — le reste (Consultation,
@@ -3518,16 +3519,30 @@ export class DocumentsService {
   // Reconstruction (2026-09, voir commentaire en tête de la section Feuille
   // de Soins) — "la société doit pouvoir générer, télécharger et imprimer
   // la liste de ses bénéficiaires (liste totale, liste par type de statut)".
-  async renderPopulationExport(contratId: string, format: "pdf" | "xlsx" | "docx", res: Response, filtres: { statut?: string }) {
+  // du/au (2026-09) — voir demande utilisateur : "on doit pouvoir éditer une
+  // liste pour un contrat par rapport à un exercice spécifique et à un
+  // intervalle de date précis. Ce qui fait que pour 2024 par exemple on
+  // peut avoir une certaine population et en 2026 on en a une autre."
+  // Reconstitue la population TELLE QU'ELLE ÉTAIT sur cette période (voir
+  // reconstituerPopulation, déjà utilisé côté écran mais jamais câblé sur
+  // cet export) au lieu de toujours lire la population ACTUELLE — c'était
+  // le bug : du/au étaient reçus par le frontend mais jamais transmis
+  // jusqu'ici (voir DocumentsController.population).
+  async renderPopulationExport(contratId: string, format: "pdf" | "xlsx" | "docx", res: Response, filtres: { statut?: string; du?: string; au?: string }) {
     const contrat = await this.prisma.contrat.findUnique({ where: { id: contratId }, include: { client: true } });
     if (!contrat) throw new NotFoundException(`Contrat ${contratId} introuvable`);
-    const assures = await this.prisma.assureSante.findMany({
-      where: { contratId, ...(filtres.statut ? { statut: filtres.statut } : {}) },
-      orderBy: [{ familleId: "asc" }, { typeAssure: "asc" }, { nom: "asc" }],
-    });
-    const titre = `Liste des Assurés${filtres.statut ? ` — ${filtres.statut}` : ""}`;
-    const sousTitre = `${contrat.client.nom}   ·   Police N° ${contrat.id}   ·   ${assures.length} bénéficiaire(s)`;
-    const rows = assures.map((a) => [a.matricule, `${a.nom} ${a.prenom ?? ""}`.trim(), TYPE_ASSURE_LABELS[a.typeAssure ?? ""] ?? a.typeAssure ?? "—", a.dateNaissance ?? "—", a.statut]);
+    const population = await reconstituerPopulation(this.prisma, contratId, filtres.du, filtres.au);
+    const assures = population
+      .filter((a) => !filtres.statut || a.statutPeriode === filtres.statut)
+      .sort((a, b) => (a.familleId ?? "").localeCompare(b.familleId ?? "") || (a.typeAssure ?? "").localeCompare(b.typeAssure ?? "") || a.nom.localeCompare(b.nom));
+    const periodeTexte = filtres.du || filtres.au ? ` — période du ${filtres.du ?? "…"} au ${filtres.au ?? "…"}` : "";
+    const titre = `Liste des Assurés${filtres.statut ? ` — ${filtres.statut}` : ""}${periodeTexte}`;
+    // Police N° = le vrai numéro de police compagnie (2026-09) — voir
+    // demande utilisateur répétée : "là où il y a N° Police, c'est le
+    // numéro de police compagnie du contrat qui doit remonter" — cet export
+    // affichait encore contrat.id brut, jamais numeroPolice.
+    const sousTitre = `${contrat.client.nom}   ·   Police N° ${contrat.numeroPolice || contrat.id}   ·   ${assures.length} bénéficiaire(s)`;
+    const rows = assures.map((a) => [a.matricule, `${a.nom} ${a.prenom ?? ""}`.trim(), TYPE_ASSURE_LABELS[a.typeAssure ?? ""] ?? a.typeAssure ?? "—", a.dateNaissance ?? "—", a.statutPeriode]);
 
     if (format === "xlsx") {
       const wb = new ExcelJS.Workbook();
@@ -3581,6 +3596,96 @@ export class DocumentsService {
       if (y + rowH > doc.page.height - 50) { doc.addPage(); y = 40; drawHeader(); doc.font("Helvetica").fontSize(8); }
       let cx = left;
       for (let i = 0; i < cols.length; i++) { doc.text(r[i], cx + 4, y + 4, { width: cols[i].w - 8 }); cx += cols[i].w; }
+      doc.moveTo(left, y + rowH).lineTo(right, y + rowH).strokeColor("#eee").stroke();
+      y += rowH;
+    }
+    doc.end();
+  }
+
+  // Liste de population FIGÉE d'un mouvement précis (2026-09) — voir
+  // demande utilisateur : "si on fait une affaire nouvelle par exemple, on
+  // doit avoir une liste liée à cette opération et cette liste doit pouvoir
+  // être éditée plusieurs fois sans changement à n'importe quelle date et
+  // doit retrouver la même liste à l'identique. C'est la même chose pour
+  // une incorporation ou un retrait." Source : AvenantAssure, qui fige
+  // nom/prénom/matricule/typeAssure AU MOMENT du mouvement — jamais
+  // rejoint depuis AssureSante — donc une correction ultérieure de la
+  // fiche d'une personne (nom corrigé, etc.) ne fait JAMAIS varier cette
+  // liste après coup, contrairement à renderPopulationExport (qui reflète
+  // l'état actuel/reconstitué des fiches). Couvre "Affaire Nouvelle"
+  // (import CSV à la création, voir SanteService.importPopulation, corrigé
+  // pour générer ce même journal), "Incorporation" et "Retrait" — même
+  // mécanisme, valable pour tout exercice et pour Maladie comme Assistance.
+  async renderListeMouvement(avenantId: string, format: "pdf" | "xlsx" | "docx", res: Response) {
+    const avenant = await this.prisma.avenant.findUnique({
+      where: { id: avenantId },
+      include: { contrat: { include: { client: true } }, avenantAssures: { orderBy: [{ action: "asc" }, { nom: "asc" }] } },
+    });
+    if (!avenant) throw new NotFoundException(`Avenant ${avenantId} introuvable`);
+
+    const numero = await this.prisma.avenant.count({ where: { contratId: avenant.contratId, createdAt: { lte: avenant.createdAt } } });
+    const titre = `Liste des assurés — ${avenant.type}`;
+    // Police N° = le vrai numéro de police compagnie (2026-09) — voir
+    // demande utilisateur : "là où il y a N° Police, c'est le numéro de
+    // police compagnie du contrat qui doit remonter".
+    const sousTitre = `${avenant.contrat.client.nom}   ·   Police N° ${avenant.contrat.numeroPolice || avenant.contrat.id}   ·   Avenant n°${numero}   ·   Date d'effet ${avenant.dateEffet}   ·   ${avenant.avenantAssures.length} personne(s)`;
+    const rows = avenant.avenantAssures.map((a) => [a.matricule ?? "—", `${a.nom} ${a.prenom ?? ""}`.trim(), TYPE_ASSURE_LABELS[a.typeAssure ?? ""] ?? a.typeAssure ?? "—", a.action, a.dateEffet]);
+
+    if (format === "xlsx") {
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Mouvement");
+      ws.columns = [
+        { header: "Matricule", key: "matricule", width: 18 }, { header: "Nom et Prénom", key: "nom", width: 30 },
+        { header: "Type", key: "type", width: 14 }, { header: "Action", key: "action", width: 16 }, { header: "Date d'effet", key: "date", width: 16 },
+      ];
+      ws.getRow(1).font = { bold: true };
+      for (const r of rows) ws.addRow(r);
+      const buffer = await wb.xlsx.writeBuffer();
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="Liste-Mouvement-${avenant.id}.xlsx"`);
+      res.send(Buffer.from(buffer));
+      return;
+    }
+    if (format === "docx") {
+      return this.envoyerDocx(res, `Liste-Mouvement-${avenant.id}`, titre, sousTitre, [], { headers: ["Matricule", "Nom et Prénom", "Type", "Action", "Date d'effet"], rows });
+    }
+
+    const p = await this.parametresEntreprise.findOne();
+    const doc = new PDFDocument({ size: "A4", margin: 40 });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="Liste-Mouvement-${avenant.id}.pdf"`);
+    doc.pipe(res);
+
+    const left = doc.page.margins.left;
+    const right = doc.page.width - doc.page.margins.right;
+    const width = right - left;
+
+    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+    doc.fontSize(11).font("Helvetica-Bold").fillColor("#000").text(titre, left, 60, { width, align: "right" });
+    doc.fontSize(8).font("Helvetica").fillColor("#555").text(sousTitre, left, 74, { width, align: "right" });
+    doc.fillColor("#000");
+
+    let y = 95;
+    const cols = [
+      { h: "Matricule", w: width * 0.16 }, { h: "Nom et Prénom", w: width * 0.32 },
+      { h: "Type", w: width * 0.13 }, { h: "Action", w: width * 0.19 }, { h: "Date d'effet", w: width * 0.2 },
+    ];
+    const drawHeader = () => {
+      doc.rect(left, y, width, 16).fill(p.couleurPrimaire);
+      let cx = left;
+      doc.fillColor("#fff").fontSize(8).font("Helvetica-Bold");
+      for (const c of cols) { doc.text(c.h, cx + 4, y + 4, { width: c.w - 8 }); cx += c.w; }
+      doc.fillColor("#000");
+      y += 16;
+    };
+    drawHeader();
+
+    doc.font("Helvetica").fontSize(8);
+    for (const r of rows) {
+      const rowH = 15;
+      if (y + rowH > doc.page.height - 50) { doc.addPage(); y = 40; drawHeader(); doc.font("Helvetica").fontSize(8); }
+      let cx = left;
+      for (let i = 0; i < cols.length; i++) { doc.text(String(r[i] ?? "—"), cx + 4, y + 4, { width: cols[i].w - 8 }); cx += cols[i].w; }
       doc.moveTo(left, y + rowH).lineTo(right, y + rowH).strokeColor("#eee").stroke();
       y += rowH;
     }

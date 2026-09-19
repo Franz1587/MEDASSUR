@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/shared/Badge";
 import { fmtM } from "@/lib/format";
 import { getAvenants } from "@/services/avenants.service";
-import { openQuittance, openQuittanceAvenant, openTableauGaranties, openAvenantDocument, type DocumentFormat } from "@/services/documents.service";
+import { openQuittance, openQuittanceAvenant, openTableauGaranties, openAvenantDocument, openListeMouvement, type DocumentFormat } from "@/services/documents.service";
 import type { Contrat } from "@/types/contrats";
 import type { Avenant } from "@/types/avenants";
 
@@ -98,6 +98,16 @@ export default function HistoriqueMouvementsTab({ contrat }: Props) {
     ];
     if (ligne.type === "Renouvellement") {
       docs.push({ label: "Tableau de garanties", action: (f: DocumentFormat) => openTableauGaranties(contrat.id, f) });
+    }
+    // Liste des assurés FIGÉE de ce mouvement (2026-09) — voir demande
+    // utilisateur : "si on fait une affaire nouvelle par exemple, on doit
+    // avoir une liste liée à cette opération... doit pouvoir être éditée
+    // plusieurs fois... et retrouver la même liste à l'identique. C'est la
+    // même chose pour une incorporation ou un retrait." Seulement pour les
+    // mouvements qui déplacent réellement des personnes (Incorporation/
+    // Retrait — un Renouvellement/Ajustement de Prime n'en déplace aucune).
+    if (ligne.type === "Incorporation" || ligne.type === "Retrait") {
+      docs.push({ label: "Liste des assurés", action: (f: DocumentFormat) => openListeMouvement(ligne.id, f) });
     }
     return docs;
   };

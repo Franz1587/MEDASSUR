@@ -80,6 +80,32 @@ function verifierSaisieAutorisee(
   }
 }
 
+// Blocage de saisie après retrait d'un assuré (2026-09) — voir demande
+// utilisateur : "l'application doit permettre le retrait d'une population
+// avec la date à laquelle cela a été fait. Ce qui fait que toutes les
+// prestations faites avant la date de retrait peuvent continuellement être
+// saisies. Mais s'il y a des prestations à la date de retrait ou après
+// cette date, l'application ne peut plus les prendre en charge." Même
+// principe que verifierSaisieAutorisee ci-dessus mais au niveau de LA
+// PERSONNE plutôt que du contrat entier — valable pour tout exercice et
+// pour Maladie comme Assistance (même journal, même contrat). Source :
+// le DERNIER mouvement AvenantAssure (Incorporation/Retrait) de cet assuré
+// sur ce contrat — même journal que population-historique.util.ts.
+async function verifierAssureNonRetire(prisma: PrismaService, contratId: string, assureId: string, datePrestation: string) {
+  const dernier = await prisma.avenantAssure.findFirst({
+    where: { contratId, assureId },
+    orderBy: [{ dateEffet: "desc" }, { avenant: { createdAt: "desc" } }],
+  });
+  if (!dernier || dernier.action !== "Retrait") return;
+  const dRetrait = parseDateFr(dernier.dateEffet);
+  const dPrestation = parseDateFr(datePrestation);
+  if (dRetrait && dPrestation && dPrestation >= dRetrait) {
+    throw new BadRequestException(
+      `Cet assuré a été retiré de ce contrat le ${dernier.dateEffet} — seules les prestations datées avant cette date peuvent être saisies pour lui.`,
+    );
+  }
+}
+
 function formatNom(s: string): string {
   return s.trim().toUpperCase();
 }
@@ -587,6 +613,40 @@ export class SanteService {
         })),
       });
       imported = nouveaux.length;
+
+      // Journal Incorporation (2026-09) — voir demande utilisateur : "il
+      // faut fixer le fait que la liste puisse aussi se générer par rapport
+      // à un mouvement de production... cette liste doit pouvoir être
+      // éditée plusieurs fois... et retrouver la même liste à l'identique."
+      // Piège déjà documenté dans population-historique.util.ts : contrairement
+      // à SanteService.createAssure (saisie manuelle, passe par
+      // MouvementsService.appliquerMouvement), un import CSV créait les
+      // lignes AssureSante SANS AUCUN avenant — population "fondatrice"
+      // invisible du journal AvenantAssure, donc impossible à reconstituer/
+      // imprimer comme un mouvement figé. Comblé ici avec le même schéma
+      // qu'appliquerMouvement (voir mouvements.service.ts) : un avenant
+      // "Incorporation" + son journal, en createMany (pas de round-trip par
+      // ligne) pour rester valable sur un lot de plusieurs dizaines de
+      // milliers de personnes. dateEffet = date de début du contrat : une
+      // population importée à la mise en place est réputée présente depuis
+      // l'origine (même convention que le repli de reconstituerPopulation
+      // pour un fondateur jamais tracé par un avenant).
+      const avenantImportId = `AVN-${new Date().getFullYear()}-${randomUUID().slice(0, 6).toUpperCase()}`;
+      await this.prisma.avenant.create({
+        data: {
+          id: avenantImportId, contratId: dto.contratId, type: "Incorporation",
+          description: `Import de ${nouveaux.length} personne(s)`,
+          primeAvant: Number(contrat.prime), primeApres: Number(contrat.prime),
+          dateEffet: contrat.dateDebut, statut: "Appliqué", exerciceNumero: contrat.exerciceNumero,
+        },
+      });
+      await this.prisma.avenantAssure.createMany({
+        data: nouveaux.map((item) => ({
+          id: `AVA-${randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`,
+          avenantId: avenantImportId, contratId: dto.contratId, assureId: item.id, nom: item.nom, prenom: item.prenom ?? null,
+          matricule: item.matricule, typeAssure: item.type, action: "Incorporation", dateEffet: contrat.dateDebut,
+        })),
+      });
     }
 
     const LOT_MAJ = 25;
@@ -1044,6 +1104,7 @@ export class SanteService {
       select: { statut: true, dateFin: true, saisieApresResiliationAutorisee: true },
     });
     verifierSaisieAutorisee(contratRef, dto.datePrestation);
+    await verifierAssureNonRetire(this.prisma, ctx.contratId, dto.assureId, dto.datePrestation);
     // Deux modes de tarification mutuellement exclusifs (2026-08) —
     // forfaitaire (catalogue ActeMedical) ou codification (lettre clé +
     // coefficient), voir demande utilisateur.
@@ -1274,6 +1335,7 @@ export class SanteService {
     await this.verifierPlafondPartage(dto.assureId, dto.type, dto.montant);
     const assure = await this.findAssureOne(dto.assureId);
     verifierSaisieAutorisee(assure.contrat, dto.date);
+    await verifierAssureNonRetire(this.prisma, assure.contratId, dto.assureId, dto.date);
     const remboursement = await this.calculerRemboursement(dto, assure.contrat, assure.typeAssure !== "AS");
     return this.prisma.priseEnCharge.create({
       data: {

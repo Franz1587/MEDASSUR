@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import ExcelJS from "exceljs";
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException, ConflictException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
@@ -505,39 +506,80 @@ export class ContratsService {
   // prime courante intacte). Voir StatistiquesService.calculer, qui lit
   // désormais cette primeNette d'exercice pour le S/P d'une période passée
   // au lieu de toujours retomber sur Contrat.primeNette.
+  // Synchronisation Contrat/Avenant (2026-09) — voir demande utilisateur :
+  // "l'application ne fait pas remonter [la reprise de données/la saisie
+  // manuelle des primes] sur les documents de quittance, avenant, tableau
+  // de garanties, comme si les choses n'étaient pas liées... l'information
+  // doit être la même peu importe l'écran". Jusqu'ici cette fonction
+  // n'écrivait QUE sur Exercice, que la Quittance/l'Avenant/le Tableau de
+  // garanties (documents.service.ts) ne lisent JAMAIS — Exercice/
+  // primeNette n'a aucun lecteur documentaire. Corrigé pour recopier la
+  // même donnée à l'endroit que chaque document lit réellement :
+  //  - Contrat (si l'exercice corrigé est l'exercice EN COURS du contrat) —
+  //    lu par la Quittance "Affaire Nouvelle" et le Tableau de garanties.
+  //  - Avenant (si un avenant porte ce même exerciceNumero, le plus récent
+  //    s'il y en a plusieurs) — lu par la Quittance d'avenant et le
+  //    document Avenant. Voulu explicitement pour un exercice PASSÉ aussi
+  //    (confirmé par l'utilisateur) : une correction de reprise de données
+  //    doit se répercuter y compris sur un document déjà émis, plutôt que
+  //    de laisser survivre une valeur périmée.
   async mettreAJourPrimeExercice(contratId: string, numero: number, dto: UpdateExercicePrimeDto) {
-    await this.findOne(contratId);
+    const contrat = await this.findOne(contratId);
     const cible = await this.prisma.exercice.findFirst({ where: { contratId, numero } });
     if (!cible) throw new NotFoundException(`Exercice n°${numero} introuvable pour ce contrat.`);
 
     const calcule = withComputedPrime({ ...dto, dateDebut: cible.dateDebut, dateFin: cible.dateFin });
 
+    const champsPrime = {
+      nombreAssuresPrincipaux: dto.nombreAssuresPrincipaux ?? null,
+      primeUnitaireAssurePrincipal: dto.primeUnitaireAssurePrincipal ?? null,
+      nombreConjoints: dto.nombreConjoints ?? null,
+      primeUnitaireConjoint: dto.primeUnitaireConjoint ?? null,
+      nombreEnfants: dto.nombreEnfants ?? null,
+      primeUnitaireEnfant: dto.primeUnitaireEnfant ?? null,
+      nombreCouples: dto.nombreCouples ?? null,
+      primeUnitaireCouple: dto.primeUnitaireCouple ?? null,
+      tauxMinoMajoration: dto.tauxMinoMajoration ?? null,
+      tauxReductionCommerciale: dto.tauxReductionCommerciale ?? null,
+      montantAccessoires: dto.montantAccessoires ?? null,
+      tauxCommission: dto.tauxCommission ?? null,
+      // Le calcul complet (primeNette/primeTotaleHT/montantTaxe/
+      // montantCommission/prime) n'est produit par withComputedPrime QUE
+      // si une population a été saisie (voir hasPopulation) — sinon dto
+      // reste tel quel, prime globale de l'exercice inchangée.
+      montantCommission: calcule.montantCommission ?? null,
+      montantTaxe: calcule.montantTaxe ?? null,
+      primeNette: calcule.primeNette ?? null,
+      primeTotaleHT: calcule.primeTotaleHT ?? null,
+    };
+
     await this.prisma.exercice.update({
       where: { id: cible.id },
-      data: {
-        nombreAssuresPrincipaux: dto.nombreAssuresPrincipaux ?? null,
-        primeUnitaireAssurePrincipal: dto.primeUnitaireAssurePrincipal ?? null,
-        nombreConjoints: dto.nombreConjoints ?? null,
-        primeUnitaireConjoint: dto.primeUnitaireConjoint ?? null,
-        nombreEnfants: dto.nombreEnfants ?? null,
-        primeUnitaireEnfant: dto.primeUnitaireEnfant ?? null,
-        nombreCouples: dto.nombreCouples ?? null,
-        primeUnitaireCouple: dto.primeUnitaireCouple ?? null,
-        tauxMinoMajoration: dto.tauxMinoMajoration ?? null,
-        tauxReductionCommerciale: dto.tauxReductionCommerciale ?? null,
-        montantAccessoires: dto.montantAccessoires ?? null,
-        tauxCommission: dto.tauxCommission ?? null,
-        // Le calcul complet (primeNette/primeTotaleHT/montantTaxe/
-        // montantCommission/prime) n'est produit par withComputedPrime QUE
-        // si une population a été saisie (voir hasPopulation) — sinon dto
-        // reste tel quel, prime globale de l'exercice inchangée.
-        montantCommission: calcule.montantCommission ?? null,
-        montantTaxe: calcule.montantTaxe ?? null,
-        primeNette: calcule.primeNette ?? null,
-        primeTotaleHT: calcule.primeTotaleHT ?? null,
-        ...(calcule.prime !== undefined ? { prime: calcule.prime } : {}),
-      },
+      data: { ...champsPrime, ...(calcule.prime !== undefined ? { prime: calcule.prime } : {}) },
     });
+
+    // Contrat — uniquement si c'est l'exercice EN COURS (jamais un exercice
+    // passé : le contrat représente l'état ACTUEL, pas un instantané d'une
+    // période révolue).
+    if (contrat.exerciceNumero === numero) {
+      await this.prisma.contrat.update({
+        where: { id: contratId },
+        data: { ...champsPrime, ...(calcule.prime !== undefined ? { prime: calcule.prime } : {}) },
+      });
+    }
+
+    // Avenant — celui qui porte ce même exerciceNumero (le plus récent s'il
+    // y en a plusieurs sur la même période, ex. Incorporation puis Retrait) ;
+    // `primeApres` reflète désormais la prime corrigée de son exercice,
+    // `primeAvant` reste inchangé (ce qu'était la prime AVANT cet avenant
+    // précis, non concerné par cette correction).
+    const avenantExercice = await this.prisma.avenant.findFirst({ where: { contratId, exerciceNumero: numero }, orderBy: { createdAt: "desc" } });
+    if (avenantExercice && calcule.prime !== undefined) {
+      await this.prisma.avenant.update({
+        where: { id: avenantExercice.id },
+        data: { ...champsPrime, primeApres: calcule.prime },
+      });
+    }
 
     return this.historiqueCompagnie(contratId);
   }
@@ -840,6 +882,31 @@ export class ContratsService {
             statut: idx === tranches.length - 1 && dernierExerciceActif ? "Actif" : "Clôturé",
           })),
         });
+        // Renouvellements pour la reprise de données (2026-09) — voir
+        // demande utilisateur : "puisqu'il y a récupération des données, le
+        // premier exercice doit être l'affaire nouvelle et le reste des
+        // exercices sont des renouvellements à ces périodes." Le premier
+        // exercice n'a besoin d'aucun avenant (la création du contrat EST
+        // l'affaire nouvelle, même convention que la ligne "fondateur"
+        // synthétique de l'Historique des mouvements) — mais les tranches
+        // suivantes, jusqu'ici de simples lignes Exercice sans aucun
+        // avenant, restaient invisibles de l'Historique des mouvements ET
+        // hors de portée de ContratsService.mettreAJourPrimeExercice (qui
+        // cherche justement l'avenant portant le même exerciceNumero pour y
+        // répercuter une correction de prime — sans avenant, rien à
+        // synchroniser). Un avenant "Renouvellement" par tranche > 1 comble
+        // les deux : mouvement réel affiché + cible de synchronisation.
+        if (tranches.length > 1) {
+          await this.prisma.avenant.createMany({
+            data: tranches.slice(1).map((t, idx) => ({
+              id: `AVN-${new Date().getFullYear()}-${randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+              contratId: id, type: "Renouvellement",
+              description: `Renouvellement (reprise de données) — période ${t.dateDebut} au ${t.dateFin}`,
+              primeAvant: prime, primeApres: prime,
+              dateEffet: t.dateDebut, statut: "Appliqué", exerciceNumero: idx + 2,
+            })),
+          });
+        }
         crees++;
       } catch (err) {
         if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {

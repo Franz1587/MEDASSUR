@@ -95,10 +95,25 @@ export class DocumentsController {
 
   @Get("population/:contratId")
   population(
-    @Param("contratId") contratId: string, @Query("format") format: string | undefined, @Query("statut") statut: string | undefined, @Res() res: Response,
+    @Param("contratId") contratId: string, @Query("format") format: string | undefined, @Query("statut") statut: string | undefined,
+    // du/au (2026-09) — voir demande utilisateur : "on doit pouvoir éditer
+    // une liste pour un contrat par rapport à un exercice spécifique et à
+    // un intervalle de date précis". Étaient reçus côté frontend
+    // (openPopulationExport) mais jamais extraits ici — l'export
+    // reflétait donc TOUJOURS la population actuelle, jamais celle d'une
+    // période passée demandée.
+    @Query("du") du: string | undefined, @Query("au") au: string | undefined, @Res() res: Response,
   ) {
     const fmt = format === "xlsx" || format === "docx" ? format : "pdf";
-    return this.documentsService.renderPopulationExport(contratId, fmt, res, { statut });
+    return this.documentsService.renderPopulationExport(contratId, fmt, res, { statut, du, au });
+  }
+
+  // Liste figée d'UN mouvement précis (Affaire Nouvelle/Incorporation/
+  // Retrait) — voir DocumentsService.renderListeMouvement.
+  @Get("liste-mouvement/:avenantId")
+  listeMouvement(@Param("avenantId") avenantId: string, @Query("format") format: string | undefined, @Res() res: Response) {
+    const fmt = format === "xlsx" || format === "docx" ? format : "pdf";
+    return this.documentsService.renderListeMouvement(avenantId, fmt, res);
   }
 
   @Get("bordereau-sinistres")

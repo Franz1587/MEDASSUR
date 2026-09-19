@@ -203,10 +203,12 @@ export class ClientsService {
     // identifiant technique interne qui ressemble à un numéro de police
     // (généré par genererIdNumerique) mais n'en est pas un, voir le
     // commentaire sur Contrat.numeroPolice dans schema.prisma. Repli sur
-    // l'id UNIQUEMENT si le numéro de police n'a pas encore été attribué.
+    // l'id si le numéro de police n'a pas encore été attribué — `||` et non
+    // `??` : des contrats existants portent une chaîne VIDE ("") plutôt que
+    // null, que `??` laissait passer telle quelle (référence invisible).
     const portefeuille = client.contrats
       .map((c) => ({
-        reference: c.numeroPolice ?? c.id,
+        reference: c.numeroPolice || c.id,
         source: "Contrat",
         produit: c.branche,
         compagnie: c.compagnie.nom,

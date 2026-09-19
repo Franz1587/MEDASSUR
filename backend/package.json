@@ -10,7 +10,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "swagger:export": "node dist/src/export-openapi.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
@@ -22,6 +23,7 @@
     "@nestjs/passport": "10.0.3",
     "@nestjs/platform-express": "10.4.15",
     "@nestjs/schedule": "^4.1.2",
+    "@nestjs/swagger": "^7.4.2",
     "@prisma/client": "5.22.0",
     "@supabase/supabase-js": "^2.116.0",
     "@zavudev/sdk": "^0.56.0",

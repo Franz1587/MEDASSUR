@@ -18,3 +18,7 @@ mobile/medassur-8323f-firebase-adminsdk-*.json
 # GitHub) : jamais du code source, à régénérer/retélécharger localement.
 .tools/
 mobile/builds/
+
+# Fichier OpenAPI généré (backend/src/export-openapi.ts) — artefact
+# régénérable à tout moment (npm run swagger:export), jamais versionné.
+backend/openapi.json

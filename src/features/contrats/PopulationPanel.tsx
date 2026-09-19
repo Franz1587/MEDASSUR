@@ -6,7 +6,7 @@ import { Badge, type BadgeVariant } from "@/components/shared/Badge";
 import { calculerAge } from "@/lib/age";
 import { getAssuresSante, exportPopulationCsv, updateAssure, type UpdateAssureInput } from "@/services/sante.service";
 import { openPopulationExport, genererCartesEnMasse } from "@/services/documents.service";
-import { mouvementPopulation, getPopulationHistorique, type AjoutPersonneInput } from "@/services/contrats.service";
+import { mouvementPopulation, getPopulationHistorique, getHistoriqueCompagnie, type AjoutPersonneInput, type ExerciceCompagnie } from "@/services/contrats.service";
 import type { Contrat } from "@/types/contrats";
 import type { AssureSante } from "@/types/sante";
 
@@ -88,6 +88,21 @@ export default function PopulationPanel({ contrat, onUpdated }: Props) {
   const [filtreDu, setFiltreDu] = useState("");
   const [filtreAu, setFiltreAu] = useState("");
 
+  // Sélecteur d'exercice (2026-09) — voir demande utilisateur : "on doit
+  // pouvoir afficher les données d'un contrat depuis l'écran du contrat...
+  // pour un exercice bien spécifique". Simple raccourci qui pré-remplit
+  // Du/Au avec les dates de l'exercice choisi — le filtre du/au existant
+  // (et rechercherPeriode/reconstituerPopulation en dessous) fait tout le
+  // travail réel, valable pour n'importe quel exercice et pour Maladie
+  // comme Assistance (même contrat, mêmes exercices).
+  const [exercices, setExercices] = useState<ExerciceCompagnie[]>([]);
+  const [exerciceId, setExerciceId] = useState("");
+  const choisirExercice = (id: string) => {
+    setExerciceId(id);
+    const ex = exercices.find((e) => e.id === id);
+    if (ex) { setFiltreDu(ex.dateDebut); setFiltreAu(ex.dateFin); }
+  };
+
   // Vue historique — résultat du bouton "Rechercher" (reconstitution de la
   // population sur la période/statut demandés, voir getPopulationHistorique).
   // null = on affiche la population actuelle ; non-null = vue en lecture
@@ -112,6 +127,7 @@ export default function PopulationPanel({ contrat, onUpdated }: Props) {
   useEffect(() => {
     setLoading(true);
     charger();
+    getHistoriqueCompagnie(contrat.id).then(setExercices).catch(() => setExercices([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contrat.id]);
 
@@ -343,6 +359,15 @@ export default function PopulationPanel({ contrat, onUpdated }: Props) {
           <p className="text-[11px] text-muted-foreground mb-2">
             Statut et période — s'appliquent à la fois à la liste ci-dessous (bouton Rechercher) et aux exports PDF/Excel/Word, qui reconstituent la population telle qu'elle était sur la période demandée. Le CSV, lui, ne filtre que par statut sur la population actuelle.
           </p>
+          {exercices.length > 0 && (
+            <label className="block mb-2.5">
+              <div className={labelCls}>Exercice (remplit Du/Au automatiquement)</div>
+              <select value={exerciceId} onChange={(e) => choisirExercice(e.target.value)} className={fieldCls}>
+                <option value="">— Choisir un exercice —</option>
+                {exercices.map((ex) => <option key={ex.id} value={ex.id}>Exercice n°{ex.numero} ({ex.dateDebut} au {ex.dateFin})</option>)}
+              </select>
+            </label>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-2.5 items-end">
             <label className="block">
               <div className={labelCls}>Statut</div>
@@ -354,11 +379,11 @@ export default function PopulationPanel({ contrat, onUpdated }: Props) {
             </label>
             <label className="block">
               <div className={labelCls}>Population du</div>
-              <DateInput value={filtreDu} onChange={setFiltreDu} placeholder="Optionnel" className={fieldCls} />
+              <DateInput value={filtreDu} onChange={(v) => { setFiltreDu(v); setExerciceId(""); }} placeholder="Optionnel" className={fieldCls} />
             </label>
             <label className="block">
               <div className={labelCls}>au</div>
-              <DateInput value={filtreAu} onChange={setFiltreAu} placeholder="Optionnel" className={fieldCls} />
+              <DateInput value={filtreAu} onChange={(v) => { setFiltreAu(v); setExerciceId(""); }} placeholder="Optionnel" className={fieldCls} />
             </label>
             <button
               type="button"

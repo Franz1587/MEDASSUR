@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FileText, Filter, Plus, List, CheckCircle2, RefreshCw, XCircle, Ban, Trash2, Users, Calculator, ShieldCheck, Upload, X, UserCog, FileDown, AlertTriangle, ArrowRightLeft, History, Receipt, Smartphone, ClipboardCheck, Pencil, Check, Search, Unlock, Lock } from "lucide-react";
+import { FileText, Filter, Plus, List, CheckCircle2, RefreshCw, XCircle, Ban, Trash2, Users, Calculator, ShieldCheck, Upload, X, UserCog, FileDown, AlertTriangle, ArrowRightLeft, History, Receipt, Smartphone, ClipboardCheck, Pencil, Check, Search, Unlock, Lock, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/shared/Badge";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
@@ -28,7 +28,7 @@ import { getClients } from "@/services/clients.service";
 import { getCompagnies, getCompagniesAutoGestion } from "@/services/compagnies.service";
 import { getMonAbonnement } from "@/services/societes.service";
 import type { MonAbonnement } from "@/types/societes";
-import { getAssuresSante, createAssure, importPopulation, readPopulationFile, downloadPopulationTemplate, type ImportPopulationResult } from "@/services/sante.service";
+import { getAssuresSante, createAssure, importPopulation, readPopulationFile, downloadPopulationTemplate, updateAssure, type ImportPopulationResult, type UpdateAssureInput } from "@/services/sante.service";
 import { getGarantieCatalogue } from "@/services/garantieCatalogue.service";
 import type { Contrat } from "@/types/contrats";
 import type { Client } from "@/types/clients";
@@ -136,7 +136,7 @@ function emptyForm(): ContratUpsertInput {
     clientId: "", compagnieId: "", branche: "Maladie", dateDebut: "", dateFin: "", prime: 0, statut: "Actif",
     numeroPolice: "",
     periodicite: "Annuel",
-    produit: "",
+    produit: "MALADIE",
     paysSouscription: "Gabon", extensionsTerritorialite: [],
     tauxCouvertureAmbulatoire: "", tauxCouvertureHospitalisation: "",
     tauxAmbulatoirePublique: "", tauxAmbulatoirePrivee: "", tauxHospitalisationPublique: "", tauxHospitalisationPrivee: "",
@@ -428,6 +428,55 @@ export default function ContratsView() {
   const [manualPopulationEntry, setManualPopulationEntry] = useState(false);
   const [appliquerSurprimeAge, setAppliquerSurprimeAge] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Édition d'un assuré/ayant droit depuis la liste "population identique
+  // au contrat Maladie" d'un contrat Assistance lié (2026-09) — voir
+  // demande utilisateur : "il faut aussi rendre possible la modification
+  // d'un assuré ou d'un ayant droit depuis la liste qui s'affiche dans la
+  // population du contrat". Cette liste était jusqu'ici en lecture seule
+  // par choix (voir plus bas, "aucun import séparé... pour éviter toute
+  // duplication") — l'AJOUT/RETRAIT reste interdit ici (pour cette même
+  // raison), mais MODIFIER la fiche d'une personne déjà affiliée ne crée
+  // aucune duplication : c'est exactement la même ligne AssureSante que
+  // celle du contrat Maladie (population partagée, jamais copiée — voir
+  // Contrat.contratMaladieLieId), donc l'éditer ici la modifie aussi là-bas.
+  const [editPersonneId, setEditPersonneId] = useState<string | null>(null);
+  const [editPersonneForm, setEditPersonneForm] = useState<UpdateAssureInput>({});
+  const [editPersonneSubmitting, setEditPersonneSubmitting] = useState(false);
+  const [editPersonneError, setEditPersonneError] = useState<string | null>(null);
+
+  const ouvrirEditionPersonne = (a: AssureSante) => {
+    if (editPersonneId === a.id) { setEditPersonneId(null); return; }
+    setEditPersonneId(a.id);
+    setEditPersonneForm({
+      nom: a.nom, prenom: a.prenom ?? "",
+      telephone: !a.familleId ? (a.telephone ?? "") : undefined,
+      dateNaissance: a.dateNaissance ?? "",
+      statutMatrimonial: a.statutMatrimonial as UpdateAssureInput["statutMatrimonial"],
+      sexe: a.sexe as UpdateAssureInput["sexe"],
+      scolarise: a.scolarise ?? false,
+      adresse: a.adresse ?? "",
+      lieuNaissance: a.lieuNaissance ?? "",
+      email: a.email ?? "",
+      telephoneFixe: a.telephoneFixe ?? "",
+    });
+    setEditPersonneError(null);
+  };
+
+  const enregistrerEditionPersonne = async (a: AssureSante) => {
+    try {
+      setEditPersonneSubmitting(true);
+      setEditPersonneError(null);
+      await updateAssure(a.id, editPersonneForm);
+      toast.success("Fiche mise à jour.");
+      setEditPersonneId(null);
+      getAssuresSante().then((all) => setExistingPopulation(all.filter((p) => p.police === form.contratMaladieLieId)));
+    } catch (err) {
+      setEditPersonneError(err instanceof Error ? err.message : "Erreur d'enregistrement.");
+    } finally {
+      setEditPersonneSubmitting(false);
+    }
+  };
 
   const refresh = () => getContrats().then(setContrats);
 
@@ -1096,7 +1145,17 @@ export default function ContratsView() {
                           type="button"
                           onClick={() => {
                             const taux = tauxCommissionCompagnie(form.compagnieId, b);
-                            setForm((v) => ({ ...v, branche: b, tauxCommission: taux !== undefined ? taux : v.tauxCommission }));
+                            setForm((v) => ({
+                              ...v, branche: b, tauxCommission: taux !== undefined ? taux : v.tauxCommission,
+                              // Produit = type de contrat par défaut (2026-09) — voir demande
+                              // utilisateur : "le produit ici est en réalité le type de contrat...
+                              // doit se remplir automatiquement par rapport au type de contrat
+                              // sur lequel on est". Jamais si l'utilisateur a déjà saisi un
+                              // libellé produit spécifique (voir Bordereau de Production, où ce
+                              // champ affiche un vrai nom de produit commercial) — seulement s'il
+                              // est vide ou déjà égal à l'auto-remplissage précédent.
+                              produit: !v.produit || v.produit === "MALADIE" || v.produit === "ASSISTANCE" ? b.toUpperCase() : v.produit,
+                            }));
                           }}
                           className={`px-4 py-2 text-sm transition-colors ${form.branche === b ? "bg-primary text-primary-foreground font-semibold" : "bg-background text-muted-foreground hover:text-foreground"}`}
                         >
@@ -1186,9 +1245,18 @@ export default function ContratsView() {
                         <div className={labelCls}>Contrat Maladie lié</div>
                         <select value={form.contratMaladieLieId ?? ""} onChange={(e) => handleContratMaladieLieChange(e.target.value)} className={fieldCls}>
                           <option value="">— Aucun (population saisie séparément) —</option>
-                          {contratsMaladieDuClient.map((c) => <option key={c.id} value={c.id}>{c.numeroPolice ?? c.id} · {c.client}</option>)}
+                          {contratsMaladieDuClient.map((c) => <option key={c.id} value={c.id}>{c.numeroPolice || c.id} · {c.client}</option>)}
                         </select>
-                        <p className="text-[10.5px] text-muted-foreground mt-1">Dès qu'un contrat Maladie a une territorialité hors Gabon, son Assistance est obligatoire et partage exactement sa population — aucun import séparé.</p>
+                        {/* Liste vide = pas un bug : voir le filtre de contratsMaladieDuClient
+                            (branche Maladie + même client + extension de territorialité). Message
+                            explicite (2026-09) plutôt qu'un select silencieusement vide — voir
+                            demande utilisateur : "la liste des contrats Maladie du souscripteur
+                            doit remonter ici", constaté vide faute de contrat éligible en données. */}
+                        {form.clientId && contratsMaladieDuClient.length === 0 ? (
+                          <p className="text-[10.5px] text-amber-600 mt-1">Aucun contrat Maladie éligible pour ce souscripteur — il doit exister un contrat Maladie avec une extension de territorialité renseignée (onglet Informations générales de ce contrat Maladie).</p>
+                        ) : (
+                          <p className="text-[10.5px] text-muted-foreground mt-1">Dès qu'un contrat Maladie a une territorialité hors Gabon, son Assistance est obligatoire et partage exactement sa population — aucun import séparé.</p>
+                        )}
                       </label>
                     )}
                     <label className="block">
@@ -1371,15 +1439,51 @@ export default function ContratsView() {
                   </div>
                   {existingPopulation.length > 0 && (
                     <div className="rounded-lg border border-border overflow-hidden max-h-72 overflow-y-auto divide-y divide-border/50">
-                      {existingPopulation.map((a) => (
-                        <div key={a.id} className="flex items-center justify-between px-3 py-1.5 text-[12px]">
-                          <span className="text-foreground">{a.nom} {a.prenom ?? ""}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-muted-foreground med-num">{a.matricule || "—"} · {a.typeAssure || "—"}</span>
-                            <Badge variant={STATUT_ASSURE_BADGE[a.statut] ?? "neutral"}>{a.statut}</Badge>
+                      {existingPopulation.map((a) => {
+                        const ouverte = editPersonneId === a.id;
+                        return (
+                          <div key={a.id}>
+                            <button type="button" onClick={() => ouvrirEditionPersonne(a)} className="w-full flex items-center justify-between px-3 py-1.5 text-[12px] hover:bg-secondary/30 text-left">
+                              <span className="text-foreground inline-flex items-center gap-1.5">
+                                {ouverte ? <ChevronUp className="w-3 h-3 flex-shrink-0 text-muted-foreground" /> : <Pencil className="w-3 h-3 flex-shrink-0 opacity-40" />}
+                                {a.nom} {a.prenom ?? ""}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-muted-foreground med-num">{a.matricule || "—"} · {a.typeAssure || "—"}</span>
+                                <Badge variant={STATUT_ASSURE_BADGE[a.statut] ?? "neutral"}>{a.statut}</Badge>
+                              </div>
+                            </button>
+                            {ouverte && (
+                              <div className="px-3 pb-3 pt-1 space-y-2.5 bg-secondary/10">
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
+                                  <label className="block"><div className={labelCls}>Nom</div><input value={editPersonneForm.nom ?? ""} onChange={(e) => setEditPersonneForm((v) => ({ ...v, nom: e.target.value }))} className={fieldCls} /></label>
+                                  <label className="block"><div className={labelCls}>Prénom</div><input value={editPersonneForm.prenom ?? ""} onChange={(e) => setEditPersonneForm((v) => ({ ...v, prenom: e.target.value }))} className={fieldCls} /></label>
+                                  <label className="block"><div className={labelCls}>Date de naissance</div><DateInput value={editPersonneForm.dateNaissance ?? ""} onChange={(v) => setEditPersonneForm((f) => ({ ...f, dateNaissance: v }))} className={fieldCls} /></label>
+                                  <label className="block"><div className={labelCls}>Sexe</div><select value={editPersonneForm.sexe ?? ""} onChange={(e) => setEditPersonneForm((v) => ({ ...v, sexe: e.target.value as UpdateAssureInput["sexe"] }))} className={fieldCls}><option value="">—</option><option value="M">Masculin</option><option value="F">Féminin</option></select></label>
+                                  {!a.familleId && <label className="block"><div className={labelCls}>Téléphone (famille)</div><input value={editPersonneForm.telephone ?? ""} onChange={(e) => setEditPersonneForm((v) => ({ ...v, telephone: e.target.value }))} className={fieldCls} /></label>}
+                                  <label className="block"><div className={labelCls}>Email</div><input value={editPersonneForm.email ?? ""} onChange={(e) => setEditPersonneForm((v) => ({ ...v, email: e.target.value }))} className={fieldCls} /></label>
+                                  <label className="block"><div className={labelCls}>Adresse</div><input value={editPersonneForm.adresse ?? ""} onChange={(e) => setEditPersonneForm((v) => ({ ...v, adresse: e.target.value }))} className={fieldCls} /></label>
+                                </div>
+                                {(a.typeAssure ?? "").toUpperCase() === "EF" && (
+                                  <label className="flex items-center gap-2">
+                                    <input type="checkbox" checked={editPersonneForm.scolarise ?? false} onChange={(e) => setEditPersonneForm((v) => ({ ...v, scolarise: e.target.checked }))} className="w-3.5 h-3.5 accent-primary" />
+                                    <span className="text-[11px] text-muted-foreground">Enfant scolarisé (limite d'âge étendue du contrat)</span>
+                                  </label>
+                                )}
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[11px] text-destructive">{editPersonneError ?? ""}</span>
+                                  <div className="flex items-center gap-2">
+                                    <button type="button" onClick={() => setEditPersonneId(null)} className="h-7 px-3 rounded-lg border border-border text-[11px] text-foreground hover:bg-secondary/40">Annuler</button>
+                                    <button type="button" disabled={editPersonneSubmitting} onClick={() => enregistrerEditionPersonne(a)} className="h-7 px-3 rounded-lg bg-primary text-primary-foreground text-[11px] hover:opacity-90 disabled:opacity-60">
+                                      {editPersonneSubmitting ? "Enregistrement…" : "Enregistrer la fiche"}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

@@ -170,7 +170,18 @@ export function openFactureProduction(id: string): Promise<void> {
 export function openPopulationExport(contratId: string, format: DocumentFormat, filtres: { statut?: string; du?: string; au?: string }): Promise<void> {
   const params = new URLSearchParams({ format });
   if (filtres.statut) params.set("statut", filtres.statut);
+  // du/au (2026-09) — étaient acceptés par cette fonction mais jamais
+  // ajoutés à l'URL : l'export ignorait donc silencieusement toute période
+  // demandée, même une fois le contrôleur backend corrigé côté serveur.
+  if (filtres.du) params.set("du", filtres.du);
+  if (filtres.au) params.set("au", filtres.au);
   return openDocument(`/documents/population/${contratId}?${params.toString()}`);
+}
+
+// Liste figée d'un mouvement précis (Affaire Nouvelle/Incorporation/
+// Retrait) — voir DocumentsService.renderListeMouvement.
+export function openListeMouvement(avenantId: string, format: DocumentFormat): Promise<void> {
+  return openDocument(`/documents/liste-mouvement/${avenantId}?format=${format}`);
 }
 
 // Offre de cotation (2026-09) — un ou plusieurs produits du MÊME client
