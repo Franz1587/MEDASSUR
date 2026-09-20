@@ -3,6 +3,8 @@ import { Wallet, ArrowUpRight, ArrowDownRight, CheckCircle, Clock, Plus } from "
 import { toast } from "sonner";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import { getComptesBancaires, getFluxTresorerie, createFlux, rapprocherFlux, type FluxUpsertInput } from "@/services/tresorerie.service";
 import type { CompteBancaire, FluxTresorerie } from "@/types/tresorerie";
@@ -63,6 +65,7 @@ export default function TresorerieView() {
   };
 
   const soldeTotal = comptes.reduce((a, b) => a + b.solde, 0);
+  const pagination = usePagination(flux);
 
   return (
     <div className="p-6 space-y-5">
@@ -88,7 +91,7 @@ export default function TresorerieView() {
           <h3 className="font-semibold text-foreground text-sm">Flux récents</h3>
         </div>
         <div className="divide-y divide-border/50">
-          {flux.map((f) => (
+          {pagination.pageItems.map((f) => (
             <div key={f.id} className="flex items-center justify-between px-4 py-3 hover:bg-secondary/30 transition-colors">
               <div className="flex items-center gap-3">
                 <div className={`p-2 rounded-lg ${f.type === "Encaissement" ? "bg-green-500/10" : "bg-red-500/10"}`}>
@@ -114,6 +117,11 @@ export default function TresorerieView() {
             </div>
           ))}
         </div>
+        <Pagination
+          page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+          pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+        />
       </div>
 
       {showCreate && (

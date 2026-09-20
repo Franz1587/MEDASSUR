@@ -5,6 +5,8 @@ import { Badge } from "@/components/shared/Badge";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { DateInput } from "@/components/shared/DateInput";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import {
   getAvenants, createAvenant, updateAvenantStatut, appliquerAvenant, deleteAvenant,
@@ -43,6 +45,7 @@ export default function AvenantsView() {
   const [formError, setFormError] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
   const toggleExpanded = (id: string) => setExpandedIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+  const pagination = usePagination(avenants);
 
   const refresh = () => getAvenants().then(setAvenants);
 
@@ -127,7 +130,7 @@ export default function AvenantsView() {
         <QuittancesLibresTab contrats={contrats} />
       ) : (
       <div className="space-y-3">
-        {avenants.map((a) => (
+        {pagination.pageItems.map((a) => (
           <div key={a.id} className="bg-card border border-border rounded-xl p-4 hover:border-primary/30 transition-colors">
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="flex-1 min-w-[240px]">
@@ -184,6 +187,11 @@ export default function AvenantsView() {
         {avenants.length === 0 && (
           <div className="py-12 text-center text-muted-foreground text-sm">Aucun avenant enregistré</div>
         )}
+        <Pagination
+          page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+          pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+        />
       </div>
       )}
 

@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { Badge } from "@/components/shared/Badge";
 import { Btn } from "@/components/shared/Btn";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import {
   getCommunications, envoyerCommunication, enregistrerRetourCommunication, pieceJointeCommunicationUrl,
   type EnvoyerCommunicationInput,
@@ -35,6 +37,7 @@ function emptyForm(): EnvoyerCommunicationInput {
 
 export default function CommunicationsView() {
   const [communications, setCommunications] = useState<Communication[]>([]);
+  const pagination = usePagination(communications);
   const [filtreCanal, setFiltreCanal] = useState("");
   const [filtreType, setFiltreType] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -104,7 +107,7 @@ export default function CommunicationsView() {
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-border"><h3 className="font-semibold text-foreground text-sm">Journal des envois ({communications.length})</h3></div>
         <div className="divide-y divide-border/50">
-          {communications.map((c) => {
+          {pagination.pageItems.map((c) => {
             const Icon = CANAUX.find((k) => k.valeur === c.canal)?.icon ?? Mail;
             return (
               <div key={c.id} className="p-3.5">
@@ -151,6 +154,11 @@ export default function CommunicationsView() {
           })}
           {communications.length === 0 && <p className="text-xs text-center text-muted-foreground py-10">Aucune communication — cliquez sur "Nouveau message" pour commencer.</p>}
         </div>
+        <Pagination
+          page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+          pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+        />
       </div>
 
       {showCreate && (

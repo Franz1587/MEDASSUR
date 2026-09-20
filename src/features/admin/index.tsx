@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { Combobox } from "@/components/shared/Combobox";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { viewLabels, type View } from "@/layout/navConfig";
 import { GROUPES_MODULES } from "@/auth/moduleGroups";
 import { roles, roleList, type RoleId } from "@/auth/roles";
@@ -340,6 +342,7 @@ function RoleTemplateModal({ template, modulesAutorises, onClose, onSaved }: { t
 export default function AdminView() {
   const { currentUser } = useAuth();
   const [users, setUsers] = useState<UserAccount[]>([]);
+  const pagination = usePagination(users);
   const [chargement, setChargement] = useState(true);
   // Un seul modal pour identité + coordonnées + droits (voir
   // UserDetailModal) — detailTarget.user === null signifie "nouvel
@@ -401,7 +404,7 @@ export default function AdminView() {
             <tbody>
               {chargement && <tr><td colSpan={4} className="px-4 py-6 text-center text-muted-foreground text-xs">Chargement…</td></tr>}
               {!chargement && users.length === 0 && <tr><td colSpan={4} className="px-4 py-6 text-center text-muted-foreground text-xs">Aucun utilisateur.</td></tr>}
-              {users.map((u) => (
+              {pagination.pageItems.map((u) => (
                 <tr key={u.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
@@ -431,6 +434,11 @@ export default function AdminView() {
               ))}
             </tbody>
           </table>
+          <Pagination
+            page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+            pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+            onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+          />
         </div>
 
         <div className="bg-card border border-border rounded-xl overflow-hidden h-fit">

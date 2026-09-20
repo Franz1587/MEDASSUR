@@ -7,6 +7,8 @@ import { Badge } from "@/components/shared/Badge";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { Combobox } from "@/components/shared/Combobox";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import { useShellNavigation } from "@/layout/ShellNavigationContext";
 import {
@@ -40,6 +42,7 @@ function emptyCreateForm(): AppelOffresUpsertInput {
 export default function AppelOffresView() {
   const { setView } = useShellNavigation();
   const [appelsOffres, setAppelsOffres] = useState<AppelOffres[]>([]);
+  const pagination = usePagination(appelsOffres);
   const [selected, setSelected] = useState<AppelOffres | null>(null);
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [compagnies, setCompagnies] = useState<Compagnie[]>([]);
@@ -221,7 +224,7 @@ export default function AppelOffresView() {
             <h3 className="font-semibold text-foreground text-sm">Appels d'offres ({appelsOffres.length})</h3>
           </div>
           <div className="divide-y divide-border/50">
-            {appelsOffres.map((ao) => (
+            {pagination.pageItems.map((ao) => (
               <div key={ao.id} onClick={() => setSelected(ao)}
                 className={`px-4 py-3 cursor-pointer transition-colors ${selected?.id === ao.id ? "bg-primary/8" : "hover:bg-secondary/40"}`}
               >
@@ -234,6 +237,11 @@ export default function AppelOffresView() {
             ))}
             {appelsOffres.length === 0 && <p className="px-4 py-6 text-center text-muted-foreground text-[12.5px]">Aucun appel d'offres</p>}
           </div>
+          <Pagination
+            page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+            pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+            onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+          />
         </div>
 
         <div className="lg:col-span-2 space-y-4">

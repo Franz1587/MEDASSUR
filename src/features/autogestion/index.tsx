@@ -3,6 +3,8 @@ import { UserCog, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import { getCompagniesAutoGestion, createAutoGestionProfile } from "@/services/compagnies.service";
 import { CompagnieLogo, CompagnieParamsDrawer } from "@/features/compagnies/CompagnieParamsDrawer";
@@ -21,6 +23,7 @@ export default function AutoGestionView() {
   const [showCreate, setShowCreate] = useState(false);
   const [clientId, setClientId] = useState("");
   const [creating, setCreating] = useState(false);
+  const pagination = usePagination(profils);
 
   const refresh = () => {
     getCompagniesAutoGestion().then((data) => {
@@ -62,7 +65,7 @@ export default function AutoGestionView() {
         actions={<Btn variant="primary" onClick={() => setShowCreate(true)}><Plus className="w-4 h-4" />Placer un souscripteur</Btn>}
       />
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-        {profils.map((c) => (
+        {pagination.pageItems.map((c) => (
           <div key={c.id} onClick={() => setSelected(c)}
             className="bg-card border border-border rounded-xl p-5 hover:border-primary/30 transition-colors cursor-pointer">
             <div className="flex items-start justify-between mb-4">
@@ -90,6 +93,11 @@ export default function AutoGestionView() {
           <p className="col-span-full py-12 text-center text-muted-foreground text-sm">Aucun souscripteur en auto-gestion pour l'instant.</p>
         )}
       </div>
+      <Pagination
+        page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+        pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+        onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+      />
 
       {showCreate && (
         <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4">

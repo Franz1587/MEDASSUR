@@ -5,6 +5,8 @@ import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { Badge } from "@/components/shared/Badge";
 import { Combobox } from "@/components/shared/Combobox";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import {
   getCotations, createCotation, updateCotation,
@@ -57,6 +59,7 @@ export default function CotationView() {
   const [aoHandoffNom, setAoHandoffNom] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [cotations, setCotations] = useState<Cotation[]>([]);
+  const pagination = usePagination(cotations);
   const [compagnies, setCompagnies] = useState<Compagnie[]>([]);
   const [appelsOffres, setAppelsOffres] = useState<AppelOffres[]>([]);
   const [selectionHistorique, setSelectionHistorique] = useState<string[]>([]);
@@ -722,7 +725,7 @@ export default function CotationView() {
             </tr>
           </thead>
           <tbody>
-            {cotations.map((c) => (
+            {pagination.pageItems.map((c) => (
               <tr key={c.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
                 <td className="px-4 py-3"><input type="checkbox" checked={selectionHistorique.includes(c.id)} onChange={() => toggleSelectionHistorique(c.id)} className="w-3.5 h-3.5 accent-primary" /></td>
                 <td className="px-4 py-3 text-xs font-semibold text-primary whitespace-nowrap med-num">{c.id}</td>
@@ -746,6 +749,11 @@ export default function CotationView() {
             )}
           </tbody>
         </table>
+        <Pagination
+          page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+          pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+        />
       </div>
     </div>
   );

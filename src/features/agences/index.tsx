@@ -3,6 +3,8 @@ import { Plus, Search, Building2, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { getAgences, createAgence, updateAgence, deleteAgence } from "@/services/agences.service";
 import type { Agence, AgenceUpsertInput } from "@/types/agences";
 
@@ -34,6 +36,7 @@ export default function AgencesView() {
     if (!q) return true;
     return a.nom.toLowerCase().includes(q) || (a.code ?? "").toLowerCase().includes(q);
   });
+  const pagination = usePagination(agencesFiltrees);
 
   const openCreate = () => { setEditId(null); setForm(emptyForm()); setShowForm(true); };
   const openEdit = (a: Agence) => { setEditId(a.id); setForm({ nom: a.nom, code: a.code ?? "" }); setShowForm(true); };
@@ -78,7 +81,7 @@ export default function AgencesView() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-        {agencesFiltrees.map((a) => (
+        {pagination.pageItems.map((a) => (
           <div key={a.id} className="bg-card border border-border rounded-xl p-4 hover:border-primary/30 transition-colors flex flex-col">
             <p className="text-[14px] font-semibold text-foreground truncate">{a.nom}</p>
             {a.code && <p className="text-[11px] text-muted-foreground med-num">Code {a.code}</p>}
@@ -92,6 +95,11 @@ export default function AgencesView() {
           <div className="col-span-full py-12 text-center text-muted-foreground text-sm">Aucune agence enregistrée</div>
         )}
       </div>
+      <Pagination
+        page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+        pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+        onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+      />
 
       {showForm && (
         <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4">
