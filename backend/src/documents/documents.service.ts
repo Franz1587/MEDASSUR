@@ -1652,38 +1652,65 @@ export class DocumentsService {
       `MATRICULE : ${assure.matricule}`,
       `SOCIÉTÉ : ${assure.contrat.client.nom}`,
     ];
+    // Collision QR code (2026-09) — voir demande utilisateur, capture à
+    // l'appui : un nom (ou une société) long débordait DANS la zone du QR
+    // code — peint APRÈS le texte (voir `doc.image(qrBuffer, ...)`
+    // plus bas), il recouvrait donc silencieusement la fin de la ligne au
+    // lieu de la faire passer à la ligne suivante. Dès qu'une ligne
+    // "LIBELLÉ : valeur" dépasse `champsW`, elle est scindée en deux
+    // lignes distinctes (libellé seul, puis valeur seule juste en
+    // dessous) — la valeur dispose alors de TOUTE la largeur `champsW`
+    // pour elle seule, bien plus généreuse que ce qu'il restait après le
+    // libellé sur la même ligne.
+    const SEPARATEUR_CHAMP = " : ";
+    const decouperSiCollisionQr = (ligne: string): string[] => {
+      const idx = ligne.indexOf(SEPARATEUR_CHAMP);
+      if (idx === -1 || doc.widthOfString(ligne) <= champsW) return [ligne];
+      return [ligne.slice(0, idx + SEPARATEUR_CHAMP.length - 1), ligne.slice(idx + SEPARATEUR_CHAMP.length)];
+    };
     // Bande des taux FIGÉE (2026-09) — voir demande utilisateur : "il faut
     // que la ligne des taux ambulatoire et hospitalisation puisse être
     // figée peu importe les mouvements des blocs plus haut" (un nom long
     // sur 2 lignes poussait auparavant tout le bas de carte, TEL et taux
     // compris, à une position différente d'une carte à l'autre). `basBloc`
     // est maintenant une CONSTANTE (bas de la photo) — plus jamais
-    // recalculée depuis la hauteur réelle du bloc de champs. Pour que ce
-    // bloc de champs tienne quand même dans l'espace fixe qui lui reste
-    // (`photoY` → `basBloc`), sa taille de police s'ajuste automatiquement
-    // vers le bas si nécessaire (voir demande utilisateur : "soit on
-    // diminue légèrement la police") — jamais de troncature du texte
-    // (retour utilisateur passé : "tu es en train de gaspiller le rendu
-    // de la carte" sur un essai qui coupait le nom avec "…").
+    // recalculée depuis la hauteur réelle du bloc de champs, donc TEL et
+    // le bandeau des taux restent immobiles même quand une ligne est
+    // scindée ci-dessus (seul le bloc NOM/PRÉNOM/.../SOCIÉTÉ descend en
+    // cascade, voir demande utilisateur : "faire descendre le bloc du bas
+    // sauf les bloc TEL et taux de couverture"). Pour que ce bloc de
+    // champs tienne quand même dans l'espace fixe qui lui reste (`photoY`
+    // → `basBloc`), sa taille de police s'ajuste automatiquement vers le
+    // bas si nécessaire (voir demande utilisateur : "soit on diminue
+    // légèrement la police") — jamais de troncature du texte (retour
+    // utilisateur passé : "tu es en train de gaspiller le rendu de la
+    // carte" sur un essai qui coupait le nom avec "…") ; si même la police
+    // minimale ne suffit plus (nom scindé compris), le bloc déborde
+    // légèrement sous `basBloc` plutôt que de tronquer — TEL/taux restent
+    // de toute façon fixes, jamais entraînés par ce débordement.
     const basBloc = photoY + photoH;
     const budgetHauteurChamps = basBloc - photoY - 1;
     let tailleTexteChamps = 6.6;
     let ly = photoY;
-    let hauteursLignes: number[] = [];
+    let groupesAffiches: string[][] = [];
+    let hauteursGroupes: number[][] = [];
     for (; tailleTexteChamps >= 5.2; tailleTexteChamps -= 0.3) {
       doc.fontSize(tailleTexteChamps);
+      groupesAffiches = lignesRecto.map(decouperSiCollisionQr);
+      hauteursGroupes = groupesAffiches.map((grp) => grp.map((l) => doc.heightOfString(l, { width: champsW })));
       let total = 0;
-      hauteursLignes = lignesRecto.map((ligne, i) => {
-        const h = doc.heightOfString(ligne, { width: champsW });
-        total += h + (i === 0 ? 4.5 : 1.5);
-        return h;
+      groupesAffiches.forEach((grp, i) => {
+        total += hauteursGroupes[i].reduce((s, h) => s + h, 0) + (grp.length - 1) * 0.5 + (i === 0 ? 4.5 : 1.5);
       });
       if (total <= budgetHauteurChamps) break;
     }
     doc.fillColor("#000").font("Helvetica-Bold").fontSize(tailleTexteChamps);
-    lignesRecto.forEach((ligne, i) => {
-      doc.text(ligne, champsX, ly, { width: champsW });
-      ly += hauteursLignes[i] + (i === 0 ? 4.5 : 1.5);
+    groupesAffiches.forEach((grp, i) => {
+      grp.forEach((ligne, j) => {
+        doc.text(ligne, champsX, ly, { width: champsW });
+        ly += hauteursGroupes[i][j] + (j < grp.length - 1 ? 0.5 : 0);
+      });
+      ly += i === 0 ? 4.5 : 1.5;
     });
 
     doc.image(qrBuffer, qrX, qrY, { width: qrTaille, height: qrTaille });
