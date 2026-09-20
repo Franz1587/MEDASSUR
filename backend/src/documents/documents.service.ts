@@ -2716,7 +2716,7 @@ export class DocumentsService {
     const accord = await this.prisma.accordPrealable.findUnique({
       where: { id: accordId },
       include: {
-        assure: { include: { contrat: { include: { client: true, compagnie: true } } } },
+        assure: { include: { contrat: { include: { client: true, compagnie: true, garanties: true } }, famille: { select: { telephone: true } } } },
         prestataireRef: true, demandeur: true, lignes: { include: { acteMedical: true } },
       },
     });
@@ -2760,11 +2760,18 @@ export class DocumentsService {
     const encartW = 165;
     const encartX = right - encartW;
     const logoW = encartX - logoX - 10;
+    // Logo seul, centré et agrandi (2026-09) — voir demande utilisateur :
+    // "Centré et agrandir de façon visible et imposante le LOGO. Il n'est
+    // pas nécessaire d'écrire en core le nom de la société et la mention
+    // courtier d'assurances, compagnie d'assurance ou même mutuelle, le
+    // logo bien imposant et centré suffit." Remplace le logo réduit
+    // (55px de haut, calé en haut à gauche de la zone) + nom/sous-titre en
+    // texte par le logo seul, occupant toute la zone disponible entre la
+    // photo et l'encart, centré horizontalement ET verticalement (PDFKit
+    // `fit` + `align`/`valign`, préserve le ratio sans jamais déformer).
     if (logoImage) {
-      try { doc.image(logoImage, logoX, photoY, { fit: [logoW, 55] }); } catch { /* jamais bloquant */ }
+      try { doc.image(logoImage, logoX, photoY, { fit: [logoW, photoH], align: "center", valign: "center" }); } catch { /* jamais bloquant */ }
     }
-    doc.fillColor(p.couleurPrimaire).font("Helvetica-Bold").fontSize(9).text(p.nom, logoX, photoY + 58, { width: logoW });
-    doc.fillColor("#555").font("Helvetica").fontSize(7.5).text(p.sousTitre, logoX, photoY + 70, { width: logoW });
 
     doc.rect(encartX, photoY, encartW, photoH).lineWidth(0.8).strokeColor("#333").stroke();
     doc.fillColor("#000").font("Helvetica").fontSize(7).text(
@@ -2786,7 +2793,8 @@ export class DocumentsService {
     champ(doc, left + 8, y + 22, "Editer le :", fmtDate(dateBase), 90, colW - 98, { boldLabel: true });
     champ(doc, left + 8, y + 34, "Valable jusqu'au:", dateValidite, 90, colW - 98, { boldLabel: true });
     champ(doc, left + colW + 8, y + 8, "Demandeur:", accord.demandeur?.nom ?? "—", 75, colW - 83, { boldLabel: true, boldValeur: true });
-    const tauxCouverture = this.tauxCouverturePriseEnCharge(accord.lignes);
+    const estAyantDroit = accord.assure.familleId !== null;
+    const tauxCouverture = this.tauxCouvertureParRubrique(accord.lignes, accord.assure.contrat.garanties, estAyantDroit);
     champ(doc, left + colW + 8, y + 24, "Taux de couverture:", tauxCouverture != null ? `${tauxCouverture} %` : "—", 105, colW - 113, { boldLabel: true });
     y += boxH1 + 10;
 
@@ -2802,7 +2810,13 @@ export class DocumentsService {
     doc.text(`Société: ${accord.assure.contrat.client.nom}`, left + 8, iy, { width: colW - 20, align: "center" }); iy += 11;
     doc.font("Helvetica-Bold").text(`Bénéficiaire: ${nomAssure}`, left + 8, iy, { width: colW - 20, align: "center" }); iy += 11;
     doc.font("Helvetica").text(`N° carte: ${accord.assure.matricule}`, left + 8, iy, { width: colW - 20, align: "center" }); iy += 11;
-    doc.text(`Client: ${accord.assure.contrat.numeroPolice ?? "—"}`, left + 8, iy, { width: colW - 20, align: "center" }); iy += 11;
+    // Téléphone de la famille plutôt que le numéro de police (2026-09) —
+    // voir demande utilisateur : "remplacer cette donnée par le numéro de
+    // téléphone de la famille" — plus utile ici que le n° de police, déjà
+    // consultable partout ailleurs dans l'application. Porté uniquement
+    // par la racine de famille (voir schema.prisma AssureSante.familleId).
+    const telephoneFamille = accord.assure.familleId ? accord.assure.famille?.telephone : accord.assure.telephone;
+    doc.text(`Téléphone: ${telephoneFamille ?? "—"}`, left + 8, iy, { width: colW - 20, align: "center" }); iy += 11;
     doc.text(`compagnie: ${accord.assure.contrat.compagnie.nom}`, left + 8, iy, { width: colW - 20, align: "center" });
 
     const nomPrestataire = accord.prestataireRef?.nom ?? accord.prestataire;
@@ -2813,7 +2827,7 @@ export class DocumentsService {
     y += boxH2 + 10;
 
     // ── Objet de la prise en charge / Délivré par ────────────────────────
-    const boxH3 = 46;
+    const boxH3 = 58;
     enteteGris("OBJET DE LA PRISE EN CHARGE", left, y, colW - 4, 14);
     enteteGris("DELIVRE PAR", left + colW + 4, y, colW - 4, 14);
     encadre(left, y, colW - 4, boxH3);
@@ -2833,8 +2847,15 @@ export class DocumentsService {
     ));
     const objetPriseEnCharge = rubriquesGarantie.length > 0 ? rubriquesGarantie.join(", ") : (accord.lignes[0]?.description ?? accord.description);
     doc.font("Helvetica").fontSize(8).text(`Code: ${objetPriseEnCharge}`, left + 8, y + 20, { width: colW - 20 });
-    doc.text(`Nom: ${p.nom}`, left + colW + 8, y + 18, { width: colW - 20 });
-    doc.text(`Adresse: ${p.ville}\n${p.pays}`, left + colW + 8, y + 29, { width: colW - 20 });
+    // Coordonnées RÉELLES du prestataire, pas celles du courtier (2026-09)
+    // — voir demande utilisateur : "faire remonter toutes les informations
+    // exactes présentes dans l'écran du prestataire" — même source que le
+    // bloc DESTINATAIRE ci-dessus (accord.prestataireRef), jamais p.nom/
+    // p.ville/p.pays (les coordonnées de la société utilisatrice, sans
+    // rapport avec qui délivre réellement la prestation).
+    doc.text(`Nom: ${accord.prestataireRef?.nom ?? accord.prestataire}`, left + colW + 8, y + 18, { width: colW - 20 });
+    doc.text(`Téléphone: ${accord.prestataireRef?.telephone ?? "—"}`, left + colW + 8, y + 29, { width: colW - 20 });
+    doc.text(`Adresse: ${accord.prestataireRef?.adresse ?? accord.prestataireRef?.ville ?? "—"}`, left + colW + 8, y + 40, { width: colW - 20 });
     y += boxH3 + 10;
 
     // ── Tableau des actes ─────────────────────────────────────────────
@@ -2907,18 +2928,31 @@ export class DocumentsService {
     doc.end();
   }
 
-  // Taux de couverture affiché sur le certificat (2026-09) — pas de champ
-  // dédié sur AccordPrealable : dérivé du ratio remboursé/frais réels déjà
-  // arrêté ligne par ligne (plafondReference/montantDevis), cohérent par
-  // construction avec le tableau affiché juste en dessous plutôt qu'une
-  // seconde source (le taux de la Garantie du contrat) qui pourrait diverger
-  // visuellement du tableau en cas de plafond partiellement atteint.
-  private tauxCouverturePriseEnCharge(lignes: { plafondReference: Prisma.Decimal; montantDevis: Prisma.Decimal }[]): number | null {
-    if (lignes.length === 0) return null;
-    const totalFrais = lignes.reduce((s, l) => s + Number(l.montantDevis), 0);
-    const totalRemb = lignes.reduce((s, l) => s + Number(l.plafondReference), 0);
-    if (totalFrais <= 0) return null;
-    return Math.round((totalRemb / totalFrais) * 100);
+  // Taux de couverture affiché sur le certificat (2026-09) — voir demande
+  // utilisateur : "ce taux doit être systématiquement l'un des taux qui
+  // remonte de l'une des rubriques suivant en fonction de la garantie
+  // (consultation, pharmacie, analyse médicales, imagerie, hospitalisation,
+  // dentisterie, orthopédie, maternité...). En fonction du tableau de
+  // garanties c'est ce taux de ces rubriques qui doit remonter ici
+  // précisément et nulle part ailleurs sur le certificat de prise en
+  // charge." Remplace un ancien calcul en ratio (plafondReference/
+  // montantDevis — le remboursement RÉELLEMENT accordé sur cette facture,
+  // qui pouvait diverger du taux contractuel en cas de plafond
+  // partiellement atteint) par une lecture directe de Garantie.tauxAssure/
+  // tauxAyantsDroit — le VRAI tableau de garanties du contrat (même
+  // source que l'écran Contrats → Garanties), sur la rubrique de la
+  // PREMIÈRE ligne ayant un acte du catalogue rattaché.
+  private tauxCouvertureParRubrique(
+    lignes: { acteMedical: { categorieGarantie: string | null } | null }[],
+    garanties: { categorie: string; tauxAssure: Prisma.Decimal | null; tauxAyantsDroit: Prisma.Decimal | null }[],
+    estAyantDroit: boolean,
+  ): number | null {
+    const rubrique = lignes.find((l) => l.acteMedical?.categorieGarantie)?.acteMedical?.categorieGarantie;
+    if (!rubrique) return null;
+    const garantie = garanties.find((g) => g.categorie === rubrique);
+    if (!garantie) return null;
+    const taux = estAyantDroit ? (garantie.tauxAyantsDroit ?? garantie.tauxAssure) : garantie.tauxAssure;
+    return taux != null ? Number(taux) : null;
   }
 
   // Numéro de sinistre PARTAGÉ par tous les décomptes d'un même (contrat,
