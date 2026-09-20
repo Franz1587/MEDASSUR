@@ -9,6 +9,8 @@ import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { DateInput } from "@/components/shared/DateInput";
 import { ImportEnMasseModal } from "@/components/shared/ImportEnMasseModal";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmt } from "@/lib/format";
 import { useShellNavigation } from "@/layout/ShellNavigationContext";
 import {
@@ -155,6 +157,7 @@ export default function ClientsView() {
     }),
     [clients, search, typeFilter, statutFilter, villeFilter],
   );
+  const pagination = usePagination(filtered);
 
   const openCreate = () => {
     setForm(defaultClientForm);
@@ -369,7 +372,7 @@ export default function ClientsView() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((c) => (
+              {pagination.pageItems.map((c) => (
                 <tr
                   key={c.id}
                   onClick={() => { setSelected(c); scrollToTop(); }}
@@ -399,6 +402,11 @@ export default function ClientsView() {
           {filtered.length === 0 && (
             <div className="py-12 text-center text-muted-foreground text-sm">Aucun résultat pour votre recherche</div>
           )}
+          <Pagination
+            page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+            pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+            onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+          />
         </div>
 
         <div className="bg-card border border-border rounded-xl p-5">

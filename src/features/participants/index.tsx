@@ -11,6 +11,8 @@ import { Btn } from "@/components/shared/Btn";
 import { Combobox } from "@/components/shared/Combobox";
 import { StatCard } from "@/components/shared/StatCard";
 import { DateInput } from "@/components/shared/DateInput";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import { calculerAge } from "@/lib/age";
 import { useShellNavigation } from "@/layout/ShellNavigationContext";
@@ -155,6 +157,7 @@ export default function ParticipantsView() {
   }, []);
 
   const racines = assures.filter((a) => !a.familleId);
+  const pagination = usePagination(racines);
   const racineDe = (a: AssureSante) => (a.familleId ? assures.find((x) => x.id === a.familleId) ?? null : a);
   const racineSelected = selected ? racineDe(selected) : null;
   const membresFamille = racineSelected ? assures.filter((a) => a.familleId === racineSelected.id) : [];
@@ -472,7 +475,7 @@ export default function ParticipantsView() {
             </tr>
           </thead>
           <tbody>
-            {racines.map((a) => {
+            {pagination.pageItems.map((a) => {
               const nbMembres = assures.filter((m) => m.familleId === a.id).length;
               return (
                 <tr key={a.id} onClick={() => { setSelected(a); scrollToTop(); }}
@@ -494,6 +497,11 @@ export default function ParticipantsView() {
             })}
           </tbody>
         </table>
+        <Pagination
+          page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+          pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+        />
       </div>
 
       {selected ? (

@@ -8,6 +8,8 @@ import { Combobox } from "@/components/shared/Combobox";
 import { DateInput } from "@/components/shared/DateInput";
 import { DerniereModification } from "@/components/shared/DerniereModification";
 import { ImportEnMasseModal } from "@/components/shared/ImportEnMasseModal";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmt } from "@/lib/format";
 import { toNumber } from "@/lib/decimal";
 import { useShellNavigation } from "@/layout/ShellNavigationContext";
@@ -507,6 +509,7 @@ export default function ContratsView() {
     }
     return true;
   });
+  const pagination = usePagination(filtered);
   const statusIcon: Record<string, React.ElementType> = {
     "Tous": List,
     "Actif": CheckCircle2,
@@ -1044,7 +1047,7 @@ export default function ContratsView() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((c) => (
+            {pagination.pageItems.map((c) => (
               <tr key={c.id} onClick={() => openEdit(c)} className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer">
                 <td className="px-4 py-3 text-primary text-xs font-semibold whitespace-nowrap med-num med-col-ref med-sticky-col">
                   {c.numeroPolice || c.id}
@@ -1100,6 +1103,11 @@ export default function ContratsView() {
             )}
           </tbody>
         </table>
+        <Pagination
+          page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+          pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+        />
       </div>
 
       {showCreate && (

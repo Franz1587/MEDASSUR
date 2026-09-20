@@ -8,6 +8,8 @@ import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { DateInput } from "@/components/shared/DateInput";
 import { DerniereModification } from "@/components/shared/DerniereModification";
 import { StatCard } from "@/components/shared/StatCard";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import {
   getAccordsPrealables, decider, createAccordPrealable, updateAccordPrealable, annulerAccordPrealable, doublonEnCoursDe,
@@ -175,6 +177,7 @@ export default function AccordPrealableView() {
   const { shellActionRequest } = useShellNavigation();
   const { currentUser } = useAuth();
   const [accords, setAccords] = useState<AccordPrealable[]>([]);
+  const pagination = usePagination(accords);
   const [assures, setAssures] = useState<AssureSante[]>([]);
   const [actes, setActes] = useState<ActeMedical[]>([]);
   const [prestataires, setPrestataires] = useState<Prestataire[]>([]);
@@ -808,7 +811,7 @@ export default function AccordPrealableView() {
             </tr>
           </thead>
           <tbody>
-            {accords.map((a) => (
+            {pagination.pageItems.map((a) => (
               <tr key={a.id} onClick={() => openEdit(a)} className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer">
                 <td className="px-4 py-3 text-xs font-semibold text-primary whitespace-nowrap" style={{ fontFamily: "'DM Mono', monospace" }}>{a.id}</td>
                 <td className="px-4 py-3 whitespace-nowrap"><Badge variant="neutral">{a.origine ?? "Agent"}</Badge></td>
@@ -868,6 +871,11 @@ export default function AccordPrealableView() {
           </tbody>
         </table>
         {accords.length === 0 && <div className="py-12 text-center text-muted-foreground text-sm">Aucun accord préalable en cours</div>}
+        <Pagination
+          page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+          pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+        />
       </div>
 
       {showCreate && (

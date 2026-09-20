@@ -6,6 +6,8 @@ import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { Combobox } from "@/components/shared/Combobox";
 import { DateInput } from "@/components/shared/DateInput";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import {
   getSinistres, getSinistresKanban, createSinistre, updateSinistreStatut, deleteSinistre,
@@ -33,6 +35,7 @@ function emptyForm(): SinistreUpsertInput {
 export default function SinistresView() {
   const [activeTab, setActiveTab] = useState<"liste" | "kanban">("liste");
   const [sinistres, setSinistres] = useState<Sinistre[]>([]);
+  const pagination = usePagination(sinistres);
   const [kanbanColumns, setKanbanColumns] = useState<Record<string, string[]>>({});
   const [clients, setClients] = useState<Client[]>([]);
   const [showCreate, setShowCreate] = useState(false);
@@ -131,7 +134,7 @@ export default function SinistresView() {
               </tr>
             </thead>
             <tbody>
-              {sinistres.map((s) => (
+              {pagination.pageItems.map((s) => (
                 <tr key={s.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
                   <td className="px-4 py-3 text-xs font-semibold text-primary whitespace-nowrap med-num med-col-ref med-sticky-col">
                     {s.id}
@@ -165,6 +168,11 @@ export default function SinistresView() {
               ))}
             </tbody>
           </table>
+          <Pagination
+            page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+            pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+            onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+          />
         </div>
       ) : (
         <div className="overflow-x-auto pb-2">
