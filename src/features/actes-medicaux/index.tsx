@@ -3,6 +3,8 @@ import { ClipboardList, Plus, Trash2, Pencil, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import {
   getActesMedicaux, createActeMedical, updateActeMedical, deleteActeMedical,
@@ -51,6 +53,11 @@ export default function ActesMedicauxView() {
     return acc;
   }, {}), [actesFiltres]);
   const famillesAffichees = Object.keys(parFamille).sort();
+  // Pagination par famille (2026-09) — chaque famille est déjà repliable
+  // (<details>), la pagination porte donc sur le nombre de FAMILLES
+  // affichées par page, pas sur le nombre brut d'actes (qui restent tous
+  // consultables en dépliant une famille).
+  const pagination = usePagination(famillesAffichees);
 
   const startEdit = (acte: ActeMedical) => {
     setEditingId(acte.id);
@@ -160,7 +167,7 @@ export default function ActesMedicauxView() {
             </p>
           )}
 
-          {famillesAffichees.map((famille) => (
+          {pagination.pageItems.map((famille) => (
             <details key={famille} open={famillesAffichees.length <= 3} className="rounded-xl border border-border overflow-hidden">
               <summary className="px-4 py-2 bg-secondary/30 border-b border-border text-[11.5px] font-bold uppercase tracking-wide text-muted-foreground cursor-pointer select-none">
                 {famille} <span className="normal-case font-normal">({parFamille[famille].length})</span>
@@ -193,6 +200,11 @@ export default function ActesMedicauxView() {
               </div>
             </details>
           ))}
+          <Pagination
+            page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+            pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+            onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+          />
         </div>
 
         <div className="bg-card border border-border rounded-xl p-5 h-fit space-y-3">

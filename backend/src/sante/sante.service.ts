@@ -53,6 +53,11 @@ function parseDateFr(s?: string | null): Date | null {
   return d && m && y ? new Date(y, m - 1, d) : null;
 }
 
+function aujourdhuiFr(): string {
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+}
+
 // Blocage de saisie post-résiliation (2026-09) — voir demande utilisateur :
 // "si un contrat est résilié... seules les prestations faites avant la date
 // de résiliation peuvent être saisies. mais tout ce qui fait après la date
@@ -852,30 +857,28 @@ export class SanteService {
   // part assurance au restant disponible plutôt que de bloquer la saisie —
   // volontairement plus permissif que verifierPlafondPartage (qui, elle,
   // reste inchangée pour le flux Remboursement existant).
-  private async calculerPartPlafonnee(assureId: string, contratId: string, categorie: string, montant: number, ligneIdAExclure?: string) {
+  private async calculerPartPlafonnee(assureId: string, contratId: string, categorie: string, montant: number, datePrestation: string, ligneIdAExclure?: string) {
     const contrat = await this.prisma.contrat.findUnique({ where: { id: contratId }, include: { garanties: true } });
     if (!contrat) return {};
     const garantie = contrat.garanties.find((g) => g.categorie === categorie && g.plafondMontant != null);
     if (!garantie?.plafondMontant) return {};
 
-    // Fenêtre de consommation — annuelle (contrat en cours) par défaut, ou
-    // biennale (2 ans) selon Garantie.plafondPeriode ("An" | "2 Ans", voir
-    // l'éditeur du tableau de garanties) : certaines rubriques ne se
-    // réinitialisent que tous les 2 ans, pas à chaque renouvellement annuel
-    // (voir demande utilisateur). Le contrat étant prolongé EN PLACE à
-    // chaque renouvellement — jamais un nouveau contratId, voir
-    // AvenantsService.appliquer — dateDebut/dateFin ne couvrent que la
-    // DERNIÈRE période annuelle : une garantie biennale doit donc regarder
-    // plus loin en arrière que le contrat en cours pour retrouver la
-    // consommation de l'année précédente. Comparaison par vraies dates
-    // (parseDateFr), pas par comparaison lexicographique de "jj/mm/aaaa"
-    // (fausse dès que le jour et le mois ne varient pas dans le même sens
-    // que l'année).
+    // Fenêtre GLISSANTE ancrée sur la date de CETTE prestation (2026-09) —
+    // voir demande utilisateur : "les plafonds de ces rubriques ne sont pas
+    // juste des simples libellés mais également les budgets annuels à ne
+    // pas dépasser... la /an ou /2an signifie que la personne pourra à
+    // nouveau bénéficier de la prestation que l'année prochaine à la même
+    // date d'anniversaire de sa dernière demande, ou deux ans après la
+    // dernière demande." PAS l'exercice du contrat (qui se renouvelle en
+    // place et ne reflète qu'une seule période annuelle, voir
+    // AvenantsService.appliquer) : chaque nouvelle prestation regarde 12
+    // (ou 24) mois en arrière à partir de SA PROPRE date, glissant donc
+    // avec chaque demande plutôt que de se réinitialiser à une date fixe.
     const estBiennal = garantie.plafondPeriode?.trim().toLowerCase() === "2 ans";
-    const dateFinFenetre = parseDateFr(contrat.dateFin) ?? new Date();
+    const dateFinFenetre = parseDateFr(datePrestation) ?? new Date();
     const dateDebutFenetre = estBiennal
       ? new Date(dateFinFenetre.getFullYear() - 2, dateFinFenetre.getMonth(), dateFinFenetre.getDate() + 1)
-      : (parseDateFr(contrat.dateDebut) ?? new Date(dateFinFenetre.getFullYear(), 0, 1));
+      : new Date(dateFinFenetre.getFullYear() - 1, dateFinFenetre.getMonth(), dateFinFenetre.getDate() + 1);
 
     // Rejeté ET Annulé exclus (2026-09) — même correction que
     // verifierPlafondPartage ci-dessus, voir demande utilisateur "le cumul
@@ -932,7 +935,7 @@ export class SanteService {
   // l'acte doit lui aussi porter sur prixDefaut × quantite — sinon un achat
   // de plusieurs boîtes du même médicament se retrouverait plafonné au prix
   // d'une seule unité.
-  async calculerPartAssuranceLigne(assureId: string, contratId: string, typePrestation: string, montant: number, prestataireId?: string | null, ligneIdAExclure?: string, acteMedicalId?: string | null, quantite = 1) {
+  async calculerPartAssuranceLigne(assureId: string, contratId: string, typePrestation: string, montant: number, prestataireId?: string | null, ligneIdAExclure?: string, acteMedicalId?: string | null, quantite = 1, datePrestation: string = aujourdhuiFr()) {
     let montantEffectif = montant;
     let familleActe: string | null = null;
     if (acteMedicalId) {
@@ -945,7 +948,7 @@ export class SanteService {
 
     let part: Record<string, unknown>;
     if (RUBRIQUES_PLAFONNEES.includes(typePrestation)) {
-      part = await this.calculerPartPlafonnee(assureId, contratId, typePrestation, montantEffectif, ligneIdAExclure);
+      part = await this.calculerPartPlafonnee(assureId, contratId, typePrestation, montantEffectif, datePrestation, ligneIdAExclure);
     } else if (!prestataireId) {
       part = {};
     } else {
@@ -1105,6 +1108,20 @@ export class SanteService {
     });
     verifierSaisieAutorisee(contratRef, dto.datePrestation);
     await verifierAssureNonRetire(this.prisma, ctx.contratId, dto.assureId, dto.datePrestation);
+    // Rubrique forcée par le TYPE de prestataire (2026-09) — voir demande
+    // utilisateur : "chaque prestation des prestataires de type opticien
+    // doit être enregistrée sous la rubrique de garantie 'OPTIQUE' et pour
+    // tous les dentistes ou cabinets dentaires sous la rubrique 'Soins &
+    // Prothèses dentaires'." Même principe que la pharmacie (secteur
+    // toujours Privé, voir calculerPartAssuranceLigne ci-dessous) — la
+    // rubrique suit le TYPE RÉEL de l'établissement, jamais ce que
+    // l'utilisateur aurait pu sélectionner par erreur, pour que le suivi de
+    // plafond et les statistiques par rubrique restent fiables.
+    if (ctx.prestataireId) {
+      const prestataireType = await this.prisma.prestataire.findUnique({ where: { id: ctx.prestataireId }, select: { type: true } });
+      if (prestataireType?.type === "Opticien") dto.typePrestation = "Optique";
+      else if (prestataireType?.type === "Cabinet Dentaire") dto.typePrestation = "Soins & Prothèses dentaires";
+    }
     // Deux modes de tarification mutuellement exclusifs (2026-08) —
     // forfaitaire (catalogue ActeMedical) ou codification (lettre clé +
     // coefficient), voir demande utilisateur.
@@ -1167,7 +1184,7 @@ export class SanteService {
     // repris (voir importerAccordsPrealables, import.service.ts).
     const part: Record<string, unknown> = opts?.baseRemboursementImpose !== undefined
       ? { baseRemboursement: opts.baseRemboursementImpose }
-      : await this.calculerPartAssuranceLigne(dto.assureId, ctx.contratId, dto.typePrestation, montantPourCalcul, ctx.prestataireId, undefined, dto.acteMedicalId, dto.quantite ?? 1);
+      : await this.calculerPartAssuranceLigne(dto.assureId, ctx.contratId, dto.typePrestation, montantPourCalcul, ctx.prestataireId, undefined, dto.acteMedicalId, dto.quantite ?? 1, dto.datePrestation);
     const baseRemboursement = "baseRemboursement" in part ? Number(part.baseRemboursement) : 0;
     // plafondRestant/messagePlafond sont des indications d'affichage (voir
     // demande utilisateur), pas des colonnes du modèle PriseEnCharge — à ne
@@ -1255,6 +1272,7 @@ export class SanteService {
       const quantiteFinale = dto.quantite !== undefined ? dto.quantite : (ligne.quantite ?? 1);
       part = await this.calculerPartAssuranceLigne(
         dto.assureId ?? ligne.assureId, ligne.contratId, typePrestation, montantPourCalcul, prestataireIdEffectif, ligneId, acteMedicalId, quantiteFinale,
+        dto.datePrestation ?? ligne.date,
       );
       // plafondRestant/messagePlafond sont des indications d'affichage,
       // jamais des colonnes du modèle PriseEnCharge (voir creerLigneFacture).

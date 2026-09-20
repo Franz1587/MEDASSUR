@@ -3,6 +3,8 @@ import { ShieldCheck, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import {
   getGarantieCatalogue, createGarantieCatalogueItem, deleteGarantieCatalogueItem,
   type GarantieCatalogueUpsertInput,
@@ -27,6 +29,7 @@ export default function GarantiesCatalogueView() {
 
   const itemsVisibles = items.filter((i) => i.branche === brancheFilter);
   const familles = [...new Set(itemsVisibles.map((i) => i.categorie))].sort();
+  const pagination = usePagination(familles);
   const parCategorie = itemsVisibles.reduce<Record<string, GarantieCatalogueItem[]>>((acc, item) => {
     (acc[item.categorie] ??= []).push(item);
     return acc;
@@ -90,7 +93,7 @@ export default function GarantiesCatalogueView() {
               Aucune rubrique {brancheFilter} dans le catalogue — créez-en une avec le formulaire ci-contre.
             </p>
           )}
-          {familles.map((famille) => (
+          {pagination.pageItems.map((famille) => (
             <div key={famille} className="rounded-xl border border-border overflow-hidden">
               <div className="px-4 py-2 bg-secondary/30 border-b border-border text-[11.5px] font-bold uppercase tracking-wide text-muted-foreground">{famille}</div>
               <div className="divide-y divide-border/50">
@@ -117,6 +120,11 @@ export default function GarantiesCatalogueView() {
               </div>
             </div>
           ))}
+          <Pagination
+            page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+            pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+            onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+          />
         </div>
 
         <div className="bg-card border border-border rounded-xl p-5 h-fit space-y-3">

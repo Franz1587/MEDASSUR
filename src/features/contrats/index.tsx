@@ -90,33 +90,46 @@ interface PopulationRow {
 
 // Tableau de garanties standard "Collège Cadres" (santé Gabon) — chargeable
 // en un clic dans l'onglet Garanties, puis personnalisable.
+// Modèle standard (2026-09) — voir demande utilisateur : "la façon avec
+// laquelle j'ai réorganisé le tableau de garanties... du contrat 3M
+// PARTNERS & CONSEILS police N° 10005316, c'est exactement ce qui doit
+// devenir le modèle standard." Repris À L'IDENTIQUE (rubriques, ordre,
+// libellés, taux, plafonds) depuis les vraies données de ce contrat —
+// remplace l'ancien modèle qui lumpait 10 rubriques différentes sous un
+// unique "Consultation/Divers" fourre-tout. `plafondMontant`/
+// `plafondPeriode` ajoutés partout où un montant est réellement
+// chiffrable (voir demande utilisateur : "l'application doit surveiller
+// strictement les plafonds... pour chaque assuré ou ayant droit" — la
+// surveillance a besoin d'un montant numérique, pas seulement du texte
+// affiché) ; laissés vides quand le plafond n'est pas un montant fixe
+// périodique (BTAM, ou une ligne non plafonnée).
 const STANDARD_GARANTIES: GarantieInput[] = [
-  { categorie: "Consultation/Divers", libelle: "Consultation Généraliste", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% frais réels selon BTAM" },
-  { categorie: "Consultation/Divers", libelle: "Consultation Spécialiste", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% frais réels selon BTAM" },
-  { categorie: "Consultation/Divers", libelle: "Visite Généraliste", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% frais réels selon BTAM" },
-  { categorie: "Consultation/Divers", libelle: "Visite Spécialiste", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% frais réels selon BTAM" },
-  { categorie: "Consultation/Divers", libelle: "Consultation Urgente/Garde", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% frais réels selon BTAM" },
-  { categorie: "Consultation/Divers", libelle: "Frais Pharmaceutique & Produits", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% frais réels selon BTAM" },
-  { categorie: "Consultation/Divers", libelle: "Radiologie & Imagerie", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% frais réels selon BTAM" },
-  { categorie: "Consultation/Divers", libelle: "Analyses Biologiques", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% frais réels selon BTAM" },
-  { categorie: "Consultation/Divers", libelle: "Petite Chirurgie/Soins", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% frais réels selon BTAM" },
-  { categorie: "Consultation/Divers", libelle: "Auxiliaires Médicaux", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% frais réels selon BTAM" },
+  { categorie: "Consultations", libelle: "Consultation Généraliste", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% / 100% frais réels selon BTAM" },
+  { categorie: "Consultations", libelle: "Consultation Spécialiste", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% / 100% frais réels selon BTAM" },
+  { categorie: "Consultations", libelle: "Visite Généraliste", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% / 100% frais réels selon BTAM" },
+  { categorie: "Consultations", libelle: "Visite Spécialiste", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% / 100% frais réels selon BTAM" },
+  { categorie: "Consultations", libelle: "Consultation Urgente/Garde", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% / 100% frais réels selon BTAM" },
+  { categorie: "Pharmacie", libelle: "Frais Pharmaceutique & Produits", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% / 100% frais réels selon BTAM" },
+  { categorie: "Imagerie", libelle: "Radiologie & Imagerie", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% / 100% frais réels selon BTAM" },
+  { categorie: "Analyses Médicale", libelle: "Analyses Biologiques", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% / 100% frais réels selon BTAM" },
+  { categorie: "Petite Chirurgie/Soins", libelle: "Petite Chirurgie/Soins", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% / 100% frais réels selon BTAM" },
+  { categorie: "Petite Chirurgie/Soins", libelle: "Auxiliaires Médicaux", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% / 100% frais réels selon BTAM" },
   // Consultation dentaire : frais réels selon BTAM, illimitée — ne consomme
   // pas le plafond partagé. Orthodontie et Soins conservateurs & prothétiques
   // partagent, eux, un même plafond de 500 000 F CFA/an (voir note catégorie).
-  { categorie: "Dentisterie", libelle: "Consultation", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% frais réels selon BTAM" },
-  { categorie: "Dentisterie", libelle: "Orthodontie", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "BTAM 500 000 F CFA / AN — plafond partagé avec Soins conservateurs & prothétiques", plafondMontant: 500_000, plafondPeriode: "An" },
-  { categorie: "Dentisterie", libelle: "Soins conservateurs & prothétiques", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "BTAM 500 000 F CFA / AN — plafond partagé avec Orthodontie", plafondMontant: 500_000, plafondPeriode: "An" },
-  { categorie: "Hospitalisation", libelle: "Hébergement", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "50 000 F CFA BTAM" },
+  { categorie: "Soins & Prothèses dentaires", libelle: "Consultation", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% frais réels selon BTAM" },
+  { categorie: "Soins & Prothèses dentaires", libelle: "Orthodontie", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "BTAM 500 000 F CFA / AN — plafond partagé avec Soins conservateurs & prothétiques", plafondMontant: 500_000, plafondPeriode: "An" },
+  { categorie: "Soins & Prothèses dentaires", libelle: "Soins conservateurs & prothétiques", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "BTAM 500 000 F CFA / AN — plafond partagé avec Orthodontie", plafondMontant: 500_000, plafondPeriode: "An" },
+  { categorie: "Hospitalisation", libelle: "Hébergement", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "50 000 F CFA BTAM", plafondMontant: 50_000 },
   { categorie: "Hospitalisation", libelle: "Frais de traitement médicaux & chirurgicaux", tauxAssure: 100, tauxAyantsDroit: 100, plafond: undefined },
-  { categorie: "Maternité", libelle: "Frais pré & Natals", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "BTAM" },
-  { categorie: "Maternité", libelle: "Accouchement Simple", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "400 000 F CFA" },
-  { categorie: "Maternité", libelle: "Accouchement Multiple", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "800 000 F CFA" },
-  { categorie: "Optique", libelle: "Verres + Montures", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "200 000 F CFA / 2 ANS" },
-  { categorie: "Kinésithérapie & Cure thermale", libelle: "Kinésithérapie & Cure Thermale", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "200 000 F CFA / AN" },
-  { categorie: "Kinésithérapie & Cure thermale", libelle: "Orthophonie", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "200 000 F CFA / AN" },
-  { categorie: "Kinésithérapie & Cure thermale", libelle: "Orthoptie", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "200 000 F CFA / AN" },
-  { categorie: "Transport", libelle: "Ambulance", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "70 000 F CFA" },
+  { categorie: "Maternité", libelle: "Frais pré & Natals", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "BTAM" },
+  { categorie: "Maternité", libelle: "Accouchement Simple", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "400 000 F CFA", plafondMontant: 400_000 },
+  { categorie: "Maternité", libelle: "Accouchement Multiple", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "800 000 F CFA", plafondMontant: 800_000 },
+  { categorie: "Optique", libelle: "Verres + Montures", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "200 000 F CFA / 2 ANS", plafondMontant: 200_000, plafondPeriode: "2 Ans" },
+  { categorie: "Kinésithérapie & Cure thermale", libelle: "Kinésithérapie & Cure Thermale", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "200 000 F CFA / AN", plafondMontant: 200_000, plafondPeriode: "An" },
+  { categorie: "Orthophonie", libelle: "Orthophonie", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "200 000 F CFA / AN", plafondMontant: 200_000, plafondPeriode: "An" },
+  { categorie: "Orthoptie", libelle: "Orthoptie", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "200 000 F CFA / AN", plafondMontant: 200_000, plafondPeriode: "An" },
+  { categorie: "Transport", libelle: "Ambulance", tauxAssure: 100, tauxAyantsDroit: 100, plafond: "70 000 F CFA", plafondMontant: 70_000 },
 ];
 
 // Garanties du contrat d'Assistance (évacuation sanitaire hors du pays de
@@ -301,10 +314,14 @@ function groupImportRowsByFamily(rows: ImportedPersonRow[]): ImportedFamily[] {
 // Le résumé global (Ambulatoires/Hospitalisations) doit impacter les
 // rubriques itemisées correspondantes, à l'exception des rubriques qui
 // restent fixées à 100% par défaut (précisé par l'utilisateur) :
-// Dentisterie, Optique, Kinésithérapie & Cure thermale, Transport, EVASAN
-// en entier, et uniquement les 2 lignes "Accouchement" dans Maternité
-// ("Frais pré & Natals" reste, lui, piloté par Ambulatoires).
-const GARANTIES_FIXEES_100 = ["Dentisterie", "Optique", "Kinésithérapie & Cure thermale", "Transport", "EVASAN"];
+// Soins & Prothèses dentaires, Optique, Kinésithérapie & Cure thermale,
+// Orthophonie, Orthoptie, Transport, EVASAN en entier, et uniquement les 2
+// lignes "Accouchement" dans Maternité ("Frais pré & Natals" reste, lui,
+// piloté par Ambulatoires). Taxonomie des rubriques alignée sur le
+// nouveau modèle standard (2026-09, voir STANDARD_GARANTIES) — Orthophonie
+// et Orthoptie sont désormais leurs propres rubriques, plus des lignes de
+// Kinésithérapie & Cure thermale.
+const GARANTIES_FIXEES_100 = ["Soins & Prothèses dentaires", "Optique", "Kinésithérapie & Cure thermale", "Orthophonie", "Orthoptie", "Transport", "EVASAN"];
 const LIBELLES_MATERNITE_FIXES = ["Accouchement Simple", "Accouchement Multiple"];
 
 // Le plafond de certaines catégories est UNE SEULE enveloppe partagée entre

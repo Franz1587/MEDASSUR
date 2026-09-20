@@ -1,11 +1,20 @@
 import { IsIn, IsNumber, IsOptional, IsString, Min } from "class-validator";
 
-// Taxonomie du type de prestation d'une ligne de facture — "Ambulatoire" et
-// "Hospitalisation" suivent le calcul au pourcentage (taux du Contrat selon
-// secteur du prestataire), les autres valeurs sont les rubriques plafonnées
-// de Garantie.categorie (calcul au plafond restant, voir SanteService).
-export const RUBRIQUES_PLAFONNEES = ["Dentisterie", "Optique", "Kinésithérapie & Cure thermale", "Maternité", "Transport", "Autre"];
-export const TYPES_PRESTATION = ["Ambulatoire", "Hospitalisation", ...RUBRIQUES_PLAFONNEES];
+// Taxonomie du type de prestation d'une ligne de facture (2026-09, voir
+// demande utilisateur : "c'est exactement ce qui doit devenir le modèle
+// standard du tableau de garanties" — reprise du contrat 3M PARTNERS &
+// CONSEILS, police 10005316). Consultations/Pharmacie/Imagerie/Analyses
+// Médicale/Petite Chirurgie-Soins/Hospitalisation suivent le calcul au
+// pourcentage (taux du Contrat selon secteur du prestataire) — le champ
+// `typePrestation === "Hospitalisation"` distingue seul les deux taux
+// (voir SanteService.calculerPartAssuranceLigne, tout le reste retombe en
+// ambulatoire). Les autres valeurs sont les rubriques plafonnées de
+// Garantie.categorie (calcul au plafond restant, fenêtre glissante 1 ou 2
+// ans à partir de la date de CHAQUE prestation, voir
+// SanteService.calculerPartPlafonnee). "Ambulatoire" reste une valeur
+// générique de repli (anciennes saisies, actes hors catalogue).
+export const RUBRIQUES_PLAFONNEES = ["Soins & Prothèses dentaires", "Optique", "Kinésithérapie & Cure thermale", "Maternité", "Transport", "Orthophonie", "Orthoptie", "Autre"];
+export const TYPES_PRESTATION = ["Ambulatoire", "Consultations", "Pharmacie", "Imagerie", "Analyses Médicale", "Petite Chirurgie/Soins", "Hospitalisation", ...RUBRIQUES_PLAFONNEES];
 
 export class CreateFactureLigneDto {
   @IsString()

@@ -5,6 +5,8 @@ import { Badge } from "@/components/shared/Badge";
 import { Btn } from "@/components/shared/Btn";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Combobox } from "@/components/shared/Combobox";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useShellNavigation } from "@/layout/ShellNavigationContext";
 import { fmtM } from "@/lib/format";
 import {
@@ -56,11 +58,17 @@ export default function PrestatairesView() {
     });
   }, [prestataires, recherche, filtreType, filtreVille]);
 
+  // Pagination (2026-09) — appliquée à la liste PLATE déjà filtrée, avant
+  // le regroupement ville → type ci-dessous : chaque page reste ensuite
+  // regroupée normalement (un groupe peut être scindé entre deux pages en
+  // cas de grosse ville, comme pour toute liste paginée puis groupée).
+  const pagination = usePagination(prestatairesFiltres);
+
   // Classement ville → type → prestataires (ordre alphabétique) — reflète
   // l'organisation du réseau de soins (voir DocumentsService.renderReseauSoins).
   const groupes = useMemo(() => {
     const parVille = new Map<string, Map<string, Prestataire[]>>();
-    for (const p of prestatairesFiltres) {
+    for (const p of pagination.pageItems) {
       if (!parVille.has(p.ville)) parVille.set(p.ville, new Map());
       const parType = parVille.get(p.ville)!;
       if (!parType.has(p.type)) parType.set(p.type, []);
@@ -75,7 +83,7 @@ export default function PrestatairesView() {
           .sort((a, b) => a[0].localeCompare(b[0], "fr"))
           .map(([type, items]) => ({ type, items: [...items].sort((a, b) => a.nom.localeCompare(b.nom, "fr")) })),
       }));
-  }, [prestatairesFiltres]);
+  }, [pagination.pageItems]);
 
   const filtresActifs = recherche.trim() !== "" || filtreType !== null || filtreVille !== null;
   const reinitialiserFiltres = () => { setRecherche(""); setFiltreType(null); setFiltreVille(null); };
@@ -290,6 +298,11 @@ export default function PrestatairesView() {
               </p>
             )}
           </div>
+          <Pagination
+            page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+            pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+            onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+          />
         </div>
 
         <div className="lg:col-span-2 bg-card border border-border rounded-xl p-5">

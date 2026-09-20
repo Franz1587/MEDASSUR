@@ -27,19 +27,14 @@ import type { LettreCle } from "@/types/lettresCles";
 import { CODE_KA, CODE_KC, CODE_K_LOC } from "@/types/lettresCles";
 
 // Doit rester strictement identique à TYPES_PRESTATION/RUBRIQUES_PLAFONNEES
-// (backend/src/sante/dto/create-facture-ligne.dto.ts) — "Ambulatoire" et
-// "Hospitalisation" suivent le calcul au pourcentage, le reste suit le
-// calcul au plafond de rubrique (Garantie.categorie).
-const TYPES_PRESTATION = ["Ambulatoire", "Hospitalisation", "Dentisterie", "Optique", "Kinésithérapie & Cure thermale", "Maternité", "Transport", "Autre"];
-
-// Catégorie du catalogue ActeMedical → type de prestation le plus proche,
-// pour pré-remplir le formulaire dès qu'un acte est choisi (reste modifiable).
-const TYPE_PAR_CATEGORIE: Record<string, string> = {
-  "Hospitalisation": "Hospitalisation",
-  "Dentisterie": "Dentisterie",
-  "Consultation/Divers": "Ambulatoire",
-  "Kinésithérapie & Cure thermale": "Kinésithérapie & Cure thermale",
-};
+// (backend/src/sante/dto/create-facture-ligne.dto.ts) — 2026-09, voir
+// demande utilisateur : "c'est exactement ce qui doit devenir le modèle
+// standard du tableau de garanties" (repris du contrat 3M PARTNERS &
+// CONSEILS, police 10005316). Consultations/Pharmacie/Imagerie/Analyses
+// Médicale/Petite Chirurgie-Soins/Hospitalisation suivent le calcul au
+// pourcentage, le reste suit le calcul au plafond de rubrique
+// (Garantie.categorie).
+const TYPES_PRESTATION = ["Ambulatoire", "Consultations", "Pharmacie", "Imagerie", "Analyses Médicale", "Petite Chirurgie/Soins", "Hospitalisation", "Soins & Prothèses dentaires", "Optique", "Kinésithérapie & Cure thermale", "Maternité", "Transport", "Orthophonie", "Orthoptie", "Autre"];
 
 const fieldCls = "w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground";
 const labelCls = "text-[12px] text-muted-foreground mb-1.5";
@@ -197,7 +192,10 @@ export default function FactureSaisie({ factureId, onClose, onChanged }: { factu
     setForm((v) => ({
       ...v, acte, ligneDeriveeCode: null, montant: acte.prixDefaut * (v.quantite || 1),
       genererBundleKC: acte.lettreCleCode === CODE_KC,
-      typePrestation: (acte.categorieGarantie && TYPE_PAR_CATEGORIE[acte.categorieGarantie]) || v.typePrestation,
+      // La rubrique de garantie de l'acte (categorieGarantie) correspond
+      // désormais DIRECTEMENT à une valeur de TYPES_PRESTATION (taxonomie
+      // alignée, 2026-09) — plus besoin d'une table de correspondance.
+      typePrestation: (acte.categorieGarantie && TYPES_PRESTATION.includes(acte.categorieGarantie) ? acte.categorieGarantie : null) || v.typePrestation,
     }));
   };
 

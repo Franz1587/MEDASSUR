@@ -30,15 +30,10 @@ import { CODE_KA, CODE_KC, CODE_K_LOC } from "@/types/lettresCles";
 
 // Doit rester strictement identique à TYPES_PRESTATION/RUBRIQUES_PLAFONNEES
 // (backend/src/sante/dto/create-facture-ligne.dto.ts) — même moteur de
-// calcul qu'une Facture (voir SanteService.creerLigneRemboursement).
-const TYPES_PRESTATION = ["Ambulatoire", "Hospitalisation", "Dentisterie", "Optique", "Kinésithérapie & Cure thermale", "Maternité", "Transport", "Autre"];
-
-const TYPE_PAR_CATEGORIE: Record<string, string> = {
-  "Hospitalisation": "Hospitalisation",
-  "Dentisterie": "Dentisterie",
-  "Consultation/Divers": "Ambulatoire",
-  "Kinésithérapie & Cure thermale": "Kinésithérapie & Cure thermale",
-};
+// calcul qu'une Facture (voir SanteService.creerLigneRemboursement) —
+// taxonomie alignée sur le modèle standard 2026-09 (contrat 3M PARTNERS &
+// CONSEILS, police 10005316).
+const TYPES_PRESTATION = ["Ambulatoire", "Consultations", "Pharmacie", "Imagerie", "Analyses Médicale", "Petite Chirurgie/Soins", "Hospitalisation", "Soins & Prothèses dentaires", "Optique", "Kinésithérapie & Cure thermale", "Maternité", "Transport", "Orthophonie", "Orthoptie", "Autre"];
 
 const fieldCls = "w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground";
 const labelCls = "text-[12px] text-muted-foreground mb-1.5";
@@ -158,7 +153,10 @@ export default function RemboursementSaisie({ remboursementId, onClose, onChange
     setForm((v) => ({
       ...v, acte, ligneDeriveeCode: null, montant: acte.prixDefaut * (v.quantite || 1),
       genererBundleKC: acte.lettreCleCode === CODE_KC,
-      typePrestation: (acte.categorieGarantie && TYPE_PAR_CATEGORIE[acte.categorieGarantie]) || v.typePrestation,
+      // La rubrique de garantie de l'acte (categorieGarantie) correspond
+      // désormais DIRECTEMENT à une valeur de TYPES_PRESTATION (taxonomie
+      // alignée, 2026-09) — plus besoin d'une table de correspondance.
+      typePrestation: (acte.categorieGarantie && TYPES_PRESTATION.includes(acte.categorieGarantie) ? acte.categorieGarantie : null) || v.typePrestation,
     }));
   };
 

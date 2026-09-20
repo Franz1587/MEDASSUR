@@ -126,16 +126,17 @@ export class AccordPrealableService {
   // montantDevis brut — même principe pour le Certificat de Prise en
   // Charge (DocumentsService.renderCertificatPriseEnCharge).
   private async calculerMontantSuggere(a: {
-    assureId: string; contratId: string; description: string; montantDevis: unknown; prestataireId: string | null;
+    assureId: string; contratId: string; description: string; montantDevis: unknown; prestataireId: string | null; dateDemande: string;
     lignes: { montantDevis: unknown; plafondReference: unknown; acteMedicalId: string | null; acteMedical: { categorieGarantie: string | null } | null }[];
   }): Promise<number | null> {
     if (a.lignes.length > 0) {
       let total = 0;
       for (const l of a.lignes) {
         // Rubrique de garantie de CET acte (ambulatoire/hospitalisation ou
-        // rubrique plafonnée type Optique/Dentisterie) — repli sur
-        // "Hospitalisation" pour une ligne sans acte du catalogue (saisie
-        // libre), la Prise en Charge couvrant par nature des soins lourds.
+        // rubrique plafonnée type Optique/Soins & Prothèses dentaires) —
+        // repli sur "Hospitalisation" pour une ligne sans acte du catalogue
+        // (saisie libre), la Prise en Charge couvrant par nature des soins
+        // lourds.
         const typePrestation = l.acteMedical?.categorieGarantie ?? "Hospitalisation";
         // Plafonnement déjà fait via l.plafondReference, PAS via
         // acteMedicalId — un acte KC (bloc chirurgical) génère 3 lignes
@@ -145,7 +146,7 @@ export class AccordPrealableService {
         // chirurgien aux lignes anesthésiste/bloc (voir même correction sur
         // DocumentsService.renderCertificatPriseEnCharge).
         const montantPourCalc = Math.min(Number(l.montantDevis), Number(l.plafondReference));
-        const part = await this.sante.calculerPartAssuranceLigne(a.assureId, a.contratId, typePrestation, montantPourCalc, a.prestataireId, undefined, undefined);
+        const part = await this.sante.calculerPartAssuranceLigne(a.assureId, a.contratId, typePrestation, montantPourCalc, a.prestataireId, undefined, undefined, 1, a.dateDemande);
         if (!("baseRemboursement" in part)) return null;
         total += Number(part.baseRemboursement);
       }
@@ -158,7 +159,7 @@ export class AccordPrealableService {
     // part ne sont pas calculées").
     if (a.montantDevis == null) return null;
     const acte = await this.prisma.acteMedical.findFirst({ where: { libelle: { equals: a.description.trim(), mode: "insensitive" } } });
-    const part = await this.sante.calculerPartAssuranceLigne(a.assureId, a.contratId, acte?.categorieGarantie ?? "Hospitalisation", Number(a.montantDevis), a.prestataireId, undefined, acte?.id ?? null);
+    const part = await this.sante.calculerPartAssuranceLigne(a.assureId, a.contratId, acte?.categorieGarantie ?? "Hospitalisation", Number(a.montantDevis), a.prestataireId, undefined, acte?.id ?? null, 1, a.dateDemande);
     return "baseRemboursement" in part ? Number(part.baseRemboursement) : null;
   }
 

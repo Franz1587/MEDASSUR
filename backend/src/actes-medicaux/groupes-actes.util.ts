@@ -32,8 +32,14 @@ export const GROUPES_ACTES: GroupeActe[] = [
   },
   { cle: "Analyse", label: "Analyse", familles: ["EXAMENS LABORATOIRE"], typePrestationDefaut: "Ambulatoire" },
   {
+    // Familles radiologie consolidées (2026-09) — voir demande utilisateur :
+    // "au lieu d'avoir radio membre inférieur, radio membre supérieur,
+    // radiologie, il faut juste tout regrouper les actes de ces famille
+    // d'acte sous une seule famille appelée 'Radiologie'." Les anciens noms
+    // (avant migration du catalogue) restent listés en repli, sans effet
+    // une fois la consolidation appliquée.
     cle: "Imagerie", label: "Imagerie",
-    familles: ["RADIOLOGIE", "RADIOLOGIE ABDOMEN", "RADIOLOGIE MEMBRES INFÉRIEURS", "RADIOLOGIE MEMBRES SUPÉRIEURS", "RADIOLOGIE RACHIS", "RADIOLOGIE TRONC", "IRM", "SCANNER / TDM", "ÉCHOGRAPHIE"],
+    familles: ["Radiologie", "RADIOLOGIE", "RADIOLOGIE ABDOMEN", "RADIOLOGIE MEMBRES INFÉRIEURS", "RADIOLOGIE MEMBRES SUPÉRIEURS", "RADIOLOGIE RACHIS", "RADIOLOGIE TRONC", "IRM", "SCANNER / TDM", "ÉCHOGRAPHIE"],
     typePrestationDefaut: "Ambulatoire",
   },
   {
@@ -41,7 +47,10 @@ export const GROUPES_ACTES: GroupeActe[] = [
     familles: ["ACTES CHIRURGICAUX", "PLÂTRE, ATTELLE ET POINT DE SUTURE", "DIALYSE & RADIOTHÉRAPIE"],
     typePrestationDefaut: "Hospitalisation",
   },
-  { cle: "Dentaire", label: "Dentaire", familles: ["SOINS & PROTHÈSES DENTAIRES", "SOINS DENTAIRES & CONSERVATEURS"], typePrestationDefaut: "Dentisterie" },
+  // Familles dentaires consolidées (2026-09) — voir demande utilisateur :
+  // "mettre tout sous la rubrique 'Soins & Prothèses Dentaires'." Anciens
+  // noms conservés en repli (sans effet une fois la migration appliquée).
+  { cle: "Dentaire", label: "Dentaire", familles: ["Soins & Prothèses Dentaires", "SOINS & PROTHÈSES DENTAIRES", "SOINS DENTAIRES & CONSERVATEURS"], typePrestationDefaut: "Soins & Prothèses dentaires" },
   { cle: "Kinesitherapie", label: "Kinésithérapie", familles: ["KINÉSITHÉRAPIE & CURES THERMALES"], typePrestationDefaut: "Kinésithérapie & Cure thermale" },
   // "Actes de Spécialités" détaché d'Hospitalisation (2026-08) — voir
   // demande utilisateur : "il faut détacher pharmacie et soins et
