@@ -103,15 +103,3 @@ export async function chatAssistant(message: string, historique: { role: "user" 
   return reponse;
 }
 
-/**
- * GED : le dépôt de fichier lui-même reste à câbler (UploadDropzone
- * n'envoie pas encore le fichier réel au serveur, voir src/features/ged) —
- * hors périmètre du correctif "pas de données codées en dur" en cours
- * (2026-09). Cette fonction n'est donc PAS encore appelée avec un vrai
- * fichier ; on ne la fait plus répondre un résultat fixe pour autant, afin
- * de ne pas laisser croire à un classement réel tant que l'upload n'est
- * pas branché.
- */
-export async function classifyDocument(): Promise<{ type: string; tags: string[] }> {
-  throw new Error("Classement automatique indisponible : l'envoi du fichier au serveur n'est pas encore implémenté.");
-}
