@@ -5,6 +5,8 @@ import { UserPlus, UserMinus, Check, X, UserCog } from "lucide-react";
 import { Badge, type BadgeVariant } from "@/components/shared/Badge";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { DateInput } from "@/components/shared/DateInput";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { getDemandesClient, trancherDemandeClient, prendreDemandeClient } from "@/services/demandeClient.service";
 import { assurePhotoUrl } from "@/services/sante.service";
 import { useAuth } from "@/auth/AuthContext";
@@ -42,6 +44,7 @@ export default function DemandesClientView() {
   const [cotisations, setCotisations] = useState<Record<string, { beneficiaires: number; cotisation: number }>>({});
   const [motifRefus, setMotifRefus] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const pagination = usePagination(demandes);
 
   const refresh = () => getDemandesClient(filtreStatut === "Toutes" ? undefined : filtreStatut).then(setDemandes);
 
@@ -120,7 +123,7 @@ export default function DemandesClientView() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
-            {demandes.map((d) => (
+            {pagination.pageItems.map((d) => (
               <tr key={d.id} className="hover:bg-secondary/25">
                 <td className="px-4 py-2.5 text-foreground flex items-center gap-1.5">
                   {d.type === "Incorporation" ? <UserPlus className="w-3.5 h-3.5 text-emerald-600" /> : <UserMinus className="w-3.5 h-3.5 text-amber-600" />}
@@ -159,6 +162,11 @@ export default function DemandesClientView() {
             )}
           </tbody>
         </table>
+        <Pagination
+          page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+          pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+        />
       </div>
 
       {enDecision && (

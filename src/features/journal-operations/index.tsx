@@ -6,6 +6,8 @@ import { Btn } from "@/components/shared/Btn";
 import { Badge } from "@/components/shared/Badge";
 import { Combobox } from "@/components/shared/Combobox";
 import { DateInput } from "@/components/shared/DateInput";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { getJournalOperations, openEtatGlobalJournal } from "@/services/audit.service";
 import { getUsers } from "@/services/admin.service";
 import { roles } from "@/auth/roles";
@@ -50,6 +52,7 @@ const labelCls = "text-[12px] text-muted-foreground mb-1.5";
 
 export default function JournalOperationsView() {
   const [entries, setEntries] = useState<AuditLogEntry[]>([]);
+  const pagination = usePagination(entries);
   const [entite, setEntite] = useState("");
   const [action, setAction] = useState("");
   const [entiteId, setEntiteId] = useState("");
@@ -178,7 +181,7 @@ export default function JournalOperationsView() {
             </tr>
           </thead>
           <tbody>
-            {entries.map((e) => (
+            {pagination.pageItems.map((e) => (
               <tr key={e.id} className="border-b border-border/50">
                 <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap" style={{ fontFamily: "'DM Mono', monospace" }}>{new Date(e.dateAction).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</td>
                 <td className="px-4 py-2.5 font-medium text-foreground whitespace-nowrap">{e.utilisateurNom}</td>
@@ -191,6 +194,11 @@ export default function JournalOperationsView() {
           </tbody>
         </table>
         {entries.length === 0 && <div className="py-12 text-center text-muted-foreground text-sm">Aucune opération ne correspond à cette recherche.</div>}
+        <Pagination
+          page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+          pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+        />
       </div>
     </div>
   );

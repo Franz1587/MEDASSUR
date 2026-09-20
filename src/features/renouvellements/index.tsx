@@ -5,6 +5,8 @@ import { Badge } from "@/components/shared/Badge";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { StatCard } from "@/components/shared/StatCard";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import { useAuth } from "@/auth/AuthContext";
 import { useShellNavigation } from "@/layout/ShellNavigationContext";
@@ -89,6 +91,7 @@ export default function RenouvellementsView() {
   };
 
   const filtered = statusFilter === "Tous" ? items : items.filter((i) => i.statut === statusFilter);
+  const pagination = usePagination(filtered);
   const statusIcon: Record<string, React.ElementType> = {
     "Tous": List,
     "À renouveler": Clock3,
@@ -143,7 +146,7 @@ export default function RenouvellementsView() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r) => (
+            {pagination.pageItems.map((r) => (
               <tr key={r.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer">
                 <td className="px-4 py-3 text-primary text-xs font-semibold whitespace-nowrap med-num med-col-ref med-sticky-col">
                   {r.id}
@@ -190,6 +193,11 @@ export default function RenouvellementsView() {
             ))}
           </tbody>
         </table>
+        <Pagination
+          page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+          pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+        />
       </div>
     </div>
   );

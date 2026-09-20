@@ -5,6 +5,8 @@ import { Badge } from "@/components/shared/Badge";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { StatCard } from "@/components/shared/StatCard";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import {
   getImpayes, getRecouvrementKanban, relancerImpaye, relancerTousLesImpayes, resoudreImpaye,
@@ -22,6 +24,7 @@ export default function RecouvrementView() {
   const [activeTab, setActiveTab] = useState<"liste" | "kanban">("liste");
   const [impayes, setImpayes] = useState<Impaye[]>([]);
   const [kanban, setKanban] = useState<Record<string, string[]>>({});
+  const pagination = usePagination(impayes);
 
   const refresh = () => {
     getImpayes().then(setImpayes);
@@ -103,7 +106,7 @@ export default function RecouvrementView() {
               </tr>
             </thead>
             <tbody>
-              {impayes.map((i) => (
+              {pagination.pageItems.map((i) => (
                 <tr key={i.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
                   <td className="px-4 py-3 text-xs font-semibold text-primary whitespace-nowrap med-num med-col-ref med-sticky-col">
                     {i.id}
@@ -137,6 +140,11 @@ export default function RecouvrementView() {
               ))}
             </tbody>
           </table>
+          <Pagination
+            page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+            pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+            onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+          />
         </div>
       ) : (
         <div className="overflow-x-auto pb-2">

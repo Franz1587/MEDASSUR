@@ -5,6 +5,8 @@ import { Badge } from "@/components/shared/Badge";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { UploadDropzone } from "@/components/shared/UploadDropzone";
 import { useSimulatedProcessing } from "@/components/shared/useSimulatedProcessing";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { getDocuments, createDocument, deleteDocument } from "@/services/ged.service";
 import { classifyDocument } from "@/services/ai.service";
 import type { GedDocument } from "@/types/ged";
@@ -25,6 +27,7 @@ export default function GedView() {
   const { status, result, run, reset } = useSimulatedProcessing<{ type: string; tags: string[] }>();
   const [entiteLiee, setEntiteLiee] = useState("");
   const [saving, setSaving] = useState(false);
+  const pagination = usePagination(documents);
 
   const refresh = () => getDocuments().then(setDocuments);
 
@@ -125,7 +128,7 @@ export default function GedView() {
             </tr>
           </thead>
           <tbody>
-            {documents.map((d) => (
+            {pagination.pageItems.map((d) => (
               <tr key={d.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer">
                 <td className="px-4 py-3 text-xs font-semibold text-foreground whitespace-nowrap med-num">{d.nom}</td>
                 <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{d.type}</td>
@@ -150,6 +153,11 @@ export default function GedView() {
             ))}
           </tbody>
         </table>
+        <Pagination
+          page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+          pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+        />
       </div>
     </div>
   );

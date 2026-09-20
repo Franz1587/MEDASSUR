@@ -6,6 +6,8 @@ import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { Combobox } from "@/components/shared/Combobox";
 import { DateInput } from "@/components/shared/DateInput";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import { useAuth } from "@/auth/AuthContext";
 import {
@@ -34,6 +36,7 @@ export default function ResiliationsView() {
   const [form, setForm] = useState<ResiliationUpsertInput>(emptyForm(currentUser?.nom ?? ""));
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const pagination = usePagination(resiliations);
 
   const refresh = () => getResiliations().then(setResiliations);
 
@@ -115,7 +118,7 @@ export default function ResiliationsView() {
             </tr>
           </thead>
           <tbody>
-            {resiliations.map((r) => (
+            {pagination.pageItems.map((r) => (
               <tr key={r.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
                 <td className="px-4 py-3 text-primary text-xs font-semibold whitespace-nowrap med-num">{r.id}</td>
                 <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap med-num">{r.contrat}</td>
@@ -142,6 +145,11 @@ export default function ResiliationsView() {
             )}
           </tbody>
         </table>
+        <Pagination
+          page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+          pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+        />
       </div>
 
       {showCreate && (

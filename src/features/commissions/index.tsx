@@ -9,6 +9,8 @@ import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { ChartTooltipStyle } from "@/components/shared/chartTooltipStyle";
 import { DateInput } from "@/components/shared/DateInput";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import { getCommissions, reverserCommission } from "@/services/commissions.service";
 import type { Commission } from "@/types/commissions";
@@ -64,6 +66,7 @@ export default function CommissionsView() {
   const liste = commissions ?? [];
   const totalCommission = liste.reduce((a, b) => a + b.montantCommission, 0);
   const chartData = liste.map((c) => ({ compagnie: c.compagnie.split(" ")[0], commission: c.montantCommission }));
+  const pagination = usePagination(liste);
 
   return (
     <div className="p-6 space-y-5">
@@ -117,7 +120,7 @@ export default function CommissionsView() {
               <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">Chargement…</td></tr>
             ) : liste.length === 0 ? (
               <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">Aucune commission pour ces critères.</td></tr>
-            ) : liste.map((c) => (
+            ) : pagination.pageItems.map((c) => (
               <tr key={c.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
                 <td className="px-4 py-3 text-xs text-primary font-semibold whitespace-nowrap med-num">{c.id}</td>
                 <td className="px-4 py-3 font-semibold text-foreground whitespace-nowrap">{c.compagnie}</td>
@@ -135,6 +138,11 @@ export default function CommissionsView() {
             ))}
           </tbody>
         </table>
+        <Pagination
+          page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+          pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+        />
       </div>
     </div>
   );

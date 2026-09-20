@@ -7,6 +7,8 @@ import { Btn } from "@/components/shared/Btn";
 import { Combobox } from "@/components/shared/Combobox";
 import { DateInput } from "@/components/shared/DateInput";
 import { RichTextEditor } from "@/components/shared/RichTextEditor";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { getClients } from "@/services/clients.service";
 import { getPrestataires } from "@/services/prestataires.service";
 import type { Client } from "@/types/clients";
@@ -43,6 +45,7 @@ export default function CourrierMaladieView() {
   const [chargement, setChargement] = useState(true);
   const [showEditeur, setShowEditeur] = useState(false);
   const [enregistrement, setEnregistrement] = useState(false);
+  const pagination = usePagination(courriers);
 
   // ── Filtres ──────────────────────────────────────────────────────
   const [filtreReference, setFiltreReference] = useState("");
@@ -183,7 +186,7 @@ export default function CourrierMaladieView() {
           <tbody className="divide-y divide-border/50">
             {chargement && <tr><td colSpan={7} className="px-4 py-6 text-center text-muted-foreground">Chargement…</td></tr>}
             {!chargement && courriers.length === 0 && <tr><td colSpan={7} className="px-4 py-6 text-center text-muted-foreground">Aucun courrier.</td></tr>}
-            {courriers.map((c) => (
+            {pagination.pageItems.map((c) => (
               <tr key={c.id} className="hover:bg-secondary/20">
                 <td className="px-4 py-2.5 font-semibold text-foreground med-num">{c.reference}</td>
                 <td className="px-4 py-2.5 text-muted-foreground">{c.type?.libelle ?? "—"}</td>
@@ -198,6 +201,11 @@ export default function CourrierMaladieView() {
             ))}
           </tbody>
         </table>
+        <Pagination
+          page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+          pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+        />
       </div>
 
       {/* ── Éditeur plein écran ──────────────────────────────────── */}

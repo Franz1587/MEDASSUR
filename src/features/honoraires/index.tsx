@@ -5,6 +5,8 @@ import { Badge } from "@/components/shared/Badge";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { Combobox } from "@/components/shared/Combobox";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import { getHonoraires, createHonoraires, facturerHonoraires, type HonorairesUpsertInput } from "@/services/honoraires.service";
 import { getContrats } from "@/services/contrats.service";
@@ -27,6 +29,7 @@ export default function HonorairesView() {
   const [form, setForm] = useState<HonorairesUpsertInput>(emptyForm());
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const pagination = usePagination(honoraires);
 
   const refresh = () => getHonoraires().then(setHonoraires);
 
@@ -90,7 +93,7 @@ export default function HonorairesView() {
             </tr>
           </thead>
           <tbody>
-            {honoraires.map((h) => (
+            {pagination.pageItems.map((h) => (
               <tr key={h.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
                 <td className="px-4 py-3 font-semibold text-foreground whitespace-nowrap">{h.clientNom}</td>
                 <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{h.periode}</td>
@@ -111,6 +114,11 @@ export default function HonorairesView() {
             )}
           </tbody>
         </table>
+        <Pagination
+          page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+          pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+        />
       </div>
 
       {showCreate && (

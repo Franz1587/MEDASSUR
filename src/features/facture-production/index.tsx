@@ -6,6 +6,8 @@ import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { Combobox } from "@/components/shared/Combobox";
 import { DateInput } from "@/components/shared/DateInput";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import { getCompagnies } from "@/services/compagnies.service";
 import { getClients } from "@/services/clients.service";
@@ -33,6 +35,7 @@ export default function FactureProductionView() {
   const [chargement, setChargement] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [enregistrement, setEnregistrement] = useState(false);
+  const pagination = usePagination(factures);
 
   // ── Filtres de recherche ──────────────────────────────────────────
   const [filtreCompagnie, setFiltreCompagnie] = useState<Compagnie | null>(null);
@@ -212,7 +215,7 @@ export default function FactureProductionView() {
           <tbody className="divide-y divide-border/50">
             {chargement && <tr><td colSpan={7} className="px-4 py-6 text-center text-muted-foreground">Chargement…</td></tr>}
             {!chargement && factures.length === 0 && <tr><td colSpan={7} className="px-4 py-6 text-center text-muted-foreground">Aucune facture de production.</td></tr>}
-            {factures.map((f) => {
+            {pagination.pageItems.map((f) => {
               const total = f.lignes.reduce((s, l) => s + Number(l.montant), 0);
               return (
                 <tr key={f.id} className="hover:bg-secondary/20">
@@ -230,6 +233,11 @@ export default function FactureProductionView() {
             })}
           </tbody>
         </table>
+        <Pagination
+          page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+          pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+        />
       </div>
 
       {/* ── Modal création ───────────────────────────────────────── */}

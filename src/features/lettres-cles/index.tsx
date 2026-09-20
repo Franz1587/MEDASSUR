@@ -3,6 +3,8 @@ import { Hash, Plus, Trash2, Pencil, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import { SPECIALITES_SANTE } from "@/lib/specialitesSante";
 import {
@@ -70,6 +72,7 @@ export default function LettresClesView() {
       || l.libelle.toLowerCase().includes(rechercheNormalisee)
       || l.specialites.some((s) => s.toLowerCase().includes(rechercheNormalisee));
   }), [lettres, rechercheNormalisee]);
+  const pagination = usePagination(lettresFiltrees);
 
   const startEdit = (l: LettreCle) => {
     setEditingCode(l.code);
@@ -153,7 +156,7 @@ export default function LettresClesView() {
                 {lettresFiltrees.length === 0 && (
                   <tr><td colSpan={7} className="text-center py-10 text-[12px] text-muted-foreground">Aucune lettre clé ne correspond à cette recherche.</td></tr>
                 )}
-                {lettresFiltrees.map((l) => (
+                {pagination.pageItems.map((l) => (
                   <tr key={l.code} className={!l.actif ? "opacity-50" : ""}>
                     <td className="px-4 py-2.5 font-semibold text-foreground">{l.code}</td>
                     <td className="px-4 py-2.5 text-foreground">{l.libelle}</td>
@@ -181,6 +184,11 @@ export default function LettresClesView() {
                 ))}
               </tbody>
             </table>
+            <Pagination
+              page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+              pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+              onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+            />
           </div>
         </div>
 

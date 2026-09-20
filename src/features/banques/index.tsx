@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { Badge } from "@/components/shared/Badge";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import {
   getBanques, createBanque, updateBanque, getMouvementsBanque, getStatistiquesBanques,
@@ -37,6 +39,7 @@ export default function BanquesView() {
   const [mouvementsBanque, setMouvementsBanque] = useState<Banque | null>(null);
   const [mouvements, setMouvements] = useState<MouvementBanque[]>([]);
   const [loadingMouvements, setLoadingMouvements] = useState(false);
+  const paginationMouvements = usePagination(mouvements);
 
   const refresh = () => {
     getBanques().then(setBanques);
@@ -228,7 +231,7 @@ export default function BanquesView() {
                       </tr>
                     </thead>
                     <tbody>
-                      {mouvements.map((m) => (
+                      {paginationMouvements.pageItems.map((m) => (
                         <tr key={m.id} className="border-b border-border/60 hover:bg-secondary/20">
                           <td className="py-2 pr-3 text-primary font-medium med-num">{m.numero}</td>
                           <td className="py-2 pr-3 med-num">{m.numeroCheque}</td>
@@ -241,6 +244,11 @@ export default function BanquesView() {
                       ))}
                     </tbody>
                   </table>
+                  <Pagination
+                    page={paginationMouvements.page} pageCount={paginationMouvements.pageCount} pageSize={paginationMouvements.pageSize}
+                    pageSizeOptions={paginationMouvements.pageSizeOptions} total={paginationMouvements.total} debut={paginationMouvements.debut} fin={paginationMouvements.fin}
+                    onPageChange={paginationMouvements.setPage} onPageSizeChange={paginationMouvements.setPageSize}
+                  />
                 </div>
               )}
             </div>

@@ -3,6 +3,8 @@ import { Search, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/shared/Badge";
 import { Btn } from "@/components/shared/Btn";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { getScoringsFraude, evaluerAssure } from "@/services/fraude.service";
 import type { ScoringFraude } from "@/types/fraude";
 
@@ -16,6 +18,7 @@ export default function FraudeView() {
   const [scores, setScores] = useState<ScoringFraude[]>([]);
   const [assureId, setAssureId] = useState("");
   const [evaluating, setEvaluating] = useState(false);
+  const pagination = usePagination(scores);
 
   useEffect(() => {
     getScoringsFraude().then(setScores);
@@ -58,7 +61,7 @@ export default function FraudeView() {
               </tr>
             </thead>
             <tbody>
-              {scores.map((s) => (
+              {pagination.pageItems.map((s) => (
                 <tr key={s.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
                   <td className="px-4 py-3 whitespace-nowrap"><Badge variant="gold">{s.cible}</Badge></td>
                   <td className="px-4 py-3 font-semibold text-foreground whitespace-nowrap">{s.cibleNom}</td>
@@ -77,6 +80,11 @@ export default function FraudeView() {
             </tbody>
           </table>
           {scores.length === 0 && <div className="py-12 text-center text-muted-foreground text-sm">Aucune évaluation enregistrée</div>}
+          <Pagination
+            page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+            pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+            onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+          />
         </div>
       </div>
     </div>

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Stethoscope, Plus, Search, Pencil, Trash2, Building2, Power } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/shared/Badge";
+import { Pagination } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { getMedecins, updateMedecin, supprimerMedecin, type Medecin } from "@/services/medecins.service";
 import MedecinForm from "./MedecinForm";
 
@@ -16,6 +18,7 @@ export default function ProfessionnelsSanteView() {
   const [recherche, setRecherche] = useState("");
   const [formOuvert, setFormOuvert] = useState(false);
   const [medecinEnEdition, setMedecinEnEdition] = useState<Medecin | null>(null);
+  const pagination = usePagination(medecins ?? []);
 
   const rafraichir = (q?: string) => getMedecins(q !== undefined ? { q } : undefined).then(setMedecins);
   useEffect(() => { rafraichir(); }, []);
@@ -85,7 +88,7 @@ export default function ProfessionnelsSanteView() {
               </tr>
             </thead>
             <tbody>
-              {medecins.map((m) => (
+              {pagination.pageItems.map((m) => (
                 <tr key={m.id} className="border-b border-border/50 hover:bg-secondary/15">
                   <td className="px-3 py-2.5 whitespace-nowrap font-semibold text-foreground">{m.titre ? `${m.titre} ` : ""}{m.nom}{m.prenom ? ` ${m.prenom}` : ""}</td>
                   <td className="px-3 py-2.5 whitespace-nowrap text-foreground">{m.specialite ?? "—"}</td>
@@ -124,6 +127,11 @@ export default function ProfessionnelsSanteView() {
               ))}
             </tbody>
           </table>
+          <Pagination
+            page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+            pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+            onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+          />
         </div>
       )}
 
