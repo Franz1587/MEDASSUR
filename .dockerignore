@@ -1,0 +1,31 @@
+node_modules
+**/node_modules
+.git
+mobile
+dist
+backend/dist
+backend/uploads
+backend/*.log
+backend/_tmp-*.ts
+backend/*.tmp.js
+backend/backfill-*.js
+*.log
+.tools
+.claude
+guidelines
+
+# Fichiers de référence volumineux à la racine du dépôt, sans rapport
+# avec le build (voir plan de migration Coolify) — anchorés à la racine
+# (préfixe /) pour ne jamais exclure public/ ou src/assets.
+/*.pdf
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
+/*.xlsx
+/*.xls
+/*.csv
+/Modèle import pour La Ruche
+default_shadcn_theme.css
+pnpm-lock.yaml
+pnpm-workspace.yaml
