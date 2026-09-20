@@ -14,7 +14,14 @@ import { IsIn, IsNumber, IsOptional, IsString, Min } from "class-validator";
 // SanteService.calculerPartPlafonnee). "Ambulatoire" reste une valeur
 // générique de repli (anciennes saisies, actes hors catalogue).
 export const RUBRIQUES_PLAFONNEES = ["Soins & Prothèses dentaires", "Optique", "Kinésithérapie & Cure thermale", "Maternité", "Transport", "Orthophonie", "Orthoptie", "Autre"];
-export const TYPES_PRESTATION = ["Ambulatoire", "Consultations", "Pharmacie", "Imagerie", "Analyses Médicale", "Petite Chirurgie/Soins", "Hospitalisation", ...RUBRIQUES_PLAFONNEES];
+// "Actes de Spécialités" (2026-09) — voir demande utilisateur : "je ne
+// veux plus de rubrique de type Consultation/Divers. Les familles d'actes
+// tels que Actes de Cardiologie doivent plutôt être rangées dans une
+// rubrique de tableau de garantie appelée 'Actes de Spécialités' car ce
+// sont des actes que réalisent les médecins spécialistes et non des actes
+// de consultation." Suit le calcul au pourcentage (ambulatoire), comme
+// Consultations — jamais plafonnée.
+export const TYPES_PRESTATION = ["Ambulatoire", "Consultations", "Actes de Spécialités", "Pharmacie", "Imagerie", "Analyses Médicale", "Petite Chirurgie/Soins", "Hospitalisation", ...RUBRIQUES_PLAFONNEES];
 
 export class CreateFactureLigneDto {
   @IsString()

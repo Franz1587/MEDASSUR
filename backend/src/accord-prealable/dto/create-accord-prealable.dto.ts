@@ -19,6 +19,14 @@ export class AccordPrealableLigneDto {
   @IsNumber()
   coefficient?: number;
 
+  // Rubrique de garantie saisie directement, sans acte du catalogue
+  // (2026-09) — voir demande utilisateur : "Saisie au plafond de la
+  // garantie" ; sans effet si acteMedicalId est renseigné (la rubrique se
+  // déduit alors de l'acte, voir AccordPrealableService.calculerMontantSuggere).
+  @IsOptional()
+  @IsString()
+  categorieGarantie?: string;
+
   @IsString()
   description: string;
 

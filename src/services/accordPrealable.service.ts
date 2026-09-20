@@ -10,6 +10,7 @@ interface ApiAccordPrealableLigne {
   description: string;
   plafondReference: string | number;
   montantDevis: string | number;
+  categorieGarantie?: string | null;
 }
 
 interface ApiAccordPrealable {
@@ -49,6 +50,7 @@ function mapLigne(l: ApiAccordPrealableLigne): AccordPrealableLigne {
     description: l.description,
     plafondReference: toNumber(l.plafondReference),
     montantDevis: toNumber(l.montantDevis),
+    categorieGarantie: l.categorieGarantie ?? undefined,
   };
 }
 
@@ -150,7 +152,7 @@ export interface AccordPrealableUpsertInput {
   // Lignes d'actes (2026-08) — quand fournies, remplacent intégralement
   // montantDevis/description ci-dessus (dérivés côté serveur : somme et
   // résumé) — voir AccordPrealableService.create/update.
-  lignes?: { acteMedicalId?: string; lettreCleCode?: string; coefficient?: number; description: string; plafondReference: number; montantDevis: number }[];
+  lignes?: { acteMedicalId?: string; lettreCleCode?: string; coefficient?: number; description: string; plafondReference: number; montantDevis: number; categorieGarantie?: string }[];
 }
 
 // Mode hors-ligne (2026-09) — voir demande utilisateur : les agents

@@ -48,6 +48,7 @@ export interface RepartitionBeneficiaireLigne {
 export interface RepartitionLigne {
   libelle: string;
   montant: number;
+  nombre: number;
   pct: number;
 }
 
@@ -106,6 +107,7 @@ export interface StatistiquesPayload {
   repartitionBeneficiaire: RepartitionBeneficiaireLigne[];
   totalPersonnesSoignees: number;
   consommationParRubrique: RepartitionLigne[];
+  consommationParFamilleActe: RepartitionLigne[];
   consommationParPrestataire: RepartitionLigne[];
   detailParPrestataire: DetailPrestataire[];
   top20Prestataires: RepartitionLigne[];
@@ -129,6 +131,7 @@ export const RUBRIQUES_STATISTIQUES: { id: string; label: string }[] = [
   { id: "top20Consommateurs", label: "Top 20 des consommateurs" },
   { id: "repartitionBeneficiaire", label: "Répartition par type de bénéficiaire" },
   { id: "consommationParRubrique", label: "Consommation par Rubrique" },
+  { id: "consommationParFamilleActe", label: "Consommation par Famille d'Actes" },
   { id: "consommationParPrestataire", label: "Consommation par Prestataire" },
   { id: "detailParPrestataire", label: "Détails de Prestations Par Prestataires" },
   { id: "top20Prestataires", label: "Top 20 des prestataires" },

@@ -52,6 +52,11 @@ export interface RepartitionBeneficiaireLigne {
 export interface RepartitionLigne {
   libelle: string;
   montant: number;
+  // Nombre d'actes réalisés dans la rubrique/famille (2026-09) — voir
+  // demande utilisateur : "ajoute... une colonne Nombre Actes avant celle
+  // du taux afin que l'on puisse évaluer exactement le nombre d'actes
+  // réalisé dans la rubrique."
+  nombre: number;
   pct: number;
 }
 
@@ -114,7 +119,7 @@ export interface EvolutionAnnuelleLigne {
 // deux listes.
 export const RUBRIQUES_STATISTIQUES = [
   "basesContractuelles", "evolutionMensuelle", "consommationParFamille", "detailParFamille",
-  "top20Consommateurs", "repartitionBeneficiaire", "consommationParRubrique",
+  "top20Consommateurs", "repartitionBeneficiaire", "consommationParRubrique", "consommationParFamilleActe",
   "consommationParPrestataire", "detailParPrestataire", "top20Prestataires",
   "evolutionSP", "analyse",
 ] as const;
@@ -140,6 +145,13 @@ export interface StatistiquesPayload {
   repartitionBeneficiaire: RepartitionBeneficiaireLigne[];
   totalPersonnesSoignees: number;
   consommationParRubrique: RepartitionLigne[];
+  // Consommation par FAMILLE D'ACTES (2026-09) — voir demande utilisateur :
+  // "il faut ajouter dans les statistiques une rubrique appelée
+  // consommation par famille des actes (exemple acte ORL, actes du
+  // cardiologue, échographie...)" — distincte de consommationParRubrique
+  // (ActeMedical.categorieGarantie, 13 rubriques du tableau de garanties) :
+  // ici c'est ActeMedical.famille, le regroupement plus fin du catalogue.
+  consommationParFamilleActe: RepartitionLigne[];
   consommationParPrestataire: RepartitionLigne[];
   detailParPrestataire: DetailPrestataire[];
   top20Prestataires: RepartitionLigne[];

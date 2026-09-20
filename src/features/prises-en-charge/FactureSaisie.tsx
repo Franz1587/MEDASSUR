@@ -34,7 +34,7 @@ import { CODE_KA, CODE_KC, CODE_K_LOC } from "@/types/lettresCles";
 // Médicale/Petite Chirurgie-Soins/Hospitalisation suivent le calcul au
 // pourcentage, le reste suit le calcul au plafond de rubrique
 // (Garantie.categorie).
-const TYPES_PRESTATION = ["Ambulatoire", "Consultations", "Pharmacie", "Imagerie", "Analyses Médicale", "Petite Chirurgie/Soins", "Hospitalisation", "Soins & Prothèses dentaires", "Optique", "Kinésithérapie & Cure thermale", "Maternité", "Transport", "Orthophonie", "Orthoptie", "Autre"];
+const TYPES_PRESTATION = ["Ambulatoire", "Consultations", "Actes de Spécialités", "Pharmacie", "Imagerie", "Analyses Médicale", "Petite Chirurgie/Soins", "Hospitalisation", "Soins & Prothèses dentaires", "Optique", "Kinésithérapie & Cure thermale", "Maternité", "Transport", "Orthophonie", "Orthoptie", "Autre"];
 
 const fieldCls = "w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground";
 const labelCls = "text-[12px] text-muted-foreground mb-1.5";

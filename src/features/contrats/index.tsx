@@ -109,6 +109,14 @@ const STANDARD_GARANTIES: GarantieInput[] = [
   { categorie: "Consultations", libelle: "Visite Généraliste", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% / 100% frais réels selon BTAM" },
   { categorie: "Consultations", libelle: "Visite Spécialiste", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% / 100% frais réels selon BTAM" },
   { categorie: "Consultations", libelle: "Consultation Urgente/Garde", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% / 100% frais réels selon BTAM" },
+  // "Actes de Spécialités" (2026-09) — voir demande utilisateur : "je ne
+  // veux plus de rubrique de type Consultation/Divers. Les familles
+  // d'actes tels que Actes de Cardiologie doivent plutôt être rangées
+  // dans une rubrique de tableau de garantie appelée 'Actes de
+  // Spécialités' car ce sont des actes que réalisent les médecins
+  // spécialistes et non des actes de consultation." Distincte de
+  // "Consultations" — même taux, même logique ambulatoire.
+  { categorie: "Actes de Spécialités", libelle: "Actes de Spécialités", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% / 100% frais réels selon BTAM" },
   { categorie: "Pharmacie", libelle: "Frais Pharmaceutique & Produits", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% / 100% frais réels selon BTAM" },
   { categorie: "Imagerie", libelle: "Radiologie & Imagerie", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% / 100% frais réels selon BTAM" },
   { categorie: "Analyses Médicale", libelle: "Analyses Biologiques", tauxAssure: 80, tauxAyantsDroit: 100, plafond: "80% / 100% frais réels selon BTAM" },

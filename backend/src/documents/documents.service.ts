@@ -2843,7 +2843,7 @@ export class DocumentsService {
     // nullable), puis sur la description libre si aucun acte du catalogue
     // n'est renseigné.
     const rubriquesGarantie = Array.from(new Set(
-      accord.lignes.map((l) => l.acteMedical?.categorieGarantie ?? l.acteMedical?.famille ?? null).filter((v): v is string => !!v),
+      accord.lignes.map((l) => l.acteMedical?.categorieGarantie ?? l.acteMedical?.famille ?? l.categorieGarantie ?? null).filter((v): v is string => !!v),
     ));
     const objetPriseEnCharge = rubriquesGarantie.length > 0 ? rubriquesGarantie.join(", ") : (accord.lignes[0]?.description ?? accord.description);
     doc.font("Helvetica").fontSize(8).text(`Code: ${objetPriseEnCharge}`, left + 8, y + 20, { width: colW - 20 });
@@ -2943,11 +2943,12 @@ export class DocumentsService {
   // source que l'écran Contrats → Garanties), sur la rubrique de la
   // PREMIÈRE ligne ayant un acte du catalogue rattaché.
   private tauxCouvertureParRubrique(
-    lignes: { acteMedical: { categorieGarantie: string | null } | null }[],
+    lignes: { acteMedical: { categorieGarantie: string | null } | null; categorieGarantie: string | null }[],
     garanties: { categorie: string; tauxAssure: Prisma.Decimal | null; tauxAyantsDroit: Prisma.Decimal | null }[],
     estAyantDroit: boolean,
   ): number | null {
-    const rubrique = lignes.find((l) => l.acteMedical?.categorieGarantie)?.acteMedical?.categorieGarantie;
+    const rubrique = lignes.find((l) => l.acteMedical?.categorieGarantie ?? l.categorieGarantie)?.acteMedical?.categorieGarantie
+      ?? lignes.find((l) => l.categorieGarantie)?.categorieGarantie;
     if (!rubrique) return null;
     const garantie = garanties.find((g) => g.categorie === rubrique);
     if (!garantie) return null;
@@ -4081,8 +4082,21 @@ export class DocumentsService {
 
     if (inclut("consommationParRubrique") && payload.consommationParRubrique.length > 0) {
       titreSection(`Consommation par Rubrique · Total ${fmt(payload.totalConsomme)} FCFA`);
-      tableau(["Rubrique", "Remboursé", "% du total"], payload.consommationParRubrique.map((l) => [l.libelle, l.montant, `${l.pct.toFixed(2)}%`]));
+      tableau(["Rubrique", "Remboursé", "Nombre Actes", "% du total"], payload.consommationParRubrique.map((l) => [l.libelle, l.montant, l.nombre, `${l.pct.toFixed(2)}%`]));
       const buf = await genererGraphiqueCamembert(payload.consommationParRubrique.map((l) => l.libelle), payload.consommationParRubrique.map((l) => l.montant), "Consommation par Rubrique", false);
+      await inserer(buf, 1, 260);
+    }
+
+    // Consommation par FAMILLE D'ACTES (2026-09) — voir demande
+    // utilisateur : "il faut ajouter dans les statistiques une rubrique
+    // appelée consommation par famille des actes (exemple acte ORL, actes
+    // du cardiologue, échographie...)" — distincte de "par Rubrique"
+    // ci-dessus (ActeMedical.categorieGarantie, le tableau de garanties) :
+    // ici ActeMedical.famille, le regroupement plus fin du catalogue.
+    if (inclut("consommationParFamilleActe") && payload.consommationParFamilleActe.length > 0) {
+      titreSection(`Consommation par Famille d'Actes · Total ${fmt(payload.totalConsomme)} FCFA`);
+      tableau(["Famille d'actes", "Remboursé", "Nombre Actes", "% du total"], payload.consommationParFamilleActe.map((l) => [l.libelle, l.montant, l.nombre, `${l.pct.toFixed(2)}%`]));
+      const buf = await genererGraphiqueCamembert(payload.consommationParFamilleActe.map((l) => l.libelle), payload.consommationParFamilleActe.map((l) => l.montant), "Consommation par Famille d'Actes", false);
       await inserer(buf, 1, 260);
     }
 
@@ -4396,8 +4410,15 @@ export class DocumentsService {
 
     if (inclut("consommationParRubrique") && payload.consommationParRubrique.length > 0) {
       children.push(titreSection(`Consommation par Rubrique · Total ${fmt(payload.totalConsomme)} FCFA`));
-      children.push(tableau(["Rubrique", "Remboursé", "% du total"], payload.consommationParRubrique.map((l) => [l.libelle, l.montant, `${l.pct.toFixed(2)}%`])));
+      children.push(tableau(["Rubrique", "Remboursé", "Nombre Actes", "% du total"], payload.consommationParRubrique.map((l) => [l.libelle, l.montant, l.nombre, `${l.pct.toFixed(2)}%`])));
       const buf = await genererGraphiqueCamembert(payload.consommationParRubrique.map((l) => l.libelle), payload.consommationParRubrique.map((l) => l.montant), "Consommation par Rubrique", false);
+      children.push(image(buf, Math.round(LARGEUR_PAGE_EMU * 0.5), Math.round(LARGEUR_PAGE_EMU * 0.5)));
+    }
+
+    if (inclut("consommationParFamilleActe") && payload.consommationParFamilleActe.length > 0) {
+      children.push(titreSection(`Consommation par Famille d'Actes · Total ${fmt(payload.totalConsomme)} FCFA`));
+      children.push(tableau(["Famille d'actes", "Remboursé", "Nombre Actes", "% du total"], payload.consommationParFamilleActe.map((l) => [l.libelle, l.montant, l.nombre, `${l.pct.toFixed(2)}%`])));
+      const buf = await genererGraphiqueCamembert(payload.consommationParFamilleActe.map((l) => l.libelle), payload.consommationParFamilleActe.map((l) => l.montant), "Consommation par Famille d'Actes", false);
       children.push(image(buf, Math.round(LARGEUR_PAGE_EMU * 0.5), Math.round(LARGEUR_PAGE_EMU * 0.5)));
     }
 

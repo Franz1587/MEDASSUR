@@ -73,6 +73,7 @@ export const GROUPES_ACTES: GroupeActe[] = [
 export const TYPES_PRESTATION_LABELS = [
   { value: "Ambulatoire", label: "Ambulatoire" },
   { value: "Consultations", label: "Consultations" },
+  { value: "Actes de Spécialités", label: "Actes de Spécialités" },
   { value: "Pharmacie", label: "Pharmacie" },
   { value: "Imagerie", label: "Imagerie" },
   { value: "Analyses Médicale", label: "Analyses Médicale" },
@@ -92,7 +93,7 @@ export const TYPES_PRESTATION_LABELS = [
 // (voir schema.prisma), utilisée pour configurer Prestataire.garantiesVisibles
 // côté interne (écran Prestataires). Alignée sur le modèle standard (voir
 // STANDARD_GARANTIES, contrats/index.tsx).
-export const CATEGORIES_GARANTIES = ["Consultations", "Pharmacie", "Imagerie", "Analyses Médicale", "Petite Chirurgie/Soins", "Hospitalisation", "Soins & Prothèses dentaires", "Optique", "Kinésithérapie & Cure thermale", "Orthophonie", "Orthoptie", "Maternité", "Transport", "Autre"];
+export const CATEGORIES_GARANTIES = ["Consultations", "Actes de Spécialités", "Pharmacie", "Imagerie", "Analyses Médicale", "Petite Chirurgie/Soins", "Hospitalisation", "Soins & Prothèses dentaires", "Optique", "Kinésithérapie & Cure thermale", "Orthophonie", "Orthoptie", "Maternité", "Transport", "Autre"];
 
 // Clé de handoff patient → prestation (2026-08) — voir demande utilisateur,
 // capture de référence "identification du patient" puis "nouvelle

@@ -16,6 +16,10 @@ export interface AccordPrealableLigne {
   // Frais réels annoncés par le prestataire sur son devis — peut dépasser
   // plafondReference, l'excédent restant à la charge du bénéficiaire.
   montantDevis: number;
+  // Rubrique de garantie saisie directement, sans acte du catalogue
+  // (2026-09) — voir "Saisir au plafond de la garantie",
+  // features/accord-prealable/index.tsx.
+  categorieGarantie?: string;
 }
 
 export interface AccordPrealable {

@@ -2583,6 +2583,15 @@ model AccordPrealableLigne {
   lettreCleCode      String?
   coefficient        Decimal? @db.Decimal(10, 2)
   description        String
+  // Rubrique de garantie saisie directement, SANS passer par un acte du
+  // catalogue (2026-09) — voir demande utilisateur : "la saisie des prises
+  // en charge pour les rubriques de garanties avec des plafonds doit
+  // pouvoir être saisie soit par actes ou soit au plafond [de la
+  // garantie]." Renseigné UNIQUEMENT en mode "Saisie au plafond"
+  // (acteMedicalId alors null) — sinon la rubrique se déduit normalement
+  // de acteMedical.categorieGarantie (voir AccordPrealableService.
+  // calculerMontantSuggere).
+  categorieGarantie  String?
   // Plafond pris en charge par l'assurance pour cette ligne (coefficient ×
   // valeur unitaire de la lettre, ou acte.prixDefaut) — figé à la saisie,
   // jamais recalculé en direct (voir montantDevisPourActe côté frontend).

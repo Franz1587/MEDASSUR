@@ -71,7 +71,7 @@ function pourCamembert(items: RepartitionLigne[], max = 8): RepartitionLigne[] {
   if (items.length <= max) return items;
   const top = items.slice(0, max - 1);
   const reste = items.slice(max - 1);
-  return [...top, { libelle: "Autres", montant: reste.reduce((s, i) => s + i.montant, 0), pct: reste.reduce((s, i) => s + i.pct, 0) }];
+  return [...top, { libelle: "Autres", montant: reste.reduce((s, i) => s + i.montant, 0), nombre: reste.reduce((s, i) => s + i.nombre, 0), pct: reste.reduce((s, i) => s + i.pct, 0) }];
 }
 
 // Résumé visuel par rubrique (voir demande utilisateur : "pour toutes les
@@ -428,7 +428,7 @@ export default function StatistiquesView() {
   };
 
   const beneficiairePie: RepartitionLigne[] = data
-    ? data.repartitionBeneficiaire.filter((g) => g.montant > 0).map((g) => ({ libelle: g.type, montant: g.montant, pct: g.pctDepenses }))
+    ? data.repartitionBeneficiaire.filter((g) => g.montant > 0).map((g) => ({ libelle: g.type, montant: g.montant, nombre: g.nombre, pct: g.pctDepenses }))
     : [];
 
   // Résumés visuels par rubrique (voir demande utilisateur : "un résumé
@@ -440,6 +440,7 @@ export default function StatistiquesView() {
   const partTop20Consommateurs = data && data.totalConsomme > 0 ? (data.top20Consommateurs.reduce((s, c) => s + c.montant, 0) / data.totalConsomme) * 100 : 0;
   const coutMoyenParPersonne = data && data.totalPersonnesSoignees > 0 ? data.totalConsomme / data.totalPersonnesSoignees : 0;
   const rubriqueDominante = data?.consommationParRubrique[0];
+  const familleActeDominante = data?.consommationParFamilleActe[0];
   const prestataireDominant = data?.consommationParPrestataire[0];
   const partTop20Prestataires = data && data.totalConsomme > 0 ? (data.top20Prestataires.reduce((s, p) => s + p.montant, 0) / data.totalConsomme) * 100 : 0;
 
@@ -586,11 +587,26 @@ export default function StatistiquesView() {
             <div className="space-y-3">
               <RechercheRubrique value={rq("consommationParRubrique")} onChange={(v) => setRq("consommationParRubrique", v)} placeholder="Rechercher une rubrique…" />
               <TableSimple
-                headers={["Rubrique", "Remboursé", "En % sur total remboursé"]}
-                rows={[...data.consommationParRubrique.filter((r) => correspond(rq("consommationParRubrique"), r.libelle)).map((r) => [r.libelle, r.montant, pct(r.pct)]), ["Total", data.totalConsomme, "100%"]]}
+                headers={["Rubrique", "Remboursé", "Nombre Actes", "En % sur total remboursé"]}
+                rows={[...data.consommationParRubrique.filter((r) => correspond(rq("consommationParRubrique"), r.libelle)).map((r) => [r.libelle, r.montant, r.nombre, pct(r.pct)]), ["Total", data.totalConsomme, data.consommationParRubrique.reduce((s, r) => s + r.nombre, 0), "100%"]]}
                 lignesEnEvidence={[data.consommationParRubrique.filter((r) => correspond(rq("consommationParRubrique"), r.libelle)).length]}
               />
               {data.consommationParRubrique.length > 0 && <PieSimple data={pourCamembert(data.consommationParRubrique.filter((r) => correspond(rq("consommationParRubrique"), r.libelle)))} />}
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            title="Consommation par Famille d'Actes"
+            resume={familleActeDominante ? [{ label: "Famille dominante", value: `${familleActeDominante.libelle} (${pct(familleActeDominante.pct)})` }] : undefined}
+          >
+            <div className="space-y-3">
+              <RechercheRubrique value={rq("consommationParFamilleActe")} onChange={(v) => setRq("consommationParFamilleActe", v)} placeholder="Rechercher une famille d'actes…" />
+              <TableSimple
+                headers={["Famille d'actes", "Remboursé", "Nombre Actes", "En % sur total remboursé"]}
+                rows={[...data.consommationParFamilleActe.filter((r) => correspond(rq("consommationParFamilleActe"), r.libelle)).map((r) => [r.libelle, r.montant, r.nombre, pct(r.pct)]), ["Total", data.totalConsomme, data.consommationParFamilleActe.reduce((s, r) => s + r.nombre, 0), "100%"]]}
+                lignesEnEvidence={[data.consommationParFamilleActe.filter((r) => correspond(rq("consommationParFamilleActe"), r.libelle)).length]}
+              />
+              {data.consommationParFamilleActe.length > 0 && <PieSimple data={pourCamembert(data.consommationParFamilleActe.filter((r) => correspond(rq("consommationParFamilleActe"), r.libelle)))} />}
             </div>
           </SectionCard>
 

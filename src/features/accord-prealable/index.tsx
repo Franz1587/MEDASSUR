@@ -57,7 +57,7 @@ function montantDevisPourActe(acte: ActeMedical, lettresActives: LettreCle[]): n
 // fenêtre du contrat, non reproductible dans un aperçu client — affichées
 // "—" plutôt qu'un chiffre trompeur, le vrai calcul se fait côté serveur au
 // moment de trancher le dossier (AccordPrealableService.calculerMontantSuggere).
-const RUBRIQUES_PLAFONNEES = ["Dentisterie", "Optique", "Kinésithérapie & Cure thermale", "Maternité", "Transport", "Autre"];
+const RUBRIQUES_PLAFONNEES = ["Soins & Prothèses dentaires", "Optique", "Kinésithérapie & Cure thermale", "Maternité", "Transport", "Orthophonie", "Orthoptie", "Autre"];
 
 function parseTauxPourcent(texte?: string | null): number | null {
   if (!texte) return null;
@@ -132,6 +132,13 @@ interface LigneActeForm {
   description: string;
   plafondReference: number;
   montantDevis: number;
+  // "Saisie au plafond de la garantie" (2026-09) — voir demande
+  // utilisateur : "la saisie des prises en charge pour les rubriques de
+  // garanties avec des plafonds doit pouvoir être saisie soit par actes
+  // ou soit au plafond." Renseigné UNIQUEMENT dans ce second mode
+  // (acteMedicalId alors absent) — la rubrique choisie directement, sans
+  // passer par le catalogue d'actes.
+  categorieGarantie?: string;
 }
 
 // Dérive les 3 lignes KC/KA/K Loc d'un bloc chirurgical à partir du seul
@@ -205,6 +212,12 @@ export default function AccordPrealableView() {
   const [lignesForm, setLignesForm] = useState<LigneActeForm[]>([]);
   const [ligneMontantDevis, setLigneMontantDevis] = useState(0);
   const [bundleKCForm, setBundleKCForm] = useState<{ kc: number; ka: number; kloc: number } | null>(null);
+  // "Saisir par acte" (par défaut) vs "Saisir au plafond de la garantie"
+  // (2026-09) — voir demande utilisateur ci-dessus.
+  const [modeSaisie, setModeSaisie] = useState<"acte" | "plafond">("acte");
+  const [plafondRubrique, setPlafondRubrique] = useState("");
+  const [plafondDescription, setPlafondDescription] = useState("");
+  const [plafondMontant, setPlafondMontant] = useState(0);
   const [fichierOrdonnance, setFichierOrdonnance] = useState<File | null>(null);
   const [fichierDevis, setFichierDevis] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -234,6 +247,10 @@ export default function AccordPrealableView() {
   const [editLignesForm, setEditLignesForm] = useState<LigneActeForm[]>([]);
   const [editLigneMontantDevis, setEditLigneMontantDevis] = useState(0);
   const [editBundleKCForm, setEditBundleKCForm] = useState<{ kc: number; ka: number; kloc: number } | null>(null);
+  const [editModeSaisie, setEditModeSaisie] = useState<"acte" | "plafond">("acte");
+  const [editPlafondRubrique, setEditPlafondRubrique] = useState("");
+  const [editPlafondDescription, setEditPlafondDescription] = useState("");
+  const [editPlafondMontant, setEditPlafondMontant] = useState(0);
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -360,11 +377,11 @@ export default function AccordPrealableView() {
   // tarif de référence de chaque acte).
   const lignesCalcCreate = lignesForm.map((l) => calculerRembLigne(l, {
     secteur: prestataireChoisi?.secteur, estAyantDroit: (assureCreateChoisiFull?.typeAssure ?? "AS") !== "AS",
-    categorieGarantie: actes.find((ac) => ac.id === l.acteMedicalId)?.categorieGarantie, contrat: contratCreate,
+    categorieGarantie: actes.find((ac) => ac.id === l.acteMedicalId)?.categorieGarantie ?? l.categorieGarantie, contrat: contratCreate,
   }));
   const lignesCalcEdit = editLignesForm.map((l) => calculerRembLigne(l, {
     secteur: editPrestataireChoisi?.secteur, estAyantDroit: (assureEditChoisiFull?.typeAssure ?? "AS") !== "AS",
-    categorieGarantie: actes.find((ac) => ac.id === l.acteMedicalId)?.categorieGarantie, contrat: contratEdit,
+    categorieGarantie: actes.find((ac) => ac.id === l.acteMedicalId)?.categorieGarantie ?? l.categorieGarantie, contrat: contratEdit,
   }));
   const totalRembCreate = sommeConnue(lignesCalcCreate.map((r) => r.remb));
   const totalResteCreate = sommeConnue(lignesCalcCreate.map((r) => r.reste));
@@ -423,6 +440,22 @@ export default function AccordPrealableView() {
   const handleSupprimerLigneActe = (index: number) => setLignesForm((v) => v.filter((_, i) => i !== index));
   const handleChangerMontantLigne = (index: number, montant: number) => setLignesForm((v) => v.map((l, i) => (i === index ? { ...l, montantDevis: montant } : l)));
 
+  // "Saisir au plafond de la garantie" (2026-09) — une seule ligne libre,
+  // sans acte du catalogue : le montant saisi est comparé directement au
+  // plafond RESTANT de la rubrique (calcul réel côté serveur, voir
+  // AccordPrealableService.calculerMontantSuggere/SanteService.
+  // calculerPartPlafonnee) — plafondReference = montantDevis ici, faute de
+  // tarif de référence d'acte à opposer (seul le plafond de rubrique
+  // s'applique).
+  const handleAjouterLignePlafond = () => {
+    if (!plafondRubrique || plafondMontant <= 0) return;
+    setLignesForm((v) => [...v, {
+      description: plafondDescription.trim() || plafondRubrique, categorieGarantie: plafondRubrique,
+      plafondReference: plafondMontant, montantDevis: plafondMontant,
+    }]);
+    setPlafondRubrique(""); setPlafondDescription(""); setPlafondMontant(0);
+  };
+
   const handleSelectEditFamille = (famille: string) => {
     setEditFamilleActe(famille);
     setEditActeChoisi(null);
@@ -459,6 +492,17 @@ export default function AccordPrealableView() {
   };
   const handleSupprimerLigneActeEdit = (index: number) => setEditLignesForm((v) => v.filter((_, i) => i !== index));
   const handleChangerMontantLigneEdit = (index: number, montant: number) => setEditLignesForm((v) => v.map((l, i) => (i === index ? { ...l, montantDevis: montant } : l)));
+
+  // "Saisir au plafond de la garantie" côté édition — voir
+  // handleAjouterLignePlafond ci-dessus, même principe.
+  const handleAjouterLignePlafondEdit = () => {
+    if (!editPlafondRubrique || editPlafondMontant <= 0) return;
+    setEditLignesForm((v) => [...v, {
+      description: editPlafondDescription.trim() || editPlafondRubrique, categorieGarantie: editPlafondRubrique,
+      plafondReference: editPlafondMontant, montantDevis: editPlafondMontant,
+    }]);
+    setEditPlafondRubrique(""); setEditPlafondDescription(""); setEditPlafondMontant(0);
+  };
 
   const refresh = async () => setAccords(await getAccordsPrealables(filtresActuels));
 
@@ -504,6 +548,8 @@ export default function AccordPrealableView() {
     setLignesForm([]);
     setLigneMontantDevis(0);
     setBundleKCForm(null);
+    setModeSaisie("acte");
+    setPlafondRubrique(""); setPlafondDescription(""); setPlafondMontant(0);
     setFichierOrdonnance(null);
     setFichierDevis(null);
     setFormError(null);
@@ -618,11 +664,13 @@ export default function AccordPrealableView() {
     setEditActeChoisi(null);
     setEditBundleKCForm(null);
     setEditLigneMontantDevis(0);
+    setEditModeSaisie("acte");
+    setEditPlafondRubrique(""); setEditPlafondDescription(""); setEditPlafondMontant(0);
     // Dossiers créés avant le modèle de lignes (2026-08) — reconstitue une
     // ligne unique à partir de description/montantDevis pour ne rien perdre
     // à l'affichage ; la sauvegarde suivante les migre vers de vraies lignes.
     setEditLignesForm(a.lignes.length > 0
-      ? a.lignes.map((l) => ({ acteMedicalId: l.acteMedicalId, lettreCleCode: l.lettreCleCode, coefficient: l.coefficient, description: l.description, plafondReference: l.plafondReference, montantDevis: l.montantDevis }))
+      ? a.lignes.map((l) => ({ acteMedicalId: l.acteMedicalId, lettreCleCode: l.lettreCleCode, coefficient: l.coefficient, description: l.description, plafondReference: l.plafondReference, montantDevis: l.montantDevis, categorieGarantie: l.categorieGarantie ?? undefined }))
       : (a.montantDevis ? [{ description: a.description, plafondReference: a.montantDevis, montantDevis: a.montantDevis }] : []));
     setEditError(null);
   };
@@ -952,6 +1000,33 @@ export default function AccordPrealableView() {
               <div className="bg-secondary/20 border border-border rounded-xl p-4">
                 <div className={sectionHeaderCls}><ListChecks className="w-3.5 h-3.5" />Actes de la prise en charge</div>
                 <p className="text-[11px] text-muted-foreground mb-3">Une prise en charge peut couvrir plusieurs actes liés, comme une facture — ajoutez-les un par un. Un acte KC (chirurgien) ajoute automatiquement les 3 lignes du bloc (KC/KA/K Loc).</p>
+
+                {/* "Saisir par acte" vs "Saisir au plafond de la garantie" (2026-09) — voir demande utilisateur : pertinent surtout pour les rubriques à plafond (Optique, Soins & Prothèses dentaires, Maternité...). */}
+                <div className="flex items-center gap-1.5 mb-3">
+                  <button type="button" onClick={() => setModeSaisie("acte")} className={`h-7 px-3 rounded-lg text-[12px] font-medium border ${modeSaisie === "acte" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>Saisir par acte</button>
+                  <button type="button" onClick={() => setModeSaisie("plafond")} className={`h-7 px-3 rounded-lg text-[12px] font-medium border ${modeSaisie === "plafond" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>Saisir au plafond de la garantie</button>
+                </div>
+
+                {modeSaisie === "plafond" ? (
+                  <div className="grid grid-cols-1 md:grid-cols-[1.3fr_1.7fr_1fr_auto] gap-3 items-end">
+                    <label className="block">
+                      <div className={labelCls}>Rubrique de garantie</div>
+                      <select value={plafondRubrique} onChange={(e) => setPlafondRubrique(e.target.value)} className={fieldCls}>
+                        <option value="">— Sélectionnez une rubrique —</option>
+                        {RUBRIQUES_PLAFONNEES.map((r) => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <div className={labelCls}>Description (facultatif)</div>
+                      <input value={plafondDescription} onChange={(e) => setPlafondDescription(e.target.value)} className={fieldCls} placeholder="ex : Lunettes correctrices" />
+                    </label>
+                    <label className="block">
+                      <div className={labelCls}>Frais réels</div>
+                      <input type="number" value={plafondMontant || ""} onChange={(e) => setPlafondMontant(e.target.value ? Number(e.target.value) : 0)} className={fieldCls} placeholder="Montant devis" />
+                    </label>
+                    <Btn variant="secondary" disabled={!plafondRubrique || plafondMontant <= 0} onClick={handleAjouterLignePlafond}><Plus className="w-4 h-4" />Ajouter la ligne</Btn>
+                  </div>
+                ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <div className={labelCls}>Famille d'acte</div>
@@ -972,8 +1047,9 @@ export default function AccordPrealableView() {
                     />
                   </div>
                 </div>
+                )}
 
-                {acteChoisi && bundleKCForm && bundleKCRef && (
+                {modeSaisie === "acte" && acteChoisi && bundleKCForm && bundleKCRef && (
                   <div className="mt-3 rounded-lg border border-primary/25 bg-primary/5 p-3 space-y-2">
                     <p className="text-[11.5px] font-medium text-foreground flex items-center gap-1"><Hash className="w-3 h-3" />Bloc chirurgical — 3 lignes liées. Saisissez le frais réel facturé par le prestataire pour chaque rubrique (le dépassement du plafond assurance reste à la charge de l'assuré).</p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -984,7 +1060,7 @@ export default function AccordPrealableView() {
                     <Btn variant="secondary" disabled={bundleKCForm.kc <= 0 || bundleKCForm.ka <= 0 || bundleKCForm.kloc <= 0} onClick={handleAjouterLigneActe}><Plus className="w-4 h-4" />Ajouter les 3 lignes</Btn>
                   </div>
                 )}
-                {acteChoisi && !bundleKCForm && (
+                {modeSaisie === "acte" && acteChoisi && !bundleKCForm && (
                   <div className="mt-3 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
                     <label className="block">
                       <div className={labelCls}>Frais réels (devis prestataire) — plafond assurance : {fmtM(montantDevisPourActe(acteChoisi, lettresActives))} FCFA</div>
@@ -1172,6 +1248,32 @@ export default function AccordPrealableView() {
               <div className="bg-secondary/20 border border-border rounded-xl p-4">
                 <div className={sectionHeaderCls}><ListChecks className="w-3.5 h-3.5" />Actes de la prise en charge</div>
                 <p className="text-[11px] text-muted-foreground mb-3">Une prise en charge peut couvrir plusieurs actes liés, comme une facture — ajoutez-les un par un. Un acte KC (chirurgien) ajoute automatiquement les 3 lignes du bloc (KC/KA/K Loc).</p>
+
+                <div className="flex items-center gap-1.5 mb-3">
+                  <button type="button" onClick={() => setEditModeSaisie("acte")} className={`h-7 px-3 rounded-lg text-[12px] font-medium border ${editModeSaisie === "acte" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>Saisir par acte</button>
+                  <button type="button" onClick={() => setEditModeSaisie("plafond")} className={`h-7 px-3 rounded-lg text-[12px] font-medium border ${editModeSaisie === "plafond" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>Saisir au plafond de la garantie</button>
+                </div>
+
+                {editModeSaisie === "plafond" ? (
+                  <div className="grid grid-cols-1 md:grid-cols-[1.3fr_1.7fr_1fr_auto] gap-3 items-end">
+                    <label className="block">
+                      <div className={labelCls}>Rubrique de garantie</div>
+                      <select value={editPlafondRubrique} onChange={(e) => setEditPlafondRubrique(e.target.value)} className={fieldCls}>
+                        <option value="">— Sélectionnez une rubrique —</option>
+                        {RUBRIQUES_PLAFONNEES.map((r) => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <div className={labelCls}>Description (facultatif)</div>
+                      <input value={editPlafondDescription} onChange={(e) => setEditPlafondDescription(e.target.value)} className={fieldCls} placeholder="ex : Lunettes correctrices" />
+                    </label>
+                    <label className="block">
+                      <div className={labelCls}>Frais réels</div>
+                      <input type="number" value={editPlafondMontant || ""} onChange={(e) => setEditPlafondMontant(e.target.value ? Number(e.target.value) : 0)} className={fieldCls} placeholder="Montant devis" />
+                    </label>
+                    <Btn variant="secondary" disabled={!editPlafondRubrique || editPlafondMontant <= 0} onClick={handleAjouterLignePlafondEdit}><Plus className="w-4 h-4" />Ajouter la ligne</Btn>
+                  </div>
+                ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <div className={labelCls}>Famille d'acte</div>
@@ -1192,8 +1294,9 @@ export default function AccordPrealableView() {
                     />
                   </div>
                 </div>
+                )}
 
-                {editActeChoisi && editBundleKCForm && editBundleKCRef && (
+                {editModeSaisie === "acte" && editActeChoisi && editBundleKCForm && editBundleKCRef && (
                   <div className="mt-3 rounded-lg border border-primary/25 bg-primary/5 p-3 space-y-2">
                     <p className="text-[11.5px] font-medium text-foreground flex items-center gap-1"><Hash className="w-3 h-3" />Bloc chirurgical — 3 lignes liées. Saisissez le frais réel facturé par le prestataire pour chaque rubrique (le dépassement du plafond assurance reste à la charge de l'assuré).</p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -1204,7 +1307,7 @@ export default function AccordPrealableView() {
                     <Btn variant="secondary" disabled={editBundleKCForm.kc <= 0 || editBundleKCForm.ka <= 0 || editBundleKCForm.kloc <= 0} onClick={handleAjouterLigneActeEdit}><Plus className="w-4 h-4" />Ajouter les 3 lignes</Btn>
                   </div>
                 )}
-                {editActeChoisi && !editBundleKCForm && (
+                {editModeSaisie === "acte" && editActeChoisi && !editBundleKCForm && (
                   <div className="mt-3 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
                     <label className="block">
                       <div className={labelCls}>Frais réels (devis prestataire) — plafond assurance : {fmtM(montantDevisPourActe(editActeChoisi, lettresActives))} FCFA</div>

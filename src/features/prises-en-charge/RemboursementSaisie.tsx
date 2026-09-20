@@ -33,7 +33,7 @@ import { CODE_KA, CODE_KC, CODE_K_LOC } from "@/types/lettresCles";
 // calcul qu'une Facture (voir SanteService.creerLigneRemboursement) —
 // taxonomie alignée sur le modèle standard 2026-09 (contrat 3M PARTNERS &
 // CONSEILS, police 10005316).
-const TYPES_PRESTATION = ["Ambulatoire", "Consultations", "Pharmacie", "Imagerie", "Analyses Médicale", "Petite Chirurgie/Soins", "Hospitalisation", "Soins & Prothèses dentaires", "Optique", "Kinésithérapie & Cure thermale", "Maternité", "Transport", "Orthophonie", "Orthoptie", "Autre"];
+const TYPES_PRESTATION = ["Ambulatoire", "Consultations", "Actes de Spécialités", "Pharmacie", "Imagerie", "Analyses Médicale", "Petite Chirurgie/Soins", "Hospitalisation", "Soins & Prothèses dentaires", "Optique", "Kinésithérapie & Cure thermale", "Maternité", "Transport", "Orthophonie", "Orthoptie", "Autre"];
 
 const fieldCls = "w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground";
 const labelCls = "text-[12px] text-muted-foreground mb-1.5";

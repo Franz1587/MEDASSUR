@@ -14,7 +14,11 @@ import { getLettresCles } from "@/services/lettresCles.service";
 import type { ActeMedical } from "@/types/acteMedical";
 import type { LettreCle } from "@/types/lettresCles";
 
-const CATEGORIES_GARANTIE = ["Consultation/Divers", "Hospitalisation", "Dentisterie", "Kinésithérapie & Cure thermale"];
+// Taxonomie alignée sur le modèle standard (2026-09, voir
+// STANDARD_GARANTIES dans contrats/index.tsx et RUBRIQUES_PLAFONNEES/
+// TYPES_PRESTATION côté backend) — 13 rubriques précises au lieu de
+// l'ancien "Consultation/Divers" fourre-tout.
+const CATEGORIES_GARANTIE = ["Consultations", "Actes de Spécialités", "Pharmacie", "Imagerie", "Analyses Médicale", "Petite Chirurgie/Soins", "Hospitalisation", "Soins & Prothèses dentaires", "Optique", "Kinésithérapie & Cure thermale", "Orthophonie", "Orthoptie", "Maternité", "Transport"];
 
 const fieldCls = "w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground";
 const labelCls = "text-[12px] text-muted-foreground mb-1.5";

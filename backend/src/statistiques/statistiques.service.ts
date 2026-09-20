@@ -155,6 +155,21 @@ export class StatistiquesService {
       // fourre-tout.
       return f ?? p.type.trim() ?? "Non précisé";
     };
+    // Famille D'ACTES (2026-09) — voir demande utilisateur : "consommation
+    // par famille des actes (exemple acte ORL, actes du cardiologue,
+    // échographie...)" — ActeMedical.famille brut (le regroupement fin du
+    // catalogue), jamais categorieGarantie (déjà utilisé par
+    // resoudreFamille ci-dessus pour la rubrique du tableau de garanties).
+    const familleActeParActeId = new Map(actes.map((a) => [a.id, a.famille]));
+    const familleActeParLibelle = new Map(actes.map((a) => [a.libelle.trim().toLowerCase(), a.famille]));
+    const resoudreFamilleActe = (p: (typeof lignes)[number]): string => {
+      if (p.acteMedicalId) {
+        const f = familleActeParActeId.get(p.acteMedicalId);
+        if (f) return f;
+      }
+      const f = familleActeParLibelle.get(p.type.trim().toLowerCase());
+      return f ?? p.type.trim() ?? "Non précisé";
+    };
     const libelleActe = (p: (typeof lignes)[number]): string => (p.acteMedicalId && libelleParActeId.get(p.acteMedicalId)) || p.type || "Acte non précisé";
 
     // ── Agrégation combinée (2026-09) — un seul passage sur `lignes` pour
@@ -175,9 +190,10 @@ export class StatistiquesService {
     const parFamille = new Map<string, ConsommationLigne>();
     const parBeneficiaire = new Map<string, { assureIds: Set<string>; montant: number }>();
     const personnesSoigneesIds = new Set<string>();
-    const parRubrique = new Map<string, number>();
+    const parRubrique = new Map<string, { montant: number; nombre: number }>();
+    const parFamilleActe = new Map<string, { montant: number; nombre: number }>();
     const detailParFamilleMap = new Map<string, DetailFamille>();
-    const parPrestataire = new Map<string, number>();
+    const parPrestataire = new Map<string, { montant: number; nombre: number }>();
     const detailParPrestataireMap = new Map<string, DetailPrestataire>();
 
     for (const p of lignes) {
@@ -208,7 +224,14 @@ export class StatistiquesService {
       personnesSoigneesIds.add(p.assureId);
 
       const rubrique = resoudreFamille(p);
-      parRubrique.set(rubrique, (parRubrique.get(rubrique) ?? 0) + montant);
+      const eRubrique = parRubrique.get(rubrique) ?? { montant: 0, nombre: 0 };
+      eRubrique.montant += montant; eRubrique.nombre += 1;
+      parRubrique.set(rubrique, eRubrique);
+
+      const familleActe = resoudreFamilleActe(p);
+      const eFamilleActe = parFamilleActe.get(familleActe) ?? { montant: 0, nombre: 0 };
+      eFamilleActe.montant += montant; eFamilleActe.nombre += 1;
+      parFamilleActe.set(familleActe, eFamilleActe);
 
       const acteLibelle = libelleActe(p);
       const assureNom = `${p.assure.nom}${p.assure.prenom ? ` ${p.assure.prenom}` : ""}`;
@@ -224,7 +247,9 @@ export class StatistiquesService {
       detailParFamilleMap.set(racineId, eDetailFamille);
 
       const nomPrestataire = p.prestataireRef?.nom ?? p.prestataire;
-      parPrestataire.set(nomPrestataire, (parPrestataire.get(nomPrestataire) ?? 0) + montant);
+      const ePrestataire = parPrestataire.get(nomPrestataire) ?? { montant: 0, nombre: 0 };
+      ePrestataire.montant += montant; ePrestataire.nombre += 1;
+      parPrestataire.set(nomPrestataire, ePrestataire);
 
       const eDetailPrestataire = detailParPrestataireMap.get(nomPrestataire) ?? { prestataire: nomPrestataire, totalPrestataire: 0, lignes: [] as DetailPrestataire["lignes"] };
       eDetailPrestataire.totalPrestataire += montant;
@@ -264,7 +289,10 @@ export class StatistiquesService {
     ];
 
     const consommationParRubrique: RepartitionLigne[] = [...parRubrique.entries()]
-      .map(([libelle, montant]) => ({ libelle, montant, pct: totalConsomme > 0 ? (montant / totalConsomme) * 100 : 0 }))
+      .map(([libelle, v]) => ({ libelle, montant: v.montant, nombre: v.nombre, pct: totalConsomme > 0 ? (v.montant / totalConsomme) * 100 : 0 }))
+      .sort((a, b) => b.montant - a.montant);
+    const consommationParFamilleActe: RepartitionLigne[] = [...parFamilleActe.entries()]
+      .map(([libelle, v]) => ({ libelle, montant: v.montant, nombre: v.nombre, pct: totalConsomme > 0 ? (v.montant / totalConsomme) * 100 : 0 }))
       .sort((a, b) => b.montant - a.montant);
 
     // ── Détails de Consommation Par Famille (rubrique additionnelle, hors
@@ -277,7 +305,7 @@ export class StatistiquesService {
 
     // ── Consommation par Prestataire ──────────────────────────────────
     const consommationParPrestataire: RepartitionLigne[] = [...parPrestataire.entries()]
-      .map(([libelle, montant]) => ({ libelle, montant, pct: totalConsomme > 0 ? (montant / totalConsomme) * 100 : 0 }))
+      .map(([libelle, v]) => ({ libelle, montant: v.montant, nombre: v.nombre, pct: totalConsomme > 0 ? (v.montant / totalConsomme) * 100 : 0 }))
       .sort((a, b) => b.montant - a.montant);
     const top20Prestataires = consommationParPrestataire.slice(0, 20);
 
@@ -364,7 +392,7 @@ export class StatistiquesService {
       periode: { du: duEff, au: auEff },
       basesContractuelles: { college: contrat.client.nom, assureur: contrat.compagnie.nom, policeNumero: contrat.numeroPolice ?? contrat.id, dateEffet: dateEffetExercice },
       evolutionMensuelle, evolutionAnnuelle, totalConsomme, consommationParFamille, detailParFamille, top20Consommateurs,
-      repartitionBeneficiaire, totalPersonnesSoignees, consommationParRubrique,
+      repartitionBeneficiaire, totalPersonnesSoignees, consommationParRubrique, consommationParFamilleActe,
       consommationParPrestataire, detailParPrestataire, top20Prestataires, spSansChargement, spAvecChargement,
     };
 
