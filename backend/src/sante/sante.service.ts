@@ -111,6 +111,62 @@ async function verifierAssureNonRetire(prisma: PrismaService, contratId: string,
   }
 }
 
+// Rattachement au BON contrat selon la date des soins (2026-09) — voir
+// demande utilisateur : "il faut toujours vérifier quand les soins ont été
+// faits et dans quel contrat il est à la date de soins. Car la date de
+// soins correspond forcément à un contrat bien spécifique auquel l'assuré
+// serait lié à cette date-là." Avec la bascule automatique à l'import
+// (voir importPopulation), un assuré peut avoir été rattaché à PLUSIEURS
+// contrats dans le temps — une facture en retard (reprise d'antériorité)
+// datée d'AVANT une bascule doit rester sur l'ANCIEN contrat, jamais sur
+// le nouveau, même si l'assuré y est "actuellement". Reconstruit la
+// chronologie réelle de rattachement de CET assuré (tous contrats
+// confondus) à partir du même journal AvenantAssure que
+// verifierAssureNonRetire ci-dessus (Incorporation/Retrait, posés par
+// MouvementsService.basculerLot et par importPopulation) — jamais une
+// fenêtre d'exercice abstraite. Historique vide (assuré jamais basculé,
+// données antérieures à ce mécanisme) = tolérant, aucun blocage : on ne
+// vérifie jamais ce qu'on ne connaît pas (même principe que
+// normaliserStatutImport, "jamais une valeur devinée").
+async function verifierContratDeAssureALaDate(prisma: PrismaService, contratId: string, assureId: string, datePrestation: string) {
+  const evenements = await prisma.avenantAssure.findMany({
+    where: { assureId },
+    orderBy: [{ dateEffet: "asc" }, { avenant: { createdAt: "asc" } }],
+  });
+  if (evenements.length === 0) return;
+
+  type Segment = { contratId: string; debut: Date; fin: Date | null };
+  const segments: Segment[] = [];
+  let ouvert: { contratId: string; debut: Date } | null = null;
+  for (const e of evenements) {
+    const d = parseDateFr(e.dateEffet);
+    if (!d) continue;
+    if (e.action === "Incorporation") {
+      if (ouvert) segments.push({ contratId: ouvert.contratId, debut: ouvert.debut, fin: null });
+      ouvert = { contratId: e.contratId, debut: d };
+    } else if (e.action === "Retrait" && ouvert && ouvert.contratId === e.contratId) {
+      segments.push({ contratId: ouvert.contratId, debut: ouvert.debut, fin: d });
+      ouvert = null;
+    }
+  }
+  if (ouvert) segments.push({ contratId: ouvert.contratId, debut: ouvert.debut, fin: null });
+
+  const dPrestation = parseDateFr(datePrestation);
+  if (!dPrestation) return;
+  const segmentTrouve = segments.find((s) => dPrestation >= s.debut && (s.fin === null || dPrestation < s.fin));
+
+  if (!segmentTrouve) {
+    throw new BadRequestException(
+      `Aucun contrat connu pour cet assuré à la date du ${datePrestation} d'après son historique de rattachement — vérifiez la date de la prestation ou le contrat.`,
+    );
+  }
+  if (segmentTrouve.contratId !== contratId) {
+    throw new BadRequestException(
+      `Cette personne était rattachée au contrat ${segmentTrouve.contratId} à la date du ${datePrestation} (pas ${contratId}) — vérifiez le contrat de cette prestation.`,
+    );
+  }
+}
+
 function formatNom(s: string): string {
   return s.trim().toUpperCase();
 }
@@ -1180,6 +1236,7 @@ export class SanteService {
     });
     verifierSaisieAutorisee(contratRef, dto.datePrestation);
     await verifierAssureNonRetire(this.prisma, ctx.contratId, dto.assureId, dto.datePrestation);
+    await verifierContratDeAssureALaDate(this.prisma, ctx.contratId, dto.assureId, dto.datePrestation);
     // Rubrique forcée par le TYPE de prestataire (2026-09) — voir demande
     // utilisateur : "chaque prestation des prestataires de type opticien
     // doit être enregistrée sous la rubrique de garantie 'OPTIQUE' et pour
