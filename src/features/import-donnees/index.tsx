@@ -16,7 +16,7 @@ import {
 } from "@/services/import.service";
 import {
   compterPersonnesEnAttenteTransfert, getPersonnesEnAttenteTransfert, ignorerPersonneEnAttenteTransfert,
-  type PersonneEnAttenteTransfert,
+  analyserEcartsTauxContrat, type PersonneEnAttenteTransfert,
 } from "@/services/sante.service";
 import {
   telechargerModeleImportClients, apercuImportClients, confirmerImportClients, type ImportClientRow,
@@ -112,6 +112,26 @@ export default function ImportDonneesView() {
     }
   };
 
+  // Analyse a posteriori des écarts de taux (2026-09) — voir
+  // SanteService.analyserEcartsTauxContrat : détecte, dans les
+  // prestations déjà en base, un changement de contrat jamais annoncé
+  // (taux observé correspondant à un autre contrat du même souscripteur)
+  // — signale dans la même file d'attente, ne bascule jamais seule.
+  const [analyseEnCours, setAnalyseEnCours] = useState(false);
+  const handleAnalyserEcartsTaux = async () => {
+    setAnalyseEnCours(true);
+    try {
+      const res = await analyserEcartsTauxContrat();
+      rafraichirEnAttenteTransfert();
+      if (res.detectes > 0) toast.success(`${res.detectes} écart(s) de taux détecté(s) — ajouté(s) à la file de transfert pour validation.`);
+      else toast.info("Aucun écart de taux détecté.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Analyse impossible.");
+    } finally {
+      setAnalyseEnCours(false);
+    }
+  };
+
   const synchroniser = async (silencieux = false) => {
     setSynchronisation(true);
     try {
@@ -148,12 +168,22 @@ export default function ImportDonneesView() {
         </div>
       )}
 
+      <div className="mb-5 rounded-xl border border-border bg-card px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-[12.5px] text-muted-foreground flex items-center gap-2">
+          <RefreshCw className="w-4 h-4 flex-shrink-0" />
+          Analyse a posteriori : détecte, dans les prestations déjà en base, un changement de contrat jamais annoncé (taux de couverture observé correspondant à un autre contrat du même souscripteur — ex. changement de collège Agent/Cadre) — jamais de bascule automatique, seulement un signalement à confirmer ci-dessous.
+        </p>
+        <Btn variant="secondary" disabled={analyseEnCours} onClick={handleAnalyserEcartsTaux}>
+          <RefreshCw className={`w-4 h-4 ${analyseEnCours ? "animate-spin" : ""}`} />Analyser les écarts de taux
+        </Btn>
+      </div>
+
       {enAttenteTransfert > 0 && (
         <div className="mb-5 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 space-y-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <p className="text-[12.5px] text-amber-700 dark:text-amber-300 flex items-center gap-2">
               <Clock className="w-4 h-4 flex-shrink-0" />
-              <span><span className="font-semibold">{enAttenteTransfert}</span> personne(s) importée(s) déjà présente(s) sur un autre contrat, en attente de confirmation de leur statut Actif — résolu automatiquement dès qu'un import confirmera leur transfert.</span>
+              <span><span className="font-semibold">{enAttenteTransfert}</span> personne(s) en attente de transfert (matricule déjà présent sur un autre contrat, ou écart de taux détecté) — résolu automatiquement au prochain import qui confirmera leur statut, ou à valider manuellement ci-dessous.</span>
             </p>
             <Btn variant="secondary" onClick={toggleListeTransfert}>{listeTransfert ? "Masquer" : "Voir le détail"}</Btn>
           </div>
@@ -161,7 +191,7 @@ export default function ImportDonneesView() {
             <div className="space-y-1 max-h-56 overflow-y-auto">
               {listeTransfert.map((p) => (
                 <div key={p.id} className="text-[11.5px] text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/25 rounded-lg px-2.5 py-1.5 flex items-start justify-between gap-2">
-                  <span className="flex-1"><span className="font-semibold">{p.nom} {p.prenom ?? ""}</span> (matricule {p.matricule}) — sur le contrat {p.contratSourceId}, import visait le contrat {p.contratCibleId}.</span>
+                  <span className="flex-1"><span className="font-semibold">{p.nom} {p.prenom ?? ""}</span> (matricule {p.matricule}) — {p.motif}</span>
                   <button type="button" onClick={() => handleIgnorerTransfert(p.id)} className="text-[11px] underline flex-shrink-0">Ignorer</button>
                 </div>
               ))}

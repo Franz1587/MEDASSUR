@@ -53,6 +53,14 @@ export class SanteController {
     return this.service.ignorerPersonneEnAttenteTransfert(id);
   }
 
+  // Analyse a posteriori des écarts de taux (2026-09) — voir
+  // SanteService.analyserEcartsTauxContrat. `contratId` optionnel (body),
+  // absent = tous les contrats.
+  @Post("analyser-ecarts-taux")
+  analyserEcartsTauxContrat(@Body("contratId") contratId?: string) {
+    return this.service.analyserEcartsTauxContrat(contratId);
+  }
+
   @Patch("assures/:id")
   updateAssure(@Param("id") id: string, @Body() dto: UpdateAssureDto) {
     return this.service.updateAssure(id, dto);

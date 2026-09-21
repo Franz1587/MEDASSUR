@@ -759,6 +759,28 @@ export class SanteService {
       });
     }
 
+    // Détection de changement de contrat par le taux observé (2026-09) —
+    // voir resoudreContratParTauxObserve : un assuré déjà présent sur ce
+    // contrat, dont l'historique de prestations révèle un taux qui ne
+    // correspond plus à CE contrat mais à un AUTRE contrat du même
+    // souscripteur (ex. changement de collège Agent → Cadre jamais
+    // annoncé), est basculé automatiquement — jamais en parallèle (la
+    // bascule ré-affecte contratId, un traitement concurrent sur la même
+    // famille casserait le cascade), et seulement pour les assurés
+    // PRINCIPAUX (familleId null) : basculerVersContrat cascade déjà leurs
+    // ayants droit, les traiter individuellement ici serait redondant.
+    for (const item of aMettreAJour) {
+      const original = existantParMatricule.get(item.matricule);
+      if (!original || original.familleId !== null) continue;
+      try {
+        if (await this.detecterEtBasculerParTaux(item.id, dto.contratId, contrat.clientId)) basculees++;
+      } catch {
+        // Jamais bloquant — une détection ratée ne doit jamais faire
+        // échouer l'import lui-même, seulement manquer une bascule
+        // possible (rattrapable plus tard via l'analyse a posteriori).
+      }
+    }
+
     const LOT_MAJ = 25;
     for (let i = 0; i < aMettreAJour.length; i += LOT_MAJ) {
       const lot = aMettreAJour.slice(i, i + LOT_MAJ);
@@ -949,6 +971,145 @@ export class SanteService {
       ? (estPublic ? contrat.tauxHospitalisationPublique : contrat.tauxHospitalisationPrivee)
       : (estPublic ? contrat.tauxAmbulatoirePublique : contrat.tauxAmbulatoirePrivee);
     return this.parseTauxPourcent(texte);
+  }
+
+  // Tolérance d'arrondi (2026-09) — baseRemboursement est arrondi à
+  // l'unité (Math.round) au calcul, donc le taux effectif recalculé après
+  // coup (baseRemboursement / montant × 100) ne retombe jamais exactement
+  // sur la valeur d'origine — ±1 point absorbe cet arrondi sans risquer de
+  // confondre deux vrais taux de contrats voisins (ex. 80 vs 100).
+  private static readonly TOLERANCE_TAUX = 1;
+
+  // Détection d'un changement de contrat via le taux réellement appliqué
+  // (2026-09) — voir demande utilisateur : cas Maurel & Prom/CIMAF Gabon,
+  // un salarié change de collège (ex. Agent → Cadre) chez le MÊME
+  // souscripteur en cours d'année, jamais annoncé par un import de
+  // population — mais ça se voit : le taux réellement remboursé sur ses
+  // prestations change et correspond exactement au barème d'un AUTRE
+  // contrat de ce souscripteur. `tauxEffectif` est recalculé depuis
+  // montant/baseRemboursement (jamais lu depuis PriseEnCharge.
+  // tauxRemboursement, qui reste NULL sur une reprise d'antériorité — voir
+  // creerLigneCommune, opts.baseRemboursementImpose court-circuite
+  // calculerPartAssuranceLigne). Portée volontairement limitée aux types
+  // NON plafonnés (voir RUBRIQUES_PLAFONNEES) — Consultations, Actes de
+  // Spécialités, Pharmacie, Imagerie, Analyses, Hospitalisation... tous
+  // suivent le même moteur au % (tauxParSecteur, taux stable et
+  // comparable). Les rubriques à plafond (Optique, Dentaire...) n'ont pas
+  // de taux fixe comparable (le remboursement dépend du plafond déjà
+  // consommé), donc jamais comparées ici : mieux vaut ne rien détecter que
+  // deviner à tort.
+  // Retourne `null` si le taux actuel correspond déjà (rien d'anormal) OU
+  // si aucun contrat frère ne correspond clairement (jamais une
+  // correspondance approximative/devinée).
+  private async resoudreContratParTauxObserve(
+    contratActuelId: string, clientId: string, estHospitalisation: boolean, secteur: string | null | undefined, estAyantDroit: boolean, tauxEffectif: number,
+  ): Promise<string | null> {
+    if (!secteur) return null;
+    const SELECT_TAUX = {
+      id: true,
+      tauxAmbulatoirePublique: true, tauxAmbulatoirePrivee: true, tauxHospitalisationPublique: true, tauxHospitalisationPrivee: true,
+      tauxAmbulatoirePubliqueAyantDroit: true, tauxAmbulatoirePriveeAyantDroit: true, tauxHospitalisationPubliqueAyantDroit: true, tauxHospitalisationPriveeAyantDroit: true,
+    } satisfies Prisma.ContratSelect;
+
+    const contratActuel = await this.prisma.contrat.findUnique({ where: { id: contratActuelId }, select: SELECT_TAUX });
+    if (!contratActuel) return null;
+    const tauxActuel = this.tauxParSecteur(estHospitalisation, secteur, estAyantDroit, contratActuel);
+    if (tauxActuel !== null && Math.abs(tauxActuel - tauxEffectif) <= SanteService.TOLERANCE_TAUX) return null;
+
+    const freres = await this.prisma.contrat.findMany({ where: { clientId, id: { not: contratActuelId } }, select: SELECT_TAUX });
+    const frereCorrespondant = freres.find((f) => {
+      const t = this.tauxParSecteur(estHospitalisation, secteur, estAyantDroit, f);
+      return t !== null && Math.abs(t - tauxEffectif) <= SanteService.TOLERANCE_TAUX;
+    });
+    return frereCorrespondant?.id ?? null;
+  }
+
+  // Parcourt l'historique de prestations d'un assuré PRINCIPAL déjà
+  // présent sur `contratActuelId`, cherche la plus ANCIENNE ligne dont le
+  // taux effectif confirme un contrat frère (voir
+  // resoudreContratParTauxObserve) — jamais d'action ici, seulement la
+  // détection, réutilisée à la fois par l'import (bascule immédiate) et
+  // l'analyse a posteriori (file d'attente, voir plus bas).
+  private async detecterContratParTauxPourAssure(assureId: string, contratActuelId: string, clientId: string): Promise<{ contratTrouve: string; dateEffet: string } | null> {
+    const assure = await this.prisma.assureSante.findUnique({ where: { id: assureId }, select: { typeAssure: true } });
+    if (!assure) return null;
+    const estAyantDroit = assure.typeAssure !== "AS";
+
+    const lignes = await this.prisma.priseEnCharge.findMany({
+      where: { assureId, contratId: contratActuelId, statut: { notIn: ["Rejeté", "Annulé"] }, type: { notIn: RUBRIQUES_PLAFONNEES } },
+      select: { type: true, montant: true, baseRemboursement: true, date: true, prestataireId: true },
+    });
+    if (lignes.length === 0) return null;
+
+    const prestataireIds = [...new Set(lignes.map((l) => l.prestataireId).filter((id): id is string => !!id))];
+    const prestataires = prestataireIds.length > 0
+      ? await this.prisma.prestataire.findMany({ where: { id: { in: prestataireIds } }, select: { id: true, secteur: true } })
+      : [];
+    const secteurParPrestataire = new Map(prestataires.map((p) => [p.id, p.secteur]));
+
+    const lignesTriees = lignes
+      .map((l) => ({ ...l, dateParsed: parseDateFr(l.date) }))
+      .filter((l): l is typeof l & { dateParsed: Date } => l.dateParsed !== null && l.baseRemboursement !== null && Number(l.montant) > 0)
+      .sort((a, b) => a.dateParsed.getTime() - b.dateParsed.getTime());
+
+    for (const ligne of lignesTriees) {
+      const tauxEffectif = (Number(ligne.baseRemboursement) / Number(ligne.montant)) * 100;
+      const secteur = ligne.prestataireId ? secteurParPrestataire.get(ligne.prestataireId) : undefined;
+      const contratTrouve = await this.resoudreContratParTauxObserve(
+        contratActuelId, clientId, ligne.type === "Hospitalisation", secteur, estAyantDroit, tauxEffectif,
+      );
+      if (contratTrouve) return { contratTrouve, dateEffet: ligne.date };
+    }
+    return null;
+  }
+
+  // Utilisation n°1 — import de population : bascule RÉELLE et immédiate
+  // dès qu'un contrat frère est confirmé (voir demande utilisateur — le
+  // fichier d'import fait déjà foi). Retourne `true` si une bascule a eu
+  // lieu, pour incrémenter le compteur `basculees` de importPopulation.
+  private async detecterEtBasculerParTaux(assureId: string, contratActuelId: string, clientId: string): Promise<boolean> {
+    const trouve = await this.detecterContratParTauxPourAssure(assureId, contratActuelId, clientId);
+    if (!trouve) return false;
+    await this.mouvements.basculerVersContrat(assureId, trouve.contratTrouve, true, trouve.dateEffet);
+    return true;
+  }
+
+  // Utilisation n°2 — analyse a posteriori (2026-09) — voir demande
+  // utilisateur : "import + analyse a posteriori sur les données
+  // existantes". Contrairement à l'import, aucun fichier ne fait foi du
+  // statut réel de la personne ici : jamais de bascule automatique,
+  // seulement un signalement dans la file PersonneEnAttenteTransfert déjà
+  // livrée (même écran, même action "Ignorer" en cas de faux positif) —
+  // un gestionnaire confirme le transfert depuis la fiche du participant.
+  // `contratId` optionnel : sans lui, scanne TOUS les contrats.
+  async analyserEcartsTauxContrat(contratId?: string) {
+    const contrats = await this.prisma.contrat.findMany({
+      where: contratId ? { id: contratId } : {},
+      select: { id: true, clientId: true },
+    });
+    let detectes = 0;
+    for (const c of contrats) {
+      const principaux = await this.prisma.assureSante.findMany({
+        where: { contratId: c.id, familleId: null },
+        select: { id: true, nom: true, prenom: true, matricule: true },
+      });
+      for (const p of principaux) {
+        const trouve = await this.detecterContratParTauxPourAssure(p.id, c.id, c.clientId).catch(() => null);
+        if (!trouve) continue;
+        await this.prisma.personneEnAttenteTransfert.deleteMany({ where: { matricule: p.matricule } });
+        await this.prisma.personneEnAttenteTransfert.create({
+          data: {
+            matricule: p.matricule, nom: p.nom, prenom: p.prenom ?? null,
+            contratSourceId: c.id, contratCibleId: trouve.contratTrouve,
+            statutImport: null,
+            motif: `Taux observé sur les prestations correspondant au contrat ${trouve.contratTrouve} depuis le ${trouve.dateEffet} (contrat actuel : ${c.id}).`,
+            donneesLigne: { source: "analyse-a-posteriori", dateEffet: trouve.dateEffet } as unknown as Prisma.InputJsonValue,
+          },
+        });
+        detectes++;
+      }
+    }
+    return { detectes };
   }
 
   // Calcule automatiquement le remboursement selon le secteur (Public/

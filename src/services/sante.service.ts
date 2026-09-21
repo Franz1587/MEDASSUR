@@ -353,6 +353,15 @@ export async function ignorerPersonneEnAttenteTransfert(id: string): Promise<{ i
   return http.delete<{ id: string }>(`/sante/personnes-en-attente-transfert/${id}`);
 }
 
+// Analyse a posteriori des écarts de taux de couverture (2026-09) — voir
+// SanteService.analyserEcartsTauxContrat : détecte, dans les prestations
+// déjà en base, un changement de contrat jamais annoncé (taux observé
+// correspondant à un autre contrat du même souscripteur) — signale dans
+// la file d'attente de transfert, ne bascule jamais automatiquement.
+export async function analyserEcartsTauxContrat(): Promise<{ detectes: number }> {
+  return http.post<{ detectes: number }>("/sante/analyser-ecarts-taux", {});
+}
+
 /**
  * Les fichiers d'import population (export compagnie/courtier) sont
  * quasi systématiquement encodés en Windows-1252 (accents français
