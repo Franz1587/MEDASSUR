@@ -123,7 +123,7 @@ export async function confirmerImportAssures(contratId: string, rows: ImportAssu
     dateNaissance: r.dateNaissance ?? "", typeAssure: r.typeAssure ?? "", telephone: r.telephone ?? "",
     statut: r.statut ?? "",
   })));
-  return { crees: res.imported + res.updated, rejets: res.rejected.map((rej) => ({ ligne: rej.ligne, motif: rej.motif })) };
+  return { crees: res.imported + res.updated + res.basculees, rejets: res.rejected.map((rej) => ({ ligne: rej.ligne, motif: rej.motif })) };
 }
 
 // ── Photos en masse (2026-08) — voir demande utilisateur : "importer même

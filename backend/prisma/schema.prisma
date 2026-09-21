@@ -324,6 +324,7 @@ model SocieteAssurance {
   prescriptions Prescription[]
   scoringFraudes ScoringFraude[]
   facturesEnAttente FactureEnAttente[]
+  personnesEnAttenteTransfert PersonneEnAttenteTransfert[]
   prestataireAlias PrestataireAlias[]
   lotsCheques LotCheques[]
   agences Agence[]
@@ -1792,6 +1793,39 @@ model FactureEnAttente {
   statut           String?
   motifRejet       String?
   createdAt        DateTime @default(now())
+
+  @@index([matricule])
+  @@index([societeId])
+}
+
+// File d'attente — transfert de personne entre contrats à l'import
+// (2026-09) — voir demande utilisateur : reprise en masse de populations
+// sur plusieurs imports étalés dans le temps ; le bon contrat de
+// destination d'une personne n'est parfois connu qu'à un import
+// ULTÉRIEUR. Même patron que FactureEnAttente ci-dessus (jamais perdue,
+// rejouée automatiquement) : quand `SanteService.importPopulation`
+// détecte qu'un matricule importé existe déjà sur un AUTRE contrat, et
+// que le statut porté par la ligne importée n'affirme pas "Actif" (donc
+// pas assez d'information pour basculer avec confiance tout de suite —
+// voir normaliserStatutImport), la ligne est stockée ici telle quelle
+// plutôt que rejetée sèchement. Elle se résout d'elle-même dès qu'un
+// import ultérieur, pour le bon contrat, porte le statut "Actif" pour ce
+// même matricule (le conflit est alors re-détecté par le même chemin, et
+// cette fois déclenche MouvementsService.basculerVersContrat au lieu de
+// remettre en attente).
+model PersonneEnAttenteTransfert {
+  id              String   @id @default(cuid())
+  societeId       String?
+  societe         SocieteAssurance? @relation(fields: [societeId], references: [id])
+  matricule       String
+  nom             String
+  prenom          String?
+  contratSourceId String
+  contratCibleId  String
+  statutImport    String?
+  motif           String
+  donneesLigne    Json
+  createdAt       DateTime @default(now())
 
   @@index([matricule])
   @@index([societeId])

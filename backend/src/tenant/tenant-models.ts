@@ -77,6 +77,7 @@ export const TENANT_MODELS = new Set<string>([
   "Prescription",
   "ScoringFraude",
   "FactureEnAttente",
+  "PersonneEnAttenteTransfert",
   "PrestataireAlias",
   "LotCheques",
   // Agence (2026-09) — voir schema.prisma pour le détail de la demande

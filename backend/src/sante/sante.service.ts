@@ -473,6 +473,8 @@ export class SanteService {
     type LigneAcceptee = { row: ImportedPersonRowDto; nom: string; prenom?: string; type: string; id: string; matricule: string; familleId: string | null; isNew: boolean };
     const accepted: LigneAcceptee[] = [];
     const matriculesVusEnLigne = new Map<string, number>();
+    let basculees = 0;
+    const resultatsBascule: { matricule: string; id: string }[] = [];
 
     // Résolution EN LOTS des vérifications anti-doublon (2026-09 — voir
     // demande utilisateur : "chaque import puisse générer une écriture de
@@ -528,7 +530,54 @@ export class SanteService {
 
         const doublonMatricule = conflitMatriculeParValeur.get(matricule);
         if (doublonMatricule) {
-          rejets.push({ ligne: ligneNo, matricule, nom, motif: this.messageConflitMatricule(matricule, doublonMatricule) });
+          // Bascule automatique à l'import (2026-09) — voir demande
+          // utilisateur : reprise en masse de populations sur plusieurs
+          // imports étalés dans le temps ; "c'est le statut au moment de
+          // l'import qui indique qu'une personne est inactive sur un
+          // contrat et active sur un autre". Un matricule déjà présent sur
+          // UN AUTRE contrat n'est plus un rejet sec dès que CETTE ligne
+          // affirme "Actif" pour le contrat en cours d'import — c'est le
+          // signal fiable d'un vrai basculement (jamais une saisie
+          // erronée), exécuté via le même mécanisme que "Transférer" sur
+          // la fiche du participant (MouvementsService.basculerVersContrat
+          // — même ligne AssureSante, contratId réaffecté, aucune
+          // duplication possible, historique de consommation intact sous
+          // l'ancien contrat).
+          if (normaliserStatutImport(line.statut) === "Actif") {
+            try {
+              await this.mouvements.basculerVersContrat(doublonMatricule.id, dto.contratId, true, aujourdhuiFr());
+              await this.prisma.personneEnAttenteTransfert.deleteMany({ where: { matricule } });
+              basculees++;
+              resultatsBascule.push({ matricule, id: doublonMatricule.id });
+            } catch (err) {
+              rejets.push({ ligne: ligneNo, matricule, nom, motif: err instanceof Error ? err.message : this.messageConflitMatricule(matricule, doublonMatricule) });
+            }
+            continue;
+          }
+
+          // Statut non affirmé "Actif" sur ce contrat — pas assez
+          // d'information pour basculer avec confiance maintenant (le bon
+          // contrat de destination sera peut-être importé plus tard, voir
+          // demande utilisateur : "il faut même un système de sauvegarde
+          // comme un cache... plus on importe les données plus
+          // l'application voit plus claire"). Jamais un rejet sec qui
+          // perdrait l'information : mise en file d'attente, résolue
+          // d'elle-même au prochain import qui affirmera son statut Actif
+          // pour ce même matricule (même chemin ci-dessus, rejoué).
+          await this.prisma.personneEnAttenteTransfert.deleteMany({ where: { matricule } });
+          await this.prisma.personneEnAttenteTransfert.create({
+            data: {
+              matricule, nom, prenom: prenom ?? null,
+              contratSourceId: doublonMatricule.contratId, contratCibleId: dto.contratId,
+              statutImport: line.statut ?? null,
+              motif: this.messageConflitMatricule(matricule, doublonMatricule),
+              donneesLigne: line as unknown as Prisma.InputJsonValue,
+            },
+          });
+          rejets.push({
+            ligne: ligneNo, matricule, nom,
+            motif: `En attente de transfert — ${this.messageConflitMatricule(matricule, doublonMatricule)} Résolu automatiquement dès qu'un import affirmera son statut Actif sur le bon contrat.`,
+          });
           continue;
         }
       }
@@ -566,13 +615,13 @@ export class SanteService {
     }
 
     if (accepted.length === 0) {
-      if (rejets.length > 0) return { imported: 0, updated: 0, rejected: rejets, resultats: [] };
+      if (rejets.length > 0 || basculees > 0) return { imported: 0, updated: 0, basculees, rejected: rejets, resultats: resultatsBascule };
       throw new BadRequestException("Aucune ligne exploitable dans le fichier importé.");
     }
 
     let imported = 0;
     let updated = 0;
-    const resultats: { matricule: string; id: string }[] = accepted.map((item) => ({ matricule: item.matricule, id: item.id }));
+    const resultats: { matricule: string; id: string }[] = [...accepted.map((item) => ({ matricule: item.matricule, id: item.id })), ...resultatsBascule];
 
     // Écriture en masse (2026-09) — voir demande utilisateur : "l'application
     // devient lente... il faudrait que peu importe le poids et le flux,
@@ -676,7 +725,30 @@ export class SanteService {
       updated += compteurs.reduce((s, c) => s + c, 0);
     }
 
-    return { imported, updated, rejected: rejets, resultats };
+    return { imported, updated, basculees, rejected: rejets, resultats };
+  }
+
+  // File d'attente des personnes en attente de transfert (2026-09) — voir
+  // importPopulation ci-dessus. Même principe que
+  // ImportService.compterFacturesEnAttente : un badge de suivi, sans action
+  // de "synchronisation" dédiée puisque la résolution se fait d'elle-même
+  // au fil des imports suivants (voir importPopulation).
+  listerPersonnesEnAttenteTransfert() {
+    return this.prisma.personneEnAttenteTransfert.findMany({ orderBy: { createdAt: "desc" } });
+  }
+
+  async compterPersonnesEnAttenteTransfert() {
+    return { nombre: await this.prisma.personneEnAttenteTransfert.count() };
+  }
+
+  // Cas rare où l'entrée ne correspond finalement pas à un vrai
+  // basculement à venir (ex. matricule réutilisé par erreur par un autre
+  // souscripteur) — retrait manuel, sans toucher à l'AssureSante existant.
+  async ignorerPersonneEnAttenteTransfert(id: string) {
+    const entree = await this.prisma.personneEnAttenteTransfert.findUnique({ where: { id } });
+    if (!entree) throw new NotFoundException(`Entrée ${id} introuvable`);
+    await this.prisma.personneEnAttenteTransfert.delete({ where: { id } });
+    return { id };
   }
 
   // `assureIds` (optionnel) permet au profil Participants de récupérer en un

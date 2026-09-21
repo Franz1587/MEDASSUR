@@ -15,6 +15,10 @@ import {
   importerPhotosEnMasse,
 } from "@/services/import.service";
 import {
+  compterPersonnesEnAttenteTransfert, getPersonnesEnAttenteTransfert, ignorerPersonneEnAttenteTransfert,
+  type PersonneEnAttenteTransfert,
+} from "@/services/sante.service";
+import {
   telechargerModeleImportClients, apercuImportClients, confirmerImportClients, type ImportClientRow,
 } from "@/services/clients.service";
 import {
@@ -76,8 +80,37 @@ export default function ImportDonneesView() {
   const [enAttente, setEnAttente] = useState(0);
   const [synchronisation, setSynchronisation] = useState(false);
 
+  // Personnes en attente de transfert (2026-09) — voir SanteService.
+  // importPopulation : un matricule importé, déjà présent sur un autre
+  // contrat, dont le statut n'affirme pas encore "Actif" pour CE contrat.
+  // Se résout de lui-même au fil des imports suivants — pas de
+  // "synchroniser" manuel ici, juste un suivi + une possibilité d'ignorer
+  // une entrée qui ne correspond finalement pas à un vrai transfert.
+  const [enAttenteTransfert, setEnAttenteTransfert] = useState(0);
+  const [listeTransfert, setListeTransfert] = useState<PersonneEnAttenteTransfert[] | null>(null);
+
   const rafraichirEnAttente = () => { compterFacturesEnAttente().then((r) => setEnAttente(r.nombre)).catch(() => undefined); };
-  useEffect(() => { rafraichirEnAttente(); }, []);
+  const rafraichirEnAttenteTransfert = () => { compterPersonnesEnAttenteTransfert().then((r) => setEnAttenteTransfert(r.nombre)).catch(() => undefined); };
+  useEffect(() => { rafraichirEnAttente(); rafraichirEnAttenteTransfert(); }, []);
+
+  const toggleListeTransfert = async () => {
+    if (listeTransfert) { setListeTransfert(null); return; }
+    try {
+      setListeTransfert(await getPersonnesEnAttenteTransfert());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Chargement impossible.");
+    }
+  };
+
+  const handleIgnorerTransfert = async (id: string) => {
+    try {
+      await ignorerPersonneEnAttenteTransfert(id);
+      setListeTransfert((v) => v?.filter((p) => p.id !== id) ?? null);
+      rafraichirEnAttenteTransfert();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Suppression impossible.");
+    }
+  };
 
   const synchroniser = async (silencieux = false) => {
     setSynchronisation(true);
@@ -112,6 +145,28 @@ export default function ImportDonneesView() {
           <Btn variant="secondary" disabled={synchronisation} onClick={() => synchroniser(false)}>
             <RefreshCw className={`w-4 h-4 ${synchronisation ? "animate-spin" : ""}`} />Synchroniser maintenant
           </Btn>
+        </div>
+      )}
+
+      {enAttenteTransfert > 0 && (
+        <div className="mb-5 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-[12.5px] text-amber-700 dark:text-amber-300 flex items-center gap-2">
+              <Clock className="w-4 h-4 flex-shrink-0" />
+              <span><span className="font-semibold">{enAttenteTransfert}</span> personne(s) importée(s) déjà présente(s) sur un autre contrat, en attente de confirmation de leur statut Actif — résolu automatiquement dès qu'un import confirmera leur transfert.</span>
+            </p>
+            <Btn variant="secondary" onClick={toggleListeTransfert}>{listeTransfert ? "Masquer" : "Voir le détail"}</Btn>
+          </div>
+          {listeTransfert && (
+            <div className="space-y-1 max-h-56 overflow-y-auto">
+              {listeTransfert.map((p) => (
+                <div key={p.id} className="text-[11.5px] text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/25 rounded-lg px-2.5 py-1.5 flex items-start justify-between gap-2">
+                  <span className="flex-1"><span className="font-semibold">{p.nom} {p.prenom ?? ""}</span> (matricule {p.matricule}) — sur le contrat {p.contratSourceId}, import visait le contrat {p.contratCibleId}.</span>
+                  <button type="button" onClick={() => handleIgnorerTransfert(p.id)} className="text-[11px] underline flex-shrink-0">Ignorer</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -198,6 +253,7 @@ export default function ImportDonneesView() {
               confirmer={async (rows) => {
                 const res = await confirmerImportAssures(contrat.id, rows);
                 if (res.crees > 0) synchroniser(true);
+                rafraichirEnAttenteTransfert();
                 return res;
               }}
               colonnes={[

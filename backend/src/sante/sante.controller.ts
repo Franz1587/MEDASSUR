@@ -36,6 +36,23 @@ export class SanteController {
     return this.service.importPopulation(dto);
   }
 
+  // File d'attente des personnes en attente de transfert (2026-09) — voir
+  // SanteService.importPopulation.
+  @Get("personnes-en-attente-transfert")
+  listerPersonnesEnAttenteTransfert() {
+    return this.service.listerPersonnesEnAttenteTransfert();
+  }
+
+  @Get("personnes-en-attente-transfert/compter")
+  compterPersonnesEnAttenteTransfert() {
+    return this.service.compterPersonnesEnAttenteTransfert();
+  }
+
+  @Delete("personnes-en-attente-transfert/:id")
+  ignorerPersonneEnAttenteTransfert(@Param("id") id: string) {
+    return this.service.ignorerPersonneEnAttenteTransfert(id);
+  }
+
   @Patch("assures/:id")
   updateAssure(@Param("id") id: string, @Body() dto: UpdateAssureDto) {
     return this.service.updateAssure(id, dto);

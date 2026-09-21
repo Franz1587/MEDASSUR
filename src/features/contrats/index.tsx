@@ -917,7 +917,7 @@ export default function ContratsView() {
 
       const parts = [
         newPopulationRows.length > 0 ? `${newPopulationRows.length} affilié(s) ajouté(s)` : null,
-        importSummary ? `${importSummary.imported} ligne(s) importée(s)${importSummary.updated ? `, ${importSummary.updated} mise(s) à jour` : ""}${importSummary.rejected.length ? ` (${importSummary.rejected.length} rejetée(s) — voir le rapport)` : ""}` : null,
+        importSummary ? `${importSummary.imported} ligne(s) importée(s)${importSummary.updated ? `, ${importSummary.updated} mise(s) à jour` : ""}${importSummary.basculees ? `, ${importSummary.basculees} transférée(s) automatiquement depuis un autre contrat` : ""}${importSummary.rejected.length ? ` (${importSummary.rejected.length} rejetée(s) — voir le rapport)` : ""}` : null,
       ].filter(Boolean);
       toast.success(editing ? "Contrat mis à jour." : `Contrat créé avec succès${parts.length ? " — " + parts.join(", ") : ""}.`);
       refresh();

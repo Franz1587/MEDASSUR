@@ -311,12 +311,46 @@ export interface ImportedPersonRowInput {
 export interface ImportPopulationResult {
   imported: number;
   updated: number;
+  // Bascules automatiques (2026-09) — personnes déjà sur un autre contrat,
+  // dont la ligne importée affirmait le statut "Actif" pour ce contrat :
+  // transférées automatiquement (voir SanteService.importPopulation),
+  // jamais dupliquées.
+  basculees: number;
   rejected: { ligne: number; matricule?: string; nom?: string; motif: string }[];
   resultats: { matricule: string; id: string }[];
 }
 
 export async function importPopulation(contratId: string, rows: ImportedPersonRowInput[]): Promise<ImportPopulationResult> {
   return http.post<ImportPopulationResult>("/sante/assures/import", { contratId, rows });
+}
+
+// File d'attente des personnes en attente de transfert (2026-09) — voir
+// SanteService.importPopulation : un matricule déjà présent sur un autre
+// contrat, dont le statut importé n'affirme pas encore "Actif", est
+// conservé ici plutôt que rejeté — résolu automatiquement dès qu'un import
+// ultérieur affirmera son statut Actif pour le bon contrat.
+export interface PersonneEnAttenteTransfert {
+  id: string;
+  matricule: string;
+  nom: string;
+  prenom?: string | null;
+  contratSourceId: string;
+  contratCibleId: string;
+  statutImport?: string | null;
+  motif: string;
+  createdAt: string;
+}
+
+export async function getPersonnesEnAttenteTransfert(): Promise<PersonneEnAttenteTransfert[]> {
+  return http.get<PersonneEnAttenteTransfert[]>("/sante/personnes-en-attente-transfert");
+}
+
+export async function compterPersonnesEnAttenteTransfert(): Promise<{ nombre: number }> {
+  return http.get<{ nombre: number }>("/sante/personnes-en-attente-transfert/compter");
+}
+
+export async function ignorerPersonneEnAttenteTransfert(id: string): Promise<{ id: string }> {
+  return http.delete<{ id: string }>(`/sante/personnes-en-attente-transfert/${id}`);
 }
 
 /**
