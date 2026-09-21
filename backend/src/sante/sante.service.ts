@@ -529,6 +529,11 @@ export class SanteService {
     type LigneAcceptee = { row: ImportedPersonRowDto; nom: string; prenom?: string; type: string; id: string; matricule: string; familleId: string | null; isNew: boolean };
     const accepted: LigneAcceptee[] = [];
     const matriculesVusEnLigne = new Map<string, number>();
+    // Fusion des doublons de matricule dans le fichier (2026-09) — voir la
+    // boucle plus bas : associe chaque matricule déjà traité à SON entrée
+    // acceptée, pour qu'une ligne suivante partageant le même matricule
+    // vienne la compléter au lieu d'être rejetée.
+    const accepteeParMatricule = new Map<string, LigneAcceptee>();
     let basculees = 0;
     const resultatsBascule: { matricule: string; id: string }[] = [];
 
@@ -570,22 +575,47 @@ export class SanteService {
       const matricule = line.matricule?.trim();
       const estAS = type === "AS" || !currentFamilyId;
 
+      // Fusion des doublons de matricule DANS LE FICHIER (2026-09) — voir
+      // demande utilisateur : "lorsque dans un fichier d'import le
+      // matricule est en double il faut simplement fusionner les
+      // données", remplace l'ancien rejet sec ("Matricule en doublon dans
+      // le fichier importé"). Complète l'entrée DÉJÀ acceptée pour ce
+      // matricule (nouvelle personne ou personne déjà connue du contrat)
+      // avec les champs non vides de cette ligne, sans jamais écraser un
+      // champ déjà renseigné par une ligne précédente — même logique de
+      // fusion que la mise à jour d'une fiche existante plus bas.
+      const dejaAcceptee = matricule ? accepteeParMatricule.get(matricule) : undefined;
+      if (dejaAcceptee) {
+        if (estAS) currentFamilyId = dejaAcceptee.familleId ?? dejaAcceptee.id;
+        if (prenom && !dejaAcceptee.prenom) dejaAcceptee.prenom = prenom;
+        if (line.sexe?.trim() && !dejaAcceptee.row.sexe?.trim()) dejaAcceptee.row.sexe = line.sexe;
+        if (line.dateNaissance?.trim() && !dejaAcceptee.row.dateNaissance?.trim()) dejaAcceptee.row.dateNaissance = line.dateNaissance;
+        if (line.telephone?.trim() && !dejaAcceptee.row.telephone?.trim()) dejaAcceptee.row.telephone = line.telephone;
+        if (line.statut?.trim() && !dejaAcceptee.row.statut?.trim()) dejaAcceptee.row.statut = line.statut;
+        if (line.photo?.trim() && !dejaAcceptee.row.photo?.trim()) dejaAcceptee.row.photo = line.photo;
+        continue;
+      }
+
       const existant = matricule ? existantParMatricule.get(matricule) : undefined;
       if (existant) {
         if (estAS) currentFamilyId = existant.familleId ?? existant.id;
-        accepted.push({ row: line, nom, prenom, type: type || (estAS ? "AS" : "EF"), id: existant.id, matricule: existant.matricule, familleId: existant.familleId, isNew: false });
+        const item: LigneAcceptee = { row: line, nom, prenom, type: type || (estAS ? "AS" : "EF"), id: existant.id, matricule: existant.matricule, familleId: existant.familleId, isNew: false };
+        accepted.push(item);
+        if (matricule) accepteeParMatricule.set(matricule, item);
         continue;
       }
 
       if (matricule) {
-        if (matriculesVusEnLigne.has(matricule)) {
-          rejets.push({ ligne: ligneNo, matricule, nom, motif: `Matricule en doublon dans le fichier importé (déjà utilisé à la ligne ${matriculesVusEnLigne.get(matricule)}).` });
-          continue;
-        }
-        matriculesVusEnLigne.set(matricule, ligneNo);
+        // Ré-entrée sur un matricule déjà traité par la branche
+        // "bascule/file d'attente" ci-dessous (rare : une bascule vient
+        // de faire disparaître le conflit inter-contrat pour ce
+        // matricule) — jamais retenter la bascule une 2ᵉ fois, la ligne
+        // suivante est simplement ignorée (déjà prise en compte).
+        if (matriculesVusEnLigne.has(matricule)) continue;
 
         const doublonMatricule = conflitMatriculeParValeur.get(matricule);
         if (doublonMatricule) {
+          matriculesVusEnLigne.set(matricule, ligneNo);
           // Bascule automatique à l'import (2026-09) — voir demande
           // utilisateur : reprise en masse de populations sur plusieurs
           // imports étalés dans le temps ; "c'est le statut au moment de
@@ -667,7 +697,9 @@ export class SanteService {
       const id = `ASS-${suffix}`;
       const genMatricule = matricule || genererMatricule();
       if (estAS) currentFamilyId = id;
-      accepted.push({ row: line, nom, prenom, type: typeResolu, id, matricule: genMatricule, familleId: estAS ? null : currentFamilyId, isNew: true });
+      const nouvelleLigne: LigneAcceptee = { row: line, nom, prenom, type: typeResolu, id, matricule: genMatricule, familleId: estAS ? null : currentFamilyId, isNew: true };
+      accepted.push(nouvelleLigne);
+      if (matricule) accepteeParMatricule.set(matricule, nouvelleLigne);
     }
 
     if (accepted.length === 0) {
