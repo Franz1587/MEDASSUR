@@ -765,16 +765,21 @@ export default function ContratsView() {
       setExistingPopulation([]);
     }
   };
-  // Contrats Maladie éligibles à un lien Assistance (2026-09) — voir demande
-  // utilisateur : "l'assistance n'existe que si un contrat a l'extension de
-  // territorialité" : un contrat Maladie SANS extension de territorialité
-  // n'a rien à couvrir en Assistance et ne doit donc pas apparaître dans ce
-  // sélecteur — même règle déjà appliquée à l'indicateur de la liste des
-  // contrats (voir plus bas, "c.branche === 'Maladie' && extensionsTerritorialite...").
-  // Comparaison par clientId (pas par nom, fragile si deux clients
-  // partagent le même nom).
+  // Contrats Maladie éligibles à un lien Assistance (2026-09, corrigé) —
+  // voir demande utilisateur : "il faut faire remonter les contrats Maladie
+  // du souscripteur afin qu'on puisse sélectionner celui qui a un contrat
+  // d'assistance afin de récupérer la population pour le calcul de la
+  // prime. Car un contrat d'assistance est très souvent lié à un contrat
+  // maladie mais pas toujours." Filtrer en plus sur l'extension de
+  // territorialité (ancienne règle, 2026-09) était trop restrictif : ce
+  // n'est qu'UN cas où le lien est FORTEMENT recommandé (territorialité
+  // hors Gabon → Assistance obligatoire, voir l'indicateur de la liste des
+  // contrats plus bas), pas la seule situation légitime — un contrat
+  // d'Assistance peut vouloir partager la population de N'IMPORTE QUEL
+  // contrat Maladie du même souscripteur. Comparaison par clientId (pas
+  // par nom, fragile si deux clients partagent le même nom).
   const contratsMaladieDuClient = contrats.filter(
-    (c) => c.branche === "Maladie" && c.clientId === form.clientId && (c.extensionsTerritorialite?.length ?? 0) > 0,
+    (c) => c.branche === "Maladie" && c.clientId === form.clientId,
   );
 
   // Population individualisée (avec date de naissance) disponible pour le
@@ -1303,14 +1308,15 @@ export default function ContratsView() {
                           {contratsMaladieDuClient.map((c) => <option key={c.id} value={c.id}>{c.numeroPolice || c.id} · {c.client}</option>)}
                         </select>
                         {/* Liste vide = pas un bug : voir le filtre de contratsMaladieDuClient
-                            (branche Maladie + même client + extension de territorialité). Message
-                            explicite (2026-09) plutôt qu'un select silencieusement vide — voir
-                            demande utilisateur : "la liste des contrats Maladie du souscripteur
-                            doit remonter ici", constaté vide faute de contrat éligible en données. */}
+                            (branche Maladie + même client, tous éligibles depuis 2026-09). Message
+                            explicite plutôt qu'un select silencieusement vide — voir demande
+                            utilisateur : "la liste des contrats Maladie du souscripteur doit
+                            remonter ici", constaté vide faute de contrat Maladie du tout pour ce
+                            souscripteur. */}
                         {form.clientId && contratsMaladieDuClient.length === 0 ? (
-                          <p className="text-[10.5px] text-amber-600 mt-1">Aucun contrat Maladie éligible pour ce souscripteur — il doit exister un contrat Maladie avec une extension de territorialité renseignée (onglet Informations générales de ce contrat Maladie).</p>
+                          <p className="text-[10.5px] text-amber-600 mt-1">Aucun contrat Maladie pour ce souscripteur — créez-le d'abord si ce contrat d'Assistance doit en partager la population.</p>
                         ) : (
-                          <p className="text-[10.5px] text-muted-foreground mt-1">Dès qu'un contrat Maladie a une territorialité hors Gabon, son Assistance est obligatoire et partage exactement sa population — aucun import séparé.</p>
+                          <p className="text-[10.5px] text-muted-foreground mt-1">Facultatif : un contrat d'Assistance partage souvent la population d'un contrat Maladie du même souscripteur (population saisie une seule fois) — obligatoire si ce contrat Maladie a une extension de territorialité hors Gabon.</p>
                         )}
                       </label>
                     )}
