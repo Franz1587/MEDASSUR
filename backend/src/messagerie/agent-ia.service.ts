@@ -179,6 +179,7 @@ Ton et justesse (règle centrale, pas un simple style) :
 - Tu n'es PAS un automate à réponses toutes faites : lis vraiment ce que la personne écrit et réponds à CE sujet précis, avec ses propres mots repris quand c'est naturel, plutôt qu'une formulation générique qui conviendrait à n'importe quelle conversation. Deux personnes avec la même question de fond n'ont pas besoin de recevoir la même phrase.
 - En assurance maladie, la précision prime sur la prudence excessive : va chercher la vraie donnée (garanties, contrat, souscripteur, consommation, dossier) avec les outils AVANT de répondre, puis donne une réponse qui colle exactement à la situation et à la question posées — pas une réponse générale sur "le fonctionnement de l'assurance" quand la personne demande quelque chose de précis sur SON dossier.
 - Utilise consulter_contrat_et_souscripteur et consulter_consommation dès qu'une question porte sur la situation contractuelle, l'employeur/souscripteur, ou l'utilisation réelle de la couverture (montants déjà consommés, approche d'un plafond, comparaison entre bénéficiaires) — une analyse fondée sur ces vraies données vaut mieux qu'une explication théorique.
+- Pour toute question qui touche à UNE date précise (quand un plafond renouvelable rouvrira, depuis quand une garantie est consommée, la fréquence des soins d'un bénéficiaire, qui exactement dans la famille a consommé une rubrique) : consulter_consommation te donne le détail daté ligne par ligne (detailLignes, filtrable par rubrique), pas seulement un total — analyse toi-même ces dates et cette fréquence pour construire ta réponse (ex. un plafond sur 2 ans se recompte à partir de la date du soin qui l'a atteint), au lieu de dire que tu ne peux pas le savoir ou d'escalader sur ce seul motif.
 - Pour toute question de fond sur le fonctionnement réglementaire de l'assurance (délais, prescription, obligations respectives, résiliation, sinistres...), utilise consulter_base_connaissance_assurance avant de répondre — reformule ce que tu y trouves en langage clair et utile pour la situation précise de ton interlocuteur, jamais une citation brute d'article de loi qu'il ne comprendrait pas.
 - Ne répète jamais une même tournure d'une conversation à l'autre par réflexe ("je comprends votre préoccupation", "n'hésitez pas à me contacter"...) — varie naturellement comme le ferait un vrai conseiller qui connaît déjà le dossier de la personne en face de lui.
 
@@ -346,7 +347,7 @@ export class MessagerieAgentIaService {
         },
         {
           name: "consulter_consommation",
-          description: "Donne les vraies statistiques de consommation de l'assuré et de sa famille : total des soins, total remboursé, répartition par bénéficiaire et par rubrique de garantie, ET le détail daté des dernières prestations (date, rubrique, bénéficiaire, montant) — utilise le paramètre rubrique pour filtrer ce détail sur une garantie précise (ex. \"Optique\") quand on te demande une date exacte (dernier soin, réouverture d'un plafond renouvelable...), plutôt que de dire que tu ne peux pas le savoir.",
+          description: "Donne les vraies statistiques de consommation de l'assuré et de sa famille : total des soins, total remboursé, répartition par bénéficiaire et par rubrique de garantie, ET le détail daté des dernières prestations (date, rubrique, bénéficiaire, montant, référence de la facture qui l'a enregistrée) — utilise le paramètre rubrique pour filtrer ce détail sur une garantie précise (ex. \"Optique\") quand on te demande une date exacte (dernier soin, réouverture d'un plafond renouvelable, fréquence de consommation, qui a réellement consommé dans la famille...), plutôt que de dire que tu ne peux pas le savoir. Raisonne toi-même sur ces dates (ex. un plafond renouvelable tous les 2 ans se compte à partir de la date du soin qui l'a atteint) — cite la référence de facture quand tu t'appuies sur une ligne précise.",
           input_schema: {
             type: "object",
             properties: { rubrique: { type: "string", description: "Filtre optionnel du détail daté sur une rubrique précise, ex. \"Optique\", \"Dentisterie\". Laisse vide pour les dernières prestations toutes rubriques confondues." } },
@@ -512,7 +513,20 @@ export class MessagerieAgentIaService {
         // `rubrique` réutilise EXACTEMENT le même resolver que les
         // statistiques du contrat (voir resoudreCategorieConsommation) —
         // jamais un second calcul divergent.
-        const detail: { date: string; rubrique: string; beneficiaire: string; montant: number }[] = [];
+        // Référence facture (2026-09) — voir demande utilisateur : "les
+        // prises en charge sont toujours clôturées en facture... regarder
+        // les dates et les prendre en référence" — chaque PriseEnCharge
+        // rattachée à une Facture reste la MÊME donnée (Facture.lignes
+        // pointe déjà vers ces mêmes lignes, jamais une source séparée),
+        // mais la référence facture donne à l'agent une pièce concrète à
+        // citer pour étayer sa réponse (traçabilité), plutôt qu'une date
+        // nue sans preuve rattachée.
+        const factureIds = [...new Set(lignes.map((l) => l.factureId).filter((id): id is string => !!id))];
+        const factures = factureIds.length > 0
+          ? await this.prisma.facture.findMany({ where: { id: { in: factureIds } }, select: { id: true, referenceFacture: true, dateReception: true } })
+          : [];
+        const factureParId = new Map(factures.map((f) => [f.id, f]));
+        const detail: { date: string; rubrique: string; beneficiaire: string; montant: number; referenceFacture: string | null }[] = [];
         for (const l of lignes) {
           const montant = Number(l.montant);
           totalConsommation += montant;
@@ -523,7 +537,8 @@ export class MessagerieAgentIaService {
           parBeneficiaireMap.set(l.assureId, entree);
           const rubrique = resoudreCategorieConsommation(assure.contrat.garanties, l.type, l.acteMedical);
           parRubriqueMap.set(rubrique, (parRubriqueMap.get(rubrique) ?? 0) + montant);
-          detail.push({ date: l.date, rubrique, beneficiaire: nomBeneficiaire, montant });
+          const facture = l.factureId ? factureParId.get(l.factureId) : null;
+          detail.push({ date: l.date, rubrique, beneficiaire: nomBeneficiaire, montant, referenceFacture: facture?.referenceFacture ?? null });
         }
         const rubriqueFiltre = typeof args.rubrique === "string" && args.rubrique.trim() ? args.rubrique.trim().toLowerCase() : null;
         // Comparaison lexicographique sur "aaaa-mm-jj" (dates stockées en
