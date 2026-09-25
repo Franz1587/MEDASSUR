@@ -97,9 +97,26 @@ async function bootstrap() {
   // gardent la priorité ; tout le reste retombe sur index.html (SPA).
   const frontendDir = process.env.FRONTEND_DIST_DIR;
   if (frontendDir) {
-    app.useStaticAssets(frontendDir);
+    // index.html jamais mis en cache par le navigateur (2026-09) — voir
+    // demande utilisateur : après un déploiement, une session déjà ouverte
+    // gardait l'ANCIEN index.html en cache (aucun en-tête Cache-Control
+    // explicite = heuristique du navigateur), qui référence les anciens
+    // fichiers JS/CSS hashés de la build précédente — désormais absents du
+    // serveur après le nouveau déploiement. Symptôme observé : échecs
+    // silencieux (ex. connexion "Email ou mot de passe incorrect" alors
+    // que les identifiants étaient corrects) disparaissant en navigation
+    // privée (aucun cache) ou après un vidage de cache manuel. Les autres
+    // fichiers (JS/CSS avec hash dans leur nom, changent de nom à chaque
+    // build) restent cachables sans risque — seul index.html doit toujours
+    // être revalidé.
+    app.useStaticAssets(frontendDir, {
+      setHeaders: (res, filePath) => {
+        if (path.basename(filePath) === "index.html") res.setHeader("Cache-Control", "no-cache");
+      },
+    });
     app.use((req: Request, res: Response, next: NextFunction) => {
       if (req.method !== "GET" || req.path.startsWith("/api") || req.path.startsWith("/uploads")) return next();
+      res.setHeader("Cache-Control", "no-cache");
       res.sendFile(path.join(frontendDir, "index.html"));
     });
   }

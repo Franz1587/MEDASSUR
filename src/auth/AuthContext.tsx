@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { roles, type RoleDefinition, type RoleId } from "@/auth/roles";
-import { http, setAccessToken, getAccessToken } from "@/lib/http";
+import { http, setAccessToken, getAccessToken, messageErreur } from "@/lib/http";
 import { demarrerAssistance } from "@/services/societes.service";
 import { demarrerSynchronisationAutomatique } from "@/lib/syncManager";
 
@@ -140,8 +140,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(authUser));
       setUser(authUser);
       return { ok: true };
-    } catch {
-      return { ok: false, error: "Email ou mot de passe incorrect." };
+    } catch (err) {
+      // Message réel du serveur quand disponible (2026-09) — voir demande
+      // utilisateur : "Email ou mot de passe incorrect" s'affichait pour
+      // N'IMPORTE QUELLE erreur (backend indisponible, cache navigateur
+      // périmé après déploiement...), masquant la vraie cause aussi bien à
+      // l'utilisateur qu'au diagnostic. Le backend renvoie déjà des
+      // messages précis (AuthService : "Identifiants invalides", "Compte
+      // introuvable", "Accès suspendu...") — repli générique seulement
+      // pour une erreur sans réponse du serveur (réseau, etc.).
+      return { ok: false, error: messageErreur(err, "Connexion impossible — vérifiez votre connexion ou réessayez.") };
     }
   };
 
