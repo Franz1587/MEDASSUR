@@ -6,9 +6,10 @@ import { NotificationsModule } from "../notifications/notifications.module";
 import { AccordPrealableModule } from "../accord-prealable/accord-prealable.module";
 import { SanteModule } from "../sante/sante.module";
 import { DocumentsModule } from "../documents/documents.module";
+import { RemboursementsModule } from "../remboursements/remboursements.module";
 
 @Module({
-  imports: [NotificationsModule, AccordPrealableModule, SanteModule, DocumentsModule],
+  imports: [NotificationsModule, AccordPrealableModule, SanteModule, DocumentsModule, RemboursementsModule],
   controllers: [MessagerieController],
   providers: [MessagerieService, MessagerieAgentIaService],
   // MessagerieAgentIaService exporté (2026-08) — voir demande utilisateur :

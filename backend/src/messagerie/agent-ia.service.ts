@@ -7,6 +7,7 @@ import type { Response } from "express";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { AccordPrealableService } from "../accord-prealable/accord-prealable.service";
+import { RemboursementsService } from "../remboursements/remboursements.service";
 import { SanteService } from "../sante/sante.service";
 import { DocumentsService } from "../documents/documents.service";
 import { RUBRIQUES_PLAFONNEES } from "../sante/dto/create-facture-ligne.dto";
@@ -181,6 +182,11 @@ Ton et justesse (règle centrale, pas un simple style) :
 - Pour toute question de fond sur le fonctionnement réglementaire de l'assurance (délais, prescription, obligations respectives, résiliation, sinistres...), utilise consulter_base_connaissance_assurance avant de répondre — reformule ce que tu y trouves en langage clair et utile pour la situation précise de ton interlocuteur, jamais une citation brute d'article de loi qu'il ne comprendrait pas.
 - Ne répète jamais une même tournure d'une conversation à l'autre par réflexe ("je comprends votre préoccupation", "n'hésitez pas à me contacter"...) — varie naturellement comme le ferait un vrai conseiller qui connaît déjà le dossier de la personne en face de lui.
 
+Persévérance (règle absolue, permanente — ne change jamais) :
+- Tu ne considères JAMAIS une conversation terminée de ton propre chef. Tant que ton interlocuteur n'a pas dit explicitement au revoir, merci pour tout, ou une formule de clôture équivalente, tu restes pleinement disponible — même après avoir donné une réponse complète, reste ouvert à une nouvelle question ou à revenir sur un point plutôt que de couper court.
+- Avant de dire que tu ne sais pas ou avant d'escalader, consulte SYSTÉMATIQUEMENT tous les outils pertinents à la question posée (garanties, contrat, consommation, dossiers d'entente préalable, remboursements, base de connaissance...) — n'abandonne jamais après une seule tentative : un vrai conseiller croise plusieurs sources avant de dire qu'il ne trouve rien. Insiste, cherche la réponse ailleurs dans les données réellement disponibles avant de renoncer.
+- Comporte-toi comme le ferait un conseiller humain expérimenté et engagé : toujours prêt à discuter, à expliquer avec patience, à rassurer une personne inquiète, à reformuler si elle n'a pas compris, et à chercher activement une solution fondée sur les vraies données de son dossier — jamais une réponse expéditive qui referme la conversation avant l'heure.
+
 Règles de contenu :
 - Tu n'inventes JAMAIS un chiffre, un plafond, une garantie ou un statut de dossier — tu utilises TOUJOURS les outils fournis pour aller chercher la vraie donnée avant de répondre sur un sujet chiffré ou un dossier précis.
 - Tu n'affirmes JAMAIS avoir reçu, enregistré ou transmis un document (devis, ordonnance, facture, quittance) que ton interlocuteur n'a pas RÉELLEMENT envoyé comme pièce jointe dans cette conversation — s'il en parle sans l'avoir jointe, demande-la-lui explicitement avant toute confirmation. Un outil qui refuse faute de pièce jointe (voir accuser_reception_remboursement) n'est jamais une raison de prétendre le contraire.
@@ -192,7 +198,7 @@ Règles de contenu :
 - Une fois une demande accordée par l'un de ces deux outils, le certificat de prise en charge est envoyé automatiquement dans la conversation juste après — annonce-le simplement ("je vous transmets votre certificat"), ne décris jamais le document toi-même (montants, dates) au-delà de ce que l'outil t'a déjà donné.
 - Si l'outil renvoie un Refusé, communique le motif avec tact mais sans le déguiser ni l'adoucir au point de le rendre incompréhensible, et propose spontanément de transmettre le dossier à un conseiller si l'assuré pense qu'il y a une erreur (par exemple une faute de frappe sur son nom, ou un prestataire mal identifié).
 - Sur une demande de remboursement, ton rôle est volontairement limité : tu accuses réception, tu confirmes que le dossier a bien été transmis pour traitement, tu ne donnes jamais de montant remboursé ni de délai précis.
-- Utilise l'outil escalader_vers_humain dès que tu ne peux pas répondre avec certitude ou que la situation le demande — formule toujours cela comme la suite normale du traitement de la demande, jamais comme un aveu de limite.
+- L'outil escalader_vers_humain est un DERNIER recours, jamais un réflexe : n'y as recours qu'après avoir réellement consulté tout ce que les outils disponibles permettent de vérifier, et seulement si la situation l'exige vraiment (une décision hors du périmètre couvert par decider_chambre_hospitalisation/traiter_demande_garantie, une erreur signalée sur un dossier, une demande explicite de parler à quelqu'un d'autre, ou une donnée réellement introuvable après vérification) — jamais simplement parce qu'une question est délicate ou demande plusieurs recherches. Formule toujours cela comme la suite normale du traitement de la demande, jamais comme un aveu de limite.
 - Reste concis (quelques phrases), pas de listes à puces sauf si cela aide vraiment à la clarté.`;
 }
 
@@ -287,6 +293,7 @@ export class MessagerieAgentIaService {
     private prisma: PrismaService,
     private notifications: NotificationsService,
     private accordPrealable: AccordPrealableService,
+    private remboursements: RemboursementsService,
     private sante: SanteService,
     private documents: DocumentsService,
     private storage: StorageService,
@@ -312,7 +319,7 @@ export class MessagerieAgentIaService {
     const outils: Anthropic.Tool[] = [
       {
         name: "escalader_vers_humain",
-        description: `Transmet la conversation à un conseiller ${ctx.nomEntreprise} (outil interne, jamais mentionné tel quel à l'interlocuteur — voir règle de confidentialité de ton identité). À utiliser dès que tu ne peux pas répondre avec certitude, que la personne le demande, ou qu'une décision de gestionnaire est nécessaire.`,
+        description: `Transmet la conversation à un conseiller ${ctx.nomEntreprise} (outil interne, jamais mentionné tel quel à l'interlocuteur — voir règle de confidentialité de ton identité). DERNIER recours uniquement, après avoir réellement consulté tous les outils pertinents : à utiliser quand la personne le demande explicitement, qu'une décision de gestionnaire est nécessaire, ou qu'une donnée reste introuvable après vérification — jamais par réflexe face à une question qui demande simplement plusieurs recherches.`,
         input_schema: { type: "object", properties: { motif: { type: "string", description: "Résumé court de la demande, pour le conseiller qui va reprendre la conversation" } }, required: ["motif"] },
       },
       {
@@ -365,6 +372,11 @@ export class MessagerieAgentIaService {
             },
             required: ["date"],
           },
+        },
+        {
+          name: "consulter_mes_remboursements",
+          description: "Liste les demandes de remboursement déjà déclarées par l'assuré (et sa famille), avec leur statut réel (En attente/Validé/Payé/Rejeté...), leur date et le nombre de lignes — jamais un montant remboursé précis (voir règle de contenu : le montant dépend d'un calcul réservé au service concerné). À utiliser dès qu'on te demande où en est un remboursement, avant de dire que tu ne sais pas ou d'escalader.",
+          input_schema: { type: "object", properties: {} },
         },
         OUTIL_DECIDER_CHAMBRE,
         OUTIL_TRAITER_GARANTIE,
@@ -511,6 +523,11 @@ export class MessagerieAgentIaService {
             ? await this.accordPrealable.findAll({ prestataireId: ctx.prestataireId })
             : [];
         return dossiers.map((d) => ({ id: d.id, type: d.type, description: d.description, decision: d.decision, statutAnalyseMedicale: d.statutAnalyseMedicale, statutValidationFinanciere: d.statutValidationFinanciere, dateDemande: d.dateDemande }));
+      }
+      case "consulter_mes_remboursements": {
+        if (!ctx.assureSanteId) return { erreur: "Non disponible pour ce type de compte." };
+        const remboursements = await this.remboursements.findAll({ assurePrincipalId: ctx.assureSanteId });
+        return remboursements.map((r) => ({ id: r.id, statut: r.statut, dateDeclaration: r.dateDeclaration, nombreLignes: r.lignes.length }));
       }
       case "verifier_dossier_entente_prealable": {
         const accordId = String(args.accordId ?? "");
@@ -1110,7 +1127,16 @@ export class MessagerieAgentIaService {
     const outils = this.outilsDisponibles(ctx);
     try {
       let tour = 0;
-      while (tour < 5) {
+      // Plafond de tours d'appels d'outils (2026-09) — voir demande
+      // utilisateur : "l'agent IA ne part pas au bout des échanges... il
+      // doit parcourir toutes les données existantes." L'ancien plafond (5)
+      // coupait le tour en PLEIN SILENCE dès qu'une question exigeait plus
+      // de recherches (garanties + contrat + consommation + dossiers +
+      // remboursements dépasse vite 5 appels) — relevé largement, et surtout
+      // le dépassement du plafond n'est plus jamais silencieux (voir
+      // filet de sécurité après la boucle).
+      const PLAFOND_TOURS = 20;
+      while (tour < PLAFOND_TOURS) {
         tour += 1;
         const reponse = await client.messages.create({
           model: "claude-sonnet-5", max_tokens: 1024, system: construireSystemPrompt(nomEntreprise), tools: outils, messages,
@@ -1176,6 +1202,18 @@ export class MessagerieAgentIaService {
         }
         messages.push({ role: "user", content: resultats });
       }
+      // Filet de sécurité (2026-09) — voir demande utilisateur : "il ne
+      // doit pas arrêter de converser". Si le plafond de tours est atteint
+      // SANS qu'une réponse finale n'ait été envoyée (le modèle voulait
+      // encore appeler un outil), la personne ne doit jamais se retrouver
+      // sans aucune réponse visible — jamais un silence total, même dans
+      // ce cas limite. Le dossier reste consultable au prochain message :
+      // on n'escalade pas automatiquement ici, on tient juste la personne
+      // informée que la recherche continue.
+      await this.prisma.message.create({
+        data: { conversationId, auteurId: null, auteurType: "IA", contenu: `Je continue à vérifier votre dossier en détail, je reviens vers vous très vite avec une réponse précise.` },
+      });
+      this.pushNotifications.envoyerAUtilisateur(demandeur.id, nomEntreprise, "Je continue à vérifier votre dossier, je reviens vers vous très vite.", { conversationId }).catch(() => undefined);
     } catch (err) {
       this.logger.error(`Erreur agent IA sur la conversation ${conversationId}: ${err instanceof Error ? err.message : err}`);
     }
