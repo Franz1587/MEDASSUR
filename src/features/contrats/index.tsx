@@ -1995,6 +1995,7 @@ export default function ContratsView() {
       {exercicePrimeCible && editing && (
         <ExercicePrimeModal
           contratId={editing.id}
+          populationContratId={editing.branche === "Assistance" && editing.contratMaladieLieId ? editing.contratMaladieLieId : editing.id}
           exercice={exercicePrimeCible}
           onClose={() => setExercicePrimeCible(null)}
           onDone={(historique) => setHistoriqueCompagnie(historique)}

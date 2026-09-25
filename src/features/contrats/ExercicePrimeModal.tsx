@@ -7,6 +7,15 @@ import { CalculPrimeSection, calculerPrime, tallyByType, type PrimeCalcState } f
 
 interface Props {
   contratId: string;
+  // Id du contrat dont on doit reprendre la population pour ce calcul de
+  // prime — le contrat lui-même, SAUF pour une Assistance liée à un
+  // contrat Maladie (voir demande utilisateur : "il faut que la
+  // population du contrat maladie remonte même au niveau du calcul de la
+  // prime, pas juste dans l'onglet population"), où la population réelle
+  // vit sous le contrat Maladie lié (même règle que openEdit/popSourceId
+  // dans index.tsx). Par défaut = contratId, pour tout appelant qui ne la
+  // fournit pas.
+  populationContratId?: string;
   exercice: ExerciceCompagnie;
   onClose: () => void;
   onDone: (historique: ExerciceCompagnie[]) => void;
@@ -28,7 +37,7 @@ const num = (v: string | number | null | undefined): number | undefined => (v ==
 // (populationLock) que ceux-ci, mais la population vient ici de
 // `reconstituerPopulation` (voir getPopulationHistorique) sur les dates
 // DE CET EXERCICE précis plutôt que de la population actuelle du contrat.
-export default function ExercicePrimeModal({ contratId, exercice, onClose, onDone }: Props) {
+export default function ExercicePrimeModal({ contratId, populationContratId, exercice, onClose, onDone }: Props) {
   const [form, setForm] = useState<Form>({
     dateDebut: exercice.dateDebut, dateFin: exercice.dateFin,
     nombreAssuresPrincipaux: exercice.nombreAssuresPrincipaux ?? undefined,
@@ -52,10 +61,10 @@ export default function ExercicePrimeModal({ contratId, exercice, onClose, onDon
 
   useEffect(() => {
     setChargementPopulation(true);
-    getPopulationHistorique(contratId, { du: exercice.dateDebut, au: exercice.dateFin })
+    getPopulationHistorique(populationContratId ?? contratId, { du: exercice.dateDebut, au: exercice.dateFin })
       .then((population) => setTally(tallyByType(population)))
       .finally(() => setChargementPopulation(false));
-  }, [contratId, exercice.dateDebut, exercice.dateFin]);
+  }, [contratId, populationContratId, exercice.dateDebut, exercice.dateFin]);
 
   const hasCategorizedPopulation = tally.AS + tally.CJ + tally.EF > 0;
   const populationSourceIsAuto = hasCategorizedPopulation && !manualPopulationEntry;
