@@ -24,13 +24,43 @@ export class AuthService {
   // de l'assuré principal (voir demande utilisateur). Tous les autres rôles
   // continuent de se connecter par User.email, inchangé.
   async login(identifiant: string, password: string) {
-    let user = await this.prisma.user.findUnique({ where: { email: identifiant } });
+    const identifiantNettoye = identifiant.trim();
+    const emailNormalisee = identifiantNettoye.toLowerCase();
+
+    let user = await this.prisma.user.findFirst({
+      where: { email: { equals: emailNormalisee, mode: "insensitive" } },
+    });
 
     if (!user) {
+      // Connexion par téléphone (2026-09) — voir demande utilisateur : "je
+      // remarque que le numéro de téléphone ne passe pas." Le numéro tapé
+      // à la connexion et celui stocké (AssureSante.telephone, jamais
+      // normalisé à la saisie/import — juste .trim()) ne coïncidaient que
+      // si formatés à l'IDENTIQUE (espaces, tirets, indicatif +241, 0
+      // initial). Comparaison désormais sur les 8 DERNIERS CHIFFRES
+      // uniquement (chiffres purs des deux côtés, mise en forme/indicatif
+      // ignorés) — $queryRaw nécessaire, Prisma ne sait pas filtrer sur une
+      // valeur de colonne normalisée à la volée (même patron $queryRaw que
+      // documents.service.ts/import.service.ts pour les séquences).
+      const suffixeTelephone = identifiantNettoye.replace(/\D/g, "").slice(-8);
+      const candidatsTelephone = suffixeTelephone.length === 8
+        ? await this.prisma.$queryRaw<{ id: string }[]>`
+            SELECT u.id FROM "User" u
+            JOIN "AssureSante" a ON a.id = u."assureSanteId"
+            WHERE u."roleId" = 'assure_principal'
+            AND a.telephone IS NOT NULL
+            AND right(regexp_replace(a.telephone, '\D', '', 'g'), 8) = ${suffixeTelephone}
+          `
+        : [];
+
       const candidats = await this.prisma.user.findMany({
         where: {
           roleId: "assure_principal",
-          assureSante: { OR: [{ matricule: identifiant }, { telephone: identifiant }, { email: identifiant }] },
+          OR: [
+            { assureSante: { matricule: { equals: identifiantNettoye, mode: "insensitive" } } },
+            { assureSante: { email: { equals: emailNormalisee, mode: "insensitive" } } },
+            ...(candidatsTelephone.length > 0 ? [{ id: { in: candidatsTelephone.map((c) => c.id) } }] : []),
+          ],
         },
       });
       if (candidats.length > 1) {
