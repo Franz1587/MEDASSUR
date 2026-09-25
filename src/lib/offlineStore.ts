@@ -27,12 +27,39 @@ export function lireCache<T>(cle: string): { data: T; horodatage: number } | nul
   }
 }
 
-export function ecrireCache(cle: string, data: unknown): void {
+// Purge le cache de lecture API — jamais la source de vérité, juste un
+// repli réseau (voir ecrireCache ci-dessous) — voir demande utilisateur :
+// "Setting the value of 'medassur-current-user' exceeded the quota" —
+// ce cache, mis en écriture pour TOUTE lecture de l'ERP sans plafond ni
+// expiration, finissait par saturer le quota localStorage et empêcher
+// même l'écriture de la session utilisateur (AuthContext).
+export function viderCacheApi(): void {
   try {
-    localStorage.setItem(PREFIXE_CACHE + cle, JSON.stringify({ data, horodatage: Date.now() }));
+    const clesASupprimer: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const cle = localStorage.key(i);
+      if (cle?.startsWith(PREFIXE_CACHE)) clesASupprimer.push(cle);
+    }
+    clesASupprimer.forEach((cle) => localStorage.removeItem(cle));
   } catch {
-    // Quota localStorage dépassé ou navigation privée — jamais bloquant,
-    // un échec d'écriture cache ne doit jamais casser l'appel réseau réussi.
+    // jamais bloquant
+  }
+}
+
+export function ecrireCache(cle: string, data: unknown): void {
+  const valeur = JSON.stringify({ data, horodatage: Date.now() });
+  try {
+    localStorage.setItem(PREFIXE_CACHE + cle, valeur);
+  } catch {
+    // Quota dépassé (voir viderCacheApi ci-dessus) — on vide ce cache de
+    // repli et on retente une fois avant d'abandonner silencieusement
+    // (navigation privée ou quota structurel de l'appareil).
+    viderCacheApi();
+    try {
+      localStorage.setItem(PREFIXE_CACHE + cle, valeur);
+    } catch {
+      // jamais bloquant
+    }
   }
 }
 

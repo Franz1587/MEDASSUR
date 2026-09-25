@@ -4,6 +4,7 @@ import { roles, type RoleDefinition, type RoleId } from "@/auth/roles";
 import { http, setAccessToken, getAccessToken, messageErreur } from "@/lib/http";
 import { demarrerAssistance } from "@/services/societes.service";
 import { demarrerSynchronisationAutomatique } from "@/lib/syncManager";
+import { viderCacheApi } from "@/lib/offlineStore";
 
 const USER_STORAGE_KEY = "medassur-current-user";
 // Retour d'assistance (2026-09) — voir demande utilisateur : "le Super
@@ -87,6 +88,27 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+// Écriture protégée de la session (2026-09) — voir demande utilisateur :
+// "Setting the value of 'medassur-current-user' exceeded the quota" —
+// le cache de lecture API (offlineStore.ecrireCache) peut saturer le
+// quota localStorage à force d'usage ; sans filet, l'écriture de la
+// session elle-même plantait avec la même erreur (elle n'a pourtant rien
+// à voir avec ce cache). On vide ce cache de repli (jamais la source de
+// vérité) et on retente une fois avant d'abandonner silencieusement.
+function stockerUtilisateur(u: AuthUser) {
+  try {
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(u));
+  } catch {
+    viderCacheApi();
+    try {
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(u));
+    } catch {
+      // navigation privée ou quota structurel — la session reste utilisable
+      // en mémoire pour cet onglet, juste pas restaurée après rechargement.
+    }
+  }
+}
+
 function lireRetourAssistance(): AssistanceReturn | null {
   const stored = sessionStorage.getItem(ASSISTANCE_RETURN_KEY);
   if (!stored) return null;
@@ -118,7 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // "medassur:unauthorized" via http.ts, pas la peine de dupliquer un
         // message d'erreur ici.
         http.get<AuthUser>("/auth/me").then((frais) => {
-          localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(frais));
+          stockerUtilisateur(frais);
           setUser(frais);
         }).catch(() => undefined);
       } catch {
@@ -137,7 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         { email, password },
       );
       setAccessToken(accessToken);
-      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(authUser));
+      stockerUtilisateur(authUser);
       setUser(authUser);
       return { ok: true };
     } catch (err) {
@@ -175,7 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const retour: AssistanceReturn = { superAdmin: { accessToken: token, user }, societeNom: resultat.societeNom };
     sessionStorage.setItem(ASSISTANCE_RETURN_KEY, JSON.stringify(retour));
     setAccessToken(resultat.accessToken);
-    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(resultat.user));
+    stockerUtilisateur(resultat.user as AuthUser);
     setUser(resultat.user as AuthUser);
     setAssistanceSocieteNom(resultat.societeNom);
   };
@@ -186,7 +208,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAssistanceSocieteNom(null);
     if (!retour) { logout(); return; }
     setAccessToken(retour.superAdmin.accessToken);
-    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(retour.superAdmin.user));
+    stockerUtilisateur(retour.superAdmin.user);
     setUser(retour.superAdmin.user);
   };
 
@@ -215,7 +237,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshCurrentUser = async () => {
     const frais = await http.get<AuthUser>("/auth/me");
-    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(frais));
+    stockerUtilisateur(frais);
     setUser(frais);
   };
 
