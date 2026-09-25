@@ -19,7 +19,6 @@ import { CreateRemboursementMembreDto } from "./dto/create-remboursement-membre.
 import { GrantDelegationDto } from "./dto/grant-delegation.dto";
 import { UpdateDelegationModulesDto } from "./dto/update-delegation-modules.dto";
 import { resoudreCategorieConsommation, resoudreExercice } from "./portail-membre.util";
-import { libelleGroupeDeFamille } from "../actes-medicaux/groupes-actes.util";
 import { RUBRIQUES_PLAFONNEES } from "../sante/dto/create-facture-ligne.dto";
 import { CarnetSanteService } from "./carnet-sante.service";
 import { PushNotificationsService } from "../notifications/push-notifications.service";
@@ -53,8 +52,20 @@ export class PortailMembreController {
   }
 
   private async idsFamilleDe(assureSanteId: string): Promise<string[]> {
-    const membres = await this.prisma.assureSante.findMany({ where: { familleId: assureSanteId } });
-    return [assureSanteId, ...membres.map((m) => m.id)];
+    const selection = await this.prisma.assureSante.findMany({
+      where: { OR: [{ id: assureSanteId }, { familleId: assureSanteId }] },
+      select: { id: true, familleId: true, identiteId: true },
+    });
+    const identiteIds = selection.map((a) => a.identiteId).filter((id): id is string => !!id);
+    const affiliations = identiteIds.length > 0
+      ? await this.prisma.assureSante.findMany({ where: { identiteId: { in: identiteIds } }, select: { id: true, familleId: true } })
+      : selection;
+    const racineIds = [...new Set(affiliations.map((a) => a.familleId ?? a.id))];
+    const familleEtendue = await this.prisma.assureSante.findMany({
+      where: { OR: [{ id: { in: racineIds } }, { familleId: { in: racineIds } }] },
+      select: { id: true },
+    });
+    return [...new Set(familleEtendue.map((a) => a.id))];
   }
 
   // Jeton Expo Push (2026-09) — voir demande utilisateur : "l'application
@@ -187,7 +198,7 @@ export class PortailMembreController {
       entree.total += montant;
       parBeneficiaireMap.set(l.assureId, entree);
 
-      const rubrique = resoudreCategorieConsommation(assure.contrat.garanties, l.type, libelleGroupeDeFamille(l.acteMedical?.famille));
+      const rubrique = resoudreCategorieConsommation(assure.contrat.garanties, l.type, l.acteMedical);
       parRubriqueMap.set(rubrique, (parRubriqueMap.get(rubrique) ?? 0) + montant);
     }
 
@@ -254,7 +265,7 @@ export class PortailMembreController {
     const filtrees = modePaiement ? lignes.filter((l) => l.modePaiement === modePaiement) : lignes;
     const enrichies = filtrees.map((l) => ({
       ...l,
-      rubrique: resoudreCategorieConsommation(assure.contrat.garanties, l.type, libelleGroupeDeFamille(l.acteMedical?.famille)),
+      rubrique: resoudreCategorieConsommation(assure.contrat.garanties, l.type, l.acteMedical),
       exercice: resoudreExercice(assure.contrat.exercices, l.date),
       acteLibelle: l.acteMedical?.libelle ?? null,
       // acteFamille (2026-08) — voir demande utilisateur : "chaque fiche de

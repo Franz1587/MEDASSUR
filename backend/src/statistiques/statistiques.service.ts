@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { genererAnalyseNarrative } from "./analyse-narrative.util";
+import { resoudreRubriqueContrat } from "../actes-medicaux/rubrique-contrat.util";
 import type {
   ConsommationLigne, DetailFamille, DetailPrestataire, RepartitionBeneficiaireLigne, RepartitionLigne, RepartitionSousGroupe,
   SpBloc, StatistiquesPayload,
@@ -47,7 +48,7 @@ export class StatistiquesService {
   async calculer(contratId: string, du?: string, au?: string): Promise<StatistiquesPayload> {
     const contrat = await this.prisma.contrat.findUnique({
       where: { id: contratId },
-      include: { client: true, compagnie: { include: { clausesAjustement: { orderBy: { ordre: "asc" } } } } },
+      include: { client: true, compagnie: { include: { clausesAjustement: { orderBy: { ordre: "asc" } } } }, garanties: { select: { categorie: true } } },
     });
     if (!contrat) throw new NotFoundException(`Contrat ${contratId} introuvable`);
 
@@ -139,22 +140,11 @@ export class StatistiquesService {
     // schéma : "nullable, toute famille n'a pas forcément d'équivalent
     // direct").
     const actes = await this.prisma.acteMedical.findMany({ select: { id: true, libelle: true, famille: true, categorieGarantie: true } });
-    const rubriqueParActeId = new Map(actes.map((a) => [a.id, a.categorieGarantie ?? a.famille]));
-    const rubriqueParLibelle = new Map(actes.map((a) => [a.libelle.trim().toLowerCase(), a.categorieGarantie ?? a.famille]));
+    const acteInfoParActeId = new Map(actes.map((a) => [a.id, { famille: a.famille, categorieGarantie: a.categorieGarantie }]));
     const libelleParActeId = new Map(actes.map((a) => [a.id, a.libelle]));
-    const resoudreFamille = (p: (typeof lignes)[number]): string => {
-      if (p.acteMedicalId) {
-        const f = rubriqueParActeId.get(p.acteMedicalId);
-        if (f) return f;
-      }
-      const f = rubriqueParLibelle.get(p.type.trim().toLowerCase());
-      // "AUTRE" ne renseigne sur rien de concret — voir demande
-      // utilisateur : "il faut dire exactement de quoi il est question".
-      // Quand l'acte ne se rattache à aucune rubrique connue du tableau de
-      // garanties, on affiche son libellé brut tel que saisi plutôt qu'un
-      // fourre-tout.
-      return f ?? p.type.trim() ?? "Non précisé";
-    };
+    const garantiesContrat = contrat.garanties;
+    const resoudreFamille = (p: (typeof lignes)[number]): string =>
+      resoudreRubriqueContrat(garantiesContrat, p, p.acteMedicalId ? acteInfoParActeId.get(p.acteMedicalId) : null);
     // Famille D'ACTES (2026-09) — voir demande utilisateur : "consommation
     // par famille des actes (exemple acte ORL, actes du cardiologue,
     // échographie...)" — ActeMedical.famille brut (le regroupement fin du
@@ -417,23 +407,18 @@ export class StatistiquesService {
   async comptagesPriseEnChargeParRubrique(contratIds: string[]) {
     if (contratIds.length === 0) return { annees: [], rubriques: [], parAnnee: {}, parMois: {} };
 
-    const [dossiers, actes] = await Promise.all([
+    const [dossiers, actes, contrats] = await Promise.all([
       this.prisma.accordPrealable.findMany({
         where: { contratId: { in: contratIds } },
-        select: { dateDemande: true, type: true, lignes: { select: { acteMedicalId: true, description: true } } },
+        select: { contratId: true, dateDemande: true, type: true, lignes: { select: { acteMedicalId: true, description: true } } },
       }),
       this.prisma.acteMedical.findMany({ select: { id: true, libelle: true, famille: true, categorieGarantie: true } }),
+      this.prisma.contrat.findMany({ where: { id: { in: contratIds } }, select: { id: true, garanties: { select: { categorie: true } } } }),
     ]);
-    const rubriqueParActeId = new Map(actes.map((a) => [a.id, a.categorieGarantie ?? a.famille]));
-    const rubriqueParLibelle = new Map(actes.map((a) => [a.libelle.trim().toLowerCase(), a.categorieGarantie ?? a.famille]));
-    const resoudreFamille = (l: { acteMedicalId: string | null; description: string }): string => {
-      if (l.acteMedicalId) {
-        const f = rubriqueParActeId.get(l.acteMedicalId);
-        if (f) return f;
-      }
-      const f = rubriqueParLibelle.get(l.description.trim().toLowerCase());
-      return f ?? l.description.trim() ?? "Non précisé";
-    };
+    const acteInfoParActeId = new Map(actes.map((a) => [a.id, { famille: a.famille, categorieGarantie: a.categorieGarantie }]));
+    const garantiesParContratId = new Map(contrats.map((c) => [c.id, c.garanties]));
+    const resoudreFamille = (contratId: string, l: { acteMedicalId: string | null; description: string }): string =>
+      resoudreRubriqueContrat(garantiesParContratId.get(contratId) ?? [], { type: l.description }, l.acteMedicalId ? acteInfoParActeId.get(l.acteMedicalId) : null);
     // Lignes = une par acte (voir AccordPrealableLigne) ; un dossier créé
     // avant l'introduction de ce modèle (aucune ligne) compte quand même
     // comme UN dossier, rattaché à son type de dossier (Hospitalisation |
@@ -441,8 +426,8 @@ export class StatistiquesService {
     // disparaître du décompte tout en restant informatif.
     const lignesAplaties = dossiers.flatMap((d) =>
       d.lignes.length > 0
-        ? d.lignes.map((l) => ({ dateDemande: d.dateDemande, ligne: l }))
-        : [{ dateDemande: d.dateDemande, ligne: { acteMedicalId: null, description: d.type || "Non précisé" } }],
+        ? d.lignes.map((l) => ({ contratId: d.contratId, dateDemande: d.dateDemande, ligne: l }))
+        : [{ contratId: d.contratId, dateDemande: d.dateDemande, ligne: { acteMedicalId: null, description: d.type || "Non précisé" } }],
     );
 
     const MOIS_COURT = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"];
@@ -451,11 +436,11 @@ export class StatistiquesService {
     const parAnneeMap = new Map<number, Map<string, number>>();
     const parMoisMap = new Map<number, Map<number, Map<string, number>>>();
 
-    for (const { dateDemande, ligne } of lignesAplaties) {
+    for (const { contratId, dateDemande, ligne } of lignesAplaties) {
       const d = parseDateFr(dateDemande);
       const annee = d.getFullYear();
       const mois = d.getMonth();
-      const rubrique = resoudreFamille(ligne);
+      const rubrique = resoudreFamille(contratId, ligne);
       anneesSet.add(annee);
       rubriquesSet.add(rubrique);
 

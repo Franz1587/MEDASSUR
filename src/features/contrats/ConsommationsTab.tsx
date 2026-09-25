@@ -9,33 +9,6 @@ import { openConsommationsExport, type DocumentFormat } from "@/services/documen
 import type { Contrat } from "@/types/contrats";
 import type { PriseEnCharge } from "@/types/sante";
 
-// Rapprochement entre une prise en charge (facture prestataire) et les
-// garanties du contrat — ici uniquement pour l'affichage agrégé par
-// rubrique, pas une règle bloquante.
-//
-// categorieGarantieActe (2026-08) — voir demande utilisateur : "Autre ça
-// ne veut rien dire en assurance santé. Il faut être le plus clair et
-// précis possible" : préfère ActeMedical.categorieGarantie (exact) au
-// rapprochement texte ci-dessous (approximatif, et qui ne matche jamais un
-// TYPES_PRESTATION comme "Ambulatoire" contre un nom de Garantie) — même
-// correction que backend DocumentsService/portail-membre.util.ts. Repli sur
-// le type réel de la ligne plutôt que "Autre" en dernier recours.
-function resoudreCategorie(garanties: Contrat["garanties"], type: string, categorieGarantieActe?: string | null): string {
-  if (categorieGarantieActe) return categorieGarantieActe;
-  const t = type.trim().toLowerCase();
-  if (!t) return "Autre";
-  // Le type saisi sur une PEC est souvent directement le nom de la rubrique
-  // (ex. "Hospitalisation", "Dentisterie") plutôt qu'un libellé précis —
-  // on essaie donc d'abord la catégorie elle-même, avant le rapprochement
-  // par libellé (identique à verifierPlafondPartage côté backend).
-  const categorieDirecte = garanties.find((g) => g.categorie.trim().toLowerCase() === t);
-  if (categorieDirecte) return categorieDirecte.categorie;
-  const exact = garanties.find((g) => g.libelle.trim().toLowerCase() === t);
-  if (exact) return exact.categorie;
-  const partiel = garanties.find((g) => t.includes(g.libelle.trim().toLowerCase()) || g.libelle.trim().toLowerCase().includes(t));
-  return partiel ? partiel.categorie : type.trim() || "Autre";
-}
-
 interface Props {
   contrat: Contrat;
 }
@@ -68,7 +41,7 @@ export default function ConsommationsTab({ contrat }: Props) {
   const rubriques = useMemo(() => {
     const map = new Map<string, { nombre: number; montant: number }>();
     for (const p of pecComptabilisees) {
-      const cat = resoudreCategorie(contrat.garanties, p.type, p.categorieGarantieActe);
+      const cat = p.rubrique ?? p.type.trim() ?? "Non précisé";
       const entree = map.get(cat) ?? { nombre: 0, montant: 0 };
       entree.nombre += 1;
       entree.montant += p.montant;
@@ -77,7 +50,7 @@ export default function ConsommationsTab({ contrat }: Props) {
     return Array.from(map.entries())
       .map(([categorie, v]) => ({ categorie, ...v }))
       .sort((a, b) => b.montant - a.montant);
-  }, [pecComptabilisees, contrat.garanties]);
+  }, [pecComptabilisees]);
 
   const exporter = (format: DocumentFormat) => {
     openConsommationsExport(contrat.id, format).catch(() => toast.error(`Export ${format.toUpperCase()} impossible.`));

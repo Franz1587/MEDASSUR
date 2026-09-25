@@ -66,11 +66,11 @@ export interface PriseEnCharge {
   accordPrealableId?: string | null;
   scoreFraude?: number;
   gestionnaireId?: string | null;
-  // Rubrique exacte de l'acte lié, si connu (2026-08) — voir demande
-  // utilisateur : "Autre ça ne veut rien dire en assurance santé" —
-  // préférée au rapprochement texte approximatif pour l'affichage par
-  // rubrique (voir ConsommationsTab.tsx, resoudreCategorie).
-  categorieGarantieActe?: string | null;
+  // Rubrique du tableau de garanties du contrat, pré-résolue côté backend
+  // (2026-09) — voir demande utilisateur : "les statistiques doivent être
+  // en harmonie parfaite avec le tableau de garantie du contrat" (voir
+  // SanteService.findPrisesEnCharge, resoudreRubriqueContrat).
+  rubrique?: string;
   // Voir services/remboursements.service.ts — présent seulement pour une
   // ligne saisie via une déclaration de remboursement multi-lignes.
   remboursementId?: string | null;

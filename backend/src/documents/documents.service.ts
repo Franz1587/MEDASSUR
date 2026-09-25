@@ -13,6 +13,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { PrismaService } from "../prisma/prisma.service";
 import { ParametresEntrepriseService } from "../parametres-entreprise/parametres-entreprise.service";
 import { groupeDeFamille } from "../actes-medicaux/groupes-actes.util";
+import { resoudreRubriqueContrat } from "../actes-medicaux/rubrique-contrat.util";
 import { StatistiquesService } from "../statistiques/statistiques.service";
 import type { RubriqueId, StatistiquesPayload } from "../statistiques/statistiques.types";
 import { BordereauxService, type BordereauSinistresPayload, type BordereauProductionPayload } from "../bordereaux/bordereaux.service";
@@ -1650,7 +1651,7 @@ export class DocumentsService {
       `PRÉNOM : ${assure.prenom ?? "—"}`,
       `NÉ(E) LE : ${assure.dateNaissance ?? "—"}`,
       `MATRICULE : ${assure.matricule}`,
-      `SOCIÉTÉ : ${assure.contrat.client.nom}`,
+      `SOCIÉTÉ : ${assure.contrat.nomCarteSante?.trim() || assure.contrat.client.nom}`,
     ];
     // Collision QR code (2026-09) — voir demande utilisateur, capture à
     // l'appui : un nom (ou une société) long débordait DANS la zone du QR
@@ -2864,13 +2865,13 @@ export class DocumentsService {
     // en d'autres termes la rubrique de garanties qui englobe l'acte
     // (famille de garantie)... et non les actes proprement dits." Une
     // prise en charge pouvant couvrir plusieurs actes de rubriques
-    // différentes, toutes les rubriques distinctes sont listées — repli
-    // sur la famille brute du catalogue si l'acte n'a pas de rubrique de
-    // garantie rattachée (voir schema.prisma ActeMedical.categorieGarantie,
-    // nullable), puis sur la description libre si aucun acte du catalogue
-    // n'est renseigné.
+    // différentes, toutes les rubriques distinctes sont listées — même
+    // résolution canonique que StatistiquesService/portail-membre.util.ts
+    // (voir resoudreRubriqueContrat), pour rester en harmonie avec le
+    // tableau de garanties réel du contrat plutôt qu'un rapprochement
+    // catalogue indépendant.
     const rubriquesGarantie = Array.from(new Set(
-      accord.lignes.map((l) => l.acteMedical?.categorieGarantie ?? l.acteMedical?.famille ?? l.categorieGarantie ?? null).filter((v): v is string => !!v),
+      accord.lignes.map((l) => resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: l.categorieGarantie ?? l.description ?? "" }, l.acteMedical)),
     ));
     const objetPriseEnCharge = rubriquesGarantie.length > 0 ? rubriquesGarantie.join(", ") : (accord.lignes[0]?.description ?? accord.description);
     doc.font("Helvetica").fontSize(8).text(`Code: ${objetPriseEnCharge}`, left + 8, y + 20, { width: colW - 20 });
@@ -5870,6 +5871,7 @@ interface CarteAssureData {
     dateFin: string;
     client: { nom: string };
     compagnie: { nom: string };
+    nomCarteSante?: string | null;
     tauxCouvertureAmbulatoire?: string | null;
     tauxCouvertureHospitalisation?: string | null;
   };

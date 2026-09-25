@@ -1,32 +1,20 @@
-// Rapprochement entre une PriseEnCharge et les garanties du contrat — même
-// logique (et même limite "best effort" pour les lignes sans acte lié) que
-// DocumentsService.resoudreCategorieConsommation / ConsommationsTab.tsx
-// (frontend) : dupliquée ici plutôt qu'exportée depuis un module qui n'a
-// pas vocation à être une dépendance du portail assuré, comme déjà fait
-// dans les 2 autres endroits.
-//
-// groupeActeLibelle (2026-08) — voir demande utilisateur : "'Consultation/
-// Divers' ça ne veut rien dire. Chaque acte est lié à une famille, c'est
-// donc la famille qui doit remonter" : quand la ligne est liée à un acte du
-// catalogue, GROUPES_ACTES (via ActeMedical.famille) donne une rubrique
-// bien plus parlante pour l'assuré ("Analyse", "Consultation", "Pharmacie"…)
-// que Garantie.categorie (8 rubriques CONTRACTUELLES larges, qui restent la
-// bonne granularité côté suivi de plafond interne — voir DocumentsService.
-// resoudreCategorieConsommation, volontairement pas touché). Et si même le
-// repli texte échoue, mieux vaut afficher le type réel de la ligne
-// ("Ambulatoire", "Transport"...) qu'un "Autre" qui ne dit rien.
+import { resoudreRubriqueContrat } from "../actes-medicaux/rubrique-contrat.util";
+
+// Rapprochement entre une PriseEnCharge et les garanties du contrat (2026-09
+// — voir demande utilisateur : "les statistiques doivent être en harmonie
+// parfaite avec le tableau de garantie du contrat... les rubriques sont
+// celles du tableau de garanties du contrat"). Délègue désormais à
+// resoudreRubriqueContrat (backend/src/actes-medicaux/rubrique-contrat.util.ts),
+// la même fonction canonique utilisée par StatistiquesService/
+// DocumentsService/ConsommationsTab — remplace la préférence historique
+// (2026-08) pour la "famille" fine du catalogue (GROUPES_ACTES), plus
+// parlante mais déconnectée du tableau de garanties réel : l'assuré voit
+// désormais exactement les mêmes libellés de rubrique que le contrat/le
+// souscripteur.
 export function resoudreCategorieConsommation(
-  garanties: { categorie: string; libelle: string }[], type: string, groupeActeLibelle?: string | null,
+  garanties: { categorie: string; libelle: string }[], type: string, acteInfo?: { famille: string; categorieGarantie: string | null } | null,
 ): string {
-  if (groupeActeLibelle) return groupeActeLibelle;
-  const t = type.trim().toLowerCase();
-  if (!t) return "Autre";
-  const categorieDirecte = garanties.find((g) => g.categorie.trim().toLowerCase() === t);
-  if (categorieDirecte) return categorieDirecte.categorie;
-  const exact = garanties.find((g) => g.libelle.trim().toLowerCase() === t);
-  if (exact) return exact.categorie;
-  const partiel = garanties.find((g) => t.includes(g.libelle.trim().toLowerCase()) || g.libelle.trim().toLowerCase().includes(t));
-  return partiel ? partiel.categorie : type.trim() || "Autre";
+  return resoudreRubriqueContrat(garanties, { type }, acteInfo);
 }
 
 function parseDateFr(s?: string | null): Date | null {

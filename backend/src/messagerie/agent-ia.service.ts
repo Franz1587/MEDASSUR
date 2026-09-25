@@ -14,7 +14,6 @@ import type { RoleId } from "../auth/role.enum";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
 import { resoudreCategorieConsommation } from "../portail-membre/portail-membre.util";
-import { libelleGroupeDeFamille } from "../actes-medicaux/groupes-actes.util";
 import { PushNotificationsService } from "../notifications/push-notifications.service";
 
 const UPLOADS_MESSAGERIE_DIR = path.join(UPLOADS_ROOT, "messagerie");
@@ -496,7 +495,7 @@ export class MessagerieAgentIaService {
           const entree = parBeneficiaireMap.get(l.assureId) ?? { nom: nomBeneficiaire, total: 0 };
           entree.total += montant;
           parBeneficiaireMap.set(l.assureId, entree);
-          const rubrique = resoudreCategorieConsommation(assure.contrat.garanties, l.type, libelleGroupeDeFamille(l.acteMedical?.famille));
+          const rubrique = resoudreCategorieConsommation(assure.contrat.garanties, l.type, l.acteMedical);
           parRubriqueMap.set(rubrique, (parRubriqueMap.get(rubrique) ?? 0) + montant);
         }
         return {

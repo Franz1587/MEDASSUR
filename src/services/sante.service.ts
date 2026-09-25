@@ -84,7 +84,7 @@ interface ApiPriseEnCharge {
   plafondApplique?: string | number;
   resteACharge?: string | number;
   ordrePaiement?: string;
-  acteMedical?: { categorieGarantie?: string | null } | null;
+  rubrique?: string;
   accordPrealableId?: string | null;
   scoreFraude?: string | number;
   gestionnaireId?: string | null;
@@ -480,7 +480,7 @@ function mapPriseEnCharge(pc: ApiPriseEnCharge): PriseEnCharge {
     accordPrealableId: pc.accordPrealableId,
     scoreFraude: pc.scoreFraude !== undefined ? toNumber(pc.scoreFraude) : undefined,
     gestionnaireId: pc.gestionnaireId ?? null,
-    categorieGarantieActe: pc.acteMedical?.categorieGarantie ?? null,
+    rubrique: pc.rubrique,
     remboursementId: pc.remboursementId ?? null,
   };
 }
