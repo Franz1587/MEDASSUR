@@ -383,7 +383,7 @@ export class SanteService {
       if (erreurAge) throw new BadRequestException(erreurAge);
     }
 
-    return this.prisma.assureSante.update({
+    const miseAJour = await this.prisma.assureSante.update({
       where: { id },
       data: {
         nom: dto.nom,
@@ -403,6 +403,24 @@ export class SanteService {
       },
       include: { contrat: true, membres: true },
     });
+
+    // Resynchronise User.nom (2026-09) — voir demande utilisateur : "ce nom
+    // a été corrigé, je ne comprends pas pourquoi l'application mobile
+    // remonte encore avec cette erreur." User.nom (voir ComptesMobileService.
+    // generer, `${nom} ${prenom}`) est calculé UNE SEULE FOIS à la création
+    // du compte mobile et n'était jusqu'ici jamais recalculé — corriger le
+    // nom/prénom sur la fiche assuré ne se répercutait donc jamais sur le
+    // compte déjà créé (l'app mobile continuait d'afficher l'ancien nom,
+    // parfois en double comme ici). updateMany : aucun compte mobile encore
+    // généré pour cet assuré est un cas normal, pas une erreur.
+    if (dto.nom !== undefined || dto.prenom !== undefined) {
+      await this.prisma.user.updateMany({
+        where: { assureSanteId: id },
+        data: { nom: `${miseAJour.nom} ${miseAJour.prenom ?? ""}`.trim() },
+      });
+    }
+
+    return miseAJour;
   }
 
   async uploadPhoto(id: string, file: Express.Multer.File) {
