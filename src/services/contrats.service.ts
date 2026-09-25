@@ -15,6 +15,8 @@ export interface ApiContrat {
   numeroPolice?: string | null;
   client: { id: string; nom: string };
   compagnie: { nom: string };
+  agenceId?: string | null;
+  agence?: { nom: string } | null;
   paysSouscription?: string | null;
   extensionsTerritorialite?: string[];
   contratMaladieLieId?: string | null;
@@ -113,6 +115,7 @@ export function mapContrat(c: ApiContrat): Contrat {
     paysSouscription: c.paysSouscription ?? "",
     extensionsTerritorialite: c.extensionsTerritorialite ?? [],
     contratMaladieLieId: c.contratMaladieLieId ?? null,
+    agenceId: c.agenceId ?? null,
     tauxCouvertureAmbulatoire: c.tauxCouvertureAmbulatoire ?? null,
     tauxCouvertureHospitalisation: c.tauxCouvertureHospitalisation ?? null,
     tauxAmbulatoirePublique: c.tauxAmbulatoirePublique ?? null,
@@ -174,6 +177,7 @@ export interface ContratUpsertInput {
   prime: number;
   statut: "Actif" | "En renouvellement" | "Expiré" | "Résilié";
   numeroPolice?: string;
+  agenceId?: string;
   periodicite?: "Mensuel" | "Trimestriel" | "Semestriel" | "Annuel";
   paysSouscription?: string;
   extensionsTerritorialite?: string[];

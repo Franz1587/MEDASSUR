@@ -28,6 +28,7 @@ import {
 } from "@/services/contrats.service";
 import { getClients } from "@/services/clients.service";
 import { getCompagnies, getCompagniesAutoGestion } from "@/services/compagnies.service";
+import { getAgences } from "@/services/agences.service";
 import { getMonAbonnement } from "@/services/societes.service";
 import type { MonAbonnement } from "@/types/societes";
 import { getAssuresSante, createAssure, importPopulation, readPopulationFile, downloadPopulationTemplate, updateAssure, type ImportPopulationResult, type UpdateAssureInput } from "@/services/sante.service";
@@ -35,6 +36,7 @@ import { getGarantieCatalogue } from "@/services/garantieCatalogue.service";
 import type { Contrat } from "@/types/contrats";
 import type { Client } from "@/types/clients";
 import type { Compagnie } from "@/types/compagnies";
+import type { Agence } from "@/types/agences";
 import type { AssureSante } from "@/types/sante";
 import type { GarantieCatalogueItem } from "@/types/garantieCatalogue";
 
@@ -158,6 +160,7 @@ function emptyForm(): ContratUpsertInput {
   return {
     clientId: "", compagnieId: "", branche: "Maladie", dateDebut: "", dateFin: "", prime: 0, statut: "Actif",
     numeroPolice: "",
+    agenceId: "",
     periodicite: "Annuel",
     produit: "MALADIE",
     paysSouscription: "Gabon", extensionsTerritorialite: [],
@@ -182,6 +185,7 @@ function contratToForm(c: Contrat, clients: Client[], compagnies: Compagnie[]): 
     dateDebut: c.dateDebut, dateFin: c.dateFin, prime: c.prime,
     statut: c.statut as ContratUpsertInput["statut"],
     numeroPolice: c.numeroPolice ?? "",
+    agenceId: c.agenceId ?? "",
     periodicite: (c.periodicite as ContratUpsertInput["periodicite"]) ?? "Annuel",
     produit: c.produit ?? "",
     paysSouscription: c.paysSouscription || "Gabon",
@@ -395,6 +399,11 @@ export default function ContratsView() {
   const [clients, setClients] = useState<Client[]>([]);
   const [compagnies, setCompagnies] = useState<Compagnie[]>([]);
   const [compagniesAutoGestion, setCompagniesAutoGestion] = useState<Compagnie[]>([]);
+  // Bureau de rattachement (2026-09) — voir demande utilisateur : "LA RUCHE
+  // a un bureau à Port-Gentil qui gère ses contrats de façon autonome" —
+  // même liste d'agences que l'écran Administration (rattachement d'un
+  // utilisateur), réutilisée ici pour le contrat.
+  const [agences, setAgences] = useState<Agence[]>([]);
   const [typeGestion, setTypeGestion] = useState<"Classique" | "AutoGestion">("Classique");
   // Type de société (2026-09) — voir demande utilisateur : "une compagnie
   // n'a pas besoin de choisir une compagnie sur ses contrats puisqu'elle
@@ -513,6 +522,7 @@ export default function ContratsView() {
     getCompagnies().then(setCompagnies);
     getCompagniesAutoGestion().then(setCompagniesAutoGestion);
     getGarantieCatalogue().then(setCatalogue);
+    getAgences().then(setAgences).catch(() => undefined);
   }, []);
 
   const rechercheNorm = rechercheContrat.trim().toLowerCase();
@@ -1265,6 +1275,18 @@ export default function ContratsView() {
                       <div className={labelCls}>Numéro de police</div>
                       <input value={form.numeroPolice ?? ""} onChange={(e) => setForm((v) => ({ ...v, numeroPolice: e.target.value }))} className={fieldCls} placeholder="ex. 1000652" />
                       <p className="text-[11px] text-muted-foreground mt-1">Suggéré automatiquement selon la compagnie — modifiable pour une reprise d'antériorité.</p>
+                    </label>
+                    <label className="block">
+                      <div className={labelCls}>Agence</div>
+                      <Combobox
+                        options={agences}
+                        value={agences.find((a) => a.id === form.agenceId) ?? null}
+                        onChange={(a) => setForm((v) => ({ ...v, agenceId: a?.id ?? "" }))}
+                        getLabel={(a) => a.nom} getId={(a) => a.id}
+                        allowClear clearLabel="Aucune"
+                        placeholder="Rechercher…"
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1">Bureau qui gère ce contrat (ex. Port-Gentil) — facultatif.</p>
                     </label>
                     <label className="block">
                       <div className={labelCls}>Produit</div>

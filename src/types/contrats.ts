@@ -6,6 +6,10 @@ import type { mockContrats } from "@/data/mock/contrats.mock";
 export type Contrat = (typeof mockContrats)[number] & {
   clientId: string;
   contratMaladieLieId?: string | null;
+  // Bureau de rattachement (2026-09) — voir demande utilisateur : "LA RUCHE
+  // a un bureau à Port-Gentil qui gère ses contrats de façon autonome" —
+  // voir schema.prisma Contrat.agenceId. Facultatif.
+  agenceId?: string | null;
   // Numéro de police (2026-08) — référence propre à la compagnie, distincte
   // de l'id technique CTR-... (voir schema.prisma Contrat.numeroPolice).
   numeroPolice?: string | null;

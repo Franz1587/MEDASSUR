@@ -36,6 +36,13 @@ export class CreateContratDto {
   @IsString()
   numeroPolice?: string;
 
+  // Bureau de rattachement (2026-09) — voir schema.prisma Contrat.agenceId :
+  // "LA RUCHE a un bureau à Port-Gentil qui gère ses contrats de façon
+  // autonome". Facultatif, aucun bureau particulier par défaut.
+  @IsOptional()
+  @IsString()
+  agenceId?: string;
+
   @IsOptional()
   @IsIn(["Mensuel", "Trimestriel", "Semestriel", "Annuel"])
   periodicite?: string;

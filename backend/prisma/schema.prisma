@@ -1285,9 +1285,18 @@ model Contrat {
   // réattribués après coup.
   gestionnaireId String?
 
+  // Agence de rattachement (2026-09) — voir demande utilisateur : "LA
+  // RUCHE a un bureau à Port-Gentil qui gère ses contrats de façon
+  // autonome". Même modèle Agence que User.agenceId (jusqu'ici limité aux
+  // utilisateurs) — permet de rattacher un contrat à un bureau précis
+  // (ex. "Port-Gentil") indépendamment de qui l'a saisi. Facultatif :
+  // absent = pas de bureau particulier renseigné, comportement inchangé.
+  agenceId String?
+
   client            Client              @relation(fields: [clientId], references: [id])
   compagnie         Compagnie           @relation(fields: [compagnieId], references: [id])
   gestionnaire      User?               @relation(fields: [gestionnaireId], references: [id])
+  agence            Agence?             @relation(fields: [agenceId], references: [id])
   avenants          Avenant[]
   assures           AssureSante[]
   impayes           Impaye[]
@@ -3202,6 +3211,7 @@ model Agence {
   createdAt DateTime @default(now())
 
   agents User[]
+  contrats Contrat[]
 
   @@index([societeId])
 }

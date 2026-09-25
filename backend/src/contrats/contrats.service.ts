@@ -145,7 +145,7 @@ export class ContratsService {
     const contrats = await this.prisma.contrat.findMany({
       where: { estTest: false, ...(compagnieId ? { compagnieId } : {}) },
       include: {
-        client: true, compagnie: true, garanties: true,
+        client: true, compagnie: true, garanties: true, agence: true,
         // Prime affichée en liste (2026-09) — voir demande utilisateur :
         // "la prime de la dernière prime active ou de la dernière période
         // du contrat même s'il est clôturé" — un contrat Résilié ne doit
@@ -162,7 +162,7 @@ export class ContratsService {
   async findOne(id: string) {
     const contrat = await this.prisma.contrat.findUnique({
       where: { id },
-      include: { client: true, compagnie: true, garanties: true },
+      include: { client: true, compagnie: true, garanties: true, agence: true },
     });
     if (!contrat) throw new NotFoundException(`Contrat ${id} introuvable`);
     return contrat;
@@ -175,7 +175,7 @@ export class ContratsService {
   findAllForClient(clientId: string) {
     return this.prisma.contrat.findMany({
       where: { clientId },
-      include: { client: true, compagnie: true, garanties: true },
+      include: { client: true, compagnie: true, garanties: true, agence: true },
       orderBy: { dateDebut: "desc" },
     });
   }
@@ -272,7 +272,7 @@ export class ContratsService {
     const numeroPolice = dto.numeroPolice?.trim() || (await this.prochainNumeroPolice(dto.compagnieId));
     let contrat;
     try {
-      contrat = await this.prisma.contrat.create({ data: { id, ...data, numeroPolice, gestionnaireId }, include: { client: true, compagnie: true, garanties: true } });
+      contrat = await this.prisma.contrat.create({ data: { id, ...data, numeroPolice, gestionnaireId }, include: { client: true, compagnie: true, garanties: true, agence: true } });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
         throw new ConflictException(`Le numéro de police "${numeroPolice}" est déjà utilisé pour cette compagnie.`);
@@ -319,7 +319,7 @@ export class ContratsService {
         await this.appliquerBasculeResiliation(id, avant.statut, data.statut);
         return this.findOne(id);
       }
-      const contrat = await this.prisma.contrat.update({ where: { id }, data, include: { client: true, compagnie: true, garanties: true } });
+      const contrat = await this.prisma.contrat.update({ where: { id }, data, include: { client: true, compagnie: true, garanties: true, agence: true } });
       await this.appliquerBasculeResiliation(id, avant.statut, data.statut);
       return contrat;
     } catch (err) {
