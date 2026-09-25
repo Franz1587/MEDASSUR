@@ -26,14 +26,33 @@ export class ActesMedicauxService {
     if (!dto.lettreCleCode && dto.prixDefaut == null) {
       throw new BadRequestException("Le prix par défaut est obligatoire pour un acte non codifié à une lettre clé.");
     }
-    const data = await this.resoudrePrixCodifie(dto);
+    const data = this.forcerRubriqueConsultation(await this.resoudrePrixCodifie(dto));
     return this.prisma.acteMedical.create({ data: data as Prisma.ActeMedicalCreateInput });
   }
 
   async update(id: string, dto: UpdateActeMedicalDto) {
-    await this.findOne(id);
-    const data = await this.resoudrePrixCodifie(dto);
+    const existant = await this.findOne(id);
+    const data = this.forcerRubriqueConsultation(await this.resoudrePrixCodifie(dto), existant.famille);
     return this.prisma.acteMedical.update({ where: { id }, data: data as Prisma.ActeMedicalUpdateInput });
+  }
+
+  // Règle permanente (2026-09) — voir demande utilisateur : "il ne faut
+  // jamais compter les consultation dentaire dans les soins dentaire...
+  // même si c'est dans la rubrique, la consultation dentaire doit toujours
+  // être comptée dans la famille des consultations car d'abord une
+  // consultation. veille à ce que cette règle ne change jamais." Une
+  // consultation dentaire (ou toute consultation famille "CONSULTATIONS")
+  // reste d'abord une CONSULTATION — jamais rattachée à la rubrique
+  // "Soins & Prothèses dentaires" (ou toute autre rubrique de spécialité),
+  // quoi que l'écran de saisie envoie. Appliqué ici plutôt que dans le
+  // DTO/le formulaire pour rester valable même si l'écran change un jour —
+  // c'est la garantie de non-régression demandée explicitement.
+  private forcerRubriqueConsultation(data: Record<string, unknown>, familleExistante?: string): Record<string, unknown> {
+    const famille = (data.famille as string | undefined) ?? familleExistante;
+    if (famille?.trim().toUpperCase() === "CONSULTATIONS") {
+      return { ...data, categorieGarantie: "Consultations" };
+    }
+    return data;
   }
 
   async remove(id: string) {
