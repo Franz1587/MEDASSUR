@@ -5,7 +5,7 @@ import {
   ClipboardCheck, ShieldAlert, HandCoins, UserCheck, ShieldCheck, IdCard, Palette, UserCog,
   ClipboardList, Receipt, Landmark, Hash, History, Gauge, FileSpreadsheet, Mail, PieChart,
   ScrollText, MapPinned, KeyRound, TrendingUp, Coins, Home, Users2, Briefcase, MessageCircle, Syringe,
-  ListOrdered, FolderClock, Send, Banknote, UploadCloud, Layers,
+  ListOrdered, FolderClock, Send, Banknote, UploadCloud, Layers, Sparkles,
 } from "lucide-react";
 
 export type View =
@@ -67,6 +67,11 @@ export type View =
   // composant Messagerie.tsx adapte son comportement selon currentUser
   // plutôt que d'avoir une clé dupliquée par portail.
   | "messagerie"
+  // Rapports IA (2026-09) — voir demande utilisateur : "il faut aussi que
+  // Ariana fasse un rapport lorsqu'elle a pu gérer une demande et que
+  // l'assuré repart satisfait." Supervision interne uniquement (jamais un
+  // portail externe) — voir backend/src/auth/role-modules.ts.
+  | "rapportsIa"
   // Communications externes (2026-08) — voir demande utilisateur :
   // "l'application doit pouvoir rendre possible l'envoi des mails, sms et
   // whatsapp. et recevoir des retours sous forme de notification et
@@ -189,6 +194,7 @@ export const viewIcons: Record<View, React.ElementType> = {
   demandesClient: UserCog,
   professionnelsSante: Syringe,
   messagerie: MessageCircle,
+  rapportsIa: Sparkles,
   communications: Send,
   membreDashboard: Home,
   membreCarte: IdCard,
@@ -271,6 +277,7 @@ export const viewLabels: Record<View, string> = {
   demandesClient: "Demandes client",
   professionnelsSante: "Professionnel de santé",
   messagerie: "Messagerie",
+  rapportsIa: "Rapports IA",
   communications: "Communications",
   membreDashboard: "Accueil",
   membreCarte: "Ma carte",

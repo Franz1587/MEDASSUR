@@ -310,6 +310,7 @@ model SocieteAssurance {
   factureProductions FactureProduction[]
   courriers Courrier[]
   conversations Conversation[]
+  rapportsConversationIa RapportConversationIA[]
   gedDocuments GedDocument[]
   comptesBancaires CompteBancaire[]
   fluxTresorerie FluxTresorerie[]
@@ -3399,6 +3400,7 @@ model Conversation {
   updatedAt     DateTime @updatedAt
 
   messages Message[]
+  rapportIa RapportConversationIA?
 
   @@index([demandeurId])
   @@index([assigneAId])
@@ -3420,6 +3422,35 @@ model Message {
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId])
+}
+
+// Rapport de clôture interne (2026-09) — voir demande utilisateur : "il
+// faut aussi que Ariana fasse un rapport lorsqu'elle a pu gérer une
+// demande et que l'assuré repart satisfait." Créé UNIQUEMENT par l'outil
+// cloturer_conversation_resolue (voir MessagerieAgentIaService) quand
+// Ariana a résolu la demande seule, sans jamais transmettre à un
+// conseiller — jamais montré à l'assuré/prestataire, réservé aux
+// gestionnaires (écran "Rapports IA"). `resume` n'est PAS anonymisé
+// (contrairement à ArianaConnaissance "CasResolu", qui reste un mécanisme
+// distinct nourrissant la base de connaissance d'Ariana) : destiné à un
+// usage interne de contrôle qualité, pas à être réutilisé comme donnée
+// d'apprentissage. conversationId unique : une conversation "Resolue" ne
+// peut plus jamais reparler (voir repondre()), donc jamais clôturée deux
+// fois.
+model RapportConversationIA {
+  id             String   @id @default(cuid())
+  societeId      String?
+  societe        SocieteAssurance? @relation(fields: [societeId], references: [id])
+  conversationId String   @unique
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  demandeurNom   String
+  objet          String
+  resume         String
+  lu             Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@index([societeId])
+  @@index([lu])
 }
 
 // Signature électronique des documents (2026-08) — voir demande utilisateur :

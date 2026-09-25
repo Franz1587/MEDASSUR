@@ -31,6 +31,7 @@ export const ALL_VIEWS = [
   "bordereauProduction",
   "bordereauEncaissement",
   "messagerie",
+  "rapportsIa",
   "communications",
 ];
 
@@ -38,11 +39,11 @@ export const ALL_VIEWS = [
 export const ROLE_MODULES: Record<RoleId, string[]> = {
   administrateur: ALL_VIEWS,
   direction_generale: ALL_VIEWS,
-  directeur_technique: [...dashboard, "contrats", "renouvellements", "avenants", "resiliations", "participants", "prisesEnCharge", "accordPrealable", "actesMedicaux", "professionnelsSante", "lettresCles", "journalOperations", "suiviAgents", "fraude", "prestataires", "reglementPrestataire", "reglementComptable", "etatTps", "cotation", "rapports", "garantiesCatalogue", "cartesAssurance", "factureProduction", "courrierMaladie", "modelesCourrier", "statistiques", "demandesClient", "reglesConsignes", "banques", "bordereauSinistres", "bordereauProduction", "bordereauEncaissement", "messagerie"],
-  gestionnaire_production: [...dashboard, "clients", "compagnies", "autoGestion", "appelOffres", "cotation", "contrats", "renouvellements", "avenants", "resiliations", "participants", "garantiesCatalogue", "cartesAssurance", "factureProduction", "courrierMaladie", "demandesClient", "messagerie"],
-  gestionnaire_sinistres: [...dashboard, "prisesEnCharge", "accordPrealable", "actesMedicaux", "professionnelsSante", "lettresCles", "journalOperations", "suiviAgents", "fraude", "clients", "ged", "courrierMaladie", "messagerie"],
-  gestionnaire_sante: [...dashboard, "contrats", "renouvellements", "avenants", "resiliations", "participants", "prisesEnCharge", "accordPrealable", "actesMedicaux", "professionnelsSante", "lettresCles", "journalOperations", "suiviAgents", "fraude", "prestataires", "reglementPrestataire", "reglementComptable", "etatTps", "clients", "ged", "garantiesCatalogue", "cartesAssurance", "courrierMaladie", "messagerie"],
-  gestionnaire_entreprises: [...dashboard, "clients", "compagnies", "autoGestion", "crm", "communications", "contrats", "messagerie"],
+  directeur_technique: [...dashboard, "contrats", "renouvellements", "avenants", "resiliations", "participants", "prisesEnCharge", "accordPrealable", "actesMedicaux", "professionnelsSante", "lettresCles", "journalOperations", "suiviAgents", "fraude", "prestataires", "reglementPrestataire", "reglementComptable", "etatTps", "cotation", "rapports", "garantiesCatalogue", "cartesAssurance", "factureProduction", "courrierMaladie", "modelesCourrier", "statistiques", "demandesClient", "reglesConsignes", "banques", "bordereauSinistres", "bordereauProduction", "bordereauEncaissement", "messagerie", "rapportsIa"],
+  gestionnaire_production: [...dashboard, "clients", "compagnies", "autoGestion", "appelOffres", "cotation", "contrats", "renouvellements", "avenants", "resiliations", "participants", "garantiesCatalogue", "cartesAssurance", "factureProduction", "courrierMaladie", "demandesClient", "messagerie", "rapportsIa"],
+  gestionnaire_sinistres: [...dashboard, "prisesEnCharge", "accordPrealable", "actesMedicaux", "professionnelsSante", "lettresCles", "journalOperations", "suiviAgents", "fraude", "clients", "ged", "courrierMaladie", "messagerie", "rapportsIa"],
+  gestionnaire_sante: [...dashboard, "contrats", "renouvellements", "avenants", "resiliations", "participants", "prisesEnCharge", "accordPrealable", "actesMedicaux", "professionnelsSante", "lettresCles", "journalOperations", "suiviAgents", "fraude", "prestataires", "reglementPrestataire", "reglementComptable", "etatTps", "clients", "ged", "garantiesCatalogue", "cartesAssurance", "courrierMaladie", "messagerie", "rapportsIa"],
+  gestionnaire_entreprises: [...dashboard, "clients", "compagnies", "autoGestion", "crm", "communications", "contrats", "messagerie", "rapportsIa"],
   comptable: [...dashboard, "comptabilite", "reglementComptable", "commissions", "recouvrement", "tresorerie", "fondsDeRoulement", "honoraires", "rapports", "banques", "bordereauSinistres", "bordereauProduction", "bordereauEncaissement", "messagerie"],
   commercial: [...dashboard, "crm", "communications", "clients", "appelOffres", "compagnies", "cotation", "messagerie"],
   agent_recouvrement: [...dashboard, "recouvrement", "clients", "contrats", "messagerie"],

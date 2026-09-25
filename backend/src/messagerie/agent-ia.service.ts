@@ -187,6 +187,7 @@ Persévérance (règle absolue, permanente — ne change jamais) :
 - Tu ne considères JAMAIS une conversation terminée de ton propre chef. Tant que ton interlocuteur n'a pas dit explicitement au revoir, merci pour tout, ou une formule de clôture équivalente, tu restes pleinement disponible — même après avoir donné une réponse complète, reste ouvert à une nouvelle question ou à revenir sur un point plutôt que de couper court.
 - Avant de dire que tu ne sais pas ou avant d'escalader, consulte SYSTÉMATIQUEMENT tous les outils pertinents à la question posée (garanties, contrat, consommation, dossiers d'entente préalable, remboursements, base de connaissance...) — n'abandonne jamais après une seule tentative : un vrai conseiller croise plusieurs sources avant de dire qu'il ne trouve rien. Insiste, cherche la réponse ailleurs dans les données réellement disponibles avant de renoncer.
 - Comporte-toi comme le ferait un conseiller humain expérimenté et engagé : toujours prêt à discuter, à expliquer avec patience, à rassurer une personne inquiète, à reformuler si elle n'a pas compris, et à chercher activement une solution fondée sur les vraies données de son dossier — jamais une réponse expéditive qui referme la conversation avant l'heure.
+- Une fois (et SEULEMENT une fois) que tu as réellement résolu la demande ET que l'interlocuteur confirme ne plus avoir besoin d'aide (remerciement, au revoir...), utilise cloturer_conversation_resolue pour clôturer proprement et transmettre un rapport à l'équipe de gestion — ne laisse jamais la conversation "traîner" indéfiniment sans jamais se clôturer quand tout est réglé. N'utilise JAMAIS cet outil si tu as escaladé à un moment quelconque de cette conversation (il te renverra une erreur).
 
 Règles de contenu :
 - Tu n'inventes JAMAIS un chiffre, un plafond, une garantie ou un statut de dossier — tu utilises TOUJOURS les outils fournis pour aller chercher la vraie donnée avant de répondre sur un sujet chiffré ou un dossier précis.
@@ -330,6 +331,15 @@ export class MessagerieAgentIaService {
           type: "object",
           properties: { recherche: { type: "string", description: "Mots-clés de la question posée (ex. \"délai de carence maladie\", \"résiliation contrat assuré\")." } },
           required: ["recherche"],
+        },
+      },
+      {
+        name: "cloturer_conversation_resolue",
+        description: "Clôture la conversation comme résolue par toi seule (jamais transmise à un conseiller) et enregistre un rapport interne pour l'équipe de gestion (jamais visible de l'interlocuteur — outil interne, voir règle de confidentialité). À utiliser UNIQUEMENT une fois la demande réellement traitée avec les vraies données ET quand l'interlocuteur signale clairement qu'il n'a plus besoin d'aide (remerciement, au revoir, confirmation que c'est bon...). Refuse et renvoie une erreur si cette conversation a, à un moment quelconque, été transmise à un conseiller ou reçu une réponse d'un agent humain — dans ce cas ne l'appelle pas.",
+        input_schema: {
+          type: "object",
+          properties: { resume: { type: "string", description: "Résumé factuel à destination de l'équipe de gestion (jamais lu par l'interlocuteur) : la demande initiale, ce que tu as vérifié/fait avec les vraies données de l'application, et le résultat obtenu. Quelques phrases, précis, pas de tournure générique répétée d'un dossier à l'autre." } },
+          required: ["resume"],
         },
       },
     ];
@@ -898,6 +908,33 @@ export class MessagerieAgentIaService {
       }
       case "escalader_vers_humain": {
         await this.escalader(conversationId, String(args.motif ?? `Escaladé par ${NOM_AGENT}.`));
+        return { ok: true };
+      }
+      case "cloturer_conversation_resolue": {
+        const conversation = await this.prisma.conversation.findUnique({ where: { id: conversationId } });
+        if (!conversation) return { erreur: "Conversation introuvable." };
+        // Garde-fous côté serveur (2026-09) — jamais fait confiance au seul
+        // jugement du modèle : une conversation escaladée, ou déjà reprise
+        // par un agent humain (même filtre que MessagerieService.
+        // envoyerMessage), ne peut jamais être close comme "résolue par IA
+        // seule" — voir demande utilisateur : le rapport ne doit exister
+        // QUE quand Ariana a vraiment géré la demande de bout en bout.
+        if (conversation.statut === "EnCoursHumain") return { erreur: "Cette conversation a déjà été transmise à un conseiller — elle ne peut pas être close comme résolue par IA seule." };
+        const dejaAssistee = await this.prisma.message.count({ where: { conversationId, auteurType: "Agent" } });
+        if (dejaAssistee > 0) return { erreur: "Un conseiller est déjà intervenu sur cette conversation — elle ne peut pas être close comme résolue par IA seule." };
+        const resume = String(args.resume ?? "").trim();
+        if (!resume) return { erreur: "Résumé manquant." };
+        const demandeur = await this.prisma.user.findUnique({ where: { id: conversation.demandeurId } });
+        await this.prisma.$transaction([
+          this.prisma.conversation.update({ where: { id: conversationId }, data: { statut: "Resolue" } }),
+          this.prisma.rapportConversationIA.create({
+            data: { conversationId, societeId: conversation.societeId, demandeurNom: demandeur?.nom ?? "Inconnu", objet: conversation.objet, resume },
+          }),
+        ]);
+        // Apprentissage anonymisé (déjà existant, voir apprendreDeLaResolution)
+        // — jusqu'ici jamais réellement déclenché faute d'écran appelant
+        // changerStatut("Resolue") ; cet outil l'active enfin pour de vrai.
+        this.apprendreDeLaResolution(conversationId).catch(() => undefined);
         return { ok: true };
       }
       default:

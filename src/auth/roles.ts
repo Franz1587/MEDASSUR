@@ -51,23 +51,23 @@ export const roles: Record<RoleId, RoleDefinition> = {
   },
   directeur_technique: {
     id: "directeur_technique", label: "Directeur Technique", family: "interne", shell: "erp",
-    allowedModules: [...dashboard, "contrats", "renouvellements", "avenants", "resiliations", "participants", "prisesEnCharge", "accordPrealable", "actesMedicaux", "professionnelsSante", "lettresCles", "journalOperations", "suiviAgents", "fraude", "prestataires", "reglementPrestataire", "reglementComptable", "etatTps", "cotation", "rapports", "garantiesCatalogue", "cartesAssurance", "factureProduction", "courrierMaladie", "modelesCourrier", "statistiques", "demandesClient", "reglesConsignes", "banques", "agences", "bordereauSinistres", "bordereauProduction", "bordereauEncaissement", "messagerie"],
+    allowedModules: [...dashboard, "contrats", "renouvellements", "avenants", "resiliations", "participants", "prisesEnCharge", "accordPrealable", "actesMedicaux", "professionnelsSante", "lettresCles", "journalOperations", "suiviAgents", "fraude", "prestataires", "reglementPrestataire", "reglementComptable", "etatTps", "cotation", "rapports", "garantiesCatalogue", "cartesAssurance", "factureProduction", "courrierMaladie", "modelesCourrier", "statistiques", "demandesClient", "reglesConsignes", "banques", "agences", "bordereauSinistres", "bordereauProduction", "bordereauEncaissement", "messagerie", "rapportsIa"],
   },
   gestionnaire_production: {
     id: "gestionnaire_production", label: "Gestionnaire Production", family: "interne", shell: "erp",
-    allowedModules: [...dashboard, "clients", "compagnies", "autoGestion", "appelOffres", "cotation", "contrats", "renouvellements", "avenants", "resiliations", "participants", "garantiesCatalogue", "cartesAssurance", "factureProduction", "courrierMaladie", "demandesClient", "messagerie"],
+    allowedModules: [...dashboard, "clients", "compagnies", "autoGestion", "appelOffres", "cotation", "contrats", "renouvellements", "avenants", "resiliations", "participants", "garantiesCatalogue", "cartesAssurance", "factureProduction", "courrierMaladie", "demandesClient", "messagerie", "rapportsIa"],
   },
   gestionnaire_sinistres: {
     id: "gestionnaire_sinistres", label: "Gestionnaire Sinistres", family: "interne", shell: "erp",
-    allowedModules: [...dashboard, "prisesEnCharge", "accordPrealable", "actesMedicaux", "professionnelsSante", "lettresCles", "journalOperations", "suiviAgents", "fraude", "clients", "ged", "courrierMaladie", "messagerie"],
+    allowedModules: [...dashboard, "prisesEnCharge", "accordPrealable", "actesMedicaux", "professionnelsSante", "lettresCles", "journalOperations", "suiviAgents", "fraude", "clients", "ged", "courrierMaladie", "messagerie", "rapportsIa"],
   },
   gestionnaire_sante: {
     id: "gestionnaire_sante", label: "Gestionnaire Santé", family: "interne", shell: "erp",
-    allowedModules: [...dashboard, "contrats", "renouvellements", "avenants", "resiliations", "participants", "prisesEnCharge", "accordPrealable", "actesMedicaux", "professionnelsSante", "lettresCles", "journalOperations", "suiviAgents", "fraude", "prestataires", "reglementPrestataire", "reglementComptable", "etatTps", "clients", "ged", "garantiesCatalogue", "cartesAssurance", "courrierMaladie", "messagerie"],
+    allowedModules: [...dashboard, "contrats", "renouvellements", "avenants", "resiliations", "participants", "prisesEnCharge", "accordPrealable", "actesMedicaux", "professionnelsSante", "lettresCles", "journalOperations", "suiviAgents", "fraude", "prestataires", "reglementPrestataire", "reglementComptable", "etatTps", "clients", "ged", "garantiesCatalogue", "cartesAssurance", "courrierMaladie", "messagerie", "rapportsIa"],
   },
   gestionnaire_entreprises: {
     id: "gestionnaire_entreprises", label: "Gestionnaire Entreprises", family: "interne", shell: "erp",
-    allowedModules: [...dashboard, "clients", "compagnies", "autoGestion", "crm", "communications", "contrats", "messagerie"],
+    allowedModules: [...dashboard, "clients", "compagnies", "autoGestion", "crm", "communications", "contrats", "messagerie", "rapportsIa"],
   },
   comptable: {
     id: "comptable", label: "Comptable", family: "interne", shell: "erp",

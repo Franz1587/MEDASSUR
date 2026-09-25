@@ -45,6 +45,9 @@ export const TENANT_MODELS = new Set<string>([
   // Conversation (2026-09) — comblé après coup, voir schema.prisma pour le
   // détail du bug (file de messagerie partagée entre TOUTES les sociétés).
   "Conversation",
+  // RapportConversationIA (2026-09) — voir schema.prisma : rapport de
+  // clôture interne créé par l'agent IA, même cloisonnement que Conversation.
+  "RapportConversationIA",
   // Trésorerie/Recouvrement/Comptabilité (2026-09) — comblé après coup,
   // même bug que Conversation : ces 4 modèles étaient interrogés sans
   // AUCUN filtrage (voir schema.prisma pour le détail).

@@ -36,6 +36,7 @@ import CartesAssuranceView from "@/features/cartes-assurance";
 import ActesMedicauxView from "@/features/actes-medicaux";
 import LettresClesView from "@/features/lettres-cles";
 import JournalOperationsView from "@/features/journal-operations";
+import RapportsIaView from "@/features/rapports-ia";
 import SuiviAgentsView from "@/features/suivi-agents";
 import FactureProductionView from "@/features/facture-production";
 import CourrierMaladieView from "@/features/courrier-maladie";
@@ -155,6 +156,7 @@ export const viewRegistry: Record<View, React.ComponentType> = {
   demandesClient: DemandesClientView,
   professionnelsSante: ProfessionnelsSanteView,
   messagerie: MessagerieView,
+  rapportsIa: RapportsIaView,
   communications: CommunicationsView,
   membreDashboard: MembreDashboardView,
   membreCarte: MembreCarteView,
