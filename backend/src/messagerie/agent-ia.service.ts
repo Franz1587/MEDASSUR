@@ -346,8 +346,11 @@ export class MessagerieAgentIaService {
         },
         {
           name: "consulter_consommation",
-          description: "Donne les vraies statistiques de consommation de l'assuré et de sa famille : total des soins, total remboursé, répartition par bénéficiaire et par rubrique de garantie. À utiliser pour toute question sur l'utilisation de la couverture, l'approche d'un plafond, ou une comparaison dans le temps — jamais une estimation devinée.",
-          input_schema: { type: "object", properties: {} },
+          description: "Donne les vraies statistiques de consommation de l'assuré et de sa famille : total des soins, total remboursé, répartition par bénéficiaire et par rubrique de garantie, ET le détail daté des dernières prestations (date, rubrique, bénéficiaire, montant) — utilise le paramètre rubrique pour filtrer ce détail sur une garantie précise (ex. \"Optique\") quand on te demande une date exacte (dernier soin, réouverture d'un plafond renouvelable...), plutôt que de dire que tu ne peux pas le savoir.",
+          input_schema: {
+            type: "object",
+            properties: { rubrique: { type: "string", description: "Filtre optionnel du détail daté sur une rubrique précise, ex. \"Optique\", \"Dentisterie\". Laisse vide pour les dernières prestations toutes rubriques confondues." } },
+          },
         },
         {
           name: "consulter_mes_dossiers_entente_prealable",
@@ -499,6 +502,17 @@ export class MessagerieAgentIaService {
         let totalConsommation = 0, totalRembourse = 0;
         const parBeneficiaireMap = new Map<string, { nom: string; total: number }>();
         const parRubriqueMap = new Map<string, number>();
+        // detailLignes (2026-09) — voir demande utilisateur : "il doit
+        // parcourir toutes les données existantes dans la base... lire avec
+        // exactitude les données" — jusqu'ici seuls des TOTAUX étaient
+        // exposés, l'agent ne pouvait donc jamais répondre à une question
+        // sur UNE date précise (ex. "à partir de quand ma garantie Optique,
+        // renouvelable tous les 2 ans, sera de nouveau disponible ?") et
+        // devait escalader à tort. `date` vient déjà de PriseEnCharge, et
+        // `rubrique` réutilise EXACTEMENT le même resolver que les
+        // statistiques du contrat (voir resoudreCategorieConsommation) —
+        // jamais un second calcul divergent.
+        const detail: { date: string; rubrique: string; beneficiaire: string; montant: number }[] = [];
         for (const l of lignes) {
           const montant = Number(l.montant);
           totalConsommation += montant;
@@ -509,11 +523,21 @@ export class MessagerieAgentIaService {
           parBeneficiaireMap.set(l.assureId, entree);
           const rubrique = resoudreCategorieConsommation(assure.contrat.garanties, l.type, l.acteMedical);
           parRubriqueMap.set(rubrique, (parRubriqueMap.get(rubrique) ?? 0) + montant);
+          detail.push({ date: l.date, rubrique, beneficiaire: nomBeneficiaire, montant });
         }
+        const rubriqueFiltre = typeof args.rubrique === "string" && args.rubrique.trim() ? args.rubrique.trim().toLowerCase() : null;
+        // Comparaison lexicographique sur "aaaa-mm-jj" (dates stockées en
+        // texte "jj/mm/aaaa") — plus sûr qu'un parsing Date pour un simple
+        // tri décroissant, aucune ambiguïté de fuseau horaire.
+        const cleTri = (d: string) => { const [j, m, a] = d.split("/"); return `${a}-${m}-${j}`; };
+        const detailFiltre = (rubriqueFiltre ? detail.filter((d) => d.rubrique.toLowerCase().includes(rubriqueFiltre)) : detail)
+          .sort((a, b) => cleTri(b.date).localeCompare(cleTri(a.date)))
+          .slice(0, 50);
         return {
           totalConsommation, totalRembourse,
           parBeneficiaire: [...parBeneficiaireMap.values()].sort((a, b) => b.total - a.total),
           parRubrique: [...parRubriqueMap.entries()].map(([rubrique, total]) => ({ rubrique, total })).sort((a, b) => b.total - a.total),
+          detailLignes: detailFiltre,
         };
       }
       case "consulter_mes_dossiers_entente_prealable": {
