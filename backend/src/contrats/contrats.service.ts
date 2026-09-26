@@ -640,7 +640,7 @@ export class ContratsService {
   // Voir contrats.controller recalculerPrimes.
   async recalculerPrimesTousContrats(appliquer: boolean) {
     const contrats = await this.prisma.contrat.findMany({ where: { estTest: false }, select: { id: true } });
-    const lignes = await recalculerPrimeSelonPopulation(this.prisma, contrats.map((c) => c.id), !appliquer, { inclurePasses: true, repriseDepuisActif: true });
+    const lignes = await recalculerPrimeSelonPopulation(this.prisma, contrats.map((c) => c.id), !appliquer, { inclurePasses: true, repriseDepuisActif: true, passesSansPrimeSeulement: true });
     return { appliquer, total: lignes.length, lignes };
   }
 

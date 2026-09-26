@@ -196,7 +196,7 @@ async function recalculerExercice(
 //    mouvements courants à chaque import.
 async function recalculerUnContrat(
   prisma: PrismaService, contratId: string, simulation: boolean,
-  options: { inclurePasses: boolean; repriseDepuisActif: boolean; numeros?: number[] },
+  options: { inclurePasses: boolean; repriseDepuisActif: boolean; passesSansPrimeSeulement?: boolean; numeros?: number[] },
 ): Promise<RecalculPrime[]> {
   const c = await prisma.contrat.findUnique({ where: { id: contratId }, select: { id: true, numeroPolice: true, branche: true, contratMaladieLieId: true, exerciceNumero: true, statut: true, dateFin: true, compagnieId: true } });
   if (!c) return [];
@@ -212,6 +212,9 @@ async function recalculerUnContrat(
     if (options.numeros && !options.numeros.includes(ex.numero)) continue;
     const estActif = ex.numero === actif.numero;
     if (!estActif && !options.inclurePasses) continue;
+    // Un exercice passé déjà renseigné (effectifs/prime saisis) est de
+    // l'historique : jamais écrasé par le rattrapage.
+    if (!estActif && options.passesSansPrimeSeulement && Number(ex.prime) > 0) continue;
     let personnes = estActif ? populationActive : personnesComptees(await reconstituerPopulation(prisma, source, ex.dateDebut, ex.dateFin), true, ex.dateDebut, ex.dateFin);
     let parametres = ex;
     if (!estActif && options.repriseDepuisActif) {
@@ -240,13 +243,16 @@ export function contratEchu(c: { statut: string; dateFin: string }): boolean {
 
 // Recalcule le contrat ET les contrats d'Assistance qui partagent sa
 // population. Jamais bloquant pour l'opération qui l'a déclenché. Par
-// défaut (mouvements, import) : exercice actif + exercices passés qui ont
-// leur propre population sur leur période, sans reprise depuis l'actif.
+// défaut (mouvements, import) : exercice ACTIF seulement — un exercice
+// passé ne bouge jamais tout seul (historique).
 export async function recalculerPrimeSelonPopulation(
   prisma: PrismaService, contratIds: string[], simulation = false,
-  options: { inclurePasses?: boolean; repriseDepuisActif?: boolean; numeros?: number[] } = {},
+  options: { inclurePasses?: boolean; repriseDepuisActif?: boolean; passesSansPrimeSeulement?: boolean; numeros?: number[] } = {},
 ): Promise<RecalculPrime[]> {
-  const opts = { inclurePasses: options.inclurePasses ?? true, repriseDepuisActif: options.repriseDepuisActif ?? false, numeros: options.numeros };
+  const opts = {
+    inclurePasses: options.inclurePasses ?? Boolean(options.numeros), repriseDepuisActif: options.repriseDepuisActif ?? false,
+    passesSansPrimeSeulement: options.passesSansPrimeSeulement ?? false, numeros: options.numeros,
+  };
   const resultats: RecalculPrime[] = [];
   const dejaFaits = new Set<string>();
   for (const id of contratIds) {
