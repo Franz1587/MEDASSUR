@@ -1101,7 +1101,7 @@ export default function ContratsView() {
                 <td className="px-4 py-3 text-primary text-xs font-semibold whitespace-nowrap med-num med-col-ref med-sticky-col">
                   {numeroPolice(c)}
                   <div className="md:hidden mt-1 space-y-0.5 text-[10px] leading-4 text-muted-foreground whitespace-normal">
-                    <p className="med-num text-foreground">{fmt(c.prime)}</p>
+                    <p className="med-num text-foreground">{c.prime > 0 ? fmt(c.prime) : "—"}</p>
                     <p>{c.statut}</p>
                   </div>
                 </td>
@@ -1118,7 +1118,7 @@ export default function ContratsView() {
                 <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap med-num med-col-period">
                   {c.dateDebut} → {c.dateFin}
                 </td>
-                <td className="px-4 py-3 text-right font-semibold text-foreground whitespace-nowrap med-num med-col-money">{fmt(c.prime)}</td>
+                <td className="px-4 py-3 text-right font-semibold text-foreground whitespace-nowrap med-num med-col-money" title={c.prime > 0 ? undefined : "Prime non renseignée — à paramétrer dans l'exercice du contrat"}>{c.prime > 0 ? fmt(c.prime) : "—"}</td>
                 <td className="px-4 py-3 text-center whitespace-nowrap med-col-days">
                   {(() => {
                     // Urgence de la colonne "Échéance" (2026-09) — calculée

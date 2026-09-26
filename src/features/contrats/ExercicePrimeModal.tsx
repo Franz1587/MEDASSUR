@@ -62,7 +62,11 @@ export default function ExercicePrimeModal({ contratId, populationContratId, exe
   useEffect(() => {
     setChargementPopulation(true);
     getPopulationHistorique(populationContratId ?? contratId, { du: exercice.dateDebut, au: exercice.dateFin })
-      .then((population) => setTally(tallyByType(population)))
+      // Règle utilisateur (2026-09) : exercice EN COURS → seules les
+      // personnes actives comptent (les retirés datés sont ajoutés au
+      // prorata par le serveur à l'enregistrement, les autres ignorés) ;
+      // exercice passé → toute la population de la période (historique).
+      .then((population) => setTally(tallyByType(exercice.statut === "Actif" ? population.filter((p) => p.statut === "Actif") : population)))
       .finally(() => setChargementPopulation(false));
   }, [contratId, populationContratId, exercice.dateDebut, exercice.dateFin]);
 

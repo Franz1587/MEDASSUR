@@ -46,6 +46,11 @@ export interface PersonnePeriode {
   // demande utilisateur "les vrais statuts ne remontent pas... garde par
   // défaut Actif"). Sans intervalle demandé, reflète simplement statutActuel.
   statutPeriode: "Actif" | "Suspendu" | "Radié";
+  // Fin de présence DATÉE dans la période demandée (retrait/radiation avec
+  // une date connue) — sert au prorata de la prime de l'exercice en cours
+  // (voir contrats/prime-exercice.util.ts). null si la personne est
+  // toujours couverte, ou si sa sortie n'a pas de date connue.
+  finPresence?: Date | null;
 }
 
 function calculerFenetres(
@@ -140,6 +145,7 @@ export async function reconstituerPopulation(
       id: fiche.id, nom: fiche.nom, prenom: fiche.prenom, matricule: fiche.matricule, typeAssure: fiche.typeAssure,
       familleId: fiche.familleId, dateNaissance: fiche.dateNaissance, sexe: fiche.sexe, cotisation: fiche.cotisation.toString(),
       scolarise: fiche.scolarise, statutActuel: fiche.statut, statutPeriode,
+      finPresence: retirePendantPeriode ? fenetrePertinente.fin : null,
     });
   }
   return resultats;

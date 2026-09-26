@@ -12,6 +12,7 @@ import { ImportContratRowDto } from "./dto/import-contrats.dto";
 import { UpdateExerciceDto } from "./dto/update-exercice.dto";
 import { UpdateExercicePrimeDto } from "./dto/update-exercice-prime.dto";
 import { withComputedPrime, primeAffichee } from "./prime.util";
+import { appliquerPrimeExercice, recalculerPrimeSelonPopulation } from "./prime-exercice.util";
 import { MouvementsService } from "../mouvements/mouvements.service";
 import { reconstituerPopulation } from "../mouvements/population-historique.util";
 import { normaliserDateImport } from "../lib/date-import.util";
@@ -636,64 +637,22 @@ export class ContratsService {
   //    (confirmé par l'utilisateur) : une correction de reprise de données
   //    doit se répercuter y compris sur un document déjà émis, plutôt que
   //    de laisser survivre une valeur périmée.
+  // Voir contrats.controller recalculerPrimes.
+  async recalculerPrimesTousContrats(appliquer: boolean) {
+    const contrats = await this.prisma.contrat.findMany({ where: { estTest: false }, select: { id: true } });
+    const lignes = await recalculerPrimeSelonPopulation(this.prisma, contrats.map((c) => c.id), !appliquer);
+    return { appliquer, total: lignes.length, lignes };
+  }
+
   async mettreAJourPrimeExercice(contratId: string, numero: number, dto: UpdateExercicePrimeDto) {
-    const contrat = await this.findOne(contratId);
+    await this.findOne(contratId);
     const cible = await this.prisma.exercice.findFirst({ where: { contratId, numero } });
     if (!cible) throw new NotFoundException(`Exercice n°${numero} introuvable pour ce contrat.`);
-
-    const calcule = withComputedPrime({ ...dto, dateDebut: cible.dateDebut, dateFin: cible.dateFin });
-
-    const champsPrime = {
-      nombreAssuresPrincipaux: dto.nombreAssuresPrincipaux ?? null,
-      primeUnitaireAssurePrincipal: dto.primeUnitaireAssurePrincipal ?? null,
-      nombreConjoints: dto.nombreConjoints ?? null,
-      primeUnitaireConjoint: dto.primeUnitaireConjoint ?? null,
-      nombreEnfants: dto.nombreEnfants ?? null,
-      primeUnitaireEnfant: dto.primeUnitaireEnfant ?? null,
-      nombreCouples: dto.nombreCouples ?? null,
-      primeUnitaireCouple: dto.primeUnitaireCouple ?? null,
-      tauxMinoMajoration: dto.tauxMinoMajoration ?? null,
-      tauxReductionCommerciale: dto.tauxReductionCommerciale ?? null,
-      montantAccessoires: dto.montantAccessoires ?? null,
-      tauxCommission: dto.tauxCommission ?? null,
-      // Le calcul complet (primeNette/primeTotaleHT/montantTaxe/
-      // montantCommission/prime) n'est produit par withComputedPrime QUE
-      // si une population a été saisie (voir hasPopulation) — sinon dto
-      // reste tel quel, prime globale de l'exercice inchangée.
-      montantCommission: calcule.montantCommission ?? null,
-      montantTaxe: calcule.montantTaxe ?? null,
-      primeNette: calcule.primeNette ?? null,
-      primeTotaleHT: calcule.primeTotaleHT ?? null,
-    };
-
-    await this.prisma.exercice.update({
-      where: { id: cible.id },
-      data: { ...champsPrime, ...(calcule.prime !== undefined ? { prime: calcule.prime } : {}) },
-    });
-
-    // Contrat — uniquement si c'est l'exercice EN COURS (jamais un exercice
-    // passé : le contrat représente l'état ACTUEL, pas un instantané d'une
-    // période révolue).
-    if (contrat.exerciceNumero === numero) {
-      await this.prisma.contrat.update({
-        where: { id: contratId },
-        data: { ...champsPrime, ...(calcule.prime !== undefined ? { prime: calcule.prime } : {}) },
-      });
-    }
-
-    // Avenant — celui qui porte ce même exerciceNumero (le plus récent s'il
-    // y en a plusieurs sur la même période, ex. Incorporation puis Retrait) ;
-    // `primeApres` reflète désormais la prime corrigée de son exercice,
-    // `primeAvant` reste inchangé (ce qu'était la prime AVANT cet avenant
-    // précis, non concerné par cette correction).
-    const avenantExercice = await this.prisma.avenant.findFirst({ where: { contratId, exerciceNumero: numero }, orderBy: { createdAt: "desc" } });
-    if (avenantExercice && calcule.prime !== undefined) {
-      await this.prisma.avenant.update({
-        where: { id: avenantExercice.id },
-        data: { ...champsPrime, primeApres: calcule.prime },
-      });
-    }
-
+    // Écriture partagée avec le recalcul automatique (voir prime-exercice.util.ts).
+    await appliquerPrimeExercice(this.prisma, contratId, numero, dto);
+    // Exercice en cours : prorata des personnes retirées à une date connue
+    // appliqué aussitôt (sans effet si la population n'est pas catégorisée).
+    if (cible.statut === "Actif") await recalculerPrimeSelonPopulation(this.prisma, [contratId]);
     return this.historiqueCompagnie(contratId);
   }
 

@@ -7,6 +7,7 @@ import { withComputedPrime } from "../contrats/prime.util";
 import { verifierAge } from "./age-limite.util";
 import { creerGenerateurMatricule } from "../sante/matricule.util";
 import { resoudreIdentite } from "../sante/identite-assuree.util";
+import { recalculerPrimeSelonPopulation } from "../contrats/prime-exercice.util";
 import { numeroPolice } from "../lib/police.util";
 
 type AssureAvecRelations = Prisma.AssureSanteGetPayload<{ include: { contrat: true; membres: true } }>;
@@ -217,7 +218,11 @@ export class MouvementsService implements OnModuleInit {
       }));
     }
 
-    return { contrat: contratMisAJour, avenants, crees, radies };
+    // Prime de l'exercice courant réalignée sur la population réelle
+    // (exercice + contrat + avenant, voir prime-exercice.util.ts).
+    await recalculerPrimeSelonPopulation(this.prisma, [contratId]);
+    const contratFinal = await this.prisma.contrat.findUnique({ where: { id: contratId }, include: { client: true, compagnie: true, garanties: true } });
+    return { contrat: contratFinal ?? contratMisAJour, avenants, crees, radies };
   }
 
   // Recalcule les compteurs agrégés (nombreAssuresPrincipaux/Conjoints/
@@ -393,6 +398,7 @@ export class MouvementsService implements OnModuleInit {
       include: { contrat: { include: { client: true } }, avenantAssures: true },
     });
 
+    await recalculerPrimeSelonPopulation(this.prisma, [contratSource.id, contratDestination.id]);
     return {
       contratSource: contratSourceMaj, contratDestination: contratDestinationMaj,
       avenants: [avenantSource, avenantDestination], basculees: personnes.map((p) => p.id),

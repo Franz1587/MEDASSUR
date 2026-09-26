@@ -39,6 +39,18 @@ export class ContratsController {
     return this.contratsService.reimputerContratsAgences(appliquer === "true");
   }
 
+  // Rattrapage des primes (2026-09) — voir demande utilisateur : "ça ne
+  // s'actualise pas systématiquement". Recalcule la prime de l'exercice
+  // courant de chaque contrat selon sa population réelle (voir
+  // prime-exercice.util.ts) ; simulation par défaut, ?appliquer=true pour
+  // exécuter. Réservé à la direction/l'administration.
+  @Post("recalculer-primes")
+  @UseGuards(RolesGuard)
+  @Roles("administrateur", "direction_generale", "directeur_technique")
+  recalculerPrimes(@Query("appliquer") appliquer?: string) {
+    return this.contratsService.recalculerPrimesTousContrats(appliquer === "true");
+  }
+
   @Get("prochain-numero-police")
   prochainNumeroPolice(@Query("compagnieId") compagnieId: string) {
     return this.contratsService.prochainNumeroPolice(compagnieId).then((numeroPolice) => ({ numeroPolice }));

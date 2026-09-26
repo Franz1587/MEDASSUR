@@ -16,6 +16,7 @@ import { creerGenerateurMatricule } from "./matricule.util";
 import { CreateFactureLigneDto, RUBRIQUES_PLAFONNEES } from "./dto/create-facture-ligne.dto";
 import { resoudreRubriqueContrat } from "../actes-medicaux/rubrique-contrat.util";
 import { resoudreIdentite } from "./identite-assuree.util";
+import { recalculerPrimeSelonPopulation } from "../contrats/prime-exercice.util";
 import { numeroPolice } from "../lib/police.util";
 import { UpdateFactureLigneDto } from "./dto/update-facture-ligne.dto";
 import { CreateRemboursementLigneDto } from "../remboursements/dto/create-remboursement-ligne.dto";
@@ -861,6 +862,10 @@ export class SanteService {
       }));
       updated += compteurs.reduce((s, c) => s + c, 0);
     }
+
+    // Prime de l'exercice courant réalignée sur la population importée
+    // (voir contrats/prime-exercice.util.ts). Jamais bloquant.
+    await recalculerPrimeSelonPopulation(this.prisma, [dto.contratId]);
 
     return { imported, updated, basculees, rejected: rejets, resultats };
   }
