@@ -58,6 +58,7 @@ export class SocieteUsersService {
 
   async create(societeId: string, dto: CreateUserDto) {
     const societe = await this.societe(societeId);
+    const email = dto.email.trim().toLowerCase();
     const passwordHash = await bcrypt.hash(MOT_DE_PASSE_INITIAL, 10);
     const modulesDemandes = dto.modules
       ?? (await this.prisma.roleModuleTemplate.findUnique({ where: { roleId: dto.roleId } }))?.modules
@@ -65,7 +66,7 @@ export class SocieteUsersService {
     const modules = this.plafonner(modulesDemandes, societe.modules);
     try {
       const cree = await this.prisma.user.create({
-        data: { nom: dto.nom, email: dto.email, initiales: dto.initiales, roleId: dto.roleId, passwordHash, modules, telephone: dto.telephone, adresse: dto.adresse, societeId, doitChangerMotDePasse: true },
+        data: { nom: dto.nom, email, initiales: dto.initiales, roleId: dto.roleId, passwordHash, modules, telephone: dto.telephone, adresse: dto.adresse, societeId, doitChangerMotDePasse: true },
         select: SELECT_SANS_HASH,
       });
       // Envoi réel des identifiants (2026-09) — voir demande utilisateur :

@@ -31,6 +31,14 @@ function moisDe(dateFr: string | null | undefined): number | null {
   const [, m] = dateFr.split("/").map(Number);
   return m ? m - 1 : null;
 }
+function estDateFuture(dateFr: string | null | undefined, maintenant = new Date()): boolean {
+  if (!dateFr) return false;
+  const [d, m, y] = dateFr.split("/").map(Number);
+  if (!d || !m || !y) return false;
+  const date = new Date(y, m - 1, d);
+  const aujourdHui = new Date(maintenant.getFullYear(), maintenant.getMonth(), maintenant.getDate());
+  return date > aujourdHui;
+}
 function joursRestants(dateFinFr: string): number {
   const [d, m, y] = dateFinFr.split("/").map(Number);
   if (!d || !m || !y) return Infinity;
@@ -62,14 +70,14 @@ export class DashboardService {
     const contratsNonTestIds = contratsNonTest.map((c) => c.id);
 
     const [
-      contrats, clients, sinistres, impayesEnCours, assuresSanteParStatut, prisesEnChargeEnAttente,
+      contrats, clients, sinistres, impayesEnCours, assuresSanteToutesAffiliations, prisesEnChargeEnAttente,
       comptesBancaires, prisesEnCharge,
     ] = await Promise.all([
       this.prisma.contrat.findMany({ where: { estTest: false }, select: { id: true, statut: true, dateDebut: true, dateFin: true, prime: true, montantCommission: true, clientId: true, client: { select: { ville: true } } } }),
       this.prisma.client.findMany({ select: { statut: true, type: true } }),
       this.prisma.sinistre.findMany({ select: { statut: true, montant: true, date: true } }),
       this.prisma.impaye.aggregate({ where: { statut: "En cours" }, _sum: { montantDu: true }, _count: true }),
-      this.prisma.assureSante.groupBy({ by: ["statut"], _count: true }),
+      this.prisma.assureSante.findMany({ select: { identiteId: true, matricule: true, statut: true, contrat: { select: { statut: true } } } }),
       this.prisma.accordPrealable.count({ where: { decision: "En attente" } }),
       this.prisma.compteBancaire.findMany({ select: { solde: true } }),
       // Rejeté ET Annulé exclus (2026-09) — même métrique/mêmes exclusions
@@ -97,11 +105,24 @@ export class DashboardService {
     // vigueur (pas "terminé"), seuls "Expiré" et "Résilié" comptent comme
     // inactifs pour ne jamais présenter un contrat en cours de renouvellement
     // comme "terminé, retiré".
-    const compteParStatutAssure = new Map(assuresSanteParStatut.map((g) => [g.statut, g._count]));
+    // Une personne est comptée une seule fois, même si elle possède des
+    // affiliations historiques sur plusieurs polices. Une affiliation
+    // active prime sur les anciennes affiliations inactives.
+    const identiteParPersonne = new Map<string, string>();
+    for (const affiliation of assuresSanteToutesAffiliations) {
+      const cle = affiliation.identiteId ?? `matricule:${affiliation.matricule}`;
+      const couvertureActive = affiliation.statut === "Actif" && ["Actif", "En renouvellement"].includes(affiliation.contrat.statut);
+      const statutCourant = couvertureActive ? "Actif" : affiliation.statut === "Radié" ? "Radié" : "Suspendu";
+      const statutActuel = identiteParPersonne.get(cle);
+      if (statutActuel === "Actif") continue;
+      identiteParPersonne.set(cle, statutCourant);
+    }
+    const compteParStatutAssure = new Map<string, number>();
+    for (const statut of identiteParPersonne.values()) compteParStatutAssure.set(statut, (compteParStatutAssure.get(statut) ?? 0) + 1);
     const assuresSante = compteParStatutAssure.get("Actif") ?? 0;
     const assuresSanteSuspendus = compteParStatutAssure.get("Suspendu") ?? 0;
     const assuresSanteRadies = compteParStatutAssure.get("Radié") ?? 0;
-    const assuresSanteTotal = assuresSanteParStatut.reduce((s, g) => s + g._count, 0);
+    const assuresSanteTotal = identiteParPersonne.size;
     const assuresSanteInactifs = assuresSanteSuspendus + assuresSanteRadies;
 
     const contratsAnnee = contrats.filter((c) => anneeDe(c.dateDebut) === annee);
@@ -156,7 +177,7 @@ export class DashboardService {
     // l'écran "Statistiques", qui reste volontairement par contrat pour une
     // analyse fine (arrêté de situation à imprimer).
     const consommationLignes = prisesEnCharge.map((p) => ({ date: p.date, montant: Number(p.baseRemboursement ?? p.montant) }));
-    const consommationAnnee = consommationLignes.filter((l) => anneeDe(l.date) === annee);
+    const consommationAnnee = consommationLignes.filter((l) => anneeDe(l.date) === annee && !(annee === new Date().getFullYear() && estDateFuture(l.date)));
     const consommationAnneePrecedenteLignes = consommationLignes.filter((l) => anneeDe(l.date) === anneePrecedente);
     const consommationMensuelle = MOIS.map((mois, i) => ({
       mois,
@@ -187,6 +208,7 @@ export class DashboardService {
     // encore rattachée...).
     const parType = new Map<string, { declares: number; regles: number }>();
     for (const p of prisesEnCharge) {
+      if (anneeDe(p.date) === annee && estDateFuture(p.date)) continue;
       if (!parType.has(p.type)) parType.set(p.type, { declares: 0, regles: 0 });
       const t = parType.get(p.type)!;
       t.declares++;

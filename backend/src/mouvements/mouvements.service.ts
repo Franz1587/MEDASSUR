@@ -104,10 +104,21 @@ export class MouvementsService implements OnModuleInit {
       const suffix = randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase();
       const id = `ASS-${suffix}`;
       const matricule = a.matricule?.trim() || genererMatricule();
+      const identite = await this.prisma.identiteAssuree.upsert({
+        where: { matricule },
+        update: { nom: a.nom, prenom: a.prenom ?? undefined },
+        create: { matricule, nom: a.nom, prenom: a.prenom },
+      });
+      await this.prisma.matriculeAssuree.upsert({
+        where: { matricule },
+        update: { identiteId: identite.id, statut: "Actuel" },
+        create: { matricule, identiteId: identite.id, statut: "Actuel" },
+      });
       const cree = await this.prisma.assureSante.create({
         data: {
           id,
           contratId,
+          identiteId: identite.id,
           nom: a.nom,
           prenom: a.prenom,
           matricule,

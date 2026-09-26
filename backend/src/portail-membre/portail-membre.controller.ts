@@ -52,8 +52,20 @@ export class PortailMembreController {
   }
 
   private async idsFamilleDe(assureSanteId: string): Promise<string[]> {
-    const membres = await this.prisma.assureSante.findMany({ where: { familleId: assureSanteId } });
-    return [assureSanteId, ...membres.map((m) => m.id)];
+    const selection = await this.prisma.assureSante.findMany({
+      where: { OR: [{ id: assureSanteId }, { familleId: assureSanteId }] },
+      select: { id: true, familleId: true, identiteId: true },
+    });
+    const identiteIds = selection.map((a) => a.identiteId).filter((id): id is string => !!id);
+    const affiliations = identiteIds.length > 0
+      ? await this.prisma.assureSante.findMany({ where: { identiteId: { in: identiteIds } }, select: { id: true, familleId: true } })
+      : selection;
+    const racineIds = [...new Set(affiliations.map((a) => a.familleId ?? a.id))];
+    const familleEtendue = await this.prisma.assureSante.findMany({
+      where: { OR: [{ id: { in: racineIds } }, { familleId: { in: racineIds } }] },
+      select: { id: true },
+    });
+    return [...new Set(familleEtendue.map((a) => a.id))];
   }
 
   // Jeton Expo Push (2026-09) — voir demande utilisateur : "l'application

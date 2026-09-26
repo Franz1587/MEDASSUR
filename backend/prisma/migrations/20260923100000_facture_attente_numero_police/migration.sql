@@ -1,0 +1,1 @@
+ALTER TABLE "FactureEnAttente" ADD COLUMN "numeroPolice" TEXT;

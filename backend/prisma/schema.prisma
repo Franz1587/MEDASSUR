@@ -707,6 +707,7 @@ model Compagnie {
   declinaisons    Compagnie[] @relation("DeclinaisonsAgence")
   agenceId        String?
   agence          Agence?     @relation(fields: [agenceId], references: [id])
+  // (index : voir migration 20260926120000_compagnie_declinaison_agence)
 
   // Taux de commission par branche — repris automatiquement dans le
   // formulaire Contrat/Avenant selon la branche choisie (voir
@@ -796,6 +797,8 @@ model Compagnie {
   facturesProduction FactureProduction[]
 
   @@index([societeId])
+
+  @@index([compagnieMereId])
 }
 
 model CompagnieAccessoireTranche {
@@ -1811,6 +1814,9 @@ model FactureEnAttente {
   societeId String?
   societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   matricule        String
+  // Numéro de police compagnie (2026-09, facultatif) — départage un
+  // matricule présent sur plusieurs polices (voir ImportService).
+  numeroPolice     String?
   prestataire      String
   referenceFacture String
   dateReception    String
@@ -1999,6 +2005,39 @@ model Sinistre {
 }
 
 // ── Santé — Affiliation & Sinistres santé ────────────────────────────
+// Identité transverse d'une personne assurée (2026-09) — voir demande
+// utilisateur : "il peut arriver qu'une personne soit liée à plusieurs
+// contrats... il faut contextualiser ses consommations par rapport à chaque
+// contrat auquel il est lié... en affichant ses consommations par exercice
+// qu'il s'agisse du même contrat ou des contrats différents." Une identité
+// peut avoir plusieurs affiliations AssureSante, une par contrat/police ;
+// les prestations restent rattachées à l'affiliation et à son contrat pour
+// préserver l'historique (rapport S/P de chaque contrat intact).
+model IdentiteAssuree {
+  id           String             @id @default(cuid())
+  matricule    String             @unique
+  nom          String
+  prenom       String?
+  createdAt    DateTime           @default(now())
+  affiliations AssureSante[]
+  matricules   MatriculeAssuree[]
+
+  @@index([nom])
+}
+
+// Matricules successifs d'une même personne (2026-09). Les anciens restent
+// recherchables sans recréer une personne ni perdre son historique.
+model MatriculeAssuree {
+  id         String          @id @default(cuid())
+  matricule  String          @unique
+  identiteId String
+  statut     String          @default("Ancien") // Actuel | Ancien
+  createdAt  DateTime        @default(now())
+  identite   IdentiteAssuree @relation(fields: [identiteId], references: [id], onDelete: Cascade)
+
+  @@index([identiteId])
+}
+
 model AssureSante {
   id                String  @id
 
@@ -2014,6 +2053,10 @@ model AssureSante {
   prenom            String?
   telephone         String?
   matricule         String
+  // Identité transverse (2026-09) — voir IdentiteAssuree : la même
+  // personne a une affiliation (cette fiche) par contrat/police.
+  identiteId        String?
+  identite          IdentiteAssuree?    @relation(fields: [identiteId], references: [id])
   contratId         String
   beneficiaires     Int
   cotisation        Decimal @db.Decimal(18, 2)
@@ -2103,6 +2146,8 @@ model AssureSante {
   @@unique([contratId, matricule])
 
   @@index([societeId])
+
+  @@index([identiteId])
 }
 
 // Demande de mouvement de population initiée depuis le portail client

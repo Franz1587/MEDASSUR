@@ -17,6 +17,10 @@ export class ImportFactureGlobalRowDto {
   @IsString()
   matricule: string;
 
+  // Facultatif pour les anciens fichiers; obligatoire en pratique lorsque
+  // le même matricule existe sur plusieurs polices.
+  @IsOptional() @IsString() numeroPolice?: string;
+
   @IsString()
   prestataire: string;
 

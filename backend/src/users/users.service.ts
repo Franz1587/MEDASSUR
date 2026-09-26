@@ -76,6 +76,7 @@ export class UsersService {
   }
 
   async create(dto: CreateUserDto) {
+    const email = dto.email.trim().toLowerCase();
     const passwordHash = await bcrypt.hash(MOT_DE_PASSE_INITIAL, 10);
     // Modèle générique par rôle (voir RoleTemplatesService) — éditable
     // depuis Administration → "Rôles", donc lu en base plutôt que depuis la
@@ -87,7 +88,7 @@ export class UsersService {
     const modules = await this.plafonnerModules(modulesDemandes);
     try {
       return await this.prisma.user.create({
-        data: { nom: dto.nom, email: dto.email, initiales: dto.initiales, roleId: dto.roleId, passwordHash, modules, telephone: dto.telephone, adresse: dto.adresse, agenceId: dto.agenceId, doitChangerMotDePasse: true },
+        data: { nom: dto.nom, email, initiales: dto.initiales, roleId: dto.roleId, passwordHash, modules, telephone: dto.telephone, adresse: dto.adresse, agenceId: dto.agenceId, doitChangerMotDePasse: true },
         select: SELECT_SANS_HASH,
       });
     } catch (err) {
