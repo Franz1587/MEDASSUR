@@ -12,13 +12,13 @@ const fieldCls = "w-full border border-border rounded-lg px-3 py-2 bg-background
 const labelCls = "text-[12px] text-muted-foreground mb-1.5";
 
 function emptyForm(): AgenceUpsertInput {
-  return { nom: "", code: "", ville: "", adresse: "", telephone: "", email: "", responsable: "", statut: "Actif", mentionsImport: [] };
+  return { nom: "", code: "", ville: "", adresse: "", telephone: "", email: "", responsable: "", statut: "Actif", mentionsImport: [], creerDeclinaisonsAuto: true };
 }
 
 function formDe(a: Agence): AgenceUpsertInput {
   return {
     nom: a.nom, code: a.code ?? "", ville: a.ville ?? "", adresse: a.adresse ?? "", telephone: a.telephone ?? "",
-    email: a.email ?? "", responsable: a.responsable ?? "", statut: a.statut, mentionsImport: [...a.mentionsImport],
+    email: a.email ?? "", responsable: a.responsable ?? "", statut: a.statut, mentionsImport: [...a.mentionsImport], creerDeclinaisonsAuto: a.creerDeclinaisonsAuto,
   };
 }
 
@@ -159,7 +159,9 @@ export default function AgencesView() {
             </div>
             <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3.5 overflow-y-auto">
               <label className="block"><div className={labelCls}>Nom de l'agence *</div><input value={form.nom} onChange={setChamp("nom")} className={fieldCls} placeholder="ex : Agence de Port-Gentil" /></label>
-              <label className="block"><div className={labelCls}>Code</div><input value={form.code ?? ""} onChange={setChamp("code")} className={fieldCls} placeholder="ex : 212" /></label>
+              <label className="block"><div className={labelCls}>Code</div><input value={form.code ?? ""} onChange={setChamp("code")} className={fieldCls} placeholder="ex : POG" />
+                <p className="text-[11px] text-muted-foreground mt-1">Sert aussi de suffixe aux compagnies de l'agence (ex. NSIA ASSURANCES POG).</p>
+              </label>
               <label className="block"><div className={labelCls}>Ville</div><input value={form.ville ?? ""} onChange={setChamp("ville")} className={fieldCls} placeholder="ex : Port-Gentil" /></label>
               <label className="block"><div className={labelCls}>Adresse</div><input value={form.adresse ?? ""} onChange={setChamp("adresse")} className={fieldCls} placeholder="Quartier, rue, BP…" /></label>
               <label className="block"><div className={labelCls}>Téléphone</div><input value={form.telephone ?? ""} onChange={setChamp("telephone")} className={fieldCls} placeholder="+241 …" /></label>
@@ -193,6 +195,15 @@ export default function AgencesView() {
                   Un contrat importé dont la compagnie ou le souscripteur contient l'une de ces mentions (ex. « OGAR ASSURANCES POG ») est rattaché automatiquement à cette agence. Une agence inactive n'est jamais retenue.
                 </p>
               </div>
+              <label className="sm:col-span-2 flex items-start gap-2.5 cursor-pointer">
+                <input type="checkbox" checked={form.creerDeclinaisonsAuto ?? true} onChange={(e) => setForm((f) => ({ ...f, creerDeclinaisonsAuto: e.target.checked }))} className="mt-0.5 w-4 h-4 accent-primary" />
+                <span>
+                  <span className="block text-[13px] text-foreground">Créer automatiquement les déclinaisons de compagnies</span>
+                  <span className="block text-[11.5px] text-muted-foreground mt-0.5">
+                    Un contrat de cette agence placé sur une compagnie (ex. NSIA ASSURANCES) est imputé à sa déclinaison d'agence (NSIA ASSURANCES {form.code?.trim() || "<code>"}). Si elle n'a pas été déclarée dans l'écran Compagnies, elle est créée en copiant tout le paramétrage de la compagnie mère. Décoché : seules les déclinaisons déclarées sont utilisées.
+                  </span>
+                </span>
+              </label>
             </div>
             <div className="px-5 py-4 border-t border-border flex items-center justify-end gap-2">
               <button type="button" onClick={() => setShowForm(false)} className="h-9 px-4 rounded-lg border border-border text-[13px] text-foreground hover:bg-secondary/40">Annuler</button>

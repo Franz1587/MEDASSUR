@@ -59,6 +59,13 @@ export interface Compagnie {
   // ex. "1000" pour NSIA, "R060" pour BGFI ASSURANCES (peut contenir des
   // lettres) — voir ContratsService.prochainNumeroPolice.
   prefixeNumeroPolice?: string | null;
+  // Déclinaison d'agence (2026-09) — ex. "NSIA ASSURANCES POG" = déclinaison
+  // de NSIA ASSURANCES pour l'agence de Port-Gentil (voir schema.prisma
+  // Compagnie.compagnieMereId). Toujours renseignés ensemble.
+  compagnieMereId?: string | null;
+  compagnieMere?: { id: string; nom: string } | null;
+  agenceId?: string | null;
+  agence?: { id: string; nom: string; code?: string | null } | null;
   // Code du courtier auprès de CETTE compagnie (2026-08) — voir Bordereau
   // de Production, colonne "Code Assuré" (identique sur toutes les lignes
   // d'une même section compagnie).

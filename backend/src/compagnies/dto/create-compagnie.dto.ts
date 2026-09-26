@@ -7,6 +7,17 @@ export class CreateCompagnieDto {
   @IsString()
   pays: string;
 
+  // Déclinaison d'agence (2026-09) — voir schema.prisma
+  // Compagnie.compagnieMereId : compagnie mère + agence, toujours ensemble
+  // (vérifié par CompagniesService.verifierDeclinaison). Chaîne vide = aucune.
+  @IsOptional()
+  @IsString()
+  compagnieMereId?: string;
+
+  @IsOptional()
+  @IsString()
+  agenceId?: string;
+
   // Code interne de la compagnie — repris sur le Décompte de Remboursement
   // Maladie ("Compagnie <code> <nom>", voir schema.prisma Compagnie.code).
   @IsOptional()

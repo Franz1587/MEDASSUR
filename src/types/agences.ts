@@ -20,6 +20,9 @@ export interface Agence {
   responsable?: string | null;
   statut: StatutAgence;
   mentionsImport: string[];
+  // Création automatique des déclinaisons de compagnies ("NSIA ASSURANCES
+  // POG"...) — voir schema.prisma Agence.creerDeclinaisonsAuto.
+  creerDeclinaisonsAuto: boolean;
   createdAt: string;
   _count?: { contrats: number; agents: number };
 }
@@ -34,4 +37,5 @@ export interface AgenceUpsertInput {
   responsable?: string;
   statut?: StatutAgence;
   mentionsImport?: string[];
+  creerDeclinaisonsAuto?: boolean;
 }

@@ -694,6 +694,20 @@ model Compagnie {
   clientId String? @unique
   client   Client? @relation(fields: [clientId], references: [id])
 
+  // Déclinaison d'agence (2026-09) — voir demande utilisateur : "lorsqu'un
+  // contrat est géré par l'agence de POG et est placé sur NSIA,
+  // l'application doit directement imputer le contrat à NSIA ASSURANCES
+  // POG." Une compagnie peut être la déclinaison d'une compagnie MÈRE pour
+  // UNE agence : déclarée à la main dans l'écran Compagnies (paramétrage
+  // propre), ou créée automatiquement par copie de la mère au premier
+  // contrat de cette agence (voir CompagniesService.declinaisonPourAgence
+  // et Agence.creerDeclinaisonsAuto).
+  compagnieMereId String?
+  compagnieMere   Compagnie?  @relation("DeclinaisonsAgence", fields: [compagnieMereId], references: [id])
+  declinaisons    Compagnie[] @relation("DeclinaisonsAgence")
+  agenceId        String?
+  agence          Agence?     @relation(fields: [agenceId], references: [id])
+
   // Taux de commission par branche — repris automatiquement dans le
   // formulaire Contrat/Avenant selon la branche choisie (voir
   // CalculPrimeSection.tsx), reste librement modifiable ensuite.
@@ -3223,10 +3237,16 @@ model Agence {
   // ces mentions ("OGAR ASSURANCES POG") est rattaché à CETTE agence —
   // déclaré par l'utilisateur, plus aucune correspondance codée en dur.
   mentionsImport String[] @default([])
+  // Création automatique des déclinaisons de compagnies (2026-09) — voir
+  // Compagnie.compagnieMereId. Désactivée : un contrat de l'agence placé
+  // sur une compagnie sans déclinaison déclarée reste sur la compagnie
+  // choisie (signalé à l'utilisateur), rien n'est créé.
+  creerDeclinaisonsAuto Boolean @default(true)
   createdAt DateTime @default(now())
 
   agents User[]
   contrats Contrat[]
+  compagnies Compagnie[]
 
   @@index([societeId])
 }

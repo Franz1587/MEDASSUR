@@ -22,6 +22,10 @@ interface ApiCompagnie {
   code?: string | null;
   prefixeNumeroPolice?: string | null;
   codeCourtier?: string | null;
+  compagnieMereId?: string | null;
+  compagnieMere?: { id: string; nom: string } | null;
+  agenceId?: string | null;
+  agence?: { id: string; nom: string; code?: string | null } | null;
   logo?: string | null;
   clientId?: string | null;
   tauxCommissionMaladie: string | number | null;
@@ -66,6 +70,10 @@ function mapCompagnie(c: ApiCompagnie): Compagnie {
     code: c.code ?? null,
     prefixeNumeroPolice: c.prefixeNumeroPolice ?? null,
     codeCourtier: c.codeCourtier ?? null,
+    compagnieMereId: c.compagnieMereId ?? null,
+    compagnieMere: c.compagnieMere ?? null,
+    agenceId: c.agenceId ?? null,
+    agence: c.agence ?? null,
     logo: c.logo ?? null,
     clientId: c.clientId ?? null,
     tauxCommissionMaladie: n(c.tauxCommissionMaladie),
@@ -133,6 +141,8 @@ export interface CompagnieUpsertInput {
   code?: string;
   prefixeNumeroPolice?: string;
   codeCourtier?: string;
+  compagnieMereId?: string;
+  agenceId?: string;
   tauxCommissionMaladie?: number;
   tauxCommissionAssistance?: number;
   plafondFamilialDefaut?: number;

@@ -1,4 +1,4 @@
-import { IsArray, IsIn, IsOptional, IsString } from "class-validator";
+import { IsArray, IsBoolean, IsIn, IsOptional, IsString } from "class-validator";
 
 export class CreateAgenceDto {
   @IsString()
@@ -24,4 +24,10 @@ export class CreateAgenceDto {
   @IsArray()
   @IsString({ each: true })
   mentionsImport?: string[];
+
+  // Création automatique des déclinaisons de compagnies (ex. "NSIA
+  // ASSURANCES POG") — voir schema.prisma Agence.creerDeclinaisonsAuto.
+  @IsOptional()
+  @IsBoolean()
+  creerDeclinaisonsAuto?: boolean;
 }

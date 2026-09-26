@@ -267,8 +267,105 @@ export class ContratsService {
     return societe?.compagnieInterneId ?? compagnieId;
   }
 
+  // Imputation compagnie ↔ agence (2026-09) — voir demande utilisateur :
+  // "on peut choisir la mauvaise compagnie par erreur. Mais le choix de
+  // l'agence doit directement corriger la compagnie. Par exemple, lorsqu'un
+  // contrat est géré par l'agence de POG et est placé sur NSIA,
+  // l'application doit directement imputer le contrat à NSIA ASSURANCES
+  // POG." Règle unique pour la création, la modification et l'import :
+  //  - agence renseignée → déclinaison de la compagnie (mère) pour cette
+  //    agence, déclarée ou créée (CompagniesService.declinaisonPourAgence) ;
+  //  - déclinaison choisie sans agence → l'agence de la déclinaison est
+  //    reprise (choisir "NSIA ASSURANCES POG" dit déjà "agence POG") ;
+  //  - sans agence → une déclinaison d'une autre agence revient à sa mère ;
+  //  - aucune déclinaison possible → compagnie inchangée + avertissement.
+  // Jamais appliqué à un profil Auto-Gestion (compagnie virtuelle d'un
+  // souscripteur, sans agence).
+  async imputerSelonAgence(compagnieId: string | undefined | null, agenceId: string | undefined | null, options: { agenceRetiree?: boolean } = {}): Promise<{
+    compagnieId: string | undefined | null; agenceId: string | null;
+    imputation?: { de: string; vers: string; creee: boolean }; avertissement?: string;
+  }> {
+    const agence = agenceId || null;
+    if (!compagnieId) return { compagnieId, agenceId: agence };
+    const c = await this.prisma.compagnie.findUnique({ where: { id: compagnieId }, select: { id: true, nom: true, compagnieMereId: true, agenceId: true, clientId: true } });
+    if (!c || c.clientId) return { compagnieId, agenceId: agence };
+    const mereId = c.compagnieMereId ?? c.id;
+
+    if (!agence) {
+      // Agence volontairement RETIRÉE d'un contrat (modification) : le
+      // contrat revient sur la compagnie mère plutôt que de se voir
+      // réattribuer d'office l'agence de sa déclinaison.
+      if (c.agenceId && options.agenceRetiree) {
+        const mere = await this.prisma.compagnie.findUnique({ where: { id: mereId }, select: { id: true, nom: true } });
+        return { compagnieId: mereId, agenceId: null, imputation: mere ? { de: c.nom, vers: mere.nom, creee: false } : undefined };
+      }
+      if (c.agenceId) return { compagnieId: c.id, agenceId: c.agenceId };
+      return { compagnieId: c.id, agenceId: null };
+    }
+    if (c.agenceId === agence) return { compagnieId: c.id, agenceId: agence };
+
+    const declinaison = await this.compagnies.declinaisonPourAgence(mereId, agence);
+    if (declinaison) return { compagnieId: declinaison.id, agenceId: agence, imputation: { de: c.nom, vers: declinaison.nom, creee: declinaison.creee } };
+
+    const mere = c.compagnieMereId ? await this.prisma.compagnie.findUnique({ where: { id: mereId }, select: { id: true, nom: true } }) : null;
+    return {
+      compagnieId: mere?.id ?? c.id, agenceId: agence,
+      avertissement: `Aucune déclinaison de "${mere?.nom ?? c.nom}" pour cette agence : déclarez-la dans l'écran Compagnies, ou renseignez le code de l'agence et autorisez la création automatique dans l'écran Agences.`,
+    };
+  }
+
+  // Réimputation rétroactive (voir contrats.controller reimputerAgences) :
+  // même règle que imputerSelonAgence, appliquée aux contrats EXISTANTS
+  // rattachés à une agence. Une correction d'erreur de saisie, pas un
+  // changement d'assureur : le contrat ET ses exercices qui portaient
+  // explicitement l'ancienne compagnie passent sur la déclinaison (voir
+  // Exercice.compagnieId) — sans avenant "Changement de Compagnie".
+  // En simulation, aucune déclinaison n'est créée : "creee" indique
+  // celles qui le seraient.
+  async reimputerContratsAgences(appliquer: boolean) {
+    const contrats = await this.prisma.contrat.findMany({
+      where: { agenceId: { not: null } },
+      select: { id: true, numeroPolice: true, agenceId: true, compagnieId: true, client: { select: { nom: true } }, compagnie: { select: { nom: true, compagnieMereId: true, agenceId: true, clientId: true } }, agence: { select: { nom: true, code: true, mentionsImport: true, creerDeclinaisonsAuto: true } } },
+      orderBy: { numeroPolice: "asc" },
+    });
+    const lignes: { contratId: string; numeroPolice: string | null; souscripteur: string; agence: string; de: string; vers: string | null; creee: boolean; avertissement?: string }[] = [];
+    for (const c of contrats) {
+      if (!c.compagnie || c.compagnie.clientId || c.compagnie.agenceId === c.agenceId) continue;
+      const base = { contratId: c.id, numeroPolice: c.numeroPolice, souscripteur: c.client.nom, agence: c.agence?.nom ?? "", de: c.compagnie.nom };
+      if (!appliquer) {
+        const mereId = c.compagnie.compagnieMereId ?? c.compagnieId;
+        const existante = await this.prisma.compagnie.findFirst({ where: { compagnieMereId: mereId, agenceId: c.agenceId }, select: { nom: true } });
+        const suffixe = c.agence?.code?.trim() || c.agence?.mentionsImport[0]?.trim();
+        const mere = await this.prisma.compagnie.findUnique({ where: { id: mereId }, select: { nom: true } });
+        if (existante) lignes.push({ ...base, vers: existante.nom, creee: false });
+        else if (c.agence?.creerDeclinaisonsAuto && suffixe) lignes.push({ ...base, vers: `${mere?.nom} ${suffixe}`, creee: true });
+        else lignes.push({ ...base, vers: null, creee: false, avertissement: "Aucune déclinaison possible : code d'agence manquant ou création automatique désactivée." });
+        continue;
+      }
+      const r = await this.imputerSelonAgence(c.compagnieId, c.agenceId);
+      if (!r.compagnieId || r.compagnieId === c.compagnieId || !r.imputation) {
+        lignes.push({ ...base, vers: null, creee: false, avertissement: r.avertissement });
+        continue;
+      }
+      try {
+        await this.prisma.$transaction([
+          this.prisma.contrat.update({ where: { id: c.id }, data: { compagnieId: r.compagnieId } }),
+          this.prisma.exercice.updateMany({ where: { contratId: c.id, compagnieId: c.compagnieId }, data: { compagnieId: r.compagnieId } }),
+        ]);
+        lignes.push({ ...base, vers: r.imputation.vers, creee: r.imputation.creee });
+      } catch (err) {
+        const doublon = err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
+        lignes.push({ ...base, vers: null, creee: false, avertissement: doublon ? `Numéro de police "${c.numeroPolice}" déjà utilisé chez ${r.imputation.vers} — contrat laissé tel quel.` : "Réimputation impossible — contrat laissé tel quel." });
+      }
+    }
+    return { appliquer, total: lignes.length, lignes };
+  }
+
   async create(dto: CreateContratDto, gestionnaireId?: string) {
     dto.compagnieId = (await this.resoudreCompagnieId(dto.compagnieId)) ?? dto.compagnieId;
+    const imputationAgence = await this.imputerSelonAgence(dto.compagnieId, dto.agenceId);
+    dto.compagnieId = imputationAgence.compagnieId ?? dto.compagnieId;
+    dto.agenceId = imputationAgence.agenceId ?? undefined;
     const id = await this.genererIdContrat();
     const data = withComputedPrime(dto);
     const numeroPolice = dto.numeroPolice?.trim() || (await this.prochainNumeroPolice(dto.compagnieId));
@@ -288,11 +385,21 @@ export class ContratsService {
         periodicite: contrat.periodicite, prime: contrat.prime, statut: "Actif",
       },
     });
-    return contrat;
+    return { ...contrat, imputationAgence: { imputation: imputationAgence.imputation, avertissement: imputationAgence.avertissement } };
   }
 
   async update(id: string, dto: UpdateContratDto) {
     const avant = await this.findOne(id);
+    // Imputation compagnie ↔ agence (voir imputerSelonAgence) dès que l'une
+    // ou l'autre est touchée par la modification.
+    let imputationAgence: Awaited<ReturnType<ContratsService["imputerSelonAgence"]>> | null = null;
+    if (dto.agenceId !== undefined || dto.compagnieId !== undefined) {
+      const agenceRetiree = dto.agenceId !== undefined && !dto.agenceId && !!avant.agenceId && (dto.compagnieId === undefined || dto.compagnieId === avant.compagnieId);
+      imputationAgence = await this.imputerSelonAgence(dto.compagnieId ?? avant.compagnieId, dto.agenceId !== undefined ? dto.agenceId : avant.agenceId, { agenceRetiree });
+      if (imputationAgence.compagnieId) dto.compagnieId = imputationAgence.compagnieId;
+      dto.agenceId = imputationAgence.agenceId ?? (null as unknown as undefined);
+    }
+    const infoImputation = imputationAgence ? { imputationAgence: { imputation: imputationAgence.imputation, avertissement: imputationAgence.avertissement } } : {};
     const data = withComputedPrime(dto);
     try {
       // Correction de période (2026-09) — voir demande utilisateur : "si on
@@ -319,11 +426,11 @@ export class ContratsService {
           dateFin: (data.dateFin ?? avant.dateFin) as string,
         });
         await this.appliquerBasculeResiliation(id, avant.statut, data.statut);
-        return this.findOne(id);
+        return { ...(await this.findOne(id)), ...infoImputation };
       }
       const contrat = await this.prisma.contrat.update({ where: { id }, data, include: { client: true, compagnie: true, garanties: true, agence: true } });
       await this.appliquerBasculeResiliation(id, avant.statut, data.statut);
-      return contrat;
+      return { ...contrat, ...infoImputation };
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
         throw new ConflictException(`Le numéro de police "${dto.numeroPolice}" est déjà utilisé pour cette compagnie.`);
@@ -864,6 +971,13 @@ export class ContratsService {
         compagnie = resCompagnie.compagnie;
       }
 
+      // Imputation compagnie ↔ agence (voir imputerSelonAgence) — AVANT le
+      // numéro de police, suggéré selon la compagnie finalement retenue.
+      const imputation = await this.imputerSelonAgence(compagnie.id, resAgence.agence?.id ?? null);
+      if (imputation.compagnieId && imputation.compagnieId !== compagnie.id) {
+        compagnie = { id: imputation.compagnieId, nom: imputation.imputation?.vers ?? compagnie.nom };
+      }
+
       const produit = ligne.produit?.trim() || produitDuNom;
 
       let numeroPolice = ligne.numeroPolice?.trim();
@@ -902,7 +1016,7 @@ export class ContratsService {
             id, clientId: client.id, compagnieId: compagnie.id, branche, produit,
             dateDebut: derniere.dateDebut, dateFin: derniere.dateFin,
             prime, statut, periodicite, numeroPolice, exerciceNumero: tranches.length,
-            agenceId: resAgence.agence?.id ?? null,
+            agenceId: imputation.agenceId,
           },
         });
         // Le DERNIER exercice ne peut être "Actif" que si le contrat

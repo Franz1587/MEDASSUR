@@ -23,6 +23,8 @@ const CHILD_INCLUDE = {
   territorialites: { orderBy: { ordre: "asc" as const } },
   tauxCouverture: { orderBy: { ordre: "asc" as const } },
   garantiesCatalogue: { orderBy: [{ branche: "asc" as const }, { ordre: "asc" as const }] },
+  compagnieMere: { select: { id: true, nom: true } },
+  agence: { select: { id: true, nom: true, code: true } },
 };
 
 // Shapes the response to match what the frontend's Compagnie type expects
@@ -77,15 +79,85 @@ export class CompagniesService {
     return withAggregates(compagnie);
   }
 
-  create(dto: CreateCompagnieDto) {
+  async create(dto: CreateCompagnieDto) {
     const id = `CMP-${randomUUID().slice(0, 6).toUpperCase()}`;
-    return this.prisma.compagnie.create({ data: { id, ...dto } }).then(() => this.findOne(id));
+    await this.verifierDeclinaison(dto);
+    await this.prisma.compagnie.create({ data: { id, ...dto, compagnieMereId: dto.compagnieMereId || null, agenceId: dto.agenceId || null } });
+    return this.findOne(id);
   }
 
   async update(id: string, dto: UpdateCompagnieDto) {
-    await this.findOne(id);
-    await this.prisma.compagnie.update({ where: { id }, data: dto });
+    const avant = await this.findOne(id);
+    const data = { ...dto };
+    if ("compagnieMereId" in dto) data.compagnieMereId = dto.compagnieMereId || (null as unknown as undefined);
+    if ("agenceId" in dto) data.agenceId = dto.agenceId || (null as unknown as undefined);
+    await this.verifierDeclinaison(
+      { compagnieMereId: "compagnieMereId" in dto ? dto.compagnieMereId : avant.compagnieMereId, agenceId: "agenceId" in dto ? dto.agenceId : avant.agenceId },
+      id,
+    );
+    await this.prisma.compagnie.update({ where: { id }, data });
     return this.findOne(id);
+  }
+
+  // Déclinaison d'agence (2026-09) — voir schema.prisma
+  // Compagnie.compagnieMereId. Une déclinaison a TOUJOURS une mère ET une
+  // agence (l'une sans l'autre ne veut rien dire), sa mère n'est jamais
+  // elle-même une déclinaison (un seul niveau), et une mère n'a qu'UNE
+  // déclinaison par agence — sinon l'imputation automatique ne saurait
+  // plus laquelle choisir.
+  private async verifierDeclinaison(dto: { compagnieMereId?: string | null; agenceId?: string | null }, idCourant?: string) {
+    const mereId = dto.compagnieMereId || null;
+    const agenceId = dto.agenceId || null;
+    if (!mereId && !agenceId) return;
+    if (!mereId || !agenceId) throw new BadRequestException("Une déclinaison d'agence doit préciser à la fois sa compagnie mère et son agence.");
+    if (mereId === idCourant) throw new BadRequestException("Une compagnie ne peut pas être sa propre compagnie mère.");
+    const mere = await this.prisma.compagnie.findUnique({ where: { id: mereId }, select: { compagnieMereId: true, nom: true } });
+    if (!mere) throw new BadRequestException("Compagnie mère introuvable.");
+    if (mere.compagnieMereId) throw new BadRequestException(`"${mere.nom}" est elle-même une déclinaison : choisissez la compagnie principale comme mère.`);
+    const existante = await this.prisma.compagnie.findFirst({ where: { compagnieMereId: mereId, agenceId, ...(idCourant ? { id: { not: idCourant } } : {}) }, select: { nom: true } });
+    if (existante) throw new ConflictException(`"${existante.nom}" est déjà la déclinaison de "${mere.nom}" pour cette agence.`);
+  }
+
+  // Compagnie à laquelle imputer un contrat géré par une agence (2026-09 —
+  // voir demande utilisateur : "lorsqu'un contrat est géré par l'agence de
+  // POG et est placé sur NSIA, l'application doit directement imputer le
+  // contrat à NSIA ASSURANCES POG"). Combine les deux modes demandés :
+  //  1. déclinaison DÉCLARÉE dans l'écran Compagnies (paramétrage propre) ;
+  //  2. à défaut, et si l'agence l'autorise (Agence.creerDeclinaisonsAuto),
+  //     déclinaison CRÉÉE par copie intégrale du paramétrage de la mère,
+  //     nommée "<mère> <code de l'agence>" (ex. "NSIA ASSURANCES POG").
+  // Retourne null quand rien n'est possible (création auto désactivée, ou
+  // agence sans code ni mention pour nommer la déclinaison) — l'appelant
+  // garde alors la compagnie choisie et le signale.
+  async declinaisonPourAgence(mereId: string, agenceId: string): Promise<{ id: string; nom: string; creee: boolean } | null> {
+    const existante = await this.prisma.compagnie.findFirst({ where: { compagnieMereId: mereId, agenceId }, select: { id: true, nom: true } });
+    if (existante) return { ...existante, creee: false };
+
+    const agence = await this.prisma.agence.findUnique({ where: { id: agenceId }, select: { code: true, mentionsImport: true, creerDeclinaisonsAuto: true } });
+    if (!agence?.creerDeclinaisonsAuto) return null;
+    const suffixe = agence.code?.trim() || agence.mentionsImport[0]?.trim();
+    if (!suffixe) return null;
+
+    const mere = await this.prisma.compagnie.findUnique({ where: { id: mereId }, include: CHILD_INCLUDE });
+    if (!mere) return null;
+    const id = `CMP-${randomUUID().slice(0, 6).toUpperCase()}`;
+    const {
+      id: _id, contrats: _c, accessoires, surprimesAge, clausesAjustement, territorialites, tauxCouverture, garantiesCatalogue,
+      compagnieMere: _m, agence: _a, societeId: _s, clientId: _cl, logo: _l, ...champs
+    } = mere;
+    const nom = `${mere.nom} ${suffixe}`;
+    const sansLien = <T extends { id: string; compagnieId: string | null }>(lignes: T[]) =>
+      lignes.map(({ id: _i, compagnieId: _ci, ...reste }) => ({ ...reste, compagnieId: id }));
+    await this.prisma.$transaction([
+      this.prisma.compagnie.create({ data: { ...champs, id, nom, logo: mere.logo, compagnieMereId: mereId, agenceId } as Prisma.CompagnieUncheckedCreateInput }),
+      this.prisma.compagnieAccessoireTranche.createMany({ data: sansLien(accessoires) }),
+      this.prisma.compagnieSurprimeAge.createMany({ data: sansLien(surprimesAge) }),
+      this.prisma.compagnieClauseAjustement.createMany({ data: sansLien(clausesAjustement) }),
+      this.prisma.compagnieTerritorialite.createMany({ data: sansLien(territorialites) }),
+      this.prisma.compagnieTauxCouverture.createMany({ data: sansLien(tauxCouverture) }),
+      this.prisma.garantieCatalogue.createMany({ data: sansLien(garantiesCatalogue) as Prisma.GarantieCatalogueCreateManyInput[] }),
+    ]);
+    return { id, nom, creee: true };
   }
 
   async remove(id: string) {

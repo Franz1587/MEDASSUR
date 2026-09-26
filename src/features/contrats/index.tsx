@@ -934,6 +934,13 @@ export default function ContratsView() {
         importSummary ? `${importSummary.imported} ligne(s) importée(s)${importSummary.updated ? `, ${importSummary.updated} mise(s) à jour` : ""}${importSummary.basculees ? `, ${importSummary.basculees} transférée(s) automatiquement depuis un autre contrat` : ""}${importSummary.rejected.length ? ` (${importSummary.rejected.length} rejetée(s) — voir le rapport)` : ""}` : null,
       ].filter(Boolean);
       toast.success(editing ? "Contrat mis à jour." : `Contrat créé avec succès${parts.length ? " — " + parts.join(", ") : ""}.`);
+      // Imputation compagnie ↔ agence (voir ContratsService.imputerSelonAgence).
+      if (contrat.imputationAgence?.imputation) {
+        const { de, vers, creee } = contrat.imputationAgence.imputation;
+        toast.info(`Contrat imputé à « ${vers} » (au lieu de « ${de} »), selon son agence${creee ? " — déclinaison créée à partir de la compagnie mère" : ""}.`);
+      } else if (contrat.imputationAgence?.avertissement) {
+        toast.warning(contrat.imputationAgence.avertissement);
+      }
       refresh();
       // Une ligne rejetée à l'import : on garde la fenêtre ouverte (sur la
       // fiche du contrat désormais enregistré) pour que le rapport reste
@@ -1290,7 +1297,7 @@ export default function ContratsView() {
                         allowClear clearLabel="Aucune"
                         placeholder="Rechercher…"
                       />
-                      <p className="text-[11px] text-muted-foreground mt-1">Bureau qui gère ce contrat (ex. Port-Gentil) — facultatif. Les agences se paramètrent dans l'écran Agences.</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">Bureau qui gère ce contrat (ex. Port-Gentil) — facultatif. À l'enregistrement, la compagnie est corrigée vers sa déclinaison pour cette agence (ex. NSIA ASSURANCES POG).</p>
                     </label>
                     <label className="block">
                       <div className={labelCls}>Produit</div>

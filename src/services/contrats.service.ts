@@ -215,14 +215,24 @@ export interface ContratUpsertInput {
   produit?: string;
 }
 
-export async function createContrat(payload: ContratUpsertInput): Promise<Contrat> {
-  const c = await http.post<ApiContrat>("/contrats", payload);
-  return mapContrat(c);
+// Imputation compagnie ↔ agence (2026-09) — renvoyée par le backend à la
+// création/modification (voir ContratsService.imputerSelonAgence) : le
+// contrat a pu être imputé à la déclinaison d'agence de sa compagnie
+// (ex. "NSIA ASSURANCES POG"), ou un avertissement signale qu'aucune
+// déclinaison n'était possible.
+export interface ImputationAgence {
+  imputation?: { de: string; vers: string; creee: boolean };
+  avertissement?: string;
 }
 
-export async function updateContrat(id: string, payload: Partial<ContratUpsertInput>): Promise<Contrat> {
-  const c = await http.patch<ApiContrat>(`/contrats/${id}`, payload);
-  return mapContrat(c);
+export async function createContrat(payload: ContratUpsertInput): Promise<Contrat & { imputationAgence?: ImputationAgence }> {
+  const c = await http.post<ApiContrat & { imputationAgence?: ImputationAgence }>("/contrats", payload);
+  return { ...mapContrat(c), imputationAgence: c.imputationAgence };
+}
+
+export async function updateContrat(id: string, payload: Partial<ContratUpsertInput>): Promise<Contrat & { imputationAgence?: ImputationAgence }> {
+  const c = await http.patch<ApiContrat & { imputationAgence?: ImputationAgence }>(`/contrats/${id}`, payload);
+  return { ...mapContrat(c), imputationAgence: c.imputationAgence };
 }
 
 export async function deleteContrat(id: string): Promise<{ id: string }> {

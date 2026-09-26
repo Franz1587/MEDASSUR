@@ -5,8 +5,11 @@ import {
   updateCompagnie, deleteCompagnie,
   uploadCompagnieLogo, deleteCompagnieLogo, compagnieLogoUrl,
   replaceAccessoires, replaceSurprimesAge, replaceClausesAjustement, replaceTerritorialites, replaceTauxCouverture,
-  replaceGarantiesCatalogue,
+  replaceGarantiesCatalogue, getCompagnies,
 } from "@/services/compagnies.service";
+import { getAgences } from "@/services/agences.service";
+import type { Agence } from "@/types/agences";
+import { Combobox } from "@/components/shared/Combobox";
 import { getContrats } from "@/services/contrats.service";
 import { useShellNavigation } from "@/layout/ShellNavigationContext";
 import { fmtM } from "@/lib/format";
@@ -80,10 +83,20 @@ export function CompagnieParamsDrawer({ compagnie: selected, onClose, onSaved, t
   const [filtreStatutContrats, setFiltreStatutContrats] = useState<"Tous" | "Actif" | "En renouvellement" | "Expiré" | "Résilié">("Tous");
 
   const [generalForm, setGeneralForm] = useState({
-    nom: "", pays: "", code: "", prefixeNumeroPolice: "", codeCourtier: "", tauxCommissionMaladie: 0, tauxCommissionAssistance: 0,
+    nom: "", pays: "", code: "", prefixeNumeroPolice: "", codeCourtier: "", compagnieMereId: "", agenceId: "", tauxCommissionMaladie: 0, tauxCommissionAssistance: 0,
     plafondFamilialDefaut: 0, limiteAgeAdulteDefaut: 0, limiteAgeEnfantDefaut: 0,
   });
   const [savingGeneral, setSavingGeneral] = useState(false);
+  // Déclinaison d'agence (2026-09) — voir demande utilisateur : un contrat
+  // géré par l'agence de POG et placé sur NSIA doit être imputé à "NSIA
+  // ASSURANCES POG". Seules les compagnies principales (jamais une autre
+  // déclinaison, ni un profil Auto-Gestion) peuvent être mère.
+  const [meresPossibles, setMeresPossibles] = useState<Compagnie[]>([]);
+  const [agences, setAgences] = useState<Agence[]>([]);
+  useEffect(() => {
+    getCompagnies().then((cs) => setMeresPossibles(cs.filter((c) => c.id !== selected.id && !c.compagnieMereId && !c.clientId))).catch(() => undefined);
+    getAgences().then(setAgences).catch(() => undefined);
+  }, [selected.id]);
 
   // Papier en-tête / pied de page légal + RIB (2026-08) — repris sur la
   // Facture Production imprimée sur le papier de la compagnie (voir
@@ -122,6 +135,8 @@ export function CompagnieParamsDrawer({ compagnie: selected, onClose, onSaved, t
       nom: selected.nom, pays: selected.pays, code: selected.code ?? "",
       prefixeNumeroPolice: selected.prefixeNumeroPolice ?? "",
       codeCourtier: selected.codeCourtier ?? "",
+      compagnieMereId: selected.compagnieMereId ?? "",
+      agenceId: selected.agenceId ?? "",
       tauxCommissionMaladie: selected.tauxCommissionMaladie ?? 0,
       tauxCommissionAssistance: selected.tauxCommissionAssistance ?? 0,
       plafondFamilialDefaut: selected.plafondFamilialDefaut ?? 0,
@@ -365,6 +380,39 @@ export function CompagnieParamsDrawer({ compagnie: selected, onClose, onSaved, t
                     <p className="text-[11px] text-muted-foreground mt-1">Numéro d'immatriculation du courtier auprès de cette compagnie — figure sur le Bordereau de Production.</p>
                   </label>
                 </div>
+
+                {!selected.clientId && (
+                  <>
+                    <p className={`${sectionCls} mt-6`}>Déclinaison d'agence</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <div className={labelCls}>Compagnie mère</div>
+                        <Combobox
+                          options={meresPossibles}
+                          value={meresPossibles.find((c) => c.id === generalForm.compagnieMereId) ?? null}
+                          onChange={(c) => setGeneralForm((v) => ({ ...v, compagnieMereId: c?.id ?? "" }))}
+                          getLabel={(c) => c.nom} getId={(c) => c.id}
+                          allowClear clearLabel="Aucune (compagnie principale)"
+                          placeholder="Rechercher…"
+                        />
+                      </div>
+                      <div>
+                        <div className={labelCls}>Agence</div>
+                        <Combobox
+                          options={agences.filter((a) => a.statut === "Actif" || a.id === generalForm.agenceId)}
+                          value={agences.find((a) => a.id === generalForm.agenceId) ?? null}
+                          onChange={(a) => setGeneralForm((v) => ({ ...v, agenceId: a?.id ?? "" }))}
+                          getLabel={(a) => (a.code ? `${a.nom} (${a.code})` : a.nom)} getId={(a) => a.id}
+                          allowClear clearLabel="Aucune"
+                          placeholder="Rechercher…"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1.5">
+                      Ex. « NSIA ASSURANCES POG » : mère NSIA ASSURANCES, agence Port-Gentil. Tout contrat de cette agence placé sur la compagnie mère lui est alors imputé automatiquement. Laissez vide pour une compagnie principale.
+                    </p>
+                  </>
+                )}
 
                 <div className="flex items-center gap-2 mt-6">
                   <button type="button" disabled={savingGeneral} onClick={handleSaveGeneral} className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-[13px] hover:opacity-90 disabled:opacity-60">Enregistrer</button>

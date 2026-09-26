@@ -12,6 +12,8 @@ import { ImportContratsDto } from "./dto/import-contrats.dto";
 import { UpdateExerciceDto } from "./dto/update-exercice.dto";
 import { UpdateExercicePrimeDto } from "./dto/update-exercice-prime.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { RolesGuard } from "../auth/roles.guard";
+import { Roles } from "../auth/roles.decorator";
 import { CommunicationsService } from "../communications/communications.service";
 
 @Controller("contrats")
@@ -26,6 +28,17 @@ export class ContratsController {
 
   // Doivent rester déclarées AVANT ":id" — sinon Nest matche ces segments
   // littéraux comme valeur de :id (routage par ordre de déclaration).
+  // Réimputation des contrats déjà rattachés à une agence (2026-09) — voir
+  // demande utilisateur : "Oui, réimputer les 28". Simulation par défaut
+  // (liste exacte des changements, rien d'écrit) ; ?appliquer=true pour
+  // exécuter. Réservé à la direction/l'administration de la société.
+  @Post("reimputer-agences")
+  @UseGuards(RolesGuard)
+  @Roles("administrateur", "direction_generale", "directeur_technique")
+  reimputerAgences(@Query("appliquer") appliquer?: string) {
+    return this.contratsService.reimputerContratsAgences(appliquer === "true");
+  }
+
   @Get("prochain-numero-police")
   prochainNumeroPolice(@Query("compagnieId") compagnieId: string) {
     return this.contratsService.prochainNumeroPolice(compagnieId).then((numeroPolice) => ({ numeroPolice }));
