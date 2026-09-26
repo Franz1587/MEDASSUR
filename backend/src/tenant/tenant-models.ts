@@ -81,6 +81,10 @@ export const TENANT_MODELS = new Set<string>([
   "ScoringFraude",
   "FactureEnAttente",
   "PersonneEnAttenteTransfert",
+  // Identité d'un assuré et ses matricules (2026-09-26) — jamais partagées
+  // entre sociétés, voir schema.prisma IdentiteAssuree.
+  "IdentiteAssuree",
+  "MatriculeAssuree",
   "PrestataireAlias",
   "LotCheques",
   // Agence (2026-09) — voir schema.prisma pour le détail de la demande

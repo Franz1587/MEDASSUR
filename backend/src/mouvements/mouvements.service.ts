@@ -6,7 +6,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { withComputedPrime } from "../contrats/prime.util";
 import { verifierAge } from "./age-limite.util";
 import { creerGenerateurMatricule } from "../sante/matricule.util";
-import { appliquerActifUniqueInterSocietes, resoudreIdentite } from "../sante/identite-assuree.util";
+import { resoudreIdentite } from "../sante/identite-assuree.util";
 
 type AssureAvecRelations = Prisma.AssureSanteGetPayload<{ include: { contrat: true; membres: true } }>;
 
@@ -105,9 +105,9 @@ export class MouvementsService implements OnModuleInit {
       const suffix = randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase();
       const id = `ASS-${suffix}`;
       const matricule = a.matricule?.trim() || genererMatricule();
-      // Identité : matricule, sinon même nom + prénom + date de naissance
-      // (toutes sociétés) — voir sante/identite-assuree.util.ts.
-      const identite = await resoudreIdentite(this.prisma, { matricule, nom: a.nom, prenom: a.prenom, dateNaissance: a.dateNaissance });
+      // Identité DANS LA SOCIÉTÉ DU CONTRAT : matricule, sinon même nom +
+      // prénom + date de naissance — voir sante/identite-assuree.util.ts.
+      const identite = await resoudreIdentite(this.prisma, contrat.societeId ?? null, { matricule, nom: a.nom, prenom: a.prenom, dateNaissance: a.dateNaissance });
       const cree = await this.prisma.assureSante.create({
         data: {
           id,
@@ -216,15 +216,7 @@ export class MouvementsService implements OnModuleInit {
       }));
     }
 
-    // Un assuré principal n'est actif que dans UNE société (date d'effet la
-    // plus récente) — voir sante/identite-assuree.util.ts. Jamais bloquant.
-    let avertissements: string[] = [];
-    try {
-      avertissements = await appliquerActifUniqueInterSocietes(this.prisma, crees.map((c) => c.id));
-    } catch (err) {
-      console.error("Contrôle assuré actif dans une seule société impossible", err);
-    }
-    return { contrat: contratMisAJour, avenants, crees, radies, avertissements };
+    return { contrat: contratMisAJour, avenants, crees, radies };
   }
 
   // Recalcule les compteurs agrégés (nombreAssuresPrincipaux/Conjoints/

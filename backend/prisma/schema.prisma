@@ -2005,8 +2005,8 @@ model Sinistre {
 }
 
 // ── Santé — Affiliation & Sinistres santé ────────────────────────────
-// Identité transverse d'une personne assurée (2026-09) — voir demande
-// utilisateur : "il peut arriver qu'une personne soit liée à plusieurs
+// Identité d'une personne assurée AU SEIN D'UNE SOCIÉTÉ (2026-09) — voir
+// demande utilisateur : "il peut arriver qu'une personne soit liée à plusieurs
 // contrats... il faut contextualiser ses consommations par rapport à chaque
 // contrat auquel il est lié... en affichant ses consommations par exercice
 // qu'il s'agisse du même contrat ou des contrats différents." Une identité
@@ -2015,13 +2015,20 @@ model Sinistre {
 // préserver l'historique (rapport S/P de chaque contrat intact).
 model IdentiteAssuree {
   id           String             @id @default(cuid())
-  matricule    String             @unique
+  // Cloisonnée par société (2026-09-26) — voir demande utilisateur : "Chaque
+  // société gère ses données... en aucun moment l'application doit les
+  // considérer comme étant les mêmes données ou se rapportant à la même
+  // personne." Une même personne assurée par deux sociétés = deux identités.
+  societeId    String?
+  matricule    String
   nom          String
   prenom       String?
   createdAt    DateTime           @default(now())
   affiliations AssureSante[]
   matricules   MatriculeAssuree[]
 
+  @@unique([societeId, matricule])
+  @@index([societeId])
   @@index([nom])
 }
 
@@ -2029,12 +2036,15 @@ model IdentiteAssuree {
 // recherchables sans recréer une personne ni perdre son historique.
 model MatriculeAssuree {
   id         String          @id @default(cuid())
-  matricule  String          @unique
+  societeId  String?
+  matricule  String
   identiteId String
   statut     String          @default("Ancien") // Actuel | Ancien
   createdAt  DateTime        @default(now())
   identite   IdentiteAssuree @relation(fields: [identiteId], references: [id], onDelete: Cascade)
 
+  @@unique([societeId, matricule])
+  @@index([societeId])
   @@index([identiteId])
 }
 

@@ -936,9 +936,6 @@ export default function ContratsView() {
         importSummary ? `${importSummary.imported} ligne(s) importée(s)${importSummary.updated ? `, ${importSummary.updated} mise(s) à jour` : ""}${importSummary.basculees ? `, ${importSummary.basculees} transférée(s) automatiquement depuis un autre contrat` : ""}${importSummary.rejected.length ? ` (${importSummary.rejected.length} rejetée(s) — voir le rapport)` : ""}` : null,
       ].filter(Boolean);
       toast.success(editing ? "Contrat mis à jour." : `Contrat créé avec succès${parts.length ? " — " + parts.join(", ") : ""}.`);
-      // Assuré principal actif dans une seule société (voir backend
-      // identite-assuree.util.ts) : fiches importées mais suspendues.
-      for (const m of importSummary?.avertissements ?? []) toast.warning(m, { duration: 12000 });
       // Imputation compagnie ↔ agence (voir ContratsService.imputerSelonAgence).
       if (contrat.imputationAgence?.imputation) {
         const { de, vers, creee } = contrat.imputationAgence.imputation;

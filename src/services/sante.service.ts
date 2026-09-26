@@ -318,10 +318,6 @@ export interface ImportPopulationResult {
   basculees: number;
   rejected: { ligne: number; matricule?: string; nom?: string; motif: string }[];
   resultats: { matricule: string; id: string }[];
-  // Assuré principal actif dans une seule société (2026-09) — fiches
-  // importées mais suspendues ici ou ailleurs selon la date d'effet la plus
-  // récente (voir backend identite-assuree.util.ts). Jamais des rejets.
-  avertissements?: string[];
 }
 
 export async function importPopulation(contratId: string, rows: ImportedPersonRowInput[]): Promise<ImportPopulationResult> {

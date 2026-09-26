@@ -15,7 +15,7 @@ import { ImportedPersonRowDto, ImportPopulationDto } from "./dto/import-populati
 import { creerGenerateurMatricule } from "./matricule.util";
 import { CreateFactureLigneDto, RUBRIQUES_PLAFONNEES } from "./dto/create-facture-ligne.dto";
 import { resoudreRubriqueContrat } from "../actes-medicaux/rubrique-contrat.util";
-import { appliquerActifUniqueInterSocietes, resoudreIdentite } from "./identite-assuree.util";
+import { resoudreIdentite } from "./identite-assuree.util";
 import { UpdateFactureLigneDto } from "./dto/update-facture-ligne.dto";
 import { CreateRemboursementLigneDto } from "../remboursements/dto/create-remboursement-ligne.dto";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
@@ -749,13 +749,13 @@ export class SanteService {
     const aMettreAJour = accepted.filter((item) => !item.isNew);
 
     if (nouveaux.length > 0) {
-      // Identité de chaque nouvelle fiche : matricule (actuel ou ancien),
-      // sinon même nom + prénom + date de naissance dans n'importe quelle
-      // société, sinon nouvelle personne — voir identite-assuree.util.ts.
+      // Identité de chaque nouvelle fiche, DANS LA SOCIÉTÉ DU CONTRAT :
+      // matricule (actuel ou ancien), sinon même nom + prénom + date de
+      // naissance, sinon nouvelle personne — voir identite-assuree.util.ts.
       const identiteParMatricule = new Map<string, { id: string }>();
       for (const item of nouveaux) {
         if (identiteParMatricule.has(item.matricule)) continue;
-        identiteParMatricule.set(item.matricule, await resoudreIdentite(this.prisma, {
+        identiteParMatricule.set(item.matricule, await resoudreIdentite(this.prisma, contrat.societeId ?? null, {
           matricule: item.matricule, nom: item.nom, prenom: item.prenom, dateNaissance: item.row.dateNaissance,
         }));
       }
@@ -861,17 +861,7 @@ export class SanteService {
       updated += compteurs.reduce((s, c) => s + c, 0);
     }
 
-    // Un assuré principal n'est actif que dans UNE société : le contrat à
-    // la date d'effet la plus récente l'emporte (voir
-    // appliquerActifUniqueInterSocietes). Jamais bloquant pour l'import.
-    let avertissements: string[] = [];
-    try {
-      avertissements = await appliquerActifUniqueInterSocietes(this.prisma, accepted.map((item) => item.id));
-    } catch (err) {
-      console.error("Contrôle assuré actif dans une seule société impossible", err);
-    }
-
-    return { imported, updated, basculees, rejected: rejets, resultats, avertissements };
+    return { imported, updated, basculees, rejected: rejets, resultats };
   }
 
   // File d'attente des personnes en attente de transfert (2026-09) — voir
