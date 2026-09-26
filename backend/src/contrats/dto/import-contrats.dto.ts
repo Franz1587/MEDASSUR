@@ -31,6 +31,10 @@ export class ImportContratRowDto {
   // ContratsService.prochainNumeroPolice), ligne par ligne dans l'ordre du
   // fichier pour que deux lignes de la même compagnie ne se percutent pas.
   @IsOptional() @IsString() numeroPolice?: string;
+  // Agence (2026-09) — nom, code ou mention déclarée d'une agence de
+  // l'écran Agences ; facultatif, sinon déduite des mentions déclarées
+  // présentes dans la compagnie/le souscripteur (voir agence-mention.util.ts).
+  @IsOptional() @IsString() agence?: string;
 }
 
 export class ImportContratsDto {

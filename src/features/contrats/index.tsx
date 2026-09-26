@@ -401,8 +401,7 @@ export default function ContratsView() {
   const [compagniesAutoGestion, setCompagniesAutoGestion] = useState<Compagnie[]>([]);
   // Bureau de rattachement (2026-09) — voir demande utilisateur : "LA RUCHE
   // a un bureau à Port-Gentil qui gère ses contrats de façon autonome" —
-  // même liste d'agences que l'écran Administration (rattachement d'un
-  // utilisateur), réutilisée ici pour le contrat.
+  // agences paramétrées dans l'écran Agences (jamais une liste codée en dur).
   const [agences, setAgences] = useState<Agence[]>([]);
   const [typeGestion, setTypeGestion] = useState<"Classique" | "AutoGestion">("Classique");
   // Type de société (2026-09) — voir demande utilisateur : "une compagnie
@@ -1284,14 +1283,14 @@ export default function ContratsView() {
                     <label className="block">
                       <div className={labelCls}>Agence</div>
                       <Combobox
-                        options={agences}
+                        options={agences.filter((a) => a.statut === "Actif" || a.id === form.agenceId)}
                         value={agences.find((a) => a.id === form.agenceId) ?? null}
                         onChange={(a) => setForm((v) => ({ ...v, agenceId: a?.id ?? "" }))}
-                        getLabel={(a) => a.nom} getId={(a) => a.id}
+                        getLabel={(a) => (a.ville ? `${a.nom} — ${a.ville}` : a.nom)} getId={(a) => a.id}
                         allowClear clearLabel="Aucune"
                         placeholder="Rechercher…"
                       />
-                      <p className="text-[11px] text-muted-foreground mt-1">Bureau qui gère ce contrat (ex. Port-Gentil) — facultatif.</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">Bureau qui gère ce contrat (ex. Port-Gentil) — facultatif. Les agences se paramètrent dans l'écran Agences.</p>
                     </label>
                     <label className="block">
                       <div className={labelCls}>Produit</div>

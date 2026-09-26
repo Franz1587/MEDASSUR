@@ -18,6 +18,7 @@ import { normaliserDateImport } from "../lib/date-import.util";
 import { texteBrutDeCellule } from "../lib/excel-cell.util";
 import { correspondApproximativement, meilleurCandidat, motsNonApparies, ressembleAUnParticulier } from "../lib/fuzzy-name-match.util";
 import { genererIdNumerique } from "../lib/numeric-id.util";
+import { trouverAgenceParMention, trouverAgenceParValeur } from "../agences/agence-mention.util";
 import { CompagniesService } from "../compagnies/compagnies.service";
 import { TenantContext } from "../tenant/tenant-context";
 
@@ -33,6 +34,7 @@ const COLONNES_IMPORT_CONTRAT: { header: string; key: keyof ImportContratRowDto 
   { header: "Statut (Actif, En renouvellement, Expiré)", key: "statut" },
   { header: "Périodicité (Mensuel, Trimestriel, Semestriel, Annuel)", key: "periodicite" },
   { header: "Numéro de police (facultatif — auto si vide)", key: "numeroPolice" },
+  { header: "Agence (facultatif — nom, code ou mention déclarée)", key: "agence" },
 ];
 
 // Le "( … )" de chaque en-tête n'est qu'une indication (format attendu,
@@ -709,6 +711,29 @@ export class ContratsService {
     return null;
   }
 
+  // Agence d'une ligne importée (2026-09) — voir demande utilisateur : "il
+  // faut rendre paramétrable la création des agences au lieu de laisser
+  // juste le code le décider." Colonne "Agence" explicite d'abord (nom,
+  // code ou mention déclarée) ; sinon mention déclarée dans l'écran
+  // Agences retrouvée dans la compagnie ou le souscripteur (ex. "OGAR
+  // ASSURANCES POG" → l'agence qui déclare "POG"). Aucune agence ne
+  // correspond → contrat sans agence, jamais une agence devinée.
+  private chargerAgencesImport() {
+    return this.prisma.agence.findMany({ select: { id: true, nom: true, code: true, statut: true, mentionsImport: true } });
+  }
+
+  private resoudreAgenceImport(
+    agences: { id: string; nom: string; code: string | null; statut: string; mentionsImport: string[] }[],
+    ligne: Pick<ImportContratRowDto, "agence" | "compagnie" | "souscripteur">,
+  ): { statut: "trouvee" | "aucune" | "inconnue"; agence?: { id: string; nom: string } } {
+    if (ligne.agence?.trim()) {
+      const agence = trouverAgenceParValeur(agences, ligne.agence);
+      return agence ? { statut: "trouvee", agence } : { statut: "inconnue" };
+    }
+    const agence = trouverAgenceParMention(agences, [ligne.compagnie, ligne.souscripteur]);
+    return agence ? { statut: "trouvee", agence } : { statut: "aucune" };
+  }
+
   async parseImportFile(buffer: Buffer): Promise<{ lignes: ImportContratRowDto[]; rejets: { ligne: number; motif: string }[] }> {
     const classeur = new ExcelJS.Workbook();
     await classeur.xlsx.load(buffer as unknown as ExcelJS.Buffer);
@@ -728,6 +753,7 @@ export class ContratsService {
 
     const lignes: ImportContratRowDto[] = [];
     const rejets: { ligne: number; motif: string }[] = [];
+    const agences = await this.chargerAgencesImport();
     for (let r = 2; r <= feuille.rowCount; r++) {
       const row = feuille.getRow(r);
       const valeur = (cle: keyof ImportContratRowDto) => {
@@ -762,6 +788,11 @@ export class ContratsService {
       // `resClient`/`resCompagnie` à null = vraiment introuvable — un
       // statut "a_creer_particulier"/"a_creer_auto_gestion" N'EST PAS un
       // rejet : la ligne sera créée à la confirmation (voir importer()).
+      // Agence (2026-09) — affichée dès l'aperçu, résolue exactement comme
+      // à la confirmation (voir resoudreAgenceImport).
+      const resAgence = this.resoudreAgenceImport(agences, ligneTypee);
+      if (resAgence.statut === "inconnue") rejets.push({ ligne: r, motif: `Agence "${ligneTypee.agence}" inconnue — créez-la (ou déclarez cette mention) dans l'écran Agences.` });
+      else if (resAgence.agence) ligneTypee.agence = resAgence.agence.nom;
       if (!resClient) rejets.push({ ligne: r, motif: `Souscripteur "${souscripteur}" introuvable — créez-le d'abord (ou via l'import Souscripteurs).` });
       else if (!resCompagnie) rejets.push({ ligne: r, motif: `Compagnie "${compagnie}" introuvable.` });
       // Produit/collège détecté automatiquement (voir resoudreClient
@@ -783,8 +814,11 @@ export class ContratsService {
     let crees = 0;
     const rejets: { ligne: number; motif: string }[] = [];
     const prochainParCompagnie = new Map<string, number>();
+    const agences = await this.chargerAgencesImport();
     for (let i = 0; i < rows.length; i++) {
       const ligne = rows[i];
+      const resAgence = this.resoudreAgenceImport(agences, ligne);
+      if (resAgence.statut === "inconnue") { rejets.push({ ligne: i + 1, motif: `Agence "${ligne.agence}" inconnue — créez-la dans l'écran Agences.` }); continue; }
       const resClient = await this.resoudreClient(ligne.souscripteur);
       if (!resClient) { rejets.push({ ligne: i + 1, motif: `Souscripteur "${ligne.souscripteur}" introuvable.` }); continue; }
 
@@ -868,6 +902,7 @@ export class ContratsService {
             id, clientId: client.id, compagnieId: compagnie.id, branche, produit,
             dateDebut: derniere.dateDebut, dateFin: derniere.dateFin,
             prime, statut, periodicite, numeroPolice, exerciceNumero: tranches.length,
+            agenceId: resAgence.agence?.id ?? null,
           },
         });
         // Le DERNIER exercice ne peut être "Actif" que si le contrat

@@ -262,6 +262,7 @@ export default function ImportDonneesView() {
             { key: "dateFin", label: "Échéance" },
             { key: "prime", label: "Prime" },
             { key: "numeroPolice", label: "N° Police" },
+            { key: "agence", label: "Agence" },
           ]}
         />
       )}

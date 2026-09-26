@@ -251,7 +251,7 @@ export async function getProchainNumeroPolice(compagnieId: string): Promise<stri
 // complète au cas par cas après import, via l'écran habituel.
 export interface ImportContratRow {
   souscripteur: string; compagnie: string;
-  branche?: string; dateDebut?: string; dateFin?: string; prime?: string; statut?: string; periodicite?: string; numeroPolice?: string;
+  branche?: string; dateDebut?: string; dateFin?: string; prime?: string; statut?: string; periodicite?: string; numeroPolice?: string; agence?: string;
 }
 
 export function telechargerModeleImportContrats(): Promise<void> {

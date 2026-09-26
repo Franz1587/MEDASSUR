@@ -3208,6 +3208,21 @@ model Agence {
   // Code d'agence (2026-09) — optionnel, reprend au besoin la numérotation
   // historique du modèle papier ("212") ; purement déclaratif.
   code      String?
+  // Paramétrage complet de l'agence (2026-09) — voir demande utilisateur :
+  // "il faut rendre paramétrable la création des agences au lieu de
+  // laisser juste le code le décider." Tout est saisi depuis l'écran
+  // Agences, jamais déduit en dur.
+  ville       String?
+  adresse     String?
+  telephone   String?
+  email       String?
+  responsable String?
+  statut      String   @default("Actif") // Actif | Inactif
+  // Mentions reconnues à l'import (ex. "POG" pour Port-Gentil) : un
+  // fichier de contrats dont la compagnie/le souscripteur porte l'une de
+  // ces mentions ("OGAR ASSURANCES POG") est rattaché à CETTE agence —
+  // déclaré par l'utilisateur, plus aucune correspondance codée en dur.
+  mentionsImport String[] @default([])
   createdAt DateTime @default(now())
 
   agents User[]
