@@ -6,6 +6,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { withComputedPrime } from "../contrats/prime.util";
 import { verifierAge } from "./age-limite.util";
 import { creerGenerateurMatricule } from "../sante/matricule.util";
+import { appliquerActifUniqueInterSocietes, resoudreIdentite } from "../sante/identite-assuree.util";
 
 type AssureAvecRelations = Prisma.AssureSanteGetPayload<{ include: { contrat: true; membres: true } }>;
 
@@ -104,16 +105,9 @@ export class MouvementsService implements OnModuleInit {
       const suffix = randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase();
       const id = `ASS-${suffix}`;
       const matricule = a.matricule?.trim() || genererMatricule();
-      const identite = await this.prisma.identiteAssuree.upsert({
-        where: { matricule },
-        update: { nom: a.nom, prenom: a.prenom ?? undefined },
-        create: { matricule, nom: a.nom, prenom: a.prenom },
-      });
-      await this.prisma.matriculeAssuree.upsert({
-        where: { matricule },
-        update: { identiteId: identite.id, statut: "Actuel" },
-        create: { matricule, identiteId: identite.id, statut: "Actuel" },
-      });
+      // Identité : matricule, sinon même nom + prénom + date de naissance
+      // (toutes sociétés) — voir sante/identite-assuree.util.ts.
+      const identite = await resoudreIdentite(this.prisma, { matricule, nom: a.nom, prenom: a.prenom, dateNaissance: a.dateNaissance });
       const cree = await this.prisma.assureSante.create({
         data: {
           id,
@@ -222,7 +216,15 @@ export class MouvementsService implements OnModuleInit {
       }));
     }
 
-    return { contrat: contratMisAJour, avenants, crees, radies };
+    // Un assuré principal n'est actif que dans UNE société (date d'effet la
+    // plus récente) — voir sante/identite-assuree.util.ts. Jamais bloquant.
+    let avertissements: string[] = [];
+    try {
+      avertissements = await appliquerActifUniqueInterSocietes(this.prisma, crees.map((c) => c.id));
+    } catch (err) {
+      console.error("Contrôle assuré actif dans une seule société impossible", err);
+    }
+    return { contrat: contratMisAJour, avenants, crees, radies, avertissements };
   }
 
   // Recalcule les compteurs agrégés (nombreAssuresPrincipaux/Conjoints/

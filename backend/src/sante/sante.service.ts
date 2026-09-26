@@ -15,6 +15,7 @@ import { ImportedPersonRowDto, ImportPopulationDto } from "./dto/import-populati
 import { creerGenerateurMatricule } from "./matricule.util";
 import { CreateFactureLigneDto, RUBRIQUES_PLAFONNEES } from "./dto/create-facture-ligne.dto";
 import { resoudreRubriqueContrat } from "../actes-medicaux/rubrique-contrat.util";
+import { appliquerActifUniqueInterSocietes, resoudreIdentite } from "./identite-assuree.util";
 import { UpdateFactureLigneDto } from "./dto/update-facture-ligne.dto";
 import { CreateRemboursementLigneDto } from "../remboursements/dto/create-remboursement-ligne.dto";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
@@ -748,19 +749,15 @@ export class SanteService {
     const aMettreAJour = accepted.filter((item) => !item.isNew);
 
     if (nouveaux.length > 0) {
-      const matricules = [...new Set(nouveaux.map((item) => item.matricule))];
-      const identitesExistantes = await this.prisma.identiteAssuree.findMany({ where: { matricule: { in: matricules } } });
-      const identiteParMatricule = new Map(identitesExistantes.map((identite) => [identite.matricule, identite]));
+      // Identité de chaque nouvelle fiche : matricule (actuel ou ancien),
+      // sinon même nom + prénom + date de naissance dans n'importe quelle
+      // société, sinon nouvelle personne — voir identite-assuree.util.ts.
+      const identiteParMatricule = new Map<string, { id: string }>();
       for (const item of nouveaux) {
-        if (!identiteParMatricule.has(item.matricule)) {
-          const identite = await this.prisma.identiteAssuree.create({ data: { matricule: item.matricule, nom: item.nom, prenom: item.prenom } });
-          identiteParMatricule.set(item.matricule, identite);
-        }
-        await this.prisma.matriculeAssuree.upsert({
-          where: { matricule: item.matricule },
-          update: { identiteId: identiteParMatricule.get(item.matricule)!.id, statut: "Actuel" },
-          create: { matricule: item.matricule, identiteId: identiteParMatricule.get(item.matricule)!.id, statut: "Actuel" },
-        });
+        if (identiteParMatricule.has(item.matricule)) continue;
+        identiteParMatricule.set(item.matricule, await resoudreIdentite(this.prisma, {
+          matricule: item.matricule, nom: item.nom, prenom: item.prenom, dateNaissance: item.row.dateNaissance,
+        }));
       }
       await this.prisma.assureSante.createMany({
         data: nouveaux.map((item) => ({
@@ -864,7 +861,17 @@ export class SanteService {
       updated += compteurs.reduce((s, c) => s + c, 0);
     }
 
-    return { imported, updated, basculees, rejected: rejets, resultats };
+    // Un assuré principal n'est actif que dans UNE société : le contrat à
+    // la date d'effet la plus récente l'emporte (voir
+    // appliquerActifUniqueInterSocietes). Jamais bloquant pour l'import.
+    let avertissements: string[] = [];
+    try {
+      avertissements = await appliquerActifUniqueInterSocietes(this.prisma, accepted.map((item) => item.id));
+    } catch (err) {
+      console.error("Contrôle assuré actif dans une seule société impossible", err);
+    }
+
+    return { imported, updated, basculees, rejected: rejets, resultats, avertissements };
   }
 
   // File d'attente des personnes en attente de transfert (2026-09) — voir

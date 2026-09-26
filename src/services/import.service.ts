@@ -123,7 +123,11 @@ export async function confirmerImportAssures(contratId: string, rows: ImportAssu
     dateNaissance: r.dateNaissance ?? "", typeAssure: r.typeAssure ?? "", telephone: r.telephone ?? "",
     statut: r.statut ?? "",
   })));
-  return { crees: res.imported + res.updated + res.basculees, rejets: res.rejected.map((rej) => ({ ligne: rej.ligne, motif: rej.motif })) };
+  // Les avertissements (fiches bien importées, mais suspendues selon la
+  // règle "assuré principal actif dans une seule société") figurent dans
+  // le rapport, clairement distingués des vrais rejets.
+  const informations = (res.avertissements ?? []).map((m) => ({ ligne: 0, motif: `Information (fiche importée) — ${m}` }));
+  return { crees: res.imported + res.updated + res.basculees, rejets: [...res.rejected.map((rej) => ({ ligne: rej.ligne, motif: rej.motif })), ...informations] };
 }
 
 // ── Photos en masse (2026-08) — voir demande utilisateur : "importer même
