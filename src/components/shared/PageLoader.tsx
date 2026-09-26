@@ -66,7 +66,7 @@ export function PageLoader() {
           ))}
           <img src={logoMark} alt="" className="page-loader-mark" />
         </div>
-        <p className="page-loader-caption">Chargement des données…</p>
+        <p className="sr-only">Chargement des données…</p>
       </div>
     </div>
   );
