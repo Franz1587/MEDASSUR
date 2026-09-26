@@ -7,6 +7,10 @@ import { CalculPrimeSection, calculerPrime, tallyByType, type PrimeCalcState } f
 
 interface Props {
   contratId: string;
+  // Contrat échu (expiré, résilié ou échéance dépassée) : toute la
+  // population de la période compte, sans prorata — voir contratEchu
+  // dans backend/src/contrats/prime-exercice.util.ts.
+  contratEchu?: boolean;
   // Id du contrat dont on doit reprendre la population pour ce calcul de
   // prime — le contrat lui-même, SAUF pour une Assistance liée à un
   // contrat Maladie (voir demande utilisateur : "il faut que la
@@ -37,7 +41,7 @@ const num = (v: string | number | null | undefined): number | undefined => (v ==
 // (populationLock) que ceux-ci, mais la population vient ici de
 // `reconstituerPopulation` (voir getPopulationHistorique) sur les dates
 // DE CET EXERCICE précis plutôt que de la population actuelle du contrat.
-export default function ExercicePrimeModal({ contratId, populationContratId, exercice, onClose, onDone }: Props) {
+export default function ExercicePrimeModal({ contratId, contratEchu = false, populationContratId, exercice, onClose, onDone }: Props) {
   const [form, setForm] = useState<Form>({
     dateDebut: exercice.dateDebut, dateFin: exercice.dateFin,
     nombreAssuresPrincipaux: exercice.nombreAssuresPrincipaux ?? undefined,
@@ -62,13 +66,14 @@ export default function ExercicePrimeModal({ contratId, populationContratId, exe
   useEffect(() => {
     setChargementPopulation(true);
     getPopulationHistorique(populationContratId ?? contratId, { du: exercice.dateDebut, au: exercice.dateFin })
-      // Règle utilisateur (2026-09) : exercice EN COURS → seules les
-      // personnes actives comptent (les retirés datés sont ajoutés au
-      // prorata par le serveur à l'enregistrement, les autres ignorés) ;
-      // exercice passé → toute la population de la période (historique).
-      .then((population) => setTally(tallyByType(exercice.statut === "Actif" ? population.filter((p) => p.statut === "Actif") : population)))
+      // Règle utilisateur (2026-09) : contrat ACTIF, exercice en cours →
+      // seules les personnes actives comptent (les retirés datés sont
+      // ajoutés au prorata par le serveur à l'enregistrement, les autres
+      // ignorés) ; contrat échu ou exercice passé → toute la population de
+      // la période, sans prorata.
+      .then((population) => setTally(tallyByType(!contratEchu && exercice.statut === "Actif" ? population.filter((p) => p.statut === "Actif") : population)))
       .finally(() => setChargementPopulation(false));
-  }, [contratId, populationContratId, exercice.dateDebut, exercice.dateFin]);
+  }, [contratId, contratEchu, populationContratId, exercice.dateDebut, exercice.dateFin, exercice.statut]);
 
   const hasCategorizedPopulation = tally.AS + tally.CJ + tally.EF > 0;
   const populationSourceIsAuto = hasCategorizedPopulation && !manualPopulationEntry;

@@ -645,14 +645,15 @@ export class ContratsService {
   }
 
   async mettreAJourPrimeExercice(contratId: string, numero: number, dto: UpdateExercicePrimeDto) {
-    await this.findOne(contratId);
+    const contrat = await this.findOne(contratId);
     const cible = await this.prisma.exercice.findFirst({ where: { contratId, numero } });
     if (!cible) throw new NotFoundException(`Exercice n°${numero} introuvable pour ce contrat.`);
     // Écriture partagée avec le recalcul automatique (voir prime-exercice.util.ts).
     await appliquerPrimeExercice(this.prisma, contratId, numero, dto);
-    // Exercice en cours : prorata des personnes retirées à une date connue
-    // appliqué aussitôt (sans effet si la population n'est pas catégorisée).
-    if (cible.statut === "Actif") await recalculerPrimeSelonPopulation(this.prisma, [contratId]);
+    // Dernier exercice du contrat : règle échu (toute la population) / actif
+    // (prorata des retirés datés) appliquée aussitôt — voir
+    // prime-exercice.util.ts ; sans effet si la population n'est pas catégorisée.
+    if (numero === contrat.exerciceNumero) await recalculerPrimeSelonPopulation(this.prisma, [contratId]);
     return this.historiqueCompagnie(contratId);
   }
 

@@ -2009,6 +2009,12 @@ export default function ContratsView() {
       {exercicePrimeCible && editing && (
         <ExercicePrimeModal
           contratId={editing.id}
+          contratEchu={(() => {
+            if (editing.statut !== "Actif" && editing.statut !== "En renouvellement") return true;
+            const [d, m, y] = editing.dateFin.split("/").map(Number);
+            const aujourdhui = new Date(); aujourdhui.setHours(0, 0, 0, 0);
+            return !!(d && m && y) && new Date(y, m - 1, d) < aujourdhui;
+          })()}
           populationContratId={editing.branche === "Assistance" && editing.contratMaladieLieId ? editing.contratMaladieLieId : editing.id}
           exercice={exercicePrimeCible}
           onClose={() => setExercicePrimeCible(null)}

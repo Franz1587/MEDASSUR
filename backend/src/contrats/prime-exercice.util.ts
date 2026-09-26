@@ -80,19 +80,24 @@ export interface RecalculPrime {
 // paramétrée ou si aucune population n'est catégorisée (prime saisie à la
 // main), ni si les effectifs n'ont pas changé.
 async function recalculerUnContrat(prisma: PrismaService, contratId: string, simulation: boolean): Promise<RecalculPrime | null> {
-  const c = await prisma.contrat.findUnique({ where: { id: contratId }, select: { id: true, numeroPolice: true, branche: true, contratMaladieLieId: true, exerciceNumero: true } });
+  const c = await prisma.contrat.findUnique({ where: { id: contratId }, select: { id: true, numeroPolice: true, branche: true, contratMaladieLieId: true, exerciceNumero: true, statut: true, dateFin: true } });
   if (!c) return null;
+  // Seul le DERNIER exercice du contrat est recalculé ; les exercices
+  // antérieurs se règlent via la fenêtre "Prime de l'exercice".
   const ex = await prisma.exercice.findFirst({ where: { contratId, numero: c.exerciceNumero } });
-  // Seul l'exercice EN COURS est recalculé : un exercice passé garde toute
-  // sa population (historique des statistiques), réglé via la fenêtre
-  // "Prime de l'exercice".
-  if (!ex || ex.statut !== "Actif") return null;
+  if (!ex) return null;
+  const echu = contratEchu(c);
   const unitaires = [ex.primeUnitaireAssurePrincipal, ex.primeUnitaireConjoint, ex.primeUnitaireEnfant].map((v) => Number(v ?? 0));
   if (!unitaires.some((u) => u > 0)) return null;
 
   const source = c.branche === "Assistance" && c.contratMaladieLieId ? c.contratMaladieLieId : c.id;
   const population = await reconstituerPopulation(prisma, source, ex.dateDebut, ex.dateFin);
-  // Règle utilisateur (2026-09) pour l'exercice en cours : "il faut ignorer
+  // Règles utilisateur (2026-09) :
+  //  - CONTRAT ÉCHU (expiré, résilié ou échéance dépassée) : "tout contrat
+  //    échu calcule la prime sur la base de toute sa population" — toute
+  //    personne présente sur la période compte en entier, sans prorata ;
+  //  - CONTRAT ACTIF : "le principe de prorata ne concerne que les contrats
+  //    actifs qui ont des assurés et ayants droit radiés ou retirés" — "il faut ignorer
   // les personnes retirées. Quand une personne est retirée à une période
   // bien précise de l'exercice, sa prime au prorata des jours qui restent à
   // couvrir est ristournée. Mais si on n'a pas la date exacte de son retrait
@@ -109,7 +114,7 @@ async function recalculerUnContrat(prisma: PrismaService, contratId: string, sim
   for (const p of population) {
     const t = (p.typeAssure ?? "").toUpperCase();
     if (t !== "AS" && t !== "CJ" && t !== "EF") continue;
-    if (p.statutPeriode === "Actif") {
+    if (echu || p.statutPeriode === "Actif") {
       tally[t]++;
       equivalents[t]++;
     } else if (p.statutPeriode === "Radié" && p.finPresence && debutEx && dureeEx > 0) {
@@ -138,6 +143,16 @@ async function recalculerUnContrat(prisma: PrismaService, contratId: string, sim
   if (inchange) return null;
   if (!simulation) await appliquerPrimeExercice(prisma, contratId, ex.numero, dto, calcule);
   return { contratId, numeroPolice: c.numeroPolice, exercice: ex.numero, effectifsAvant: avant, effectifsApres: tally, primeAvant: Number(ex.prime), primeApres: apres };
+}
+
+// Contrat échu : statut Expiré/Résilié (ou autre que Actif/En
+// renouvellement), ou date d'échéance déjà passée.
+export function contratEchu(c: { statut: string; dateFin: string }): boolean {
+  if (c.statut !== "Actif" && c.statut !== "En renouvellement") return true;
+  const fin = parseDateFr(c.dateFin);
+  if (!fin) return false;
+  const now = new Date();
+  return fin < new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
 // Recalcule le contrat ET les contrats d'Assistance qui partagent sa
