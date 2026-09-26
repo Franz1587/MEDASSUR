@@ -367,6 +367,7 @@ export class ContratsService {
     dto.compagnieId = imputationAgence.compagnieId ?? dto.compagnieId;
     dto.agenceId = imputationAgence.agenceId ?? undefined;
     const id = await this.genererIdContrat();
+    if (dto.nomCarteSante !== undefined) dto.nomCarteSante = dto.nomCarteSante.trim() || (null as unknown as undefined);
     const data = withComputedPrime(dto);
     const numeroPolice = dto.numeroPolice?.trim() || (await this.prochainNumeroPolice(dto.compagnieId));
     let contrat;
@@ -400,6 +401,9 @@ export class ContratsService {
       dto.agenceId = imputationAgence.agenceId ?? (null as unknown as undefined);
     }
     const infoImputation = imputationAgence ? { imputationAgence: { imputation: imputationAgence.imputation, avertissement: imputationAgence.avertissement } } : {};
+    // Nom sur la carte santé : effacé dans le formulaire = retour au nom du
+    // souscripteur (null), jamais une chaîne vide imprimée sur la carte.
+    if (dto.nomCarteSante !== undefined) dto.nomCarteSante = dto.nomCarteSante?.trim() || (null as unknown as undefined);
     const data = withComputedPrime(dto);
     try {
       // Correction de période (2026-09) — voir demande utilisateur : "si on

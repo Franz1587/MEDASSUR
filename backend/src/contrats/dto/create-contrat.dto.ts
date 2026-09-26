@@ -36,6 +36,12 @@ export class CreateContratDto {
   @IsString()
   numeroPolice?: string;
 
+  // Nom imprimé sur la carte santé (voir schema.prisma Contrat.nomCarteSante) —
+  // chaîne vide = retour au nom du souscripteur.
+  @IsOptional()
+  @IsString()
+  nomCarteSante?: string;
+
   // Bureau de rattachement (2026-09) — voir schema.prisma Contrat.agenceId :
   // "LA RUCHE a un bureau à Port-Gentil qui gère ses contrats de façon
   // autonome". Facultatif, aucun bureau particulier par défaut.

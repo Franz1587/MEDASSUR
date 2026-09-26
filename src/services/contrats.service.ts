@@ -13,6 +13,7 @@ export interface ApiContrat {
   prime: string | number;
   statut: string;
   numeroPolice?: string | null;
+  nomCarteSante?: string | null;
   client: { id: string; nom: string };
   compagnie: { nom: string };
   agenceId?: string | null;
@@ -111,6 +112,7 @@ export function mapContrat(c: ApiContrat): Contrat {
     prime: toNumber(c.prime),
     statut: c.statut,
     numeroPolice: c.numeroPolice ?? null,
+    nomCarteSante: c.nomCarteSante ?? null,
     jours: Number.isNaN(jr) ? "—" : jr < 0 ? "Échu" : `${jr} jours`,
     paysSouscription: c.paysSouscription ?? "",
     extensionsTerritorialite: c.extensionsTerritorialite ?? [],
@@ -177,6 +179,7 @@ export interface ContratUpsertInput {
   prime: number;
   statut: "Actif" | "En renouvellement" | "Expiré" | "Résilié";
   numeroPolice?: string;
+  nomCarteSante?: string;
   agenceId?: string;
   periodicite?: "Mensuel" | "Trimestriel" | "Semestriel" | "Annuel";
   paysSouscription?: string;

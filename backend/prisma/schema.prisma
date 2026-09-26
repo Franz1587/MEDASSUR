@@ -1151,6 +1151,11 @@ model Contrat {
   // bascule sur ce logiciel). Unique PAR compagnie, pas globalement — deux
   // compagnies différentes peuvent avoir des séries qui se recoupent.
   numeroPolice String?
+  // Nom imprimé sur la carte santé (2026-09) — voir demande utilisateur :
+  // libellé propre à CE contrat (ex. un collège ou une filiale) à la place
+  // du nom du souscripteur sur le champ "SOCIÉTÉ" des cartes (voir
+  // DocumentsService, rendu de la carte). Vide/null = nom du souscripteur.
+  nomCarteSante String?
 
   // Date de création réelle (2026-08) — absente jusqu'ici (seul Avenant
   // portait un createdAt), nécessaire pour dater l'ÉMISSION de l'affaire

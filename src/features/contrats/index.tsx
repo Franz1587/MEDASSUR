@@ -28,15 +28,15 @@ import {
 } from "@/services/contrats.service";
 import { getClients } from "@/services/clients.service";
 import { getCompagnies, getCompagniesAutoGestion } from "@/services/compagnies.service";
-import { getAgences } from "@/services/agences.service";
 import { getMonAbonnement } from "@/services/societes.service";
 import type { MonAbonnement } from "@/types/societes";
 import { getAssuresSante, createAssure, importPopulation, readPopulationFile, downloadPopulationTemplate, updateAssure, type ImportPopulationResult, type UpdateAssureInput } from "@/services/sante.service";
 import { getGarantieCatalogue } from "@/services/garantieCatalogue.service";
 import type { Contrat } from "@/types/contrats";
+import { getAgences } from "@/services/agences.service";
+import type { Agence } from "@/types/agences";
 import type { Client } from "@/types/clients";
 import type { Compagnie } from "@/types/compagnies";
-import type { Agence } from "@/types/agences";
 import type { AssureSante } from "@/types/sante";
 import type { GarantieCatalogueItem } from "@/types/garantieCatalogue";
 
@@ -160,6 +160,7 @@ function emptyForm(): ContratUpsertInput {
   return {
     clientId: "", compagnieId: "", branche: "Maladie", dateDebut: "", dateFin: "", prime: 0, statut: "Actif",
     numeroPolice: "",
+    nomCarteSante: "",
     agenceId: "",
     periodicite: "Annuel",
     produit: "MALADIE",
@@ -185,6 +186,7 @@ function contratToForm(c: Contrat, clients: Client[], compagnies: Compagnie[]): 
     dateDebut: c.dateDebut, dateFin: c.dateFin, prime: c.prime,
     statut: c.statut as ContratUpsertInput["statut"],
     numeroPolice: c.numeroPolice ?? "",
+    nomCarteSante: c.nomCarteSante ?? "",
     agenceId: c.agenceId ?? "",
     periodicite: (c.periodicite as ContratUpsertInput["periodicite"]) ?? "Annuel",
     produit: c.produit ?? "",
@@ -399,10 +401,6 @@ export default function ContratsView() {
   const [clients, setClients] = useState<Client[]>([]);
   const [compagnies, setCompagnies] = useState<Compagnie[]>([]);
   const [compagniesAutoGestion, setCompagniesAutoGestion] = useState<Compagnie[]>([]);
-  // Bureau de rattachement (2026-09) — voir demande utilisateur : "LA RUCHE
-  // a un bureau à Port-Gentil qui gère ses contrats de façon autonome" —
-  // agences paramétrées dans l'écran Agences (jamais une liste codée en dur).
-  const [agences, setAgences] = useState<Agence[]>([]);
   const [typeGestion, setTypeGestion] = useState<"Classique" | "AutoGestion">("Classique");
   // Type de société (2026-09) — voir demande utilisateur : "une compagnie
   // n'a pas besoin de choisir une compagnie sur ses contrats puisqu'elle
@@ -411,6 +409,11 @@ export default function ContratsView() {
   // le sélecteur Compagnie du formulaire ci-dessous se masque à sa place.
   const [moi, setMoi] = useState<MonAbonnement | null>(null);
   useEffect(() => { getMonAbonnement().then(setMoi).catch(() => undefined); }, []);
+  // Bureau de rattachement (2026-09) — voir demande utilisateur : "LA RUCHE
+  // a un bureau à Port-Gentil qui gère ses contrats de façon autonome" —
+  // agences paramétrées dans l'écran Agences (jamais une liste codée en dur).
+  const [agences, setAgences] = useState<Agence[]>([]);
+  useEffect(() => { getAgences().then(setAgences).catch(() => undefined); }, []);
   const [historiqueCompagnie, setHistoriqueCompagnie] = useState<ExerciceCompagnie[]>([]);
   // Correction manuelle d'un exercice (2026-08) — voir demande utilisateur :
   // "il peut arriver que les données de l'import de date d'un exercice ne
@@ -521,7 +524,6 @@ export default function ContratsView() {
     getCompagnies().then(setCompagnies);
     getCompagniesAutoGestion().then(setCompagniesAutoGestion);
     getGarantieCatalogue().then(setCatalogue);
-    getAgences().then(setAgences).catch(() => undefined);
   }, []);
 
   const rechercheNorm = rechercheContrat.trim().toLowerCase();
@@ -1288,6 +1290,11 @@ export default function ContratsView() {
                       <p className="text-[11px] text-muted-foreground mt-1">Suggéré automatiquement selon la compagnie — modifiable pour une reprise d'antériorité.</p>
                     </label>
                     <label className="block">
+                      <div className={labelCls}>Nom à afficher sur la carte santé</div>
+                      <input value={form.nomCarteSante ?? ""} onChange={(e) => setForm((v) => ({ ...v, nomCarteSante: e.target.value }))} className={fieldCls} placeholder="Par défaut : nom du souscripteur" />
+                      <p className="text-[11px] text-muted-foreground mt-1">Ce libellé est propre à ce contrat et sera imprimé sur les cartes santé.</p>
+                    </label>
+                    <div>
                       <div className={labelCls}>Agence</div>
                       <Combobox
                         options={agences.filter((a) => a.statut === "Actif" || a.id === form.agenceId)}
@@ -1298,7 +1305,7 @@ export default function ContratsView() {
                         placeholder="Rechercher…"
                       />
                       <p className="text-[11px] text-muted-foreground mt-1">Bureau qui gère ce contrat (ex. Port-Gentil) — facultatif. À l'enregistrement, la compagnie est corrigée vers sa déclinaison pour cette agence (ex. NSIA ASSURANCES POG).</p>
-                    </label>
+                    </div>
                     <label className="block">
                       <div className={labelCls}>Produit</div>
                       <input value={form.produit ?? ""} onChange={(e) => setForm((v) => ({ ...v, produit: e.target.value }))} className={fieldCls} placeholder="ex. PEC UPEGA COLLEGE 1" />
