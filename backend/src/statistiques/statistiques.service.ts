@@ -97,7 +97,7 @@ export class StatistiquesService {
       select: {
         date: true, montant: true, baseRemboursement: true, assureId: true, type: true, acteMedicalId: true, prestataire: true,
         assure: { select: { id: true, familleId: true, matricule: true, nom: true, prenom: true, typeAssure: true, sexe: true } },
-        prestataireRef: { select: { nom: true } },
+        prestataireRef: { select: { nom: true, type: true } },
       },
     });
     // Filtrage par période + collecte de racinesId en UN SEUL passage
@@ -144,7 +144,7 @@ export class StatistiquesService {
     const libelleParActeId = new Map(actes.map((a) => [a.id, a.libelle]));
     const garantiesContrat = contrat.garanties;
     const resoudreFamille = (p: (typeof lignes)[number]): string =>
-      resoudreRubriqueContrat(garantiesContrat, p, p.acteMedicalId ? acteInfoParActeId.get(p.acteMedicalId) : null);
+      resoudreRubriqueContrat(garantiesContrat, { type: p.type, prestataireType: p.prestataireRef?.type }, p.acteMedicalId ? acteInfoParActeId.get(p.acteMedicalId) : null);
     // Famille D'ACTES (2026-09) — voir demande utilisateur : "consommation
     // par famille des actes (exemple acte ORL, actes du cardiologue,
     // échographie...)" — ActeMedical.famille brut (le regroupement fin du

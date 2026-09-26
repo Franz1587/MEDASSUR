@@ -13,8 +13,9 @@ import { resoudreRubriqueContrat } from "../actes-medicaux/rubrique-contrat.util
 // souscripteur.
 export function resoudreCategorieConsommation(
   garanties: { categorie: string; libelle: string }[], type: string, acteInfo?: { famille: string; categorieGarantie: string | null } | null,
+  prestataireType?: string | null,
 ): string {
-  return resoudreRubriqueContrat(garanties, { type }, acteInfo);
+  return resoudreRubriqueContrat(garanties, { type, prestataireType }, acteInfo);
 }
 
 function parseDateFr(s?: string | null): Date | null {

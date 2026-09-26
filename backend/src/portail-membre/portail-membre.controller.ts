@@ -186,7 +186,7 @@ export class PortailMembreController {
       entree.total += montant;
       parBeneficiaireMap.set(l.assureId, entree);
 
-      const rubrique = resoudreCategorieConsommation(assure.contrat.garanties, l.type, l.acteMedical);
+      const rubrique = resoudreCategorieConsommation(assure.contrat.garanties, l.type, l.acteMedical, l.prestataireRef?.type);
       parRubriqueMap.set(rubrique, (parRubriqueMap.get(rubrique) ?? 0) + montant);
     }
 
@@ -253,7 +253,7 @@ export class PortailMembreController {
     const filtrees = modePaiement ? lignes.filter((l) => l.modePaiement === modePaiement) : lignes;
     const enrichies = filtrees.map((l) => ({
       ...l,
-      rubrique: resoudreCategorieConsommation(assure.contrat.garanties, l.type, l.acteMedical),
+      rubrique: resoudreCategorieConsommation(assure.contrat.garanties, l.type, l.acteMedical, l.prestataireRef?.type),
       exercice: resoudreExercice(assure.contrat.exercices, l.date),
       acteLibelle: l.acteMedical?.libelle ?? null,
       // acteFamille (2026-08) — voir demande utilisateur : "chaque fiche de

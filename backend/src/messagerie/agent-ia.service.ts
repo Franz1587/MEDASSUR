@@ -545,7 +545,7 @@ export class MessagerieAgentIaService {
           const entree = parBeneficiaireMap.get(l.assureId) ?? { nom: nomBeneficiaire, total: 0 };
           entree.total += montant;
           parBeneficiaireMap.set(l.assureId, entree);
-          const rubrique = resoudreCategorieConsommation(assure.contrat.garanties, l.type, l.acteMedical);
+          const rubrique = resoudreCategorieConsommation(assure.contrat.garanties, l.type, l.acteMedical, l.prestataireRef?.type);
           parRubriqueMap.set(rubrique, (parRubriqueMap.get(rubrique) ?? 0) + montant);
           const facture = l.factureId ? factureParId.get(l.factureId) : null;
           detail.push({ date: l.date, rubrique, beneficiaire: nomBeneficiaire, montant, referenceFacture: facture?.referenceFacture ?? null });

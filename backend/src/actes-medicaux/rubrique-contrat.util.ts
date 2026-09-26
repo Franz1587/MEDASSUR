@@ -67,9 +67,32 @@ export function normaliserRubrique(valeur: string): string {
   return trouvee ? trouvee.rubrique : valeur.trim();
 }
 
+// Spécialité du prestataire → rubrique (2026-09) — voir demande
+// utilisateur : "l'optique souvent traduit en frais d'optique ou verre et
+// monture n'apparaît pas dans la statistique de DGDI." Les fichiers repris
+// typent l'essentiel des soins d'un opticien ou d'un dentiste en "ACTES
+// AMBULATOIRES" (mesuré en prod : 1 477 lignes chez des Opticiens, 297 chez
+// des Cabinets Dentaires) — seule la SPÉCIALITÉ du prestataire porte alors
+// la vraie rubrique. Basé sur Prestataire.type (fiable), jamais sur le nom
+// ("CARREFOUR DE LA VISION" est un ophtalmologue : ses consultations
+// restent des Consultations).
+const RUBRIQUE_PAR_TYPE_PRESTATAIRE: Record<string, string> = {
+  Opticien: "Optique",
+  "Cabinet Dentaire": "Dentisterie",
+  "Centre de Kinésithérapie": "Kinésithérapie & Cure thermale",
+  Laboratoire: "Analyses Médicale",
+  "Centre d'Imagerie": "Imagerie",
+  Pharmacie: "Pharmacie",
+  "Dépôt pharmaceutique": "Pharmacie",
+};
+// Seules ces rubriques "fourre-tout" cèdent la place à la spécialité du
+// prestataire — une rubrique déjà précise (Hospitalisation, Pharmacie,
+// Imagerie chez un dentiste...) n'est jamais écrasée.
+const RUBRIQUES_GENERIQUES = new Set(["Ambulatoire", "Consultations", "Actes de Spécialités", "Petite Chirurgie/Soins", "Autre", "Non précisé"]);
+
 export function resoudreRubriqueContrat(
   garantiesContrat: { categorie: string }[],
-  ligne: { type: string },
+  ligne: { type: string; prestataireType?: string | null },
   acteInfo?: ActeInfoRubrique | null,
 ): string {
   // Garde "DIVERS" — un import d'historique en masse ("reprise
@@ -81,8 +104,10 @@ export function resoudreRubriqueContrat(
   // garde que portail-membre.util.ts historiquement, désormais partagée.
   const categorieActe = acteInfo && acteInfo.famille.trim().toUpperCase() !== "DIVERS" ? acteInfo.categorieGarantie : null;
   const candidat = (categorieActe ?? ligne.type ?? "").trim();
-  if (!candidat) return "Non précisé";
-  const rubrique = normaliserRubrique(candidat);
+  let rubrique = candidat ? normaliserRubrique(candidat) : "Non précisé";
+  const rubriquePrestataire = ligne.prestataireType ? RUBRIQUE_PAR_TYPE_PRESTATAIRE[ligne.prestataireType] : undefined;
+  if (rubriquePrestataire && RUBRIQUES_GENERIQUES.has(rubrique)) rubrique = rubriquePrestataire;
+  if (rubrique === "Non précisé") return rubrique;
 
   // Rubrique plafonnée (a besoin d'une ligne Garantie pour avoir un
   // taux/plafond défini) mais aucune ligne ne correspond sur ce contrat —

@@ -911,6 +911,7 @@ export class SanteService {
         factureId: true,
         assure: { select: { nom: true, prenom: true } },
         acteMedical: { select: { categorieGarantie: true, libelle: true, famille: true } },
+        prestataireRef: { select: { type: true } },
       },
     });
     // rubrique (2026-09) — voir demande utilisateur : "les statistiques
@@ -926,7 +927,7 @@ export class SanteService {
       ? await this.prisma.contrat.findMany({ where: { id: { in: contratIds } }, select: { id: true, garanties: { select: { categorie: true } } } })
       : [];
     const garantiesParContratId = new Map(contrats.map((c) => [c.id, c.garanties]));
-    return lignes.map((l) => ({ ...l, rubrique: resoudreRubriqueContrat(garantiesParContratId.get(l.contratId) ?? [], l, l.acteMedical) }));
+    return lignes.map((l) => ({ ...l, rubrique: resoudreRubriqueContrat(garantiesParContratId.get(l.contratId) ?? [], { type: l.type, prestataireType: l.prestataireRef?.type }, l.acteMedical) }));
   }
 
   // Vérifie l'enveloppe partagée d'une rubrique de garantie (ex: Dentisterie
