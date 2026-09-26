@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { ecouterRequetesEnVol, requetesEnVolActuelles } from "@/lib/http";
 import logoMark from "@/assets/logo-mark.png";
 
@@ -12,6 +12,12 @@ import logoMark from "@/assets/logo-mark.png";
 // population).
 const DELAI_AFFICHAGE_MS = 180;
 const DELAI_MASQUAGE_MS = 150;
+
+// Anneau de traits (style "spinner" classique) autour du logo : chaque trait
+// s'estompe à tour de rôle, décalé d'un cran, ce qui dessine une traîne
+// dégradée qui tourne dans le sens horaire.
+const NB_TRAITS = 24;
+const DUREE_TOUR_S = 1.2;
 
 // Overlay de chargement de page — unique, monté une seule fois à la racine
 // de l'app (voir App.tsx), piloté par le compteur RÉEL de lectures réseau
@@ -46,10 +52,19 @@ export function PageLoader() {
       className={`page-loader-overlay ${visible ? "page-loader-overlay--visible" : ""}`}
     >
       <div className="page-loader-card">
-        <img src={logoMark} alt="" className="page-loader-mark" />
-        <div className="page-loader-track">
-          <span className="page-loader-bar page-loader-bar-1" />
-          <span className="page-loader-bar page-loader-bar-2" />
+        <div className="page-loader-spinner">
+          {Array.from({ length: NB_TRAITS }, (_, i) => (
+            <span
+              key={i}
+              className="page-loader-tick"
+              style={{
+                transform: `rotate(${(i * 360) / NB_TRAITS}deg)`,
+                animationDelay: `${((i - NB_TRAITS) * DUREE_TOUR_S) / NB_TRAITS}s`,
+                "--tick-mix": `${Math.round((i / (NB_TRAITS - 1)) * 100)}%`,
+              } as CSSProperties}
+            />
+          ))}
+          <img src={logoMark} alt="" className="page-loader-mark" />
         </div>
         <p className="page-loader-caption">Chargement des données…</p>
       </div>

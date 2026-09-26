@@ -558,6 +558,28 @@
   transform: translateY(0) scale(1);
 }
 
+.page-loader-spinner {
+  position: relative;
+  width: 124px;
+  height: 124px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-loader-tick {
+  position: absolute;
+  top: 0;
+  left: calc(50% - 2.5px);
+  width: 5px;
+  height: 22px;
+  border-radius: 1.5px;
+  transform-origin: 50% 62px;
+  background: color-mix(in srgb, var(--accent) var(--tick-mix, 0%), var(--primary));
+  opacity: 0.12;
+  animation: pageLoaderTick 1.2s linear infinite;
+}
+
 .page-loader-mark {
   width: 46px;
   height: 46px;
@@ -567,31 +589,14 @@
   filter: drop-shadow(0 4px 10px rgba(13, 115, 191, 0.35));
 }
 
-.page-loader-track {
-  position: relative;
-  width: 230px;
-  height: 6px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--secondary) 75%, white);
+@keyframes pageLoaderTick {
+  0% { opacity: 1; }
+  100% { opacity: 0.12; }
 }
 
-.page-loader-bar {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--primary), var(--accent));
-  box-shadow: 0 0 10px color-mix(in srgb, var(--primary) 55%, transparent);
-}
-
-.page-loader-bar-1 {
-  animation: pageLoaderSweep1 2.1s cubic-bezier(0.65, 0.815, 0.735, 0.395) infinite;
-}
-
-.page-loader-bar-2 {
-  animation: pageLoaderSweep2 2.1s cubic-bezier(0.165, 0.84, 0.44, 1) infinite;
-  animation-delay: 1.15s;
+@media (prefers-reduced-motion: reduce) {
+  .page-loader-tick { animation-duration: 2.4s; }
+  .page-loader-mark { animation: none; }
 }
 
 .page-loader-caption {
@@ -604,18 +609,6 @@
 @keyframes pageLoaderPulse {
   0%, 100% { transform: scale(1); opacity: 0.88; }
   50% { transform: scale(1.09); opacity: 1; }
-}
-
-@keyframes pageLoaderSweep1 {
-  0% { left: -35%; right: 100%; }
-  60% { left: 100%; right: -90%; }
-  100% { left: 100%; right: -90%; }
-}
-
-@keyframes pageLoaderSweep2 {
-  0% { left: -200%; right: 100%; }
-  60% { left: 107%; right: -8%; }
-  100% { left: 107%; right: -8%; }
 }
 
 @media (max-width: 768px) {
