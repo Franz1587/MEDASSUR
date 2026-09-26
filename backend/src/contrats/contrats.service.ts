@@ -640,20 +640,20 @@ export class ContratsService {
   // Voir contrats.controller recalculerPrimes.
   async recalculerPrimesTousContrats(appliquer: boolean) {
     const contrats = await this.prisma.contrat.findMany({ where: { estTest: false }, select: { id: true } });
-    const lignes = await recalculerPrimeSelonPopulation(this.prisma, contrats.map((c) => c.id), !appliquer);
+    const lignes = await recalculerPrimeSelonPopulation(this.prisma, contrats.map((c) => c.id), !appliquer, { inclurePasses: true, repriseDepuisActif: true });
     return { appliquer, total: lignes.length, lignes };
   }
 
   async mettreAJourPrimeExercice(contratId: string, numero: number, dto: UpdateExercicePrimeDto) {
-    const contrat = await this.findOne(contratId);
+    await this.findOne(contratId);
     const cible = await this.prisma.exercice.findFirst({ where: { contratId, numero } });
     if (!cible) throw new NotFoundException(`Exercice n°${numero} introuvable pour ce contrat.`);
     // Écriture partagée avec le recalcul automatique (voir prime-exercice.util.ts).
     await appliquerPrimeExercice(this.prisma, contratId, numero, dto);
-    // Dernier exercice du contrat : règle échu (toute la population) / actif
-    // (prorata des retirés datés) appliquée aussitôt — voir
-    // prime-exercice.util.ts ; sans effet si la population n'est pas catégorisée.
-    if (numero === contrat.exerciceNumero) await recalculerPrimeSelonPopulation(this.prisma, [contratId]);
+    // Population réelle de l'exercice (règles échu/actif/passé) et surprime
+    // d'âge appliquées aussitôt — voir prime-exercice.util.ts ; sans effet
+    // si la période n'a pas de population catégorisée (saisie manuelle).
+    await recalculerPrimeSelonPopulation(this.prisma, [contratId], false, { numeros: [numero] });
     return this.historiqueCompagnie(contratId);
   }
 

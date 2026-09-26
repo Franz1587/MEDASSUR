@@ -41,7 +41,7 @@ import type { AssureSante } from "@/types/sante";
 import type { GarantieCatalogueItem } from "@/types/garantieCatalogue";
 
 import {
-  CalculPrimeSection, calculerPrime, TAUX_TAXE_GABON, primeUnitairesAvecSurprime, tallyByType,
+  CalculPrimeSection, calculerPrime, TAUX_TAXE_GABON, tallyByType,
   type PersonneAvecAge,
 } from "@/features/contrats/CalculPrimeSection";
 import { numeroPolice } from "@/lib/police";
@@ -465,7 +465,9 @@ export default function ContratsView() {
   const [importSearch, setImportSearch] = useState("");
   const [importRejected, setImportRejected] = useState<ImportPopulationResult["rejected"]>([]);
   const [manualPopulationEntry, setManualPopulationEntry] = useState(false);
-  const [appliquerSurprimeAge, setAppliquerSurprimeAge] = useState(false);
+  // Surprime d'âge toujours appliquée (2026-09) — voir demande utilisateur :
+  // "Il faut appliquer les surprimes d'âge."
+  const appliquerSurprimeAge = true;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Édition d'un assuré/ayant droit depuis la liste "population identique
@@ -607,7 +609,6 @@ export default function ContratsView() {
     setImportSearch("");
     setImportRejected([]);
     setManualPopulationEntry(false);
-    setAppliquerSurprimeAge(false);
     setTypeGestion("Classique");
     setHistoriqueCompagnie([]);
     setFormError(null);
@@ -638,7 +639,6 @@ export default function ContratsView() {
     setImportSearch("");
     setImportRejected([]);
     setManualPopulationEntry(false);
-    setAppliquerSurprimeAge(false);
     setFormError(null);
     setActiveTab("general");
     setShowCreate(true);
@@ -802,6 +802,7 @@ export default function ContratsView() {
     actif: appliquerSurprimeAge,
     grille: selectedCompagnie?.surprimesAge ?? [],
     population: populationAvecAge,
+    dateReference: form.dateDebut,
   };
 
   const toggleExtension = (ext: string) => {
@@ -906,7 +907,6 @@ export default function ContratsView() {
       setSubmitting(true);
       const payload: ContratUpsertInput = {
         ...form,
-        ...(appliquerSurprimeAge ? primeUnitairesAvecSurprime(form, surprimeAgeOptions) : {}),
         prime: calc.primeTotaleTTC > 0 ? calc.primeTotaleTTC : form.prime,
       };
       const contrat = editing ? await updateContrat(editing.id, payload) : await createContrat(payload);
@@ -1306,6 +1306,24 @@ export default function ContratsView() {
                         placeholder="Rechercher…"
                       />
                       <p className="text-[11px] text-muted-foreground mt-1">Bureau qui gère ce contrat (ex. Port-Gentil) — facultatif. À l'enregistrement, la compagnie est corrigée vers sa déclinaison pour cette agence (ex. NSIA ASSURANCES POG).</p>
+                    </div>
+                    <div className="md:col-span-2 rounded-lg border border-border px-3.5 py-3">
+                      <div className={labelCls}>Tranches d'âge pour bénéficier de l'assurance</div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
+                        <label className="block">
+                          <div className="text-[11.5px] text-muted-foreground mb-1">Enfant : de 0 à … ans</div>
+                          <input type="number" min={0} value={form.limiteAgeEnfant ?? 21} onChange={(e) => setForm((v) => ({ ...v, limiteAgeEnfant: Number(e.target.value) }))} className={fieldCls} />
+                        </label>
+                        <label className="block">
+                          <div className="text-[11.5px] text-muted-foreground mb-1" title="Ne s'applique qu'aux enfants marqués « scolarisé » sur leur fiche — sinon la limite enfant reste la règle.">Enfant scolarisé : jusqu'à … ans</div>
+                          <input type="number" min={0} value={form.limiteAgeEnfantScolarise ?? 28} onChange={(e) => setForm((v) => ({ ...v, limiteAgeEnfantScolarise: Number(e.target.value) }))} className={fieldCls} />
+                        </label>
+                        <label className="block">
+                          <div className="text-[11.5px] text-muted-foreground mb-1">Adulte (assuré, conjoint) : de 0 à … ans</div>
+                          <input type="number" min={0} value={form.limiteAgeAdulte ?? 65} onChange={(e) => setForm((v) => ({ ...v, limiteAgeAdulte: Number(e.target.value) }))} className={fieldCls} />
+                        </label>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-1.5">Propres à ce contrat : au-delà, une personne ne peut pas être incorporée ni importée.</p>
                     </div>
                     <label className="block">
                       <div className={labelCls}>Produit</div>
@@ -1746,7 +1764,6 @@ export default function ContratsView() {
                   accessoiresTranches={selectedCompagnie?.accessoires}
                   surprimeAge={{
                     actif: appliquerSurprimeAge,
-                    onToggle: () => setAppliquerSurprimeAge((v) => !v),
                     disabled: !selectedCompagnie || selectedCompagnie.surprimesAge.length === 0 || populationAvecAge.length === 0,
                     raison: !selectedCompagnie
                       ? "Sélectionnez une compagnie (onglet Informations générales) pour activer la surprime d'âge."
@@ -1764,12 +1781,6 @@ export default function ContratsView() {
                 >
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <label className="block"><div className={labelCls}>Taux territorialité (%)</div><input type="number" step="0.1" value={form.tauxTerritorialite ?? 0} onChange={(e) => setForm((v) => ({ ...v, tauxTerritorialite: Number(e.target.value) }))} className={fieldCls} /></label>
-                    <label className="block"><div className={labelCls}>Limite âge adulte</div><input type="number" value={form.limiteAgeAdulte ?? 0} onChange={(e) => setForm((v) => ({ ...v, limiteAgeAdulte: Number(e.target.value) }))} className={fieldCls} /></label>
-                    <label className="block"><div className={labelCls}>Limite âge enfant</div><input type="number" value={form.limiteAgeEnfant ?? 0} onChange={(e) => setForm((v) => ({ ...v, limiteAgeEnfant: Number(e.target.value) }))} className={fieldCls} /></label>
-                    <label className="block">
-                      <div className={labelCls} title="Ne s'applique qu'aux enfants marqués « scolarisé » sur leur fiche — sinon la limite âge enfant ci-dessus reste la règle.">Limite âge enfant scolarisé</div>
-                      <input type="number" value={form.limiteAgeEnfantScolarise ?? 0} onChange={(e) => setForm((v) => ({ ...v, limiteAgeEnfantScolarise: Number(e.target.value) }))} className={fieldCls} />
-                    </label>
                     <label className="block"><div className={labelCls}>Limite personnes/famille</div><input type="number" value={form.limitePersFamille ?? 0} onChange={(e) => setForm((v) => ({ ...v, limitePersFamille: Number(e.target.value) }))} className={fieldCls} /></label>
                     <label className="block"><div className={labelCls}>Plafond / Adhérent (FCFA)</div><input type="number" value={form.plafondAdherent ?? ""} onChange={(e) => setForm((v) => ({ ...v, plafondAdherent: e.target.value ? Number(e.target.value) : undefined }))} className={fieldCls} /></label>
                     <label className="block"><div className={labelCls}>Plafond / Famille (FCFA)</div><input type="number" value={form.plafondFamille ?? ""} onChange={(e) => setForm((v) => ({ ...v, plafondFamille: e.target.value ? Number(e.target.value) : undefined }))} className={fieldCls} /></label>
@@ -2009,6 +2020,7 @@ export default function ContratsView() {
       {exercicePrimeCible && editing && (
         <ExercicePrimeModal
           contratId={editing.id}
+          grilleSurprimeAge={selectedCompagnie?.surprimesAge ?? []}
           contratEchu={(() => {
             if (editing.statut !== "Actif" && editing.statut !== "En renouvellement") return true;
             const [d, m, y] = editing.dateFin.split("/").map(Number);

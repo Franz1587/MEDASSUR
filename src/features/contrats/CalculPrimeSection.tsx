@@ -1,6 +1,6 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { fmt } from "@/lib/format";
-import { calculerAge } from "@/lib/age";
+import { calculerAge, ageALaDate } from "@/lib/age";
 
 export const TAUX_TAXE_GABON = 0.08;
 
@@ -83,6 +83,9 @@ export interface SurprimeAgeOptions {
   actif: boolean;
   grille: SurprimeAgeTranche[];
   population: PersonneAvecAge[];
+  // Date JJ/MM/AAAA à laquelle l'âge est calculé (début de l'exercice) —
+  // même règle que le serveur (backend prime-exercice.util.ts).
+  dateReference?: string;
 }
 
 export function tauxSurprimeAge(age: number | null, grille: SurprimeAgeTranche[]): number {
@@ -100,7 +103,7 @@ export function tauxSurprimeAge(age: number | null, grille: SurprimeAgeTranche[]
 function montantCategorie(nombre: number, primeUnitaire: number, categorie: CategoriePopulation, surprime?: SurprimeAgeOptions): number {
   if (!surprime?.actif || surprime.grille.length === 0) return nombre * primeUnitaire;
   const personnesConnues = surprime.population.filter((p) => p.categorie === categorie).slice(0, nombre);
-  const totalConnu = personnesConnues.reduce((sum, p) => sum + primeUnitaire * (1 + tauxSurprimeAge(calculerAge(p.dateNaissance), surprime.grille) / 100), 0);
+  const totalConnu = personnesConnues.reduce((sum, p) => sum + primeUnitaire * (1 + tauxSurprimeAge(ageALaDate(p.dateNaissance, surprime.dateReference), surprime.grille) / 100), 0);
   const inconnues = Math.max(0, nombre - personnesConnues.length);
   return totalConnu + inconnues * primeUnitaire;
 }
@@ -198,7 +201,10 @@ export function CalculPrimeSection<T extends PrimeChampsState>({
   // expliquent pourquoi elle est grisée plutôt que de la faire disparaître
   // sans explication — compagnie non sélectionnée, grille non paramétrée,
   // ou population sans date de naissance exploitable).
-  surprimeAge?: { actif: boolean; onToggle: () => void; disabled: boolean; raison?: string };
+  // Surprime d'âge (2026-09) — voir demande utilisateur : "Il faut appliquer
+  // les surprimes d'âge." Toujours appliquée dès que la compagnie a une
+  // grille : plus de case à cocher.
+  surprimeAge?: { actif: boolean; disabled: boolean; raison?: string };
 }) {
   const suggestionAccessoires = accessoiresTranches && calc.primeNette > 0
     ? trancheAccessoiresSuggeree(calc.primeNette, accessoiresTranches)
@@ -279,10 +285,9 @@ export function CalculPrimeSection<T extends PrimeChampsState>({
       {surprimeAge && (
         <div className="rounded-lg border border-border px-3 py-2.5 space-y-1.5">
           <div className="flex items-center justify-between gap-3">
-            <label className={`flex items-center gap-2 text-[13px] text-foreground ${surprimeAge.disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
-              <input type="checkbox" checked={surprimeAge.actif} disabled={surprimeAge.disabled} onChange={surprimeAge.onToggle} className="w-4 h-4 accent-primary" />
-              Appliquer la surprime d'âge (grille de la compagnie)
-            </label>
+            <p className={`text-[13px] text-foreground ${surprimeAge.disabled ? "opacity-60" : ""}`}>
+              Surprime d'âge (grille de la compagnie){surprimeAge.disabled ? "" : " — appliquée automatiquement"}
+            </p>
             {surprimeAge.actif && calc.montantSurprimeAge > 0 && (
               <span className="text-[12px] font-semibold text-amber-500 med-num whitespace-nowrap">+{fmt(calc.montantSurprimeAge)}</span>
             )}

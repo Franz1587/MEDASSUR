@@ -3,7 +3,7 @@ import { Calculator } from "lucide-react";
 import { toast } from "sonner";
 import { toNumber } from "@/lib/decimal";
 import { mettreAJourPrimeExercice, getPopulationHistorique, type ExerciceCompagnie, type ExercicePrimeInput } from "@/services/contrats.service";
-import { CalculPrimeSection, calculerPrime, tallyByType, type PrimeCalcState } from "@/features/contrats/CalculPrimeSection";
+import { CalculPrimeSection, calculerPrime, tallyByType, type PrimeCalcState, type PersonneAvecAge, type SurprimeAgeTranche } from "@/features/contrats/CalculPrimeSection";
 
 interface Props {
   contratId: string;
@@ -11,6 +11,10 @@ interface Props {
   // population de la période compte, sans prorata — voir contratEchu
   // dans backend/src/contrats/prime-exercice.util.ts.
   contratEchu?: boolean;
+  // Grille de surprimes d'âge de la compagnie (2026-09) — voir demande
+  // utilisateur : "Il faut appliquer les surprimes d'âge." Âge calculé au
+  // début de l'exercice, comme le serveur (prime-exercice.util.ts).
+  grilleSurprimeAge?: SurprimeAgeTranche[];
   // Id du contrat dont on doit reprendre la population pour ce calcul de
   // prime — le contrat lui-même, SAUF pour une Assistance liée à un
   // contrat Maladie (voir demande utilisateur : "il faut que la
@@ -41,7 +45,7 @@ const num = (v: string | number | null | undefined): number | undefined => (v ==
 // (populationLock) que ceux-ci, mais la population vient ici de
 // `reconstituerPopulation` (voir getPopulationHistorique) sur les dates
 // DE CET EXERCICE précis plutôt que de la population actuelle du contrat.
-export default function ExercicePrimeModal({ contratId, contratEchu = false, populationContratId, exercice, onClose, onDone }: Props) {
+export default function ExercicePrimeModal({ contratId, contratEchu = false, grilleSurprimeAge = [], populationContratId, exercice, onClose, onDone }: Props) {
   const [form, setForm] = useState<Form>({
     dateDebut: exercice.dateDebut, dateFin: exercice.dateFin,
     nombreAssuresPrincipaux: exercice.nombreAssuresPrincipaux ?? undefined,
@@ -61,6 +65,7 @@ export default function ExercicePrimeModal({ contratId, contratEchu = false, pop
   const [error, setError] = useState<string | null>(null);
   const [chargementPopulation, setChargementPopulation] = useState(true);
   const [tally, setTally] = useState({ AS: 0, CJ: 0, EF: 0 });
+  const [personnes, setPersonnes] = useState<PersonneAvecAge[]>([]);
   const [manualPopulationEntry, setManualPopulationEntry] = useState(false);
 
   useEffect(() => {
@@ -71,7 +76,13 @@ export default function ExercicePrimeModal({ contratId, contratEchu = false, pop
       // ajoutés au prorata par le serveur à l'enregistrement, les autres
       // ignorés) ; contrat échu ou exercice passé → toute la population de
       // la période, sans prorata.
-      .then((population) => setTally(tallyByType(!contratEchu && exercice.statut === "Actif" ? population.filter((p) => p.statut === "Actif") : population)))
+      .then((population) => {
+        const comptees = !contratEchu && exercice.statut === "Actif" ? population.filter((p) => p.statut === "Actif") : population;
+        setTally(tallyByType(comptees));
+        setPersonnes(comptees
+          .filter((p) => p.typeAssure === "AS" || p.typeAssure === "CJ" || p.typeAssure === "EF")
+          .map((p) => ({ categorie: p.typeAssure as "AS" | "CJ" | "EF", dateNaissance: p.dateNaissance })));
+      })
       .finally(() => setChargementPopulation(false));
   }, [contratId, contratEchu, populationContratId, exercice.dateDebut, exercice.dateFin, exercice.statut]);
 
@@ -87,7 +98,9 @@ export default function ExercicePrimeModal({ contratId, contratEchu = false, pop
     );
   }, [populationSourceIsAuto, tally]);
 
-  const calc = calculerPrime(form as PrimeCalcState);
+  const calc = calculerPrime(form as PrimeCalcState, {
+    actif: grilleSurprimeAge.length > 0, grille: grilleSurprimeAge, population: personnes, dateReference: exercice.dateDebut,
+  });
 
   const handleSubmit = async () => {
     try {
@@ -124,6 +137,11 @@ export default function ExercicePrimeModal({ contratId, contratEchu = false, pop
               form={form}
               setForm={setForm}
               calc={calc}
+              surprimeAge={{
+                actif: grilleSurprimeAge.length > 0,
+                disabled: grilleSurprimeAge.length === 0,
+                raison: grilleSurprimeAge.length === 0 ? "Cette compagnie n'a pas de grille de surprimes d'âge paramétrée (fiche Compagnie)." : undefined,
+              }}
               populationLock={hasCategorizedPopulation ? {
                 computedAS: tally.AS, computedCJ: tally.CJ, computedEF: tally.EF,
                 manualEntry: manualPopulationEntry,
