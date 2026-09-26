@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router";
 import { InternalNavigationProvider } from "@/navigation/InternalNavigationContext";
+import { PageLoader } from "@/components/shared/PageLoader";
 import SanteAdminConsole from "@/features/sante/SanteAdminConsole";
 import { useAuth } from "@/auth/AuthContext";
 import { AssistanceBanner } from "@/auth/AssistanceBanner";
@@ -48,6 +49,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <InternalNavigationProvider>
+        <PageLoader />
         <AssistanceBanner />
         <Routes>
           <Route path="/login" element={<LoginRoute />} />

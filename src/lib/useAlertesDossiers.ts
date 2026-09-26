@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { jouerSonNotification } from "@/lib/sonNotification";
+import { runSilently } from "@/lib/http";
 
 // Bulles + son de relance, généralisées à tout "dossier" avec une notion de
 // prise en charge (2026-09) — voir demande utilisateur : "étendre le fait
@@ -59,7 +60,10 @@ export function useAlertesDossiers({ recuperer, labelNouveau, labelRelance, onOu
       enCours = true;
       let dossiers: DossierAlertable[];
       try {
-        dossiers = await recupererRef.current();
+        // Veille de fond (voir demande utilisateur d'origine) — ne doit
+        // jamais déclencher l'overlay de chargement plein écran (PageLoader),
+        // sans quoi il clignoterait toutes les 20s même page déjà affichée.
+        dossiers = await runSilently(() => recupererRef.current());
       } catch {
         enCours = false;
         return; // silencieux — un échec réseau ponctuel ne doit jamais spammer d'erreur

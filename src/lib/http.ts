@@ -35,62 +35,103 @@ export function getAccessToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
+// Compteur global de lectures réseau en vol (2026-09) — voir demande
+// utilisateur : "une page transparente avec une barre de chargement de
+// données" tant que les données de la page ne sont pas encore affichées.
+// PageLoader.tsx s'y abonne pour savoir quand afficher/masquer l'overlay,
+// SANS qu'aucune page n'ait à s'en soucier explicitement : chaque lecture
+// (`http.get`) compte automatiquement, via ce point d'entrée UNIQUE que
+// toutes les pages traversent déjà. `runSilently` exclut du compte les
+// requêtes de fond qui ne doivent JAMAIS déclencher l'overlay plein écran
+// (badges notifications/messagerie, veille de nouveaux dossiers, sondage du
+// QR de signature électronique...) — sans quoi l'overlay clignoterait toutes
+// les 15-20s même quand l'utilisateur ne fait que consulter une page déjà
+// chargée.
+type EcouteurRequetes = () => void;
+let requetesEnVol = 0;
+let profondeurSilencieuse = 0;
+const ecouteursRequetes = new Set<EcouteurRequetes>();
+
+function notifierRequetes() {
+  ecouteursRequetes.forEach((e) => e());
+}
+
+export function ecouterRequetesEnVol(ecouteur: EcouteurRequetes): () => void {
+  ecouteursRequetes.add(ecouteur);
+  return () => ecouteursRequetes.delete(ecouteur);
+}
+
+export function requetesEnVolActuelles(): number {
+  return requetesEnVol;
+}
+
+export function runSilently<T>(fn: () => Promise<T>): Promise<T> {
+  profondeurSilencieuse++;
+  return fn().finally(() => { profondeurSilencieuse--; });
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getAccessToken();
   const lecture = !init?.method || init.method === "GET";
-  let res: Response;
+  const compteRequete = lecture && profondeurSilencieuse === 0;
+  if (compteRequete) { requetesEnVol++; notifierRequetes(); }
   try {
-    res = await fetch(`${API_URL}${path}`, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...init?.headers,
-      },
-    });
-  } catch (err) {
-    // Erreur RÉSEAU (pas de connexion) — distincte d'un rejet HTTP (4xx/5xx)
-    // traité plus bas. Sert la dernière réponse connue pour TOUTE lecture
-    // (ERP interne inclus — une lecture est sans risque, contrairement à une
-    // écriture, restée elle strictement limitée aux portails externes via
-    // ecritureHorsLigne/PREFIXES_HORS_LIGNE ci-dessous). Même principe que
-    // mobile/src/api/http.ts, qui met déjà tout GET en cache sans distinction.
-    if (lecture) {
-      const encache = lireCache<T>(path);
-      if (encache) return encache.data;
+    let res: Response;
+    try {
+      res = await fetch(`${API_URL}${path}`, {
+        ...init,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...init?.headers,
+        },
+      });
+    } catch (err) {
+      // Erreur RÉSEAU (pas de connexion) — distincte d'un rejet HTTP (4xx/5xx)
+      // traité plus bas. Sert la dernière réponse connue pour TOUTE lecture
+      // (ERP interne inclus — une lecture est sans risque, contrairement à une
+      // écriture, restée elle strictement limitée aux portails externes via
+      // ecritureHorsLigne/PREFIXES_HORS_LIGNE ci-dessous). Même principe que
+      // mobile/src/api/http.ts, qui met déjà tout GET en cache sans distinction.
+      if (lecture) {
+        const encache = lireCache<T>(path);
+        if (encache) return encache.data;
+      }
+      throw err;
     }
-    throw err;
-  }
-  if (!res.ok) {
-    // Le token JWT expire (8h, voir auth.module.ts) sans qu'aucune requête
-    // n'ait échoué entre-temps pour le signaler à l'utilisateur — sans ça,
-    // l'app reste affichée avec des données déjà chargées pendant que
-    // chaque nouvelle action échoue silencieusement en 401. On prévient
-    // l'AuthContext (voir son écouteur "medassur:unauthorized") pour qu'il
-    // déconnecte proprement et renvoie vers l'écran de connexion.
-    if (res.status === 401 && path !== "/auth/login") {
-      window.dispatchEvent(new Event("medassur:unauthorized"));
+    if (!res.ok) {
+      // Le token JWT expire (8h, voir auth.module.ts) sans qu'aucune requête
+      // n'ait échoué entre-temps pour le signaler à l'utilisateur — sans ça,
+      // l'app reste affichée avec des données déjà chargées pendant que
+      // chaque nouvelle action échoue silencieusement en 401. On prévient
+      // l'AuthContext (voir son écouteur "medassur:unauthorized") pour qu'il
+      // déconnecte proprement et renvoie vers l'écran de connexion.
+      if (res.status === 401 && path !== "/auth/login") {
+        window.dispatchEvent(new Event("medassur:unauthorized"));
+      }
+      const bodyText = await res.text();
+      // status/body attachés à l'erreur (2026-08) — voir demande utilisateur :
+      // "contrôleur de demande et de saisie de prise en charge... bloquer et
+      // signaler qu'il y a déjà une demande en cours." Un appelant qui a
+      // besoin de RÉAGIR précisément à une erreur (409 doublon, ex.) ne peut
+      // pas se contenter du message texte concaténé ci-dessous — il lui faut
+      // le code HTTP et le corps JSON structurés. Reste rétro-compatible :
+      // .message garde exactement le même format qu'avant pour tout le code
+      // existant qui fait juste `toast.error(e.message)`.
+      let corpsJson: unknown;
+      try { corpsJson = JSON.parse(bodyText); } catch { /* réponse non-JSON, corpsJson reste undefined */ }
+      const erreur = new Error(`${init?.method ?? "GET"} ${path} failed (${res.status}): ${bodyText}`) as Error & { status?: number; body?: unknown };
+      erreur.status = res.status;
+      erreur.body = corpsJson;
+      throw erreur;
     }
-    const bodyText = await res.text();
-    // status/body attachés à l'erreur (2026-08) — voir demande utilisateur :
-    // "contrôleur de demande et de saisie de prise en charge... bloquer et
-    // signaler qu'il y a déjà une demande en cours." Un appelant qui a
-    // besoin de RÉAGIR précisément à une erreur (409 doublon, ex.) ne peut
-    // pas se contenter du message texte concaténé ci-dessous — il lui faut
-    // le code HTTP et le corps JSON structurés. Reste rétro-compatible :
-    // .message garde exactement le même format qu'avant pour tout le code
-    // existant qui fait juste `toast.error(e.message)`.
-    let corpsJson: unknown;
-    try { corpsJson = JSON.parse(bodyText); } catch { /* réponse non-JSON, corpsJson reste undefined */ }
-    const erreur = new Error(`${init?.method ?? "GET"} ${path} failed (${res.status}): ${bodyText}`) as Error & { status?: number; body?: unknown };
-    erreur.status = res.status;
-    erreur.body = corpsJson;
-    throw erreur;
+    if (res.status === 204) return undefined as T;
+    const donnees = (await res.json()) as T;
+    if (lecture) ecrireCache(path, donnees);
+    return donnees;
+  } finally {
+    if (compteRequete) { requetesEnVol--; notifierRequetes(); }
   }
-  if (res.status === 204) return undefined as T;
-  const donnees = (await res.json()) as T;
-  if (lecture) ecrireCache(path, donnees);
-  return donnees;
 }
 
 // Écriture "tolérante hors-ligne" — voir mobile/src/api/http.ts (postOffline),

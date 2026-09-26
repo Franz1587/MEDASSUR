@@ -6,6 +6,7 @@ import {
   type JetonSignatureQr,
 } from "@/services/maSignature.service";
 import { getUser, uploadUserSignature, deleteUserSignature, genererQrSignatureUtilisateur } from "@/services/admin.service";
+import { runSilently } from "@/lib/http";
 
 interface SignatureManagerProps {
   // Mode admin (2026-09) — voir demande utilisateur : "les options qui
@@ -82,7 +83,10 @@ export function SignatureManager({ userId, nom }: SignatureManagerProps = {}) {
       setJeton(j);
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = setInterval(async () => {
-        const { signe } = await statutJetonSignature(j.token).catch(() => ({ signe: false }));
+        // Sondage de fond en attendant la signature depuis le téléphone —
+        // jamais l'overlay de chargement plein écran (PageLoader), la
+        // modale QR affiche déjà son propre état d'attente.
+        const { signe } = await runSilently(() => statutJetonSignature(j.token)).catch(() => ({ signe: false }));
         if (signe) {
           if (pollRef.current) clearInterval(pollRef.current);
           setJeton(null);

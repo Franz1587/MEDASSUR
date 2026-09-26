@@ -15,6 +15,7 @@ import { BackButton } from "@/components/shared/BackButton";
 import { SignatureManager } from "@/components/shared/SignatureManager";
 import { getNotifications, marquerNotificationLue, marquerToutesNotificationsLues } from "@/services/notifications.service";
 import { getNonLus as getMessagerieNonLus } from "@/services/messagerie.service";
+import { runSilently } from "@/lib/http";
 import type { AppNotification } from "@/types/notifications";
 import logoMark from "@/assets/logo-mark.png";
 
@@ -259,14 +260,16 @@ export function AdminShell({
   const [messagerieNonLus, setMessagerieNonLus] = useState(0);
 
   useEffect(() => {
-    const refresh = () => getNotifications().then(setNotifications).catch(() => undefined);
+    // Badge de fond (compteur non-lus) — jamais l'overlay de chargement
+    // plein écran (PageLoader), ni au premier chargement ni au sondage.
+    const refresh = () => runSilently(() => getNotifications()).then(setNotifications).catch(() => undefined);
     refresh();
     const id = setInterval(refresh, NOTIFICATIONS_POLL_MS);
     return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
-    const refresh = () => getMessagerieNonLus().then(setMessagerieNonLus).catch(() => undefined);
+    const refresh = () => runSilently(() => getMessagerieNonLus()).then(setMessagerieNonLus).catch(() => undefined);
     refresh();
     const id = setInterval(refresh, MESSAGERIE_POLL_MS);
     return () => clearInterval(id);

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { getConversations, type Conversation } from "@/services/messagerie.service";
 import { jouerSonNotification } from "@/lib/sonNotification";
+import { runSilently } from "@/lib/http";
 
 // Bulles + son de notification pour la messagerie (2026-09) — voir demande
 // utilisateur : "il faut que l'application fasse apparaître des bulles de
@@ -70,7 +71,9 @@ export function useAlertesMessagerie({ interne, suspendreNouveauMessage, onOuvri
       enCours = true;
       let conversations: Conversation[];
       try {
-        conversations = await getConversations();
+        // Veille de fond — jamais l'overlay de chargement plein écran
+        // (PageLoader), même logique que useAlertesDossiers.ts.
+        conversations = await runSilently(() => getConversations());
       } catch {
         enCours = false;
         return; // silencieux — le badge non-lus existant gère déjà l'affichage d'erreur réseau

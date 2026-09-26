@@ -7,6 +7,7 @@ import {
   getConversations, getMessages, creerConversation, envoyerMessage, prendreConversation,
   marquerConversationLue, urlPieceJointeMessagerie, type Conversation, type Message,
 } from "@/services/messagerie.service";
+import { runSilently } from "@/lib/http";
 import arianaAvatar from "@/assets/ariana-avatar.png";
 
 // Messagerie universelle (2026-08) — voir demande utilisateur : "il faut
@@ -169,7 +170,9 @@ export default function MessagerieView() {
 
   useEffect(() => {
     rafraichirListe();
-    const id = setInterval(rafraichirListe, MESSAGERIE_POLL_MS);
+    // Rafraîchissement de fond une fois la liste déjà affichée — jamais
+    // l'overlay de chargement plein écran (PageLoader).
+    const id = setInterval(() => runSilently(rafraichirListe), MESSAGERIE_POLL_MS);
     return () => clearInterval(id);
   }, []);
 
@@ -178,7 +181,7 @@ export default function MessagerieView() {
     const rafraichir = () => getMessages(selectedId).then(setMessages).catch(() => undefined);
     rafraichir();
     marquerConversationLue(selectedId).then(rafraichirListe).catch(() => undefined);
-    const id = setInterval(() => { rafraichir(); marquerConversationLue(selectedId).catch(() => undefined); }, MESSAGERIE_POLL_MS);
+    const id = setInterval(() => { runSilently(rafraichir); marquerConversationLue(selectedId).catch(() => undefined); }, MESSAGERIE_POLL_MS);
     return () => clearInterval(id);
   }, [selectedId]);
 
