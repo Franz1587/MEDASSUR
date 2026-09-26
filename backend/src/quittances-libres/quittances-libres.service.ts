@@ -78,7 +78,7 @@ export class QuittancesLibresService {
 
   async create(dto: CreateQuittanceLibreDto, gestionnaireId?: string) {
     const contrat = await this.prisma.contrat.findUnique({ where: { id: dto.contratId } });
-    if (!contrat) throw new NotFoundException(`Contrat ${dto.contratId} introuvable`);
+    if (!contrat) throw new NotFoundException("Contrat introuvable");
 
     // Tolérance d'arrondi (2026-08) — une répartition égale par
     // trimestre/semestre peut laisser 1-2 FCFA de reste sur la dernière

@@ -441,7 +441,7 @@ export async function getPopulationHistorique(
   if (filtre.au) params.set("au", filtre.au);
   const data = await http.get<ApiPersonnePeriode[]>(`/contrats/${contratId}/population-historique?${params.toString()}`);
   return data.map((p) => ({
-    id: p.id, nom: p.nom, prenom: p.prenom ?? undefined, matricule: p.matricule, police: contratId,
+    id: p.id, nom: p.nom, prenom: p.prenom ?? undefined, matricule: p.matricule, contratId,
     benef: 0, cotisation: toNumber(p.cotisation), statut: p.statutPeriode,
     dateNaissance: p.dateNaissance ?? undefined, familleId: p.familleId ?? undefined,
     typeAssure: p.typeAssure ?? undefined, sexe: p.sexe ?? undefined, scolarise: p.scolarise,

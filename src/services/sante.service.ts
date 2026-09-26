@@ -2,6 +2,7 @@ import { http, API_URL, getAccessToken } from "@/lib/http";
 import { toNumber } from "@/lib/decimal";
 import { calculerAge } from "@/lib/age";
 import type { AssureSante, PriseEnCharge, MouvementAssure } from "@/types/sante";
+import { numeroPolice } from "@/lib/police";
 
 // Levée par createAssure/updateAssure quand le téléphone fourni est déjà
 // porté par une autre famille et que l'ajout d'un CJ/EF à cette famille
@@ -104,7 +105,7 @@ export function mapAssure(a: ApiAssureSante): AssureSante {
     prenom: a.prenom,
     telephone: a.telephone,
     matricule: a.matricule,
-    police: a.contratId,
+    contratId: a.contratId,
     benef: a.beneficiaires,
     cotisation: toNumber(a.cotisation),
     statut: a.statut,
@@ -411,8 +412,8 @@ export function downloadPopulationTemplate() {
  * existant) sont repris tels quels dans le fichier — seules les colonnes
  * réellement manquantes restent vides à compléter. Retourne le nombre de
  * lignes exportées (0 = rien à compléter, aucun fichier téléchargé). */
-export async function downloadPopulationTemplateContrat(contratId: string): Promise<number> {
-  const population = (await getAssuresSante()).filter((a) => a.police === contratId);
+export async function downloadPopulationTemplateContrat(contratId: string, police?: string | null): Promise<number> {
+  const population = (await getAssuresSante()).filter((a) => a.contratId === contratId);
   const incomplets = population.filter((a) => !a.photo || (!a.familleId && !a.telephone));
   if (incomplets.length === 0) return 0;
   const lignes = incomplets.map((a) => [
@@ -426,7 +427,7 @@ export async function downloadPopulationTemplateContrat(contratId: string): Prom
     !a.familleId ? (a.telephone ?? "") : "",
     "",
   ].join(";"));
-  telechargerCsv(`modele-import-${contratId}.csv`, [MODELE_IMPORT_ENTETE, ...lignes]);
+  telechargerCsv(`modele-import-${numeroPolice({ numeroPolice: police })}.csv`, [MODELE_IMPORT_ENTETE, ...lignes]);
   return incomplets.length;
 }
 
@@ -439,7 +440,7 @@ const EXPORT_POPULATION_ENTETE = "N° Matricule;Nom et Prénom;Date de Naissance
  * la population ACTUELLE, filtrée par statut uniquement — pour une période
  * antérieure, utiliser un des trois autres formats. Colonnes alignées sur le
  * modèle de liste fourni (2026-08). */
-export function exportPopulationCsv(contrat: { id: string; dateDebut: string }, population: AssureSante[], statut?: "tous" | "Actif" | "Radié") {
+export function exportPopulationCsv(contrat: { id: string; dateDebut: string; numeroPolice?: string | null }, population: AssureSante[], statut?: "tous" | "Actif" | "Radié") {
   const filtree = !statut || statut === "tous" ? population : population.filter((a) => a.statut === statut);
   const lignes = filtree.map((a) => [
     a.matricule,
@@ -452,7 +453,7 @@ export function exportPopulationCsv(contrat: { id: string; dateDebut: string }, 
     contrat.dateDebut,
     a.statut,
   ].join(";"));
-  telechargerCsv(`Liste-Assures-${contrat.id}.csv`, [EXPORT_POPULATION_ENTETE, ...lignes]);
+  telechargerCsv(`Liste-Assures-${numeroPolice(contrat)}.csv`, [EXPORT_POPULATION_ENTETE, ...lignes]);
 }
 
 function mapPriseEnCharge(pc: ApiPriseEnCharge): PriseEnCharge {

@@ -4,7 +4,10 @@ export interface AssureSante {
   prenom?: string;
   telephone?: string;
   matricule: string;
-  police: string;
+  // Identifiant INTERNE du contrat (clé technique uniquement) — jamais
+  // affiché : un contrat se désigne par son numéro de police compagnie
+  // (voir src/lib/police.ts). Anciennement nommé `police`, source de confusion.
+  contratId: string;
   benef: number;
   cotisation: number;
   statut: string;

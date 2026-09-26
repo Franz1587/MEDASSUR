@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateFactureProductionDto } from "./dto/create-facture-production.dto";
+import { numeroPolice } from "../lib/police.util";
 
 // Facture Production (2026-08) — génération MANUELLE à la demande (voir
 // demande utilisateur), une par opération (nouveau contrat, avenant…),
@@ -127,7 +128,7 @@ export class FactureProductionService {
       if (!contratsFactures.has(c.id)) {
         mouvements.push({
           contratId: c.id, avenantId: null, compagnieId: c.compagnieId,
-          libelle: `POLICE MALADIE N°${c.numeroPolice ?? c.id} — Affaire Nouvelle`,
+          libelle: `POLICE MALADIE N°${numeroPolice(c)} — Affaire Nouvelle`,
           periodeDebut: c.dateDebut, periodeFin: c.dateFin, montant: Number(c.prime),
         });
       }
@@ -136,7 +137,7 @@ export class FactureProductionService {
         const delta = Math.abs(Number(a.primeApres) - Number(a.primeAvant));
         mouvements.push({
           contratId: c.id, avenantId: a.id, compagnieId: c.compagnieId,
-          libelle: `POLICE MALADIE N°${c.numeroPolice ?? c.id} — Avenant ${a.type}`,
+          libelle: `POLICE MALADIE N°${numeroPolice(c)} — Avenant ${a.type}`,
           periodeDebut: a.dateEffet, periodeFin: a.dateFin ?? c.dateFin,
           montant: delta > 0 ? delta : Number(a.primeApres),
         });

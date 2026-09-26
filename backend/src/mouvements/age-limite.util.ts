@@ -1,3 +1,4 @@
+import { numeroPolice } from "../lib/police.util";
 // Calcul d'âge et vérification des limites d'âge par contrat — voir
 // Contrat.limiteAgeAdulte/limiteAgeEnfant/limiteAgeEnfantScolarise et
 // AssureSante.scolarise (schema.prisma). Assurés principaux et conjoints :
@@ -25,6 +26,7 @@ export function calculerAgeAns(dateNaissance: string | null | undefined, referen
 
 export interface ContratLimitesAge {
   id: string;
+  numeroPolice?: string | null;
   limiteAgeAdulte?: number | null;
   limiteAgeEnfant?: number | null;
   limiteAgeEnfantScolarise?: number | null;
@@ -61,5 +63,5 @@ export function verifierAge(contrat: ContratLimitesAge, personne: PersonneAge, r
     t === "EF" && !personne.scolarise && contrat.limiteAgeEnfantScolarise != null
       ? ` (jusqu'à ${contrat.limiteAgeEnfantScolarise} ans si l'enfant est scolarisé)`
       : "";
-  return `Âge hors limite pour le contrat ${contrat.id} : ${age} ans, limite ${limite} ans${extension}.`;
+  return `Âge hors limite pour la police ${numeroPolice(contrat)} : ${age} ans, limite ${limite} ans${extension}.`;
 }

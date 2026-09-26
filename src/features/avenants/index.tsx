@@ -17,6 +17,7 @@ import { openQuittanceAvenant, openAvenantDocument, openTableauGaranties } from 
 import QuittancesLibresTab from "@/features/avenants/QuittancesLibres";
 import type { Avenant } from "@/types/avenants";
 import type { Contrat } from "@/types/contrats";
+import { numeroPolice } from "@/lib/police";
 
 const statutVariant: Record<string, "neutral" | "info" | "success"> = {
   "Brouillon": "neutral",
@@ -207,7 +208,7 @@ export default function AvenantsView() {
                 <div className="text-[12px] text-muted-foreground mb-1.5">Contrat</div>
                 <select value={form.contratId} onChange={(e) => handleContratChange(e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground">
                   <option value="">— Sélectionner —</option>
-                  {contrats.map((c) => <option key={c.id} value={c.id}>{c.numeroPolice ?? c.id} · {c.client}</option>)}
+                  {contrats.map((c) => <option key={c.id} value={c.id}>{numeroPolice(c)} · {c.client}</option>)}
                 </select>
               </label>
               <label className="block">

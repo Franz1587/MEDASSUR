@@ -12,6 +12,7 @@ import { QueuedOfflineError } from "@/lib/http";
 import type { Contrat } from "@/types/contrats";
 import type { AssureSante } from "@/types/sante";
 import type { BeneficiaireInput, CreateDemandeClientInput, DemandeClient } from "@/types/demandeClient";
+import { numeroPolice } from "@/lib/police";
 
 function statutVariant(statut: string): BadgeVariant {
   if (statut === "Accordée") return "success";
@@ -236,7 +237,7 @@ export default function PortailDemandesView() {
                     options={contrats}
                     value={contratChoisi}
                     onChange={(c) => { setContratChoisi(c); setForm((v) => ({ ...v, contratId: c?.id ?? "" })); }}
-                    getLabel={(c) => c.numeroPolice ?? c.id}
+                    getLabel={(c) => numeroPolice(c)}
                     getSubLabel={(c) => c.branche}
                     getId={(c) => c.id}
                     placeholder="Rechercher…"

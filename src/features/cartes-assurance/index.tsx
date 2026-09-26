@@ -11,6 +11,7 @@ import { openCarteAssurance, genererCartesEnMasse } from "@/services/documents.s
 import ImportDiffereModal from "./ImportDiffereModal";
 import type { Contrat } from "@/types/contrats";
 import type { AssureSante } from "@/types/sante";
+import { numeroPolice } from "@/lib/police";
 
 const fieldCls = "w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground";
 const filtreCls = "h-8 w-full border border-border rounded-lg px-2 bg-background text-[12px] text-foreground";
@@ -64,7 +65,7 @@ export default function CartesAssuranceView() {
     if (!contratId) { setPopulation([]); return; }
     setLoadingPopulation(true);
     getAssuresSante()
-      .then((all) => setPopulation(all.filter((a) => a.police === contratId && a.statut !== "Radié")))
+      .then((all) => setPopulation(all.filter((a) => a.contratId === contratId && a.statut !== "Radié")))
       .finally(() => setLoadingPopulation(false));
   };
 
@@ -148,7 +149,7 @@ export default function CartesAssuranceView() {
 
   const handleGenererContrat = async () => {
     if (!contratId) return;
-    const ok = window.confirm(`Générer les cartes (${rectoUniquement ? "recto seul" : "recto-verso"}) de tous les assurés actifs de ${contratId} (${population.length}+) ?`);
+    const ok = window.confirm(`Générer les cartes (${rectoUniquement ? "recto seul" : "recto-verso"}) de tous les assurés actifs de la police ${numeroPolice(contrat)} (${population.length}+) ?`);
     if (!ok) return;
     try {
       setBusy(true);
@@ -181,7 +182,7 @@ export default function CartesAssuranceView() {
             options={contrats}
             value={contrats.find((c) => c.id === contratId) ?? null}
             onChange={(c) => setContratId(c?.id ?? "")}
-            getLabel={(c) => c.numeroPolice ?? c.id} getSubLabel={(c) => c.client} getId={(c) => c.id}
+            getLabel={(c) => numeroPolice(c)} getSubLabel={(c) => c.client} getId={(c) => c.id}
             placeholder="Rechercher un contrat…"
           />
         </label>

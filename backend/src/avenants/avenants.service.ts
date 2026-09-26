@@ -65,7 +65,7 @@ export class AvenantsService {
   // sur la période courante du contrat pour les autres types.
   async create(dto: CreateAvenantDto) {
     const contrat = await this.prisma.contrat.findUnique({ where: { id: dto.contratId } });
-    if (!contrat) throw new NotFoundException(`Contrat ${dto.contratId} introuvable`);
+    if (!contrat) throw new NotFoundException("Contrat introuvable");
 
     const calcule = withComputedPrime({
       dateDebut: dto.type === "Renouvellement" ? dto.dateEffet : contrat.dateDebut,

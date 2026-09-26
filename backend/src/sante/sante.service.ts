@@ -16,6 +16,7 @@ import { creerGenerateurMatricule } from "./matricule.util";
 import { CreateFactureLigneDto, RUBRIQUES_PLAFONNEES } from "./dto/create-facture-ligne.dto";
 import { resoudreRubriqueContrat } from "../actes-medicaux/rubrique-contrat.util";
 import { resoudreIdentite } from "./identite-assuree.util";
+import { numeroPolice } from "../lib/police.util";
 import { UpdateFactureLigneDto } from "./dto/update-facture-ligne.dto";
 import { CreateRemboursementLigneDto } from "../remboursements/dto/create-remboursement-ligne.dto";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
@@ -168,7 +169,7 @@ async function verifierContratDeAssureALaDate(prisma: PrismaService, contratId: 
   };
   const libelleContrat = (id: string) => {
     const contrat = contratParId.get(id);
-    return contrat?.numeroPolice?.trim() || id;
+    return numeroPolice(contrat);
   };
   const cleContratCible = cleMetier(contratId);
   type Segment = { contratId: string; cle: string; debut: Date; fin: Date | null };
@@ -311,7 +312,7 @@ export class SanteService {
   async findAssuresForClient(clientId: string, contratId?: string) {
     if (contratId) {
       const contrat = await this.prisma.contrat.findUnique({ where: { id: contratId }, select: { clientId: true } });
-      if (!contrat || contrat.clientId !== clientId) throw new ForbiddenException(`Contrat ${contratId} inaccessible`);
+      if (!contrat || contrat.clientId !== clientId) throw new ForbiddenException("Contrat inaccessible");
     }
     return this.prisma.assureSante.findMany({
       where: { contrat: { clientId }, ...(contratId ? { contratId } : {}) },
@@ -579,7 +580,7 @@ export class SanteService {
   // leur motif — le reste du fichier est importé normalement.
   async importPopulation(dto: ImportPopulationDto) {
     const contrat = await this.prisma.contrat.findUnique({ where: { id: dto.contratId } });
-    if (!contrat) throw new NotFoundException(`Contrat ${dto.contratId} introuvable`);
+    if (!contrat) throw new NotFoundException("Contrat introuvable");
 
     const existants = await this.prisma.assureSante.findMany({
       where: { contratId: dto.contratId },
@@ -1176,7 +1177,7 @@ export class SanteService {
   async analyserEcartsTauxContrat(contratId?: string) {
     const contrats = await this.prisma.contrat.findMany({
       where: contratId ? { id: contratId } : {},
-      select: { id: true, clientId: true },
+      select: { id: true, clientId: true, numeroPolice: true },
     });
     let detectes = 0;
     for (const c of contrats) {
@@ -1193,7 +1194,7 @@ export class SanteService {
             matricule: p.matricule, nom: p.nom, prenom: p.prenom ?? null,
             contratSourceId: c.id, contratCibleId: trouve.contratTrouve,
             statutImport: null,
-            motif: `Taux observé sur les prestations correspondant au contrat ${trouve.contratTrouve} depuis le ${trouve.dateEffet} (contrat actuel : ${c.id}).`,
+            motif: `Taux observé sur les prestations correspondant à la police ${numeroPolice(await this.prisma.contrat.findUnique({ where: { id: trouve.contratTrouve }, select: { numeroPolice: true } }))} depuis le ${trouve.dateEffet} (police actuelle : ${numeroPolice(c)}).`,
             donneesLigne: { source: "analyse-a-posteriori", dateEffet: trouve.dateEffet } as unknown as Prisma.InputJsonValue,
           },
         });

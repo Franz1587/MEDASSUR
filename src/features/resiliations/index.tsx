@@ -17,6 +17,7 @@ import {
 import { getContrats } from "@/services/contrats.service";
 import type { Resiliation } from "@/types/resiliations";
 import type { Contrat } from "@/types/contrats";
+import { numeroPolice } from "@/lib/police";
 
 const statutVariant: Record<string, "warning" | "info" | "success"> = {
   "Demandée": "warning",
@@ -166,7 +167,7 @@ export default function ResiliationsView() {
                   options={contrats}
                   value={contrats.find((c) => c.id === form.contratId) ?? null}
                   onChange={(c) => setForm((v) => ({ ...v, contratId: c?.id ?? "" }))}
-                  getLabel={(c) => c.numeroPolice ?? c.id} getSubLabel={(c) => c.client} getId={(c) => c.id}
+                  getLabel={(c) => numeroPolice(c)} getSubLabel={(c) => c.client} getId={(c) => c.id}
                   placeholder="Rechercher…"
                 />
               </label>

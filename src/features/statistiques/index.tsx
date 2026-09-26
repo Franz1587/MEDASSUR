@@ -16,6 +16,7 @@ import {
 } from "@/services/statistiques.service";
 import { openStatistiques } from "@/services/documents.service";
 import type { Contrat } from "@/types/contrats";
+import { numeroPolice } from "@/lib/police";
 
 const fieldCls = "border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground";
 const labelCls = "text-[12px] text-muted-foreground mb-1.5";
@@ -456,7 +457,7 @@ export default function StatistiquesView() {
               options={contrats}
               value={contratSelectionne}
               onChange={(c) => setContratId(c?.id ?? "")}
-              getLabel={(c) => `${c.numeroPolice ?? c.id} — ${c.client}`}
+              getLabel={(c) => `${numeroPolice(c)} — ${c.client}`}
               getSubLabel={(c) => c.compagnie}
               getId={(c) => c.id}
               placeholder="Rechercher un contrat…"

@@ -65,7 +65,7 @@ export class ResiliationsService {
 
   async create(dto: CreateResiliationDto) {
     const contrat = await this.prisma.contrat.findUnique({ where: { id: dto.contratId } });
-    if (!contrat) throw new NotFoundException(`Contrat ${dto.contratId} introuvable`);
+    if (!contrat) throw new NotFoundException("Contrat introuvable");
     const primeAvant = Number(contrat.prime);
     const created = await this.avenants.create({
       contratId: dto.contratId,

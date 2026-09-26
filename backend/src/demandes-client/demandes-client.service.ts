@@ -9,6 +9,7 @@ import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
 import { CreateDemandeClientDto } from "./dto/create-demande-client.dto";
 import { DecisionDemandeClientDto } from "./dto/decision-demande-client.dto";
+import { numeroPolice } from "../lib/police.util";
 
 // Même dossier que SanteService.UPLOADS_PHOTOS_DIR — une photo ajoutée ici
 // est transmise TELLE QUELLE à l'AssureSante réellement créée à
@@ -45,8 +46,8 @@ export class DemandesClientService {
   // demande utilisateur).
   async create(dto: CreateDemandeClientDto, demandeurId: string, clientId: string) {
     const contrat = await this.prisma.contrat.findUnique({ where: { id: dto.contratId } });
-    if (!contrat) throw new NotFoundException(`Contrat ${dto.contratId} introuvable`);
-    if (contrat.clientId !== clientId) throw new ForbiddenException(`Contrat ${dto.contratId} inaccessible`);
+    if (!contrat) throw new NotFoundException("Contrat introuvable");
+    if (contrat.clientId !== clientId) throw new ForbiddenException("Contrat inaccessible");
 
     if (dto.type === "Incorporation") {
       if (!dto.beneficiaires || dto.beneficiaires.length === 0) throw new BadRequestException("Au moins un bénéficiaire à incorporer est requis.");
@@ -75,7 +76,7 @@ export class DemandesClientService {
     const libelle = dto.type === "Incorporation" ? libelleBeneficiaires(dto) : `Retrait — ${demande.assureRetrait?.nom ?? dto.assureId}`;
     await Promise.all(
       destinataires.map((u) =>
-        this.notifications.create("Gestionnaire", u.id, `Nouvelle demande client (${demande.id}) : ${libelle} — contrat ${dto.contratId}`).catch(() => undefined),
+        this.notifications.create("Gestionnaire", u.id, `Nouvelle demande client (${demande.id}) : ${libelle} — police ${numeroPolice(contrat)}`).catch(() => undefined),
       ),
     );
     return demande;

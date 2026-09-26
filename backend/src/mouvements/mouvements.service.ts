@@ -7,6 +7,7 @@ import { withComputedPrime } from "../contrats/prime.util";
 import { verifierAge } from "./age-limite.util";
 import { creerGenerateurMatricule } from "../sante/matricule.util";
 import { resoudreIdentite } from "../sante/identite-assuree.util";
+import { numeroPolice } from "../lib/police.util";
 
 type AssureAvecRelations = Prisma.AssureSanteGetPayload<{ include: { contrat: true; membres: true } }>;
 
@@ -78,7 +79,7 @@ export class MouvementsService implements OnModuleInit {
 
   async appliquerMouvement(contratId: string, dateEffet: string, ajouts: AjoutMouvement[], retraits: RetraitMouvement[]) {
     const contrat = await this.prisma.contrat.findUnique({ where: { id: contratId } });
-    if (!contrat) throw new NotFoundException(`Contrat ${contratId} introuvable`);
+    if (!contrat) throw new NotFoundException("Contrat introuvable");
     const primeAvant = Number(contrat.prime);
     const delta = { AS: 0, CJ: 0, EF: 0 };
 
@@ -267,9 +268,9 @@ export class MouvementsService implements OnModuleInit {
       throw new BadRequestException("Le contrat destination est identique au contrat actuel de cette personne.");
     }
     const contratDestination = await this.prisma.contrat.findUnique({ where: { id: contratDestinationId } });
-    if (!contratDestination) throw new NotFoundException(`Contrat ${contratDestinationId} introuvable`);
+    if (!contratDestination) throw new NotFoundException("Contrat introuvable");
     const contratSource = await this.prisma.contrat.findUnique({ where: { id: assure.contratId } });
-    if (!contratSource) throw new NotFoundException(`Contrat ${assure.contratId} introuvable`);
+    if (!contratSource) throw new NotFoundException("Contrat introuvable");
 
     const estRacine = assure.familleId === null;
     const basculeFamille = estRacine && avecFamille;
@@ -294,9 +295,9 @@ export class MouvementsService implements OnModuleInit {
       throw new BadRequestException("Le contrat destination est identique au contrat source.");
     }
     const contratSource = await this.prisma.contrat.findUnique({ where: { id: contratSourceId } });
-    if (!contratSource) throw new NotFoundException(`Contrat ${contratSourceId} introuvable`);
+    if (!contratSource) throw new NotFoundException("Contrat introuvable");
     const contratDestination = await this.prisma.contrat.findUnique({ where: { id: contratDestinationId } });
-    if (!contratDestination) throw new NotFoundException(`Contrat ${contratDestinationId} introuvable`);
+    if (!contratDestination) throw new NotFoundException("Contrat introuvable");
 
     const selectionnees = await this.prisma.assureSante.findMany({ where: { id: { in: assureIds }, contratId: contratSourceId } });
     if (selectionnees.length === 0) throw new BadRequestException("Aucun assuré sélectionné pour cette bascule.");
@@ -373,7 +374,7 @@ export class MouvementsService implements OnModuleInit {
       data: {
         id: `AVN-${new Date().getFullYear()}-${randomUUID().slice(0, 6).toUpperCase()}`,
         contratId: contratSource.id, type: "Retrait",
-        description: `Retrait de ${personnes.length} personne(s) suite à bascule vers le contrat ${contratDestination.id} : ${noms}`,
+        description: `Retrait de ${personnes.length} personne(s) suite à bascule vers la police ${numeroPolice(contratDestination)} : ${noms}`,
         primeAvant: Number(contratSource.prime), primeApres: Number(contratSourceMaj.prime),
         dateEffet, statut: "Appliqué", exerciceNumero: contratSource.exerciceNumero,
         avenantAssures: { create: avenantAssureData("Retrait") },
@@ -384,7 +385,7 @@ export class MouvementsService implements OnModuleInit {
       data: {
         id: `AVN-${new Date().getFullYear()}-${randomUUID().slice(0, 6).toUpperCase()}`,
         contratId: contratDestination.id, type: "Incorporation",
-        description: `Incorporation de ${personnes.length} personne(s) suite à bascule depuis le contrat ${contratSource.id} : ${noms}`,
+        description: `Incorporation de ${personnes.length} personne(s) suite à bascule depuis la police ${numeroPolice(contratSource)} : ${noms}`,
         primeAvant: Number(contratDestination.prime), primeApres: Number(contratDestinationMaj.prime),
         dateEffet, statut: "Appliqué", exerciceNumero: contratDestination.exerciceNumero,
         avenantAssures: { create: avenantAssureData("Incorporation") },

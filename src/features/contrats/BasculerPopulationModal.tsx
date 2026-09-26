@@ -7,6 +7,7 @@ import { getAssuresSante } from "@/services/sante.service";
 import { basculerPopulation } from "@/services/contrats.service";
 import type { Contrat } from "@/types/contrats";
 import type { AssureSante } from "@/types/sante";
+import { numeroPolice } from "@/lib/police";
 
 const fieldCls = "w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground";
 const labelCls = "text-[12px] text-muted-foreground mb-1.5";
@@ -42,7 +43,7 @@ export default function BasculerPopulationModal({ contrat, contrats, onClose, on
   useEffect(() => {
     getAssuresSante()
       .then((all) => {
-        const pop = all.filter((a) => a.police === contrat.id);
+        const pop = all.filter((a) => a.contratId === contrat.id);
         setPopulation(pop);
         setSelected(pop.map((a) => a.id));
       })
@@ -85,7 +86,7 @@ export default function BasculerPopulationModal({ contrat, contrats, onClose, on
       <div className="w-full max-w-2xl bg-card border border-border rounded-xl shadow-2xl max-h-[92vh] overflow-hidden flex flex-col">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
           <div>
-            <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2"><ArrowRightLeft className="w-4 h-4 text-primary" />Basculer la population — {contrat.id}</h3>
+            <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2"><ArrowRightLeft className="w-4 h-4 text-primary" />Basculer la population — {numeroPolice(contrat)}</h3>
             <p className="text-[12px] text-muted-foreground mt-0.5">{contrat.client} · {population.length} personne(s) sur ce contrat</p>
           </div>
           <button type="button" onClick={onClose} className="h-8 px-3 rounded-lg border border-border text-[12px] text-foreground hover:bg-secondary/40">Fermer</button>
@@ -103,7 +104,7 @@ export default function BasculerPopulationModal({ contrat, contrats, onClose, on
                 options={contrats.filter((c) => c.id !== contrat.id)}
                 value={contrats.find((c) => c.id === contratDestinationId) ?? null}
                 onChange={(c) => setContratDestinationId(c?.id ?? "")}
-                getLabel={(c) => c.numeroPolice ?? c.id} getSubLabel={(c) => c.client} getId={(c) => c.id}
+                getLabel={(c) => numeroPolice(c)} getSubLabel={(c) => c.client} getId={(c) => c.id}
                 placeholder="Rechercher…"
               />
             </label>

@@ -4,6 +4,7 @@ import { Badge, type BadgeVariant } from "@/components/shared/Badge";
 import { getMesContrats } from "@/services/portailClient.service";
 import type { Contrat } from "@/types/contrats";
 import ContratDetail from "./ContratDetail";
+import { numeroPolice } from "@/lib/police";
 
 function statutVariant(statut: string): BadgeVariant {
   if (statut === "Actif") return "success";
@@ -50,7 +51,7 @@ export default function PortailContratsView() {
           <tbody className="divide-y divide-border/60">
             {contrats.map((c) => (
               <tr key={c.id} className="hover:bg-secondary/25 cursor-pointer" onClick={() => setContratOuvert(c)}>
-                <td className="px-4 py-2.5 font-semibold text-foreground">{c.numeroPolice ?? c.id}</td>
+                <td className="px-4 py-2.5 font-semibold text-foreground">{numeroPolice(c)}</td>
                 <td className="px-4 py-2.5 text-foreground">{c.branche}</td>
                 <td className="px-4 py-2.5 text-foreground">{c.compagnie}</td>
                 <td className="px-4 py-2.5"><Badge variant={statutVariant(c.statut)}>{c.statut}</Badge></td>

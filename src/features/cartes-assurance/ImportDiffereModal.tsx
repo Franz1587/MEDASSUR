@@ -9,6 +9,7 @@ import {
   type ImportPopulationResult,
 } from "@/services/sante.service";
 import type { Contrat } from "@/types/contrats";
+import { numeroPolice } from "@/lib/police";
 
 const fieldCls = "w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground";
 
@@ -78,7 +79,7 @@ export default function ImportDiffereModal({ onClose, onImported }: Props) {
     if (!contratId) return;
     try {
       setTelechargementModele(true);
-      const n = await downloadPopulationTemplateContrat(contratId);
+      const n = await downloadPopulationTemplateContrat(contratId, contrats.find((c) => c.id === contratId)?.numeroPolice);
       if (n === 0) toast.success("Toutes les personnes de ce contrat ont déjà une photo et un téléphone — rien à compléter.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Impossible de générer le modèle.");
@@ -172,7 +173,7 @@ export default function ImportDiffereModal({ onClose, onImported }: Props) {
               options={contrats}
               value={contrats.find((c) => c.id === contratId) ?? null}
               onChange={(c) => setContratId(c?.id ?? "")}
-              getLabel={(c) => c.numeroPolice ?? c.id} getSubLabel={(c) => c.client} getId={(c) => c.id}
+              getLabel={(c) => numeroPolice(c)} getSubLabel={(c) => c.client} getId={(c) => c.id}
               placeholder="Rechercher…"
             />
           </label>

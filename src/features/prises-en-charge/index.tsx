@@ -27,6 +27,7 @@ import type { Remboursement } from "@/types/remboursement";
 import type { Prestataire } from "@/types/prestataires";
 import type { Client } from "@/types/clients";
 import type { Contrat } from "@/types/contrats";
+import { numeroPolice } from "@/lib/police";
 
 const controleMedicalVariant: Record<string, "success" | "warning" | "danger" | "neutral"> = {
   "Validé": "success", "En cours": "warning", "Rejeté": "danger", "Non requis": "neutral",
@@ -264,7 +265,7 @@ export default function PrisesEnChargeView() {
       const payload: RemboursementUpsertInput = {
         beneficiaire: rembHeaderForm.beneficiaire,
         assurePrincipalId: rembHeaderForm.beneficiaire === "AssurePrincipal" ? rembHeaderForm.assurePrincipal!.id : undefined,
-        contratId: rembHeaderForm.beneficiaire === "AssurePrincipal" ? rembHeaderForm.assurePrincipal!.police : rembHeaderForm.contratId,
+        contratId: rembHeaderForm.beneficiaire === "AssurePrincipal" ? rembHeaderForm.assurePrincipal!.contratId : rembHeaderForm.contratId,
         dateDeclaration: rembHeaderForm.dateDeclaration,
       };
       const remb = await createRemboursement(payload);
@@ -386,7 +387,7 @@ export default function PrisesEnChargeView() {
                     options={contratsDuFiltreClient}
                     value={contratsDuFiltreClient.find((c) => c.id === filtreContratId) ?? null}
                     onChange={(c) => setFiltreContratId(c?.id ?? "")}
-                    getLabel={(c) => c.numeroPolice ?? c.id} getSubLabel={(c) => c.client} getId={(c) => c.id}
+                    getLabel={(c) => numeroPolice(c)} getSubLabel={(c) => c.client} getId={(c) => c.id}
                     allowClear clearLabel="Tous"
                   />
                 </label>
@@ -489,7 +490,7 @@ export default function PrisesEnChargeView() {
                     options={contratsDuFiltreRembClient}
                     value={contratsDuFiltreRembClient.find((c) => c.id === filtreRembContratId) ?? null}
                     onChange={(c) => setFiltreRembContratId(c?.id ?? "")}
-                    getLabel={(c) => c.numeroPolice ?? c.id} getSubLabel={(c) => c.client} getId={(c) => c.id}
+                    getLabel={(c) => numeroPolice(c)} getSubLabel={(c) => c.client} getId={(c) => c.id}
                     allowClear clearLabel="Tous"
                   />
                 </label>
@@ -661,7 +662,7 @@ export default function PrisesEnChargeView() {
                   className={`${fieldCls} disabled:opacity-60`}
                 >
                   <option value="">{factureForm.client ? "— Sélectionner —" : "Choisir un souscripteur d'abord"}</option>
-                  {contratsDuClient.map((c) => <option key={c.id} value={c.id}>{c.numeroPolice ?? c.id} · {c.branche} · {c.compagnie}</option>)}
+                  {contratsDuClient.map((c) => <option key={c.id} value={c.id}>{numeroPolice(c)} · {c.branche} · {c.compagnie}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -742,7 +743,7 @@ export default function PrisesEnChargeView() {
                       className={`${fieldCls} disabled:opacity-60`}
                     >
                       <option value="">{rembHeaderForm.client ? "— Sélectionner —" : "Choisir un souscripteur d'abord"}</option>
-                      {contratsDuClientRemb.map((c) => <option key={c.id} value={c.id}>{c.numeroPolice ?? c.id} · {c.branche} · {c.compagnie}</option>)}
+                      {contratsDuClientRemb.map((c) => <option key={c.id} value={c.id}>{numeroPolice(c)} · {c.branche} · {c.compagnie}</option>)}
                     </select>
                   </div>
                   <p className="text-[11px] text-muted-foreground -mt-2">Les employés couverts par ce contrat (et leurs ayants droit) pourront chacun être sélectionnés ligne par ligne dans la déclaration.</p>

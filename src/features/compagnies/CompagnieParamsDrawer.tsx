@@ -15,6 +15,7 @@ import { useShellNavigation } from "@/layout/ShellNavigationContext";
 import { fmtM } from "@/lib/format";
 import type { Compagnie } from "@/types/compagnies";
 import type { Contrat } from "@/types/contrats";
+import { numeroPolice } from "@/lib/police";
 
 // Portail d'accès rapide à un contrat depuis un autre écran (2026-08, voir
 // demande utilisateur : "cet interface doit être également un autre
@@ -747,7 +748,7 @@ export function CompagnieParamsDrawer({ compagnie: selected, onClose, onSaved, t
                     )}
                     {contratsFiltres.map((c) => (
                       <tr key={c.id} className="hover:bg-secondary/20 cursor-pointer" onClick={() => handleOuvrirContrat(c)}>
-                        <td className="px-4 py-2 font-semibold text-foreground med-num">{c.numeroPolice ?? c.id}</td>
+                        <td className="px-4 py-2 font-semibold text-foreground med-num">{numeroPolice(c)}</td>
                         <td className="px-3 py-2 text-foreground">{c.client}</td>
                         <td className="px-3 py-2 text-muted-foreground">{c.branche}</td>
                         <td className="px-3 py-2 text-muted-foreground med-num">{c.dateDebut} → {c.dateFin}</td>

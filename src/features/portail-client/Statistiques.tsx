@@ -14,6 +14,7 @@ import { ChartTooltipStyle } from "@/components/shared/chartTooltipStyle";
 import { fmtM } from "@/lib/format";
 import { getMesContrats, getMesStatistiques, openMesStatistiquesPdf, type StatistiquesPayloadClient } from "@/services/portailClient.service";
 import type { Contrat } from "@/types/contrats";
+import { numeroPolice } from "@/lib/police";
 
 const PALETTE = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
 
@@ -133,7 +134,7 @@ export default function PortailStatistiquesView() {
         <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
           <label className="block w-full sm:w-64">
             <div className="text-[11px] font-medium text-muted-foreground mb-1">Contrat</div>
-            <Combobox options={contrats} value={contratChoisi} onChange={setContratChoisi} getLabel={(c) => c.numeroPolice ?? c.id} getSubLabel={(c) => c.branche} getId={(c) => c.id} placeholder="Rechercher…" />
+            <Combobox options={contrats} value={contratChoisi} onChange={setContratChoisi} getLabel={(c) => numeroPolice(c)} getSubLabel={(c) => c.branche} getId={(c) => c.id} placeholder="Rechercher…" />
           </label>
           <label className="block w-full sm:w-40">
             <div className="text-[11px] font-medium text-muted-foreground mb-1">Date de début</div>

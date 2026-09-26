@@ -8,6 +8,7 @@ import { getMesContrats, getMesParticipants, openMesParticipantsListe } from "@/
 import { assurePhotoUrl } from "@/services/sante.service";
 import type { Contrat } from "@/types/contrats";
 import type { AssureSante } from "@/types/sante";
+import { numeroPolice } from "@/lib/police";
 
 // Statut simplifié côté client (2026-08) — voir demande utilisateur : "en
 // matière de statut, on juste 'Actif' ou 'Rétiré'". Les nuances internes
@@ -197,7 +198,7 @@ export default function PortailParticipantsView() {
               options={contrats}
               value={contratChoisi}
               onChange={setContratChoisi}
-              getLabel={(c) => c.numeroPolice ?? c.id}
+              getLabel={(c) => numeroPolice(c)}
               getSubLabel={(c) => c.branche}
               getId={(c) => c.id}
               allowClear

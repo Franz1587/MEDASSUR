@@ -25,6 +25,7 @@ import {
   telechargerModeleImportContrats, apercuImportContrats, confirmerImportContrats, type ImportContratRow, getContrats,
 } from "@/services/contrats.service";
 import type { Contrat } from "@/types/contrats";
+import { numeroPolice } from "@/lib/police";
 
 // Import de données (Système) — 2026-08 — voir demande utilisateur : "pour
 // permettre aux sociétés d'assurance qui voudraient changer de logiciel mais
@@ -271,7 +272,7 @@ export default function ImportDonneesView() {
         <ChoixContratPuis titre="Import en masse d'assurés et ayants droit" onClose={() => setOuvert(null)}>
           {(contrat) => (
             <ImportEnMasseModal<ImportAssureRow>
-              titre={`Import en masse d'assurés — ${contrat.numeroPolice || contrat.id} (${contrat.client})`}
+              titre={`Import en masse d'assurés — ${numeroPolice(contrat)} (${contrat.client})`}
               onClose={() => setOuvert(null)}
               onImported={() => undefined}
               telechargerModele={telechargerModeleImportAssures}
@@ -305,7 +306,7 @@ export default function ImportDonneesView() {
         <ChoixContratPuis titre="Import en masse de factures" onClose={() => setOuvert(null)}>
           {(contrat) => (
             <ImportEnMasseModal<ImportFactureRow>
-              titre={`Import en masse de factures — ${contrat.numeroPolice || contrat.id} (${contrat.client})`}
+              titre={`Import en masse de factures — ${numeroPolice(contrat)} (${contrat.client})`}
               onClose={() => setOuvert(null)}
               onImported={() => undefined}
               telechargerModele={telechargerModeleImportFactures}
@@ -354,7 +355,7 @@ export default function ImportDonneesView() {
         <ChoixContratPuis titre="Import en masse de prises en charge" onClose={() => setOuvert(null)}>
           {(contrat) => (
             <ImportEnMasseModal<ImportAccordPrealableRow>
-              titre={`Import en masse de prises en charge — ${contrat.numeroPolice || contrat.id} (${contrat.client})`}
+              titre={`Import en masse de prises en charge — ${numeroPolice(contrat)} (${contrat.client})`}
               onClose={() => setOuvert(null)}
               onImported={() => undefined}
               telechargerModele={telechargerModeleImportAccordsPrealables}
@@ -407,7 +408,7 @@ function ChoixContratPuis({ titre, onClose, children }: { titre: string; onClose
               options={contrats}
               value={null}
               onChange={(c) => c && setContrat(c)}
-              getLabel={(c) => `${c.numeroPolice || c.id} — ${c.client}`}
+              getLabel={(c) => `${numeroPolice(c)} — ${c.client}`}
               getId={(c) => c.id}
             />
           </div>

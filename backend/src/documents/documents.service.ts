@@ -33,6 +33,7 @@ import { montantEnLettresFcfa } from "../lib/montant-en-lettres.util";
 import { TAUX_TPS } from "../sante/sante.service";
 import { reconstituerPopulation } from "../mouvements/population-historique.util";
 import type { Prisma, ParametresEntreprise } from "@prisma/client";
+import { numeroPolice, policePourNomFichier } from "../lib/police.util";
 
 // Groupes d'actes considérés "Examen" (bon d'examen) — le reste (Consultation,
 // Pharmacie, Dentaire, Kinésithérapie, Hospitalisation, Actes de Spécialités)
@@ -256,7 +257,7 @@ const AVENANT_META: Record<string, { code: string; suffixe: string; estRistourne
 };
 
 interface DocContrat {
-  id: string; branche: string; typeAffaire: string; dateDebut: string; dateFin: string; prime: Prisma.Decimal;
+  id: string; numeroPolice?: string | null; branche: string; typeAffaire: string; dateDebut: string; dateFin: string; prime: Prisma.Decimal;
   primeNette: Prisma.Decimal | null; primeTotaleHT: Prisma.Decimal | null;
   montantAccessoires: Prisma.Decimal | null; montantTaxe: Prisma.Decimal | null; tauxCommission: Prisma.Decimal | null;
   paysSouscription: string | null; extensionsTerritorialite: string[];
@@ -444,7 +445,7 @@ export class DocumentsService {
       where: { id },
       include: { client: true, compagnie: true, garanties: true },
     });
-    if (!contrat) throw new NotFoundException(`Contrat ${id} introuvable`);
+    if (!contrat) throw new NotFoundException("Contrat introuvable");
     return contrat;
   }
 
@@ -581,7 +582,7 @@ export class DocumentsService {
 
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="${meta.estRistourne ? "Ristourne" : "Quittance"}-${avenant?.id ?? contrat.id}.pdf"`);
+    res.setHeader("Content-Disposition", `inline; filename="${meta.estRistourne ? "Ristourne" : "Quittance"}-${policePourNomFichier(contrat)}${avenant ? `-${avenant.id}` : ""}.pdf"`);
     doc.pipe(res);
 
     const dessinerCorps = (exemplaire: string) => {
@@ -617,7 +618,7 @@ export class DocumentsService {
 
     const infoLignes: [string, string][] = [
       ["Branche :", contrat.branche],
-      ["Police :", `POLICE N° ${contrat.id}`],
+      ["Police :", `POLICE N° ${numeroPolice(contrat)}`],
       ["Emission :", `${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}`],
       ["Effet :", `${dateTirets(dateEffet)}  A 0 Heure`],
       ["Echéance :", `${dateTirets(dateFin)}  A Minuit`],
@@ -790,7 +791,7 @@ export class DocumentsService {
     const leftCellW = midX - left - 8;
     const rightCellW = right - midX - 8;
     ry = tableTop;
-    champ(doc, left + 4, ry + 4, "POLICE :", contrat.id, 44, leftCellW - 44, { boldLabel: true, fontSize: 8 });
+    champ(doc, left + 4, ry + 4, "POLICE :", numeroPolice(contrat), 44, leftCellW - 44, { boldLabel: true, fontSize: 8 });
     champ(doc, midX + 4, ry + 4, "SOUSCRIPTEUR", `${refNumerique(contrat.client.id)}  ${contrat.client.nom}`, 74, rightCellW - 74, { boldLabel: true, fontSize: 8 });
     ry += rowH[0];
     champ(doc, left + 4, ry + 4, "EFFET :", avenant.dateEffet, 44, leftCellW - 44, { boldLabel: true, boldValeur: true, fontSize: 8 });
@@ -878,7 +879,7 @@ export class DocumentsService {
 
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="Tableau-Garanties-${contrat.id}.pdf"`);
+    res.setHeader("Content-Disposition", `inline; filename="Tableau-Garanties-${policePourNomFichier(contrat)}.pdf"`);
     doc.pipe(res);
 
     const dessinerCorps = (exemplaire: string) => {
@@ -897,7 +898,7 @@ export class DocumentsService {
       doc.fillColor(p.couleurPrimaire).fontSize(9).text(titreCentre, left + 260, 60, { width: width - 260, align: "center" });
       doc.fillColor("#000").fontSize(8).font("Helvetica");
       const infos = [
-        `POLICE N°   ${contrat.id}`,
+        `POLICE N°   ${numeroPolice(contrat)}`,
         `QUITTANCE N° ${numeroQuittance}`,
         `A EFFET DU : ${dateTirets(contrat.dateDebut)} A 0 HEURE`,
         `ECHEANCE AU  ${dateTirets(contrat.dateFin)} A MINUIT`,
@@ -922,7 +923,7 @@ export class DocumentsService {
 
     const dx = left + width * 0.45 + 6;
     const dw = width * 0.55 - 12;
-    doc.font("Helvetica-Bold").fontSize(8).text(`DECOMPTE (${contrat.id})`, dx, y + 6);
+    doc.font("Helvetica-Bold").fontSize(8).text(`DECOMPTE (${numeroPolice(contrat)})`, dx, y + 6);
     const decCols = [dw * 0.4, dw * 0.3, dw * 0.3];
     const decHeaderY = y + 20;
     doc.fontSize(7);
@@ -1833,7 +1834,7 @@ export class DocumentsService {
       const limiteBasse = 134; // au-delà, on empiète sur la vague de bas de carte
       let vy = 20;
       doc.fillColor(primaire).fontSize(6).font("Helvetica-Bold");
-      const lignePolice = `POLICE N° ${assure.contrat.id}   ·   COMPAGNIE ${assure.contrat.compagnie.nom}`;
+      const lignePolice = `POLICE N° ${numeroPolice(assure.contrat)}   ·   COMPAGNIE ${assure.contrat.compagnie.nom}`;
       doc.text(lignePolice, 10, vy, { width: largeurTexte });
       vy += doc.heightOfString(lignePolice, { width: largeurTexte }) + 3;
       const ligneSouscripteur = `SOUSCRIPTEUR ${assure.contrat.client.nom}`;
@@ -3247,7 +3248,7 @@ export class DocumentsService {
       const b2c = champLigne(c3x, rowY + 1, "Nature maladie :", "Affection Courante", col3W - 12);
       rowY = Math.max(b2a, b2b, b2c) + 4;
 
-      const b3a = champEmpile(c1x, rowY, "N° Police", contratAssure.numeroPolice ?? contratAssure.id);
+      const b3a = champEmpile(c1x, rowY, "N° Police", numeroPolice(contratAssure));
       const b3b = champEmpileLarge(c2x, rowY, "Bénéficiaire des soins :", `${assure.nom} ${assure.prenom ?? ""}`.trim() + `  -  Matricule : ${assure.matricule}`, col2W - 12);
       const b3c = champLigne(c3x, rowY + 1, "Début des soins :", premiereLigne.date, col3W - 12);
       rowY = Math.max(b3a, b3b, b3c) + 6;
@@ -3475,7 +3476,7 @@ export class DocumentsService {
     const numeroQuittance = avenant ? await this.numeroQuittanceAvenant(avenant) : await this.numeroQuittanceContrat(contrat);
     const dateEffet = avenant ? avenant.dateEffet : contrat.dateDebut;
     const primeNette = Number(avenant ? avenant.primeApres : (contrat.primeNette ?? contrat.prime));
-    await this.envoyerDocx(res, `Quittance-${avenant?.id ?? contrat.id}`, kind === "AffaireNouvelle" ? "QUITTANCE — AFFAIRE NOUVELLE" : `QUITTANCE — AVENANT ${AVENANT_META[kind].suffixe}`, `Police N° ${contrat.id}`, [
+    await this.envoyerDocx(res, `Quittance-${policePourNomFichier(contrat)}${avenant ? `-${avenant.id}` : ""}`, kind === "AffaireNouvelle" ? "QUITTANCE — AFFAIRE NOUVELLE" : `QUITTANCE — AVENANT ${AVENANT_META[kind].suffixe}`, `Police N° ${numeroPolice(contrat)}`, [
       ["Souscripteur :", contrat.client.nom],
       ["Compagnie :", contrat.compagnie.nom],
       ["Quittance N° :", String(numeroQuittance)],
@@ -3496,7 +3497,7 @@ export class DocumentsService {
   }
 
   private async genererTableauGarantiesDocx(res: Response, contrat: DocContrat) {
-    await this.envoyerDocx(res, `Tableau-Garanties-${contrat.id}`, `TABLEAU DE GARANTIES — ${contrat.branche.toUpperCase()}`, `Police N° ${contrat.id}   ·   ${contrat.client.nom}`, [
+    await this.envoyerDocx(res, `Tableau-Garanties-${policePourNomFichier(contrat)}`, `TABLEAU DE GARANTIES — ${contrat.branche.toUpperCase()}`, `Police N° ${numeroPolice(contrat)}   ·   ${contrat.client.nom}`, [
       ["Compagnie :", contrat.compagnie.nom],
       ["Effet :", contrat.dateDebut],
       ["Échéance :", contrat.dateFin],
@@ -3646,7 +3647,7 @@ export class DocumentsService {
   // jusqu'ici (voir DocumentsController.population).
   async renderPopulationExport(contratId: string, format: "pdf" | "xlsx" | "docx", res: Response, filtres: { statut?: string; du?: string; au?: string }) {
     const contrat = await this.prisma.contrat.findUnique({ where: { id: contratId }, include: { client: true } });
-    if (!contrat) throw new NotFoundException(`Contrat ${contratId} introuvable`);
+    if (!contrat) throw new NotFoundException("Contrat introuvable");
     const population = await reconstituerPopulation(this.prisma, contratId, filtres.du, filtres.au);
     // Regroupement par famille, familles triées par ordre alphabétique de
     // l'assuré principal (2026-09) — voir demande utilisateur : "il faut
@@ -3681,7 +3682,7 @@ export class DocumentsService {
     // demande utilisateur répétée : "là où il y a N° Police, c'est le
     // numéro de police compagnie du contrat qui doit remonter" — cet export
     // affichait encore contrat.id brut, jamais numeroPolice.
-    const sousTitre = `${contrat.client.nom}   ·   Police N° ${contrat.numeroPolice || contrat.id}   ·   ${assures.length} bénéficiaire(s)`;
+    const sousTitre = `${contrat.client.nom}   ·   Police N° ${numeroPolice(contrat)}   ·   ${assures.length} bénéficiaire(s)`;
     const rows = assures.map((a) => [a.matricule, `${a.nom} ${a.prenom ?? ""}`.trim(), TYPE_ASSURE_LABELS[a.typeAssure ?? ""] ?? a.typeAssure ?? "—", a.dateNaissance ?? "—", a.statutPeriode]);
 
     if (format === "xlsx") {
@@ -3695,18 +3696,18 @@ export class DocumentsService {
       for (const r of rows) ws.addRow(r);
       const buffer = await wb.xlsx.writeBuffer();
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename="Liste-Assures-${contrat.id}.xlsx"`);
+      res.setHeader("Content-Disposition", `attachment; filename="Liste-Assures-${policePourNomFichier(contrat)}.xlsx"`);
       res.send(Buffer.from(buffer));
       return;
     }
     if (format === "docx") {
-      return this.envoyerDocx(res, `Liste-Assures-${contrat.id}`, titre, sousTitre, [], { headers: ["Matricule", "Nom et Prénom", "Type", "Naissance", "Statut"], rows });
+      return this.envoyerDocx(res, `Liste-Assures-${policePourNomFichier(contrat)}`, titre, sousTitre, [], { headers: ["Matricule", "Nom et Prénom", "Type", "Naissance", "Statut"], rows });
     }
 
     const p = await this.parametresEntreprise.findOne();
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="Liste-Assures-${contrat.id}.pdf"`);
+    res.setHeader("Content-Disposition", `inline; filename="Liste-Assures-${policePourNomFichier(contrat)}.pdf"`);
     doc.pipe(res);
 
     const left = doc.page.margins.left;
@@ -3768,7 +3769,7 @@ export class DocumentsService {
     // Police N° = le vrai numéro de police compagnie (2026-09) — voir
     // demande utilisateur : "là où il y a N° Police, c'est le numéro de
     // police compagnie du contrat qui doit remonter".
-    const sousTitre = `${avenant.contrat.client.nom}   ·   Police N° ${avenant.contrat.numeroPolice || avenant.contrat.id}   ·   Avenant n°${numero}   ·   Date d'effet ${avenant.dateEffet}   ·   ${avenant.avenantAssures.length} personne(s)`;
+    const sousTitre = `${avenant.contrat.client.nom}   ·   Police N° ${numeroPolice(avenant.contrat)}   ·   Avenant n°${numero}   ·   Date d'effet ${avenant.dateEffet}   ·   ${avenant.avenantAssures.length} personne(s)`;
     const rows = avenant.avenantAssures.map((a) => [a.matricule ?? "—", `${a.nom} ${a.prenom ?? ""}`.trim(), TYPE_ASSURE_LABELS[a.typeAssure ?? ""] ?? a.typeAssure ?? "—", a.action, a.dateEffet]);
 
     if (format === "xlsx") {
@@ -3860,7 +3861,7 @@ export class DocumentsService {
     const pageGardeImage = await this.chargerImage("pages-garde-statistiques", p.statistiquesPageGarde, UPLOADS_PAGES_GARDE_STATISTIQUES_DIR);
     const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="Statistiques-${payload.contrat.id}.pdf"`);
+    res.setHeader("Content-Disposition", `inline; filename="Statistiques-${policePourNomFichier(payload.contrat)}.pdf"`);
     doc.pipe(res);
 
     const left = doc.page.margins.left;
@@ -4630,7 +4631,7 @@ export class DocumentsService {
     });
     const buffer = await Packer.toBuffer(document);
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-    res.setHeader("Content-Disposition", `attachment; filename="Statistiques-${payload.contrat.id}.docx"`);
+    res.setHeader("Content-Disposition", `attachment; filename="Statistiques-${policePourNomFichier(payload.contrat)}.docx"`);
     res.send(buffer);
   }
 
@@ -5622,7 +5623,7 @@ export class DocumentsService {
       const primeNette = Number(c.primeNette ?? c.prime);
       const accessoires = Number(c.montantAccessoires ?? 0);
       const taxe = Number(c.montantTaxe ?? Math.round((primeNette + accessoires) * TAUX_TAXE_GABON));
-      return { police: c.id, nature: `${c.branche.toUpperCase()} ${c.typeAffaire?.toUpperCase() ?? ""}`.trim(), echeance: dateTirets(c.dateFin), primeTtc: primeNette + accessoires + taxe, compagnie: c.compagnie.nom };
+      return { police: numeroPolice(c), nature: `${c.branche.toUpperCase()} ${c.typeAffaire?.toUpperCase() ?? ""}`.trim(), echeance: dateTirets(c.dateFin), primeTtc: primeNette + accessoires + taxe, compagnie: c.compagnie.nom };
     });
     const totalPrime = lignes.reduce((s, l) => s + l.primeTtc, 0);
     const dateEcheancePrincipale = contrats[0]?.dateFin ?? "—";
@@ -5719,11 +5720,12 @@ export class DocumentsService {
 
   // Export Accords Préalables (Prises en Charge) d'un contrat.
   async renderAccordPrealableExport(contratId: string, format: "pdf" | "xlsx" | "docx", res: Response) {
+    const police = policePourNomFichier(await this.prisma.contrat.findUnique({ where: { id: contratId }, select: { numeroPolice: true } }));
     const accords = await this.accordPrealable.findAll({ contratId });
     const rows = accords.map((a) => [a.assure.nom + " " + (a.assure.prenom ?? ""), a.type, a.dateDemande, a.decision, a.montantAutorise !== null ? Number(a.montantAutorise) : 0]);
-    if (format === "xlsx") return this.envoyerTableauXlsx(res, `Accords-Prealables-${contratId}`, ["Assuré", "Type", "Date demande", "Décision", "Montant autorisé"], rows);
-    if (format === "docx") return this.envoyerDocx(res, `Accords-Prealables-${contratId}`, "PRISES EN CHARGE", `${accords.length} dossier(s)`, [], { headers: ["Assuré", "Type", "Date demande", "Décision", "Montant"], rows: rows.map((r) => r.map(String)) });
-    return this.envoyerTableauPdf(res, `Accords-Prealables-${contratId}`, "PRISES EN CHARGE", `${accords.length} dossier(s)`,
+    if (format === "xlsx") return this.envoyerTableauXlsx(res, `Accords-Prealables-${police}`, ["Assuré", "Type", "Date demande", "Décision", "Montant autorisé"], rows);
+    if (format === "docx") return this.envoyerDocx(res, `Accords-Prealables-${police}`, "PRISES EN CHARGE", `${accords.length} dossier(s)`, [], { headers: ["Assuré", "Type", "Date demande", "Décision", "Montant"], rows: rows.map((r) => r.map(String)) });
+    return this.envoyerTableauPdf(res, `Accords-Prealables-${police}`, "PRISES EN CHARGE", `${accords.length} dossier(s)`,
       [{ h: "Assuré", w: 150 }, { h: "Type", w: 100 }, { h: "Date demande", w: 100 }, { h: "Décision", w: 90 }, { h: "Montant autorisé", w: 100 }],
       rows, "TOTAL AUTORISÉ", `${fmt(rows.reduce((s, r) => s + (r[4] as number), 0))} FCFA`);
   }
@@ -5731,15 +5733,16 @@ export class DocumentsService {
   // Export Consommations (lignes PriseEnCharge) d'un contrat — voir mémoire
   // "Facture égale détails" : jamais un total agrégé seul.
   async renderConsommationsExport(contratId: string, format: "pdf" | "xlsx" | "docx", res: Response) {
+    const police = policePourNomFichier(await this.prisma.contrat.findUnique({ where: { id: contratId }, select: { numeroPolice: true } }));
     const lignes = await this.prisma.priseEnCharge.findMany({
       where: { contratId, statut: { not: "Annulé" } },
       include: { assure: true },
       orderBy: { date: "desc" },
     });
     const rows = lignes.map((l) => [`${l.assure.nom} ${l.assure.prenom ?? ""}`.trim(), l.date, l.type, Number(l.montant), l.baseRemboursement !== null ? Number(l.baseRemboursement) : 0]);
-    if (format === "xlsx") return this.envoyerTableauXlsx(res, `Consommations-${contratId}`, ["Assuré", "Date", "Type", "Frais réels", "Remboursé"], rows);
-    if (format === "docx") return this.envoyerDocx(res, `Consommations-${contratId}`, "CONSOMMATIONS", `${lignes.length} ligne(s)`, [], { headers: ["Assuré", "Date", "Type", "Frais réels", "Remboursé"], rows: rows.map((r) => r.map(String)) });
-    return this.envoyerTableauPdf(res, `Consommations-${contratId}`, "CONSOMMATIONS", `${lignes.length} ligne(s)`,
+    if (format === "xlsx") return this.envoyerTableauXlsx(res, `Consommations-${police}`, ["Assuré", "Date", "Type", "Frais réels", "Remboursé"], rows);
+    if (format === "docx") return this.envoyerDocx(res, `Consommations-${police}`, "CONSOMMATIONS", `${lignes.length} ligne(s)`, [], { headers: ["Assuré", "Date", "Type", "Frais réels", "Remboursé"], rows: rows.map((r) => r.map(String)) });
+    return this.envoyerTableauPdf(res, `Consommations-${police}`, "CONSOMMATIONS", `${lignes.length} ligne(s)`,
       [{ h: "Assuré", w: 150 }, { h: "Date", w: 90 }, { h: "Type", w: 110 }, { h: "Frais réels", w: 100 }, { h: "Remboursé", w: 100 }],
       rows, "TOTAL REMBOURSÉ", `${fmt(rows.reduce((s, r) => s + (r[4] as number), 0))} FCFA`);
   }
@@ -5766,7 +5769,7 @@ export class DocumentsService {
     doc.fontSize(12).font("Helvetica-Bold").fillColor("#000").text(`QUITTANCE — TRANCHE N° ${tranche.numero}`, left, 60, { width, align: "right" });
     doc.fillColor("#000");
     let y = 90;
-    let yy = champ(doc, left, y, "Police :", contrat.id, 100, 250, { boldLabel: true, boldValeur: true });
+    let yy = champ(doc, left, y, "Police :", numeroPolice(contrat), 100, 250, { boldLabel: true, boldValeur: true });
     yy = champ(doc, left, yy, "Souscripteur :", contrat.client.nom, 100, 250, { boldLabel: true });
     yy = champ(doc, left, yy, "Compagnie :", contrat.compagnie.nom, 100, 250, { boldLabel: true });
     yy = champ(doc, left, yy, "Échéance :", tranche.dateEcheance, 100, 250, { boldLabel: true });
@@ -5871,6 +5874,7 @@ interface CarteAssureData {
     dateFin: string;
     client: { nom: string };
     compagnie: { nom: string };
+    numeroPolice?: string | null;
     nomCarteSante?: string | null;
     tauxCouvertureAmbulatoire?: string | null;
     tauxCouvertureHospitalisation?: string | null;

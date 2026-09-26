@@ -6,6 +6,7 @@ import type {
   ConsommationLigne, DetailFamille, DetailPrestataire, RepartitionBeneficiaireLigne, RepartitionLigne, RepartitionSousGroupe,
   SpBloc, StatistiquesPayload,
 } from "./statistiques.types";
+import { numeroPolice } from "../lib/police.util";
 
 const MOIS_FR = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
@@ -50,7 +51,7 @@ export class StatistiquesService {
       where: { id: contratId },
       include: { client: true, compagnie: { include: { clausesAjustement: { orderBy: { ordre: "asc" } } } }, garanties: { select: { categorie: true } } },
     });
-    if (!contrat) throw new NotFoundException(`Contrat ${contratId} introuvable`);
+    if (!contrat) throw new NotFoundException("Contrat introuvable");
 
     // "Date d'effet" des Bases Contractuelles = date d'effet de l'exercice
     // EN COURS, pas la date de création du contrat (voir demande
@@ -376,11 +377,11 @@ export class StatistiquesService {
 
     const payloadSansAnalyse = {
       contrat: {
-        id: contrat.id, numeroPolice: contrat.numeroPolice ?? contrat.id, client: contrat.client.nom,
+        id: contrat.id, numeroPolice: numeroPolice(contrat), client: contrat.client.nom,
         compagnie: contrat.compagnie.nom, branche: contrat.branche, garantiesPrivees,
       },
       periode: { du: duEff, au: auEff },
-      basesContractuelles: { college: contrat.client.nom, assureur: contrat.compagnie.nom, policeNumero: contrat.numeroPolice ?? contrat.id, dateEffet: dateEffetExercice },
+      basesContractuelles: { college: contrat.client.nom, assureur: contrat.compagnie.nom, policeNumero: numeroPolice(contrat), dateEffet: dateEffetExercice },
       evolutionMensuelle, evolutionAnnuelle, totalConsomme, consommationParFamille, detailParFamille, top20Consommateurs,
       repartitionBeneficiaire, totalPersonnesSoignees, consommationParRubrique, consommationParFamilleActe,
       consommationParPrestataire, detailParPrestataire, top20Prestataires, spSansChargement, spAvecChargement,

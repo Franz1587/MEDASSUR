@@ -26,6 +26,7 @@ import { openCarteAssurance, openFeuilleExamen, openFeuilleSoins } from "@/servi
 import { getContrats } from "@/services/contrats.service";
 import type { AssureSante, PriseEnCharge, MouvementAssure } from "@/types/sante";
 import type { Contrat } from "@/types/contrats";
+import { numeroPolice } from "@/lib/police";
 
 const fieldCls = "w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground";
 const labelCls = "text-[12px] text-muted-foreground mb-1.5";
@@ -213,7 +214,7 @@ export default function ParticipantsView() {
       setAyantSubmitting(true);
       await creerAvecConfirmation({
         nom: ayantForm.nom, prenom: ayantForm.prenom || undefined,
-        contratId: selected.police, beneficiaires: 0, cotisation: 0,
+        contratId: selected.contratId, beneficiaires: 0, cotisation: 0,
         dateNaissance: ayantForm.dateNaissance || undefined,
         dateAffiliation: new Date().toLocaleDateString("fr-FR"),
         typeAssure: ayantForm.typeAssure, familleId: selected.id,
@@ -388,7 +389,7 @@ export default function ParticipantsView() {
   // jamais l'historique de consommation de l'ancien contrat : ce
   // regroupement le rend simplement visible sans ambiguïté, ancien
   // "collège" et nouveau restant clairement distincts.
-  const contratLabelById = new Map(contrats.map((c) => [c.id, `${c.numeroPolice || c.id} · ${c.client}`]));
+  const contratLabelById = new Map(contrats.map((c) => [c.id, `${numeroPolice(c)} · ${c.client}`]));
   const pecGroupee = Array.from(
     pec.reduce((groups, p) => {
       const annee = p.date.slice(-4);
@@ -422,7 +423,7 @@ export default function ParticipantsView() {
                 options={contrats}
                 value={contrats.find((c) => c.id === filtreContratId) ?? null}
                 onChange={(c) => setFiltreContratId(c?.id ?? "")}
-                getLabel={(c) => c.numeroPolice ?? c.id} getSubLabel={(c) => c.client} getId={(c) => c.id}
+                getLabel={(c) => numeroPolice(c)} getSubLabel={(c) => c.client} getId={(c) => c.id}
                 allowClear clearLabel="Tous"
               />
             </label>
@@ -586,7 +587,7 @@ export default function ParticipantsView() {
                     options={contrats}
                     value={contrats.find((c) => c.id === form.contratId) ?? null}
                     onChange={(c) => setForm((v) => ({ ...v, contratId: c?.id ?? "" }))}
-                    getLabel={(c) => c.numeroPolice ?? c.id} getSubLabel={(c) => c.client} getId={(c) => c.id}
+                    getLabel={(c) => numeroPolice(c)} getSubLabel={(c) => c.client} getId={(c) => c.id}
                     placeholder="Rechercher…"
                   />
                 </label>
@@ -898,7 +899,7 @@ export default function ParticipantsView() {
                           <div className="text-[12px] text-muted-foreground mb-1.5">Contrat destination</div>
                           <select value={basculeForm.contratDestinationId} onChange={(e) => setBasculeForm((f) => ({ ...f, contratDestinationId: e.target.value }))} className={fieldCls}>
                             <option value="">— Sélectionner —</option>
-                            {contrats.filter((c) => c.id !== selected.police).map((c) => <option key={c.id} value={c.id}>{c.numeroPolice ?? c.id} · {c.client}</option>)}
+                            {contrats.filter((c) => c.id !== selected.contratId).map((c) => <option key={c.id} value={c.id}>{numeroPolice(c)} · {c.client}</option>)}
                           </select>
                         </label>
                         <label className="block"><div className="text-[12px] text-muted-foreground mb-1.5">Date d'effet</div><DateInput value={basculeForm.dateEffet} onChange={(v) => setBasculeForm((f) => ({ ...f, dateEffet: v }))} className={fieldCls} /></label>

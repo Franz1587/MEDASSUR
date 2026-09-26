@@ -9,6 +9,7 @@ import { openPopulationExport, genererCartesEnMasse } from "@/services/documents
 import { mouvementPopulation, getPopulationHistorique, getHistoriqueCompagnie, type AjoutPersonneInput, type ExerciceCompagnie } from "@/services/contrats.service";
 import type { Contrat } from "@/types/contrats";
 import type { AssureSante } from "@/types/sante";
+import { numeroPolice } from "@/lib/police";
 
 const fieldCls = "w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground";
 const labelCls = "text-[12px] text-muted-foreground mb-1.5";
@@ -120,7 +121,7 @@ export default function PopulationPanel({ contrat, onUpdated }: Props) {
     // repris des années plus tard peut avoir une population historique
     // qu'il faut pouvoir consulter/exporter sans la masquer.
     getAssuresSante()
-      .then((all) => setPopulation(all.filter((a) => a.police === contrat.id)))
+      .then((all) => setPopulation(all.filter((a) => a.contratId === contrat.id)))
       .finally(() => setLoading(false));
   };
 
@@ -201,7 +202,7 @@ export default function PopulationPanel({ contrat, onUpdated }: Props) {
   // une génération avec les recto-verso comme c'est déjà le cas."
   const genererCartes = async (rectoUniquement: boolean) => {
     const mode = rectoUniquement ? "recto seul" : "recto-verso";
-    if (!window.confirm(`Générer les cartes (${mode}) de tous les assurés actifs de ${contrat.numeroPolice || contrat.id} (${population.length} personne(s)) ?`)) return;
+    if (!window.confirm(`Générer les cartes (${mode}) de tous les assurés actifs de ${numeroPolice(contrat)} (${population.length} personne(s)) ?`)) return;
     try {
       setBusyCartes(true);
       await genererCartesEnMasse({ contratId: contrat.id, rectoUniquement });

@@ -44,6 +44,7 @@ import {
   CalculPrimeSection, calculerPrime, TAUX_TAXE_GABON, primeUnitairesAvecSurprime, tallyByType,
   type PersonneAvecAge,
 } from "@/features/contrats/CalculPrimeSection";
+import { numeroPolice } from "@/lib/police";
 
 // Portail d'accès rapide depuis un autre écran (2026-08) — voir onglet
 // "Contrats" de CompagnieParamsDrawer, même mécanisme que
@@ -508,7 +509,7 @@ export default function ContratsView() {
       await updateAssure(a.id, editPersonneForm);
       toast.success("Fiche mise à jour.");
       setEditPersonneId(null);
-      getAssuresSante().then((all) => setExistingPopulation(all.filter((p) => p.police === form.contratMaladieLieId)));
+      getAssuresSante().then((all) => setExistingPopulation(all.filter((p) => p.contratId === form.contratMaladieLieId)));
     } catch (err) {
       setEditPersonneError(err instanceof Error ? err.message : "Erreur d'enregistrement.");
     } finally {
@@ -534,7 +535,7 @@ export default function ContratsView() {
     if (brancheFilter !== "Tous" && c.branche !== brancheFilter) return false;
     if (compagnieFilter && c.compagnie !== compagnieFilter.nom) return false;
     if (rechercheNorm) {
-      const cible = `${c.id} ${c.client} ${c.compagnie} ${c.numeroPolice ?? ""}`.toLowerCase();
+      const cible = `${c.numeroPolice ?? ""} ${c.client} ${c.compagnie}`.toLowerCase();
       if (!cible.includes(rechercheNorm)) return false;
     }
     if (echeanceDuDate || echeanceAuDate) {
@@ -632,7 +633,7 @@ export default function ContratsView() {
     // Assistance liée : jamais sa propre population, toujours celle de son
     // contrat Maladie lié (voir handleContratMaladieLieChange).
     const popSourceId = c.branche === "Assistance" && c.contratMaladieLieId ? c.contratMaladieLieId : c.id;
-    getAssuresSante().then((all) => setExistingPopulation(all.filter((a) => a.police === popSourceId)));
+    getAssuresSante().then((all) => setExistingPopulation(all.filter((a) => a.contratId === popSourceId)));
     setImportFile(null);
     setImportSearch("");
     setImportRejected([]);
@@ -761,7 +762,7 @@ export default function ContratsView() {
   const handleContratMaladieLieChange = (contratMaladieLieId: string) => {
     setForm((v) => ({ ...v, contratMaladieLieId: contratMaladieLieId || undefined }));
     if (contratMaladieLieId) {
-      getAssuresSante().then((all) => setExistingPopulation(all.filter((a) => a.police === contratMaladieLieId)));
+      getAssuresSante().then((all) => setExistingPopulation(all.filter((a) => a.contratId === contratMaladieLieId)));
     } else {
       setExistingPopulation([]);
     }
@@ -962,7 +963,7 @@ export default function ContratsView() {
   };
 
   const handleDelete = async (c: Contrat) => {
-    const ok = window.confirm(`Supprimer le contrat ${c.id} ?`);
+    const ok = window.confirm(`Supprimer le contrat ${numeroPolice(c)} ?`);
     if (!ok) return;
     try {
       await deleteContrat(c.id);
@@ -1098,7 +1099,7 @@ export default function ContratsView() {
             {pagination.pageItems.map((c) => (
               <tr key={c.id} onClick={() => openEdit(c)} className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer">
                 <td className="px-4 py-3 text-primary text-xs font-semibold whitespace-nowrap med-num med-col-ref med-sticky-col">
-                  {c.numeroPolice || c.id}
+                  {numeroPolice(c)}
                   <div className="md:hidden mt-1 space-y-0.5 text-[10px] leading-4 text-muted-foreground whitespace-normal">
                     <p className="med-num text-foreground">{fmt(c.prime)}</p>
                     <p>{c.statut}</p>
@@ -1318,7 +1319,7 @@ export default function ContratsView() {
                         <div className={labelCls}>Contrat Maladie lié</div>
                         <select value={form.contratMaladieLieId ?? ""} onChange={(e) => handleContratMaladieLieChange(e.target.value)} className={fieldCls}>
                           <option value="">— Aucun (population saisie séparément) —</option>
-                          {contratsMaladieDuClient.map((c) => <option key={c.id} value={c.id}>{c.numeroPolice || c.id} · {c.client}</option>)}
+                          {contratsMaladieDuClient.map((c) => <option key={c.id} value={c.id}>{numeroPolice(c)} · {c.client}</option>)}
                         </select>
                         {/* Liste vide = pas un bug : voir le filtre de contratsMaladieDuClient
                             (branche Maladie + même client, tous éligibles depuis 2026-09). Message
@@ -1996,7 +1997,7 @@ export default function ContratsView() {
           onClose={() => setBasculePopulationContrat(null)}
           onDone={() => {
             refresh();
-            if (editing) getAssuresSante().then((all) => setExistingPopulation(all.filter((a) => a.police === editing.id)));
+            if (editing) getAssuresSante().then((all) => setExistingPopulation(all.filter((a) => a.contratId === editing.id)));
           }}
         />
       )}

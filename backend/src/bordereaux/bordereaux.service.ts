@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { numeroPolice } from "../lib/police.util";
 
 function parseDateFr(s?: string | null): Date | null {
   if (!s) return null;
@@ -132,7 +133,7 @@ export class BordereauxService {
       const ligne: LigneBordereauSinistres = {
         dateSoins: l.date,
         dateReglement: l.bordereau.dateReception,
-        numeroPolice: contrat.numeroPolice ?? contrat.id,
+        numeroPolice: numeroPolice(contrat),
         souscripteur: contrat.client.nom,
         numeroClient: contrat.client.id,
         assurePrincipal: `${l.assure.nom} ${l.assure.prenom ?? ""}`.trim(),
@@ -212,7 +213,7 @@ export class BordereauxService {
       const primesTotales = Number(c.primeTotaleHT ?? c.prime);
       const commission = Number(c.montantCommission ?? 0);
       groupe.lignes.push({
-        numeroPolice: c.numeroPolice ?? c.id,
+        numeroPolice: numeroPolice(c),
         codeAssure: compagnie.codeCourtier ?? "N/A",
         numQuittance: c.numeroQuittance != null ? String(c.numeroQuittance) : "N/A",
         dateEmisQuittance: "N/A",
@@ -284,7 +285,7 @@ export class BordereauxService {
       const compagnie = compagnies.find((k) => k.id === e.contrat.compagnieId)!;
       const montant = Number(e.montant);
       groupe.lignes.push({
-        numeroPolice: e.contrat.numeroPolice ?? e.contrat.id,
+        numeroPolice: numeroPolice(e.contrat),
         codeAssure: compagnie.codeCourtier ?? "N/A",
         numQuittance: e.contrat.numeroQuittance != null ? String(e.contrat.numeroQuittance) : "N/A",
         dateEmisQuittance: "N/A",

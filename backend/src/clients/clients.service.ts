@@ -11,6 +11,7 @@ import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
 import { genererIdNumerique } from "../lib/numeric-id.util";
 import { texteBrutDeCellule } from "../lib/excel-cell.util";
+import { numeroPolice } from "../lib/police.util";
 
 const UPLOADS_LOGOS_DIR = path.join(UPLOADS_ROOT, "logos-clients");
 
@@ -205,7 +206,7 @@ export class ClientsService {
     // null, que `??` laissait passer telle quelle (référence invisible).
     const portefeuille = client.contrats
       .map((c) => ({
-        reference: c.numeroPolice || c.id,
+        reference: numeroPolice(c),
         source: "Contrat",
         produit: c.branche,
         compagnie: c.compagnie.nom,

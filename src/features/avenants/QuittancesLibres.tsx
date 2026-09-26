@@ -15,6 +15,7 @@ import { getBanques } from "@/services/banques.service";
 import type { QuittanceLibre } from "@/types/quittanceLibre";
 import type { Contrat } from "@/types/contrats";
 import type { Banque } from "@/types/banques";
+import { numeroPolice } from "@/lib/police";
 
 const fieldCls = "w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground";
 const labelCls = "text-[12px] text-muted-foreground mb-1.5";
@@ -370,7 +371,7 @@ export default function QuittancesLibresTab({ contrats }: Props) {
                     options={contrats}
                     value={contrat ?? null}
                     onChange={(c) => handleContratChange(c?.id ?? "")}
-                    getLabel={(c) => c.numeroPolice ?? c.id} getSubLabel={(c) => c.client} getId={(c) => c.id}
+                    getLabel={(c) => numeroPolice(c)} getSubLabel={(c) => c.client} getId={(c) => c.id}
                     placeholder="Rechercher…"
                   />
                 </label>

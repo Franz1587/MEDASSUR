@@ -317,7 +317,7 @@ export default function AccordPrealableView() {
   // renderCertificatPriseEnCharge).
   const trouverGarantieDuType = (assureId: string, type: string) => {
     const assureChoisi = assures.find((a) => a.id === assureId);
-    const contratDeLAssure = assureChoisi ? contrats.find((c) => c.id === assureChoisi.police) : undefined;
+    const contratDeLAssure = assureChoisi ? contrats.find((c) => c.id === assureChoisi.contratId) : undefined;
     if (!contratDeLAssure) return undefined;
     const typeLower = type.trim().toLowerCase();
     return contratDeLAssure.garanties.find((g) => g.categorie.trim().toLowerCase() === typeLower && g.plafondMontant != null)
@@ -334,11 +334,11 @@ export default function AccordPrealableView() {
   // public/privé × ayant droit (voir calculerRembLigne ci-dessus).
   const contratCreate = useMemo(() => {
     const assureChoisi = assures.find((as) => as.id === form.assureId);
-    return assureChoisi ? contrats.find((c) => c.id === assureChoisi.police) : undefined;
+    return assureChoisi ? contrats.find((c) => c.id === assureChoisi.contratId) : undefined;
   }, [assures, contrats, form.assureId]);
   const contratEdit = useMemo(() => {
     const assureChoisi = assures.find((as) => as.id === editForm.assureId);
-    return assureChoisi ? contrats.find((c) => c.id === assureChoisi.police) : undefined;
+    return assureChoisi ? contrats.find((c) => c.id === assureChoisi.contratId) : undefined;
   }, [assures, contrats, editForm.assureId]);
   const assureCreateChoisiFull = useMemo(() => assures.find((as) => as.id === form.assureId), [assures, form.assureId]);
   const assureEditChoisiFull = useMemo(() => assures.find((as) => as.id === editForm.assureId), [assures, editForm.assureId]);

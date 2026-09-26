@@ -166,7 +166,7 @@ export class ContratsService {
       where: { id },
       include: { client: true, compagnie: true, garanties: true, agence: true },
     });
-    if (!contrat) throw new NotFoundException(`Contrat ${id} introuvable`);
+    if (!contrat) throw new NotFoundException("Contrat introuvable");
     return contrat;
   }
 
@@ -184,7 +184,7 @@ export class ContratsService {
 
   async findOneForClient(id: string, clientId: string) {
     const contrat = await this.findOne(id);
-    if (contrat.clientId !== clientId) throw new ForbiddenException(`Contrat ${id} inaccessible`);
+    if (contrat.clientId !== clientId) throw new ForbiddenException("Contrat inaccessible");
     return contrat;
   }
 

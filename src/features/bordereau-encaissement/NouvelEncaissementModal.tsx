@@ -7,6 +7,7 @@ import { DateInput } from "@/components/shared/DateInput";
 import { getContrats } from "@/services/contrats.service";
 import { createEncaissement } from "@/services/encaissements.service";
 import type { Contrat } from "@/types/contrats";
+import { numeroPolice } from "@/lib/police";
 
 const fieldCls = "w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground";
 const labelCls = "text-[12px] text-muted-foreground mb-1.5";
@@ -69,7 +70,7 @@ export default function NouvelEncaissementModal({ onClose, onCreated }: { onClos
               value={contratSelectionne}
               onChange={(c) => setContratId(c?.id ?? "")}
               getLabel={(c) => c.client}
-              getSubLabel={(c) => `${c.numeroPolice ?? c.id} — ${c.compagnie}`}
+              getSubLabel={(c) => `${numeroPolice(c)} — ${c.compagnie}`}
               getId={(c) => c.id}
               placeholder="Rechercher un souscripteur…"
             />

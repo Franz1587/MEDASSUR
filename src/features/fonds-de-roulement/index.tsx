@@ -11,6 +11,7 @@ import { getFondsDeRoulement, createFonds, consommerFonds, type FondsUpsertInput
 import { getContrats } from "@/services/contrats.service";
 import type { FondsDeRoulement } from "@/types/fondsDeRoulement";
 import type { Contrat } from "@/types/contrats";
+import { numeroPolice } from "@/lib/police";
 
 const statutVariant: Record<string, "success" | "warning" | "danger"> = {
   Normal: "success",
@@ -101,7 +102,7 @@ export default function FondsDeRoulementView() {
                 <p className="text-sm font-semibold text-foreground">{f.clientNom}</p>
                 <Badge variant={statutVariant[f.statut] ?? "neutral"}>{f.statut}</Badge>
               </div>
-              <p className="text-xs text-muted-foreground mb-3">{f.contratId} · Alimenté le {f.dateAlimentation}</p>
+              <p className="text-xs text-muted-foreground mb-3">Police {numeroPolice(contrats.find((c) => c.id === f.contratId))} · Alimenté le {f.dateAlimentation}</p>
               <div className="w-full bg-secondary rounded-full h-2 mb-2">
                 <div className={`h-2 rounded-full ${f.statut === "Normal" ? "bg-primary" : "bg-red-500"}`} style={{ width: `${Math.min(pctConsomme, 100)}%` }} />
               </div>
@@ -132,7 +133,7 @@ export default function FondsDeRoulementView() {
                   options={contrats}
                   value={contrats.find((c) => c.id === form.contratId) ?? null}
                   onChange={(c) => setForm((v) => ({ ...v, contratId: c?.id ?? "" }))}
-                  getLabel={(c) => c.numeroPolice ?? c.id} getSubLabel={(c) => c.client} getId={(c) => c.id}
+                  getLabel={(c) => numeroPolice(c)} getSubLabel={(c) => c.client} getId={(c) => c.id}
                   placeholder="Rechercher…"
                 />
               </label>

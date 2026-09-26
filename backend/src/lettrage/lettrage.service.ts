@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { lettrerCompte, type MouvementALettrer } from "./lettrage.util";
+import { numeroPolice } from "../lib/police.util";
 
 // Lettrage interne à une société — comptes CLIENTS (souscripteurs) et
 // FOURNISSEURS (prestataires) — 2026-09. Voir demande utilisateur : "en
@@ -70,7 +71,7 @@ export class LettrageService {
               mouvements.push({
                 id: `ex-${ex.id}`,
                 date: ex.dateDebut,
-                libelle: `Prime exercice n°${ex.numero} — police ${ct.numeroPolice ?? ct.id}`,
+                libelle: `Prime exercice n°${ex.numero} — police ${numeroPolice(ct)}`,
                 montant: Number(ex.prime),
               });
             }
@@ -81,14 +82,14 @@ export class LettrageService {
               const debit: MouvementALettrer = {
                 id: `tr-${tr.id}`,
                 date: tr.dateEcheance,
-                libelle: `Tranche n°${tr.numero} — quittance libre — police ${ct.numeroPolice ?? ct.id}`,
+                libelle: `Tranche n°${tr.numero} — quittance libre — police ${numeroPolice(ct)}`,
                 montant: Number(tr.montant),
               };
               if (tr.encaissementId && tr.encaissement) {
                 const credit: MouvementALettrer = {
                   id: `enc-${tr.encaissement.id}`,
                   date: tr.encaissement.dateEncaissement,
-                  libelle: `Règlement tranche n°${tr.numero}${tr.encaissement.modePaiement ? " — " + tr.encaissement.modePaiement : ""} — police ${ct.numeroPolice ?? ct.id}`,
+                  libelle: `Règlement tranche n°${tr.numero}${tr.encaissement.modePaiement ? " — " + tr.encaissement.modePaiement : ""} — police ${numeroPolice(ct)}`,
                   montant: -Number(tr.encaissement.montant),
                 };
                 pairesConnues.push([debit, credit]);
@@ -105,7 +106,7 @@ export class LettrageService {
             mouvements.push({
               id: `enc-${enc.id}`,
               date: enc.dateEncaissement,
-              libelle: `Encaissement prime${enc.modePaiement ? " — " + enc.modePaiement : ""} — police ${ct.numeroPolice ?? ct.id}`,
+              libelle: `Encaissement prime${enc.modePaiement ? " — " + enc.modePaiement : ""} — police ${numeroPolice(ct)}`,
               montant: -Number(enc.montant),
             });
           }

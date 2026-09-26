@@ -13,6 +13,7 @@ import {
 } from "@/services/portailClient.service";
 import type { Contrat } from "@/types/contrats";
 import type { Avenant } from "@/types/avenants";
+import { numeroPolice } from "@/lib/police";
 
 function statutVariant(statut: string): BadgeVariant {
   if (statut === "Actif") return "success";
@@ -108,7 +109,7 @@ export default function ContratDetail({ contrat, onRetour }: Props) {
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-primary/12 rounded-xl"><FileText className="w-5 h-5 text-primary" /></div>
           <div>
-            <h1 className="text-[1.35rem] font-bold text-foreground">{contrat.numeroPolice ?? contrat.id}</h1>
+            <h1 className="text-[1.35rem] font-bold text-foreground">{numeroPolice(contrat)}</h1>
             <p className="text-xs text-muted-foreground mt-0.5">{contrat.compagnie} · {contrat.branche}</p>
           </div>
         </div>
