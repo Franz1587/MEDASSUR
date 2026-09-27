@@ -28,14 +28,9 @@ export interface LigneBordereauSinistres {
   partGarant: number;
   tps: number;
   netAPayer: number;
-  // Agence de SAISIE de la facture/du remboursement et ville du prestataire
-  // (2026-09, bordereau par agence — voir sinistres() ci-dessous).
-  agence: string;
-  villePrestataire: string;
 }
 
 export interface GroupeBordereauSinistres {
-  // Libellé du groupe : souscripteur ou prestataire selon le regroupement.
   souscripteur: string;
   lignes: LigneBordereauSinistres[];
   totaux: { fraisReels: number; partGarant: number; tps: number; netAPayer: number };
@@ -47,31 +42,24 @@ export interface BordereauSinistresPayload {
   compagnieId?: string;
   compagnie?: string;
   typeReglement: "maladie" | "comptable";
-  agenceId?: string;
-  agence?: string;
-  ville?: string;
-  groupement: GroupementBordereauSinistres;
   groupes: GroupeBordereauSinistres[];
   total: { fraisReels: number; partGarant: number; tps: number; netAPayer: number };
 }
 
-export type GroupementBordereauSinistres = "souscripteur" | "prestataire";
-
-// Filtres du bordereau sinistres par agence (2026-09) — voir demande
-// utilisateur : "il faut pouvoir générer les bordereaux par compagnie oui,
-// mais par agence. Il ne sera pas question de faire remonter les sinistres en
-// fonction des clients uniquement, mais beaucoup plus en fonction des
-// prestataires d'une ville et surtout de l'agence dans laquelle les factures
-// des prestataires médicaux ont été saisies."
+// Filtres du bordereau sinistres (2026-09) — voir demande utilisateur : "le
+// système doit simplement permettre la génération des bordereaux en fonction
+// de l'agence qui l'a traité, ou un bordereau selon la compagnie sur laquelle
+// le contrat a été créé... les filtres peuvent être ajoutés dans
+// l'application, mais le fichier doit rester inchangé sans ajouter d'autres
+// champs." Ces filtres ne font que SÉLECTIONNER les lignes : le modèle du
+// bordereau (colonnes, regroupement par souscripteur) ne change jamais.
 //  - agenceId : agence de saisie de la facture/du remboursement ; la valeur
 //    SANS_AGENCE isole ce qui a été saisi hors agence (siège, portail) ;
-//  - ville : ville du prestataire ;
-//  - groupement : par souscripteur (historique) ou par prestataire.
+//  - ville : ville du prestataire.
 export const SANS_AGENCE = "sans-agence";
 export interface FiltresBordereauSinistres {
   agenceId?: string;
   ville?: string;
-  groupement?: GroupementBordereauSinistres;
 }
 
 export interface LigneBordereauProduction {
@@ -121,7 +109,6 @@ export class BordereauxService {
   constructor(private prisma: PrismaService) {}
 
   async sinistres(du?: string, au?: string, compagnieId?: string, typeReglement: "maladie" | "comptable" = "maladie", filtres: FiltresBordereauSinistres = {}): Promise<BordereauSinistresPayload> {
-    const groupement: GroupementBordereauSinistres = filtres.groupement === "prestataire" ? "prestataire" : "souscripteur";
     const villeFiltre = filtres.ville?.trim().toLowerCase() || null;
     const dateDu = parseDateFr(du);
     const dateAu = parseDateFr(au);
@@ -131,15 +118,13 @@ export class BordereauxService {
         where: { bordereauId: { not: null } },
         include: {
           assure: true, prestataireRef: true, bordereau: true,
-          facture: { select: { agenceId: true, agence: { select: { nom: true } } } },
-          remboursement: { select: { agenceId: true, agence: { select: { nom: true } } } },
+          facture: { select: { agenceId: true } },
+          remboursement: { select: { agenceId: true } },
         },
       }),
       compagnieId ? this.prisma.compagnie.findUnique({ where: { id: compagnieId } }) : Promise.resolve(null),
     ]);
-    const agenceFiltre = filtres.agenceId && filtres.agenceId !== SANS_AGENCE
-      ? await this.prisma.agence.findUnique({ where: { id: filtres.agenceId }, select: { id: true, nom: true } })
-      : null;
+
 
     const dansPeriode = lignesBrutes.filter((l) => {
       if (!l.bordereau) return false;
@@ -189,22 +174,16 @@ export class BordereauxService {
         numeroReglement: typeReglement === "comptable" ? (l.bordereau.referenceVirement ?? "Non réglé") : l.bordereau.numero,
         fraisReels, partGarant, tps,
         netAPayer: partGarant - tps,
-        agence: agenceSaisie?.agence?.nom ?? "Sans agence (siège)",
-        villePrestataire: villePrestataire || "—",
       };
-      const cleGroupe = groupement === "prestataire" ? `p:${l.prestataireRef?.id ?? l.prestataire}` : contrat.client.id;
-      const libelleGroupe = groupement === "prestataire"
-        ? `${ligne.prestataire}${villePrestataire ? ` — ${villePrestataire}` : ""}`
-        : contrat.client.nom;
-      const groupe = parClient.get(cleGroupe) ?? {
-        souscripteur: libelleGroupe, lignes: [], totaux: { fraisReels: 0, partGarant: 0, tps: 0, netAPayer: 0 },
+      const groupe = parClient.get(contrat.client.id) ?? {
+        souscripteur: contrat.client.nom, lignes: [], totaux: { fraisReels: 0, partGarant: 0, tps: 0, netAPayer: 0 },
       };
       groupe.lignes.push(ligne);
       groupe.totaux.fraisReels += fraisReels;
       groupe.totaux.partGarant += partGarant;
       groupe.totaux.tps += tps;
       groupe.totaux.netAPayer += ligne.netAPayer;
-      parClient.set(cleGroupe, groupe);
+      parClient.set(contrat.client.id, groupe);
     }
 
     const groupes = [...parClient.values()]
@@ -221,11 +200,7 @@ export class BordereauxService {
       { fraisReels: 0, partGarant: 0, tps: 0, netAPayer: 0 },
     );
 
-    return {
-      du, au, compagnieId, compagnie: compagnie?.nom, typeReglement,
-      agenceId: filtres.agenceId, agence: filtres.agenceId === SANS_AGENCE ? "Sans agence (siège)" : agenceFiltre?.nom,
-      ville: filtres.ville?.trim() || undefined, groupement, groupes, total,
-    };
+    return { du, au, compagnieId, compagnie: compagnie?.nom, typeReglement, groupes, total };
   }
 
   // Villes des prestataires (filtre du bordereau sinistres).

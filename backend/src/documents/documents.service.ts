@@ -4702,23 +4702,20 @@ export class DocumentsService {
     du: string | undefined, au: string | undefined, compagnieId: string | undefined, typeReglement: "maladie" | "comptable", format: "pdf" | "xlsx", res: Response,
     filtres: FiltresBordereauSinistres = {},
   ) {
+    // Les filtres (agence de saisie, ville du prestataire) ne font que
+    // sélectionner les lignes : le document reste EXACTEMENT le modèle
+    // d'origine — voir demande utilisateur : "le modèle de bordereau ne doit
+    // pas changer peu importe l'agence... le fichier doit rester inchangé
+    // sans ajouter d'autres champs."
     const payload = await this.bordereaux.sinistres(du, au, compagnieId, typeReglement, filtres);
-    // Souscripteur lu sur la LIGNE (et non le groupe) : en regroupement par
-    // prestataire, le groupe porte le nom du prestataire.
-    const rows = payload.groupes.flatMap((g) => g.lignes.map((l) => [l.dateSoins, l.dateReglement, l.numeroPolice, l.souscripteur, l.assurePrincipal, l.prestataire, l.villePrestataire, l.agence, l.numeroReglement, l.fraisReels, l.partGarant, l.tps, l.netAPayer]));
-    const perimetre = [
-      payload.compagnie, payload.agence ? `Agence ${payload.agence}` : null, payload.ville ? `Prestataires de ${payload.ville}` : null,
-      payload.typeReglement === "maladie" ? "Règlement Maladie" : "Règlement Comptable", `${du ?? "…"} au ${au ?? "…"}`,
-    ].filter(Boolean).join(" · ");
-    const suffixe = [payload.agence, payload.ville].filter(Boolean).join("-").replace(/[\\/:*?"<>|\s]+/g, "-");
-    const nomFichier = `Bordereau-Sinistres-${typeReglement}${suffixe ? `-${suffixe}` : ""}`;
+    const rows = payload.groupes.flatMap((g) => g.lignes.map((l) => [l.dateSoins, l.dateReglement, l.numeroPolice, g.souscripteur, l.assurePrincipal, l.prestataire, l.numeroReglement, l.fraisReels, l.partGarant, l.tps, l.netAPayer]));
     if (format === "xlsx") {
-      return this.envoyerTableauXlsx(res, nomFichier,
-        ["Date soins", "Date règlement", "Police", "Souscripteur", "Assuré", "Prestataire", "Ville", "Agence de saisie", "N° règlement", "Frais réels", "Part garant", "TPS", "Net à payer"],
-        rows, ["", "", "", "", "", "", "", "", "TOTAL", payload.total.fraisReels, payload.total.partGarant, payload.total.tps, payload.total.netAPayer]);
+      return this.envoyerTableauXlsx(res, `Bordereau-Sinistres-${typeReglement}`,
+        ["Date soins", "Date règlement", "Police", "Souscripteur", "Assuré", "Prestataire", "N° règlement", "Frais réels", "Part garant", "TPS", "Net à payer"],
+        rows, ["", "", "", "", "", "", "TOTAL", payload.total.fraisReels, payload.total.partGarant, payload.total.tps, payload.total.netAPayer]);
     }
-    return this.envoyerTableauPdf(res, nomFichier, "BORDEREAU SINISTRES", perimetre,
-      [{ h: "Date soins", w: 58 }, { h: "Date règl.", w: 58 }, { h: "Police", w: 62 }, { h: "Souscripteur", w: 95 }, { h: "Assuré", w: 90 }, { h: "Prestataire", w: 95 }, { h: "Ville", w: 58 }, { h: "Agence", w: 70 }, { h: "N° règl.", w: 62 }, { h: "Frais réels", w: 64 }, { h: "Part garant", w: 64 }, { h: "TPS", w: 48 }, { h: "Net à payer", w: 68 }],
+    return this.envoyerTableauPdf(res, `Bordereau-Sinistres-${typeReglement}`, "BORDEREAU SINISTRES", `${payload.compagnie ?? ""} · ${payload.typeReglement === "maladie" ? "Règlement Maladie" : "Règlement Comptable"} · ${du ?? "…"} au ${au ?? "…"}`,
+      [{ h: "Date soins", w: 65 }, { h: "Date règl.", w: 65 }, { h: "Police", w: 70 }, { h: "Souscripteur", w: 110 }, { h: "Assuré", w: 100 }, { h: "Prestataire", w: 110 }, { h: "N° règl.", w: 70 }, { h: "Frais réels", w: 70 }, { h: "Part garant", w: 70 }, { h: "TPS", w: 55 }, { h: "Net à payer", w: 75 }],
       rows, "NET TOTAL À PAYER", `${fmt(payload.total.netAPayer)} FCFA`);
   }
 

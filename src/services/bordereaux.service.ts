@@ -16,8 +16,6 @@ export interface LigneBordereauSinistres {
   partGarant: number;
   tps: number;
   netAPayer: number;
-  agence: string;
-  villePrestataire: string;
 }
 
 export interface GroupeBordereauSinistres {
@@ -34,23 +32,18 @@ export interface BordereauSinistresPayload {
   compagnieId?: string;
   compagnie?: string;
   typeReglement: TypeReglementBordereauSinistres;
-  agenceId?: string;
-  agence?: string;
-  ville?: string;
-  groupement: GroupementBordereauSinistres;
   groupes: GroupeBordereauSinistres[];
   total: { fraisReels: number; partGarant: number; tps: number; netAPayer: number };
 }
 
-// Bordereau sinistres par agence (2026-09) — agence de SAISIE des factures
-// (SANS_AGENCE = saisies hors agence : siège, portail), ville du prestataire,
-// regroupement par souscripteur ou par prestataire.
+// Filtres du bordereau sinistres (2026-09) — agence de SAISIE des factures
+// (SANS_AGENCE = saisies hors agence : siège, portail) et ville du
+// prestataire. Ils sélectionnent les lignes ; le modèle du bordereau reste
+// inchangé.
 export const SANS_AGENCE = "sans-agence";
-export type GroupementBordereauSinistres = "souscripteur" | "prestataire";
 export interface FiltresBordereauSinistres {
   agenceId?: string;
   ville?: string;
-  groupement?: GroupementBordereauSinistres;
 }
 
 export async function getVillesPrestatairesBordereau(): Promise<string[]> {
@@ -67,7 +60,6 @@ export async function getBordereauSinistres(
   if (typeReglement) params.set("typeReglement", typeReglement);
   if (filtres.agenceId) params.set("agenceId", filtres.agenceId);
   if (filtres.ville) params.set("ville", filtres.ville);
-  if (filtres.groupement) params.set("groupement", filtres.groupement);
   const qs = params.toString();
   return http.get<BordereauSinistresPayload>(`/bordereaux/sinistres${qs ? `?${qs}` : ""}`);
 }

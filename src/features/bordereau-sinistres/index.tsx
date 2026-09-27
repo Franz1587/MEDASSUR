@@ -6,7 +6,7 @@ import { Combobox } from "@/components/shared/Combobox";
 import { DateInput } from "@/components/shared/DateInput";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { fmtM } from "@/lib/format";
-import { getBordereauSinistres, getVillesPrestatairesBordereau, SANS_AGENCE, type BordereauSinistresPayload, type GroupementBordereauSinistres, type TypeReglementBordereauSinistres } from "@/services/bordereaux.service";
+import { getBordereauSinistres, getVillesPrestatairesBordereau, SANS_AGENCE, type BordereauSinistresPayload, type TypeReglementBordereauSinistres } from "@/services/bordereaux.service";
 import { getAgences } from "@/services/agences.service";
 import type { Agence } from "@/types/agences";
 import { openBordereauSinistres } from "@/services/documents.service";
@@ -22,12 +22,13 @@ const labelCls = "text-[12px] text-muted-foreground mb-1.5";
 // roulement (voir modèle fourni, toujours scopé à un seul destinataire),
 // donc une compagnie doit être choisie avant de générer. Détail groupé par
 // souscripteur au sein de cette compagnie (même structure que le modèle).
-// Par agence (2026-09) — voir demande utilisateur : "générer les bordereaux
-// par compagnie oui, mais par agence... en fonction des prestataires d'une
-// ville et surtout de l'agence dans laquelle les factures ont été saisies" :
-// filtres agence de saisie et ville du prestataire, regroupement par
-// prestataire possible ; la compagnie devient facultative si une agence est
-// choisie.
+// Par agence (2026-09) — voir demande utilisateur : "le système doit
+// simplement permettre la génération des bordereaux en fonction de l'agence
+// qui l'a traité, ou un bordereau selon la compagnie sur laquelle le contrat
+// a été créé... le fichier doit rester inchangé sans ajouter d'autres
+// champs." Filtres agence de saisie et ville du prestataire (la compagnie
+// devient facultative si une agence est choisie) ; le bordereau affiché et
+// imprimé garde exactement le modèle d'origine.
 export default function BordereauSinistresView() {
   const [compagnies, setCompagnies] = useState<Compagnie[]>([]);
   const [compagnieId, setCompagnieId] = useState("");
@@ -40,7 +41,6 @@ export default function BordereauSinistresView() {
   const [agenceId, setAgenceId] = useState("");
   const [villes, setVilles] = useState<string[]>([]);
   const [ville, setVille] = useState("");
-  const [groupement, setGroupement] = useState<GroupementBordereauSinistres>("souscripteur");
 
   useEffect(() => {
     getCompagnies().then(setCompagnies);
@@ -50,7 +50,7 @@ export default function BordereauSinistresView() {
 
   const optionsAgence = [{ id: SANS_AGENCE, nom: "Sans agence (siège)" }, ...agences.map((a) => ({ id: a.id, nom: a.nom }))];
   const optionsVille = villes.map((v) => ({ id: v, nom: v }));
-  const filtres = { agenceId: agenceId || undefined, ville: ville || undefined, groupement };
+  const filtres = { agenceId: agenceId || undefined, ville: ville || undefined };
   const perimetreChoisi = !!compagnieId || !!agenceId;
 
   const handleRechercher = async () => {
@@ -68,7 +68,7 @@ export default function BordereauSinistresView() {
 
   return (
     <div className="p-6">
-      <ModuleHeader title="Bordereau Sinistres" subtitle="Factures et remboursements réglés, par compagnie, par agence de saisie et par ville de prestataire — pour réclamation du fonds de roulement" icon={AlertTriangle} />
+      <ModuleHeader title="Bordereau Sinistres" subtitle="Factures et remboursements réglés, par compagnie ou par agence de traitement — pour réclamation du fonds de roulement" icon={AlertTriangle} />
 
       <div className="bg-card border border-border rounded-xl p-4 mb-4">
         <div className="flex items-end gap-3 flex-wrap">
@@ -105,19 +105,7 @@ export default function BordereauSinistresView() {
               placeholder="Toutes les villes"
             />
           </label>
-          <label className="block">
-            <div className={labelCls}>Regrouper par</div>
-            <div className="inline-flex rounded-lg border border-border overflow-hidden">
-              {(["souscripteur", "prestataire"] as const).map((g, i) => (
-                <button
-                  key={g} type="button" onClick={() => { setGroupement(g); setPayload(null); }}
-                  className={`px-3 py-2 text-[13px] ${i > 0 ? "border-l border-border" : ""} ${groupement === g ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
-                >
-                  {g === "souscripteur" ? "Souscripteur" : "Prestataire"}
-                </button>
-              ))}
-            </div>
-          </label>
+
           <label className="block">
             <div className={labelCls}>Type de règlement</div>
             <div className="inline-flex rounded-lg border border-border overflow-hidden">
@@ -151,7 +139,7 @@ export default function BordereauSinistresView() {
 
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-border">
-          <h3 className="font-semibold text-foreground text-sm">{payload ? `${payload.groupes.length} ${payload.groupement === "prestataire" ? "prestataire(s)" : "souscripteur(s)"} — ${nbLignes} ligne(s)` : `Détail par ${groupement}`}</h3>
+          <h3 className="font-semibold text-foreground text-sm">{payload ? `${payload.groupes.length} souscripteur(s) — ${nbLignes} ligne(s)` : "Détail par souscripteur"}</h3>
         </div>
 
         {!perimetreChoisi ? (
@@ -165,7 +153,7 @@ export default function BordereauSinistresView() {
             <table className="w-full text-[12.5px]">
               <thead>
                 <tr className="border-b border-border bg-secondary/20">
-                  {["Date soins", "Date règlement", "N° Police", "Souscripteur", "N° client", "Assuré", "Prestataire", "Ville", "Agence de saisie", libelleColReglement, "Frais réels", "Part Garant", "TPS", "Net à payer"].map((h) => (
+                  {["Date soins", "Date règlement", "N° Police", "Souscripteur", "N° client", "Assuré", "Prestataire", libelleColReglement, "Frais réels", "Part Garant", "TPS", "Net à payer"].map((h) => (
                     <th key={h} className="text-left text-[10.5px] text-muted-foreground font-semibold uppercase tracking-wide px-3 py-2 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -182,8 +170,6 @@ export default function BordereauSinistresView() {
                         <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{l.numeroClient}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap text-foreground">{l.assurePrincipal}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap text-foreground">{l.prestataire}</td>
-                        <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{l.villePrestataire}</td>
-                        <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{l.agence}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{l.numeroReglement}</td>
                         <td className="px-3 py-1.5 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(l.fraisReels)}</td>
                         <td className="px-3 py-1.5 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(l.partGarant)}</td>
@@ -192,7 +178,7 @@ export default function BordereauSinistresView() {
                       </tr>
                     ))}
                     <tr className="bg-primary/10 font-semibold">
-                      <td colSpan={10} className="px-3 py-1.5 text-foreground text-right">Sous Total {g.souscripteur}</td>
+                      <td colSpan={8} className="px-3 py-1.5 text-foreground text-right">Sous Total {g.souscripteur}</td>
                       <td className="px-3 py-1.5 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(g.totaux.fraisReels)}</td>
                       <td className="px-3 py-1.5 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(g.totaux.partGarant)}</td>
                       <td className="px-3 py-1.5 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(g.totaux.tps)}</td>
@@ -203,7 +189,7 @@ export default function BordereauSinistresView() {
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-border bg-secondary/40 font-bold">
-                  <td colSpan={10} className="px-3 py-2 text-foreground text-right">TOTAL GÉNÉRAL</td>
+                  <td colSpan={8} className="px-3 py-2 text-foreground text-right">TOTAL GÉNÉRAL</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(payload.total.fraisReels)}</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(payload.total.partGarant)}</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(payload.total.tps)}</td>

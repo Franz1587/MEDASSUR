@@ -120,10 +120,10 @@ export class DocumentsController {
   bordereauSinistres(
     @Query("du") du: string | undefined, @Query("au") au: string | undefined, @Query("compagnieId") compagnieId: string | undefined,
     @Query("typeReglement") typeReglement: string | undefined, @Query("format") format: string | undefined, @Res() res: Response,
-    @Query("agenceId") agenceId?: string, @Query("ville") ville?: string, @Query("groupement") groupement?: string,
+    @Query("agenceId") agenceId?: string, @Query("ville") ville?: string,
   ) {
     return this.documentsService.renderBordereauSinistres(du, au, compagnieId, typeReglement === "comptable" ? "comptable" : "maladie", format === "xlsx" ? "xlsx" : "pdf", res, {
-      agenceId: agenceId || undefined, ville: ville || undefined, groupement: groupement === "prestataire" ? "prestataire" : "souscripteur",
+      agenceId: agenceId || undefined, ville: ville || undefined,
     });
   }
 
