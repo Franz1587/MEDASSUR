@@ -26,7 +26,7 @@ export class TenantContextInterceptor implements NestInterceptor {
           error: (e) => subscriber.error(e),
           complete: () => subscriber.complete(),
         });
-      });
+      }, req?.user?.userId ?? null);
     });
   }
 }

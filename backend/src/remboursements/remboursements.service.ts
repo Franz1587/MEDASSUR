@@ -8,6 +8,7 @@ import { UpdateRemboursementDto } from "./dto/update-remboursement.dto";
 import { CreateRemboursementLigneDto } from "./dto/create-remboursement-ligne.dto";
 import { UpdateRemboursementLigneDto } from "./dto/update-remboursement-ligne.dto";
 import { ApercuRemboursementLigneDto } from "./dto/apercu-remboursement-ligne.dto";
+import { agenceDeSaisie } from "../lib/agence-saisie.util";
 
 function parseDateFr(s?: string | null): Date | null {
   if (!s) return null;
@@ -68,9 +69,11 @@ export class RemboursementsService {
     if (dto.beneficiaire === "AssurePrincipal" && !dto.assurePrincipalId) {
       throw new BadRequestException("L'assuré principal bénéficiaire est obligatoire.");
     }
+    const agenceId = await agenceDeSaisie(this.prisma, gestionnaireId);
     return this.prisma.remboursement.create({
       data: {
         id: `REMB-${new Date().getFullYear()}-${randomUUID().slice(0, 6).toUpperCase()}`,
+        agenceId,
         beneficiaire: dto.beneficiaire, assurePrincipalId: dto.beneficiaire === "AssurePrincipal" ? dto.assurePrincipalId : undefined,
         contratId: dto.contratId, dateDeclaration: dto.dateDeclaration, gestionnaireId,
       },

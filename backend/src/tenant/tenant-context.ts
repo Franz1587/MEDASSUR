@@ -15,13 +15,21 @@ import { AsyncLocalStorage } from "node:async_hooks";
 // les deux cas, aucun filtrage n'est appliqué — jamais une exception.
 interface TenantStore {
   societeId: string | null;
+  // Utilisateur connecté (2026-09) — sert à retrouver l'agence de SAISIE
+  // d'une facture/d'un remboursement quel que soit le chemin de création
+  // (saisie, import...), voir agence-saisie.util.ts.
+  userId?: string | null;
 }
 
 const als = new AsyncLocalStorage<TenantStore>();
 
 export const TenantContext = {
-  run<T>(societeId: string | null, fn: () => T): T {
-    return als.run({ societeId }, fn);
+  run<T>(societeId: string | null, fn: () => T, userId?: string | null): T {
+    return als.run({ societeId, userId: userId ?? null }, fn);
+  },
+
+  getUserId(): string | null {
+    return als.getStore()?.userId ?? null;
   },
 
   getSocieteId(): string | null {

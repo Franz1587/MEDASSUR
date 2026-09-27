@@ -10,6 +10,9 @@ import {
   reinitialiserMotDePasseSocieteUser, supprimerSocieteUser,
 } from "@/services/societes.service";
 import type { SocieteUser, CreerSocieteUserInput } from "@/types/societes";
+import { Combobox } from "@/components/shared/Combobox";
+import { getAgences } from "@/services/agences.service";
+import type { Agence } from "@/types/agences";
 
 const fieldCls = "w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground";
 const labelCls = "text-[12px] text-muted-foreground mb-1.5";
@@ -25,7 +28,7 @@ function initiales(nom: string): string {
 }
 
 function emptyForm(): CreerSocieteUserInput {
-  return { nom: "", email: "", initiales: "", roleId: "commercial", modules: ["dashboard"] };
+  return { nom: "", email: "", initiales: "", roleId: "commercial", modules: ["dashboard"], agenceId: "" };
 }
 
 // Panneau "Utilisateurs" d'une société, pour le Super Admin (2026-09) —
@@ -49,6 +52,12 @@ export function SocieteUsersPanel({ societeId, modulesAutorises }: { societeId: 
     getSocieteUsers(societeId).then(setUsers).catch((err) => toast.error(err instanceof Error ? err.message : "Chargement impossible.")).finally(() => setLoading(false));
   };
   useEffect(refresh, [societeId]);
+  // Agences de CETTE société uniquement (le Super Admin voit toutes les
+  // sociétés — voir Agence.societeId).
+  const [agencesSociete, setAgencesSociete] = useState<Agence[]>([]);
+  useEffect(() => {
+    getAgences().then((toutes) => setAgencesSociete(toutes.filter((a) => a.societeId === societeId))).catch(() => undefined);
+  }, [societeId]);
 
   const openCreate = () => {
     setTarget(null);
@@ -60,7 +69,7 @@ export function SocieteUsersPanel({ societeId, modulesAutorises }: { societeId: 
 
   const openEdit = (u: SocieteUser) => {
     setTarget(u);
-    setForm({ nom: u.nom, email: u.email, initiales: u.initiales, roleId: u.roleId, telephone: u.telephone ?? "", adresse: u.adresse ?? "" });
+    setForm({ nom: u.nom, email: u.email, initiales: u.initiales, roleId: u.roleId, telephone: u.telephone ?? "", adresse: u.adresse ?? "", agenceId: u.agenceId ?? "" });
     setSelection(new Set(u.modules));
     setError(null);
     setShowModal(true);
@@ -156,6 +165,17 @@ export function SocieteUsersPanel({ societeId, modulesAutorises }: { societeId: 
                   <select value={form.roleId} onChange={(e) => setForm((v) => ({ ...v, roleId: e.target.value }))} className={fieldCls}>
                     {ROLES_ASSIGNABLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
                   </select>
+                </label>
+                <label className="block col-span-2"><div className={labelCls}>Agence de rattachement</div>
+                  <Combobox
+                    options={agencesSociete}
+                    value={agencesSociete.find((a) => a.id === form.agenceId) ?? null}
+                    onChange={(a) => setForm((v) => ({ ...v, agenceId: a?.id ?? "" }))}
+                    getLabel={(a) => a.nom} getSubLabel={(a) => a.code ?? ""} getId={(a) => a.id}
+                    placeholder={agencesSociete.length ? "Rechercher une agence…" : "Aucune agence paramétrée pour cette société"}
+                    allowClear clearLabel="Aucune agence"
+                  />
+                  <p className="text-[10.5px] text-muted-foreground mt-1">Les factures saisies par cet agent seront rattachées à cette agence (bordereau sinistres par agence).</p>
                 </label>
               </div>
               <div className={labelCls}>DROITS ({selection.size} module(s), plafonnés à l'abonnement de la société)</div>

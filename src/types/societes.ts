@@ -474,6 +474,7 @@ export interface SocieteUser {
   createdAt: string;
   telephone?: string | null;
   adresse?: string | null;
+  agenceId?: string | null;
   photo?: string | null;
   derniereConnexion?: string | null;
 }
@@ -486,6 +487,9 @@ export interface CreerSocieteUserInput {
   modules?: string[];
   telephone?: string;
   adresse?: string;
+  // Agence de rattachement (2026-09) — "" = aucune ; toujours une agence de
+  // CETTE société (contrôlé côté serveur).
+  agenceId?: string;
 }
 
 // Tarification par personne assurée (2026-09) — voir demande utilisateur :

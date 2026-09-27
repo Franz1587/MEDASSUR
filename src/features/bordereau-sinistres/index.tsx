@@ -6,7 +6,9 @@ import { Combobox } from "@/components/shared/Combobox";
 import { DateInput } from "@/components/shared/DateInput";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { fmtM } from "@/lib/format";
-import { getBordereauSinistres, type BordereauSinistresPayload, type TypeReglementBordereauSinistres } from "@/services/bordereaux.service";
+import { getBordereauSinistres, getVillesPrestatairesBordereau, SANS_AGENCE, type BordereauSinistresPayload, type GroupementBordereauSinistres, type TypeReglementBordereauSinistres } from "@/services/bordereaux.service";
+import { getAgences } from "@/services/agences.service";
+import type { Agence } from "@/types/agences";
 import { openBordereauSinistres } from "@/services/documents.service";
 import { getCompagnies } from "@/services/compagnies.service";
 import type { Compagnie } from "@/types/compagnies";
@@ -20,6 +22,12 @@ const labelCls = "text-[12px] text-muted-foreground mb-1.5";
 // roulement (voir modèle fourni, toujours scopé à un seul destinataire),
 // donc une compagnie doit être choisie avant de générer. Détail groupé par
 // souscripteur au sein de cette compagnie (même structure que le modèle).
+// Par agence (2026-09) — voir demande utilisateur : "générer les bordereaux
+// par compagnie oui, mais par agence... en fonction des prestataires d'une
+// ville et surtout de l'agence dans laquelle les factures ont été saisies" :
+// filtres agence de saisie et ville du prestataire, regroupement par
+// prestataire possible ; la compagnie devient facultative si une agence est
+// choisie.
 export default function BordereauSinistresView() {
   const [compagnies, setCompagnies] = useState<Compagnie[]>([]);
   const [compagnieId, setCompagnieId] = useState("");
@@ -28,14 +36,28 @@ export default function BordereauSinistresView() {
   const [au, setAu] = useState("");
   const [payload, setPayload] = useState<BordereauSinistresPayload | null>(null);
   const [recherchant, setRecherchant] = useState(false);
+  const [agences, setAgences] = useState<Agence[]>([]);
+  const [agenceId, setAgenceId] = useState("");
+  const [villes, setVilles] = useState<string[]>([]);
+  const [ville, setVille] = useState("");
+  const [groupement, setGroupement] = useState<GroupementBordereauSinistres>("souscripteur");
 
-  useEffect(() => { getCompagnies().then(setCompagnies); }, []);
+  useEffect(() => {
+    getCompagnies().then(setCompagnies);
+    getAgences().then(setAgences).catch(() => undefined);
+    getVillesPrestatairesBordereau().then(setVilles).catch(() => undefined);
+  }, []);
+
+  const optionsAgence = [{ id: SANS_AGENCE, nom: "Sans agence (siège)" }, ...agences.map((a) => ({ id: a.id, nom: a.nom }))];
+  const optionsVille = villes.map((v) => ({ id: v, nom: v }));
+  const filtres = { agenceId: agenceId || undefined, ville: ville || undefined, groupement };
+  const perimetreChoisi = !!compagnieId || !!agenceId;
 
   const handleRechercher = async () => {
-    if (!compagnieId) { toast.error("Choisissez d'abord une compagnie."); return; }
+    if (!perimetreChoisi) { toast.error("Choisissez une compagnie ou une agence."); return; }
     setRecherchant(true);
     try {
-      setPayload(await getBordereauSinistres(du || undefined, au || undefined, compagnieId, typeReglement));
+      setPayload(await getBordereauSinistres(du || undefined, au || undefined, compagnieId || undefined, typeReglement, filtres));
     } finally {
       setRecherchant(false);
     }
@@ -46,19 +68,55 @@ export default function BordereauSinistresView() {
 
   return (
     <div className="p-6">
-      <ModuleHeader title="Bordereau Sinistres" subtitle="Factures et remboursements réglés, par compagnie et par souscripteur — pour réclamation du fonds de roulement" icon={AlertTriangle} />
+      <ModuleHeader title="Bordereau Sinistres" subtitle="Factures et remboursements réglés, par compagnie, par agence de saisie et par ville de prestataire — pour réclamation du fonds de roulement" icon={AlertTriangle} />
 
       <div className="bg-card border border-border rounded-xl p-4 mb-4">
         <div className="flex items-end gap-3 flex-wrap">
           <label className="block w-64">
-            <div className={labelCls}>Compagnie *</div>
+            <div className={labelCls}>Compagnie{agenceId ? "" : " *"}</div>
             <Combobox
               options={compagnies}
               value={compagnies.find((c) => c.id === compagnieId) ?? null}
               onChange={(c) => { setCompagnieId(c?.id ?? ""); setPayload(null); }}
               getLabel={(c) => c.nom} getId={(c) => c.id}
+              allowClear clearLabel="Toutes les compagnies"
               placeholder="Rechercher…"
             />
+          </label>
+          <label className="block w-56">
+            <div className={labelCls}>Agence de saisie</div>
+            <Combobox
+              options={optionsAgence}
+              value={optionsAgence.find((a) => a.id === agenceId) ?? null}
+              onChange={(a) => { setAgenceId(a?.id ?? ""); setPayload(null); }}
+              getLabel={(a) => a.nom} getId={(a) => a.id}
+              allowClear clearLabel="Toutes les agences"
+              placeholder="Toutes les agences"
+            />
+          </label>
+          <label className="block w-48">
+            <div className={labelCls}>Ville du prestataire</div>
+            <Combobox
+              options={optionsVille}
+              value={optionsVille.find((v) => v.id === ville) ?? null}
+              onChange={(v) => { setVille(v?.id ?? ""); setPayload(null); }}
+              getLabel={(v) => v.nom} getId={(v) => v.id}
+              allowClear clearLabel="Toutes les villes"
+              placeholder="Toutes les villes"
+            />
+          </label>
+          <label className="block">
+            <div className={labelCls}>Regrouper par</div>
+            <div className="inline-flex rounded-lg border border-border overflow-hidden">
+              {(["souscripteur", "prestataire"] as const).map((g, i) => (
+                <button
+                  key={g} type="button" onClick={() => { setGroupement(g); setPayload(null); }}
+                  className={`px-3 py-2 text-[13px] ${i > 0 ? "border-l border-border" : ""} ${groupement === g ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
+                >
+                  {g === "souscripteur" ? "Souscripteur" : "Prestataire"}
+                </button>
+              ))}
+            </div>
           </label>
           <label className="block">
             <div className={labelCls}>Type de règlement</div>
@@ -86,18 +144,18 @@ export default function BordereauSinistresView() {
             <DateInput value={au} onChange={setAu} className={fieldCls} />
           </label>
           <Btn variant="primary" onClick={handleRechercher} disabled={recherchant}><Search className="w-4 h-4" />{recherchant ? "Recherche…" : "Rechercher"}</Btn>
-          <Btn variant="ghost" onClick={() => openBordereauSinistres(du || undefined, au || undefined, compagnieId, typeReglement)} disabled={!compagnieId}><Printer className="w-4 h-4" />Imprimer</Btn>
-          <Btn variant="ghost" onClick={() => openBordereauSinistres(du || undefined, au || undefined, compagnieId, typeReglement, "xlsx")} disabled={!compagnieId}><FileSpreadsheet className="w-4 h-4" />Excel</Btn>
+          <Btn variant="ghost" onClick={() => openBordereauSinistres(du || undefined, au || undefined, compagnieId || undefined, typeReglement, "pdf", filtres)} disabled={!perimetreChoisi}><Printer className="w-4 h-4" />Imprimer</Btn>
+          <Btn variant="ghost" onClick={() => openBordereauSinistres(du || undefined, au || undefined, compagnieId || undefined, typeReglement, "xlsx", filtres)} disabled={!perimetreChoisi}><FileSpreadsheet className="w-4 h-4" />Excel</Btn>
         </div>
       </div>
 
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-border">
-          <h3 className="font-semibold text-foreground text-sm">{payload ? `${payload.groupes.length} souscripteur(s) — ${nbLignes} ligne(s)` : "Détail par souscripteur"}</h3>
+          <h3 className="font-semibold text-foreground text-sm">{payload ? `${payload.groupes.length} ${payload.groupement === "prestataire" ? "prestataire(s)" : "souscripteur(s)"} — ${nbLignes} ligne(s)` : `Détail par ${groupement}`}</h3>
         </div>
 
-        {!compagnieId ? (
-          <div className="py-10 text-center text-muted-foreground text-sm">Choisissez une compagnie puis lancez la recherche.</div>
+        {!perimetreChoisi ? (
+          <div className="py-10 text-center text-muted-foreground text-sm">Choisissez une compagnie ou une agence puis lancez la recherche.</div>
         ) : !payload ? (
           <div className="py-10 text-center text-muted-foreground text-sm">{recherchant ? "Chargement…" : "Lancez la recherche pour afficher le détail."}</div>
         ) : payload.groupes.length === 0 ? (
@@ -107,7 +165,7 @@ export default function BordereauSinistresView() {
             <table className="w-full text-[12.5px]">
               <thead>
                 <tr className="border-b border-border bg-secondary/20">
-                  {["Date soins", "Date règlement", "N° Police", "Souscripteur", "N° client", "Assuré", "Prestataire", libelleColReglement, "Frais réels", "Part Garant", "TPS", "Net à payer"].map((h) => (
+                  {["Date soins", "Date règlement", "N° Police", "Souscripteur", "N° client", "Assuré", "Prestataire", "Ville", "Agence de saisie", libelleColReglement, "Frais réels", "Part Garant", "TPS", "Net à payer"].map((h) => (
                     <th key={h} className="text-left text-[10.5px] text-muted-foreground font-semibold uppercase tracking-wide px-3 py-2 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -124,6 +182,8 @@ export default function BordereauSinistresView() {
                         <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{l.numeroClient}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap text-foreground">{l.assurePrincipal}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap text-foreground">{l.prestataire}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{l.villePrestataire}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{l.agence}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{l.numeroReglement}</td>
                         <td className="px-3 py-1.5 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(l.fraisReels)}</td>
                         <td className="px-3 py-1.5 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(l.partGarant)}</td>
@@ -132,7 +192,7 @@ export default function BordereauSinistresView() {
                       </tr>
                     ))}
                     <tr className="bg-primary/10 font-semibold">
-                      <td colSpan={8} className="px-3 py-1.5 text-foreground text-right">Sous Total {g.souscripteur}</td>
+                      <td colSpan={10} className="px-3 py-1.5 text-foreground text-right">Sous Total {g.souscripteur}</td>
                       <td className="px-3 py-1.5 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(g.totaux.fraisReels)}</td>
                       <td className="px-3 py-1.5 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(g.totaux.partGarant)}</td>
                       <td className="px-3 py-1.5 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(g.totaux.tps)}</td>
@@ -143,7 +203,7 @@ export default function BordereauSinistresView() {
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-border bg-secondary/40 font-bold">
-                  <td colSpan={8} className="px-3 py-2 text-foreground text-right">TOTAL GÉNÉRAL</td>
+                  <td colSpan={10} className="px-3 py-2 text-foreground text-right">TOTAL GÉNÉRAL</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(payload.total.fraisReels)}</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(payload.total.partGarant)}</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(payload.total.tps)}</td>

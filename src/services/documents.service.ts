@@ -251,11 +251,15 @@ export function openQuittanceTranche(trancheId: string): Promise<void> {
 
 export function openBordereauSinistres(
   du: string | undefined, au: string | undefined, compagnieId: string | undefined, typeReglement: "maladie" | "comptable", format: "pdf" | "xlsx" = "pdf",
+  filtres: { agenceId?: string; ville?: string; groupement?: "souscripteur" | "prestataire" } = {},
 ): Promise<void> {
   const params = new URLSearchParams({ typeReglement, format });
   if (du) params.set("du", du);
   if (au) params.set("au", au);
   if (compagnieId) params.set("compagnieId", compagnieId);
+  if (filtres.agenceId) params.set("agenceId", filtres.agenceId);
+  if (filtres.ville) params.set("ville", filtres.ville);
+  if (filtres.groupement) params.set("groupement", filtres.groupement);
   return openDocument(`/documents/bordereau-sinistres?${params.toString()}`);
 }
 

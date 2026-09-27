@@ -56,8 +56,20 @@ export class SocieteUsersService {
     return u;
   }
 
+  // Agence de rattachement (2026-09) — voir demande utilisateur : "lorsqu'on
+  // crée un utilisateur, qu'on puisse le lier à une agence." Toujours une
+  // agence de CETTE société (jamais celle d'une autre) ; "" = aucune.
+  private async agenceDeLaSociete(societeId: string, agenceId: string | undefined): Promise<string | null | undefined> {
+    if (agenceId === undefined) return undefined;
+    if (!agenceId) return null;
+    const agence = await this.prisma.agence.findFirst({ where: { id: agenceId, societeId }, select: { id: true } });
+    if (!agence) throw new BadRequestException("Cette agence n'appartient pas à la société.");
+    return agence.id;
+  }
+
   async create(societeId: string, dto: CreateUserDto) {
     const societe = await this.societe(societeId);
+    const agenceId = await this.agenceDeLaSociete(societeId, dto.agenceId);
     const email = dto.email.trim().toLowerCase();
     const passwordHash = await bcrypt.hash(MOT_DE_PASSE_INITIAL, 10);
     const modulesDemandes = dto.modules
@@ -66,7 +78,7 @@ export class SocieteUsersService {
     const modules = this.plafonner(modulesDemandes, societe.modules);
     try {
       const cree = await this.prisma.user.create({
-        data: { nom: dto.nom, email, initiales: dto.initiales, roleId: dto.roleId, passwordHash, modules, telephone: dto.telephone, adresse: dto.adresse, societeId, doitChangerMotDePasse: true },
+        data: { nom: dto.nom, email, initiales: dto.initiales, roleId: dto.roleId, passwordHash, modules, telephone: dto.telephone, adresse: dto.adresse, agenceId: agenceId ?? null, societeId, doitChangerMotDePasse: true },
         select: SELECT_SANS_HASH,
       });
       // Envoi réel des identifiants (2026-09) — voir demande utilisateur :
@@ -87,8 +99,9 @@ export class SocieteUsersService {
 
   async update(societeId: string, userId: string, dto: UpdateUserDto) {
     await this.findOneDansSociete(societeId, userId);
+    const agenceId = await this.agenceDeLaSociete(societeId, dto.agenceId);
     try {
-      return await this.prisma.user.update({ where: { id: userId }, data: dto, select: SELECT_SANS_HASH });
+      return await this.prisma.user.update({ where: { id: userId }, data: { ...dto, agenceId }, select: SELECT_SANS_HASH });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
         throw new ConflictException(`L'email "${dto.email}" est déjà utilisé par un autre utilisateur.`);

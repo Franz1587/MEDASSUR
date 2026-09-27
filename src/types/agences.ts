@@ -11,6 +11,9 @@ export type StatutAgence = "Actif" | "Inactif";
 
 export interface Agence {
   id: string;
+  // Société propriétaire — sert au Super Admin (qui voit toutes les
+  // sociétés) pour ne proposer que les agences de la société concernée.
+  societeId?: string | null;
   nom: string;
   code?: string | null;
   ville?: string | null;

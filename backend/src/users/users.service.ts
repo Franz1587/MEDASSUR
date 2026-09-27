@@ -88,7 +88,7 @@ export class UsersService {
     const modules = await this.plafonnerModules(modulesDemandes);
     try {
       return await this.prisma.user.create({
-        data: { nom: dto.nom, email, initiales: dto.initiales, roleId: dto.roleId, passwordHash, modules, telephone: dto.telephone, adresse: dto.adresse, agenceId: dto.agenceId, doitChangerMotDePasse: true },
+        data: { nom: dto.nom, email, initiales: dto.initiales, roleId: dto.roleId, passwordHash, modules, telephone: dto.telephone, adresse: dto.adresse, agenceId: dto.agenceId || null, doitChangerMotDePasse: true },
         select: SELECT_SANS_HASH,
       });
     } catch (err) {

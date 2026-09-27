@@ -9,6 +9,7 @@ import { UpdateFactureDto } from "./dto/update-facture.dto";
 import { ApercuLigneDto } from "./dto/apercu-ligne.dto";
 import { CreateFactureLigneDto } from "../sante/dto/create-facture-ligne.dto";
 import { UpdateFactureLigneDto } from "../sante/dto/update-facture-ligne.dto";
+import { agenceDeSaisie } from "../lib/agence-saisie.util";
 
 // select ciblé (2026-09, était include: {contrat:true, ...} en entier) —
 // voir demande utilisateur : "je veux la rapidité, la fluidité" ; mesuré en
@@ -164,13 +165,14 @@ export class FacturesService {
   // depuis le portail prestataire (voir PortailPrestataireController) n'a
   // aucun gestionnaire interne à l'origine ; le champ reste nullable en base
   // pour ce cas (voir schema.prisma Facture.gestionnaireId).
-  create(dto: CreateFactureDto, gestionnaireId?: string) {
+  async create(dto: CreateFactureDto, gestionnaireId?: string) {
+    const agenceId = await agenceDeSaisie(this.prisma, gestionnaireId);
     return this.prisma.facture.create({
       data: {
         id: `FAC-${new Date().getFullYear()}-${randomUUID().slice(0, 6).toUpperCase()}`,
         prestataireId: dto.prestataireId, contratId: dto.contratId,
         dateReception: dto.dateReception, referenceFacture: dto.referenceFacture,
-        gestionnaireId,
+        gestionnaireId, agenceId,
       },
       select: SELECT_FACTURE,
     });

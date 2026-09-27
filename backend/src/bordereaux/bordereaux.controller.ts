@@ -14,8 +14,14 @@ export class BordereauxController {
   sinistres(
     @Query("du") du?: string, @Query("au") au?: string, @Query("compagnieId") compagnieId?: string,
     @Query("typeReglement") typeReglement?: "maladie" | "comptable",
+    @Query("agenceId") agenceId?: string, @Query("ville") ville?: string, @Query("groupement") groupement?: "souscripteur" | "prestataire",
   ) {
-    return this.service.sinistres(du, au, compagnieId, typeReglement);
+    return this.service.sinistres(du, au, compagnieId, typeReglement, { agenceId: agenceId || undefined, ville: ville || undefined, groupement });
+  }
+
+  @Get("sinistres/villes")
+  villesPrestataires() {
+    return this.service.villesPrestataires();
   }
 
   @Get("production")

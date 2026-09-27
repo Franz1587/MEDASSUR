@@ -2944,6 +2944,13 @@ model Facture {
   // un nouveau règlement (voir FacturesService.annuler).
   motifAnnulation  String?
   gestionnaireId   String?
+  // Agence de SAISIE (2026-09) — voir demande utilisateur : "faire remonter
+  // les sinistres... en fonction des prestataires d'une ville et surtout de
+  // l'agence dans laquelle les factures des prestataires médicaux ont été
+  // saisies." Figée à la création (agence de l'agent qui saisit), jamais
+  // recalculée si l'agent change d'agence ensuite.
+  agenceId         String?
+  agence           Agence?        @relation(fields: [agenceId], references: [id])
   createdAt        DateTime @default(now())
 
   // Relevé de facture prestataire (2026-08) — voir demande utilisateur :
@@ -3024,6 +3031,13 @@ model Remboursement {
   statut            String   @default("En saisie") // En saisie | Soumise | Annulée
   motifAnnulation   String?
   gestionnaireId    String?
+  // Agence de SAISIE (2026-09) — voir demande utilisateur : "faire remonter
+  // les sinistres... en fonction des prestataires d'une ville et surtout de
+  // l'agence dans laquelle les factures des prestataires médicaux ont été
+  // saisies." Figée à la création (agence de l'agent qui saisit), jamais
+  // recalculée si l'agent change d'agence ensuite.
+  agenceId          String?
+  agence            Agence?      @relation(fields: [agenceId], references: [id])
   createdAt         DateTime @default(now())
 
   assurePrincipal AssureSante? @relation(fields: [assurePrincipalId], references: [id])
@@ -3307,6 +3321,8 @@ model Agence {
   agents User[]
   contrats Contrat[]
   compagnies Compagnie[]
+  factures Facture[]
+  remboursements Remboursement[]
 
   @@index([societeId])
 }
