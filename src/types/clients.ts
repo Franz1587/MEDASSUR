@@ -8,6 +8,9 @@ export interface Client {
 	email: string;
 	statut: "Actif" | "Inactif";
 	contrats: number;
+	// Contrats Actifs/En renouvellement (hors test) — un souscripteur n'est
+	// désactivable qu'à 0 (voir backend clients/statut-souscripteur.util.ts).
+	contratsActifs?: number;
 	prime: number;
 	// Nom de fichier sous backend/uploads/logos-clients/ — voir
 	// uploadClientLogo().

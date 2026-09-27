@@ -22,6 +22,7 @@ import { genererIdNumerique } from "../lib/numeric-id.util";
 import { trouverAgenceParMention, trouverAgenceParValeur } from "../agences/agence-mention.util";
 import { CompagniesService } from "../compagnies/compagnies.service";
 import { TenantContext } from "../tenant/tenant-context";
+import { synchroniserStatutSouscripteurs } from "../clients/statut-souscripteur.util";
 
 // Import en masse (2026-08) — en-têtes du modèle .xlsx, mêmes conventions
 // que ClientsService (correspondance par en-tête, pas par index).
@@ -387,6 +388,7 @@ export class ContratsService {
         periodicite: contrat.periodicite, prime: contrat.prime, statut: "Actif",
       },
     });
+    await synchroniserStatutSouscripteurs(this.prisma, [contrat.clientId]);
     return { ...contrat, imputationAgence: { imputation: imputationAgence.imputation, avertissement: imputationAgence.avertissement } };
   }
 
@@ -431,10 +433,12 @@ export class ContratsService {
           dateFin: (data.dateFin ?? avant.dateFin) as string,
         });
         await this.appliquerBasculeResiliation(id, avant.statut, data.statut);
+        await synchroniserStatutSouscripteurs(this.prisma, [avant.clientId, dto.clientId]);
         return { ...(await this.findOne(id)), ...infoImputation };
       }
       const contrat = await this.prisma.contrat.update({ where: { id }, data, include: { client: true, compagnie: true, garanties: true, agence: true } });
       await this.appliquerBasculeResiliation(id, avant.statut, data.statut);
+      await synchroniserStatutSouscripteurs(this.prisma, [avant.clientId, contrat.clientId]);
       return { ...contrat, ...infoImputation };
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
@@ -489,8 +493,9 @@ export class ContratsService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const contrat = await this.findOne(id);
     await this.prisma.contrat.delete({ where: { id } });
+    await synchroniserStatutSouscripteurs(this.prisma, [contrat.clientId]);
     return { id };
   }
 
@@ -882,6 +887,7 @@ export class ContratsService {
   // même compagnie et sans numéro de police explicite, ne se percutent
   // (voir demande utilisateur : suite ordonnée par compagnie).
   async importer(rows: ImportContratRowDto[]): Promise<{ crees: number; rejets: { ligne: number; motif: string }[] }> {
+    const clientsImportes: string[] = [];
     let crees = 0;
     const rejets: { ligne: number; motif: string }[] = [];
     const prochainParCompagnie = new Map<string, number>();
@@ -975,6 +981,7 @@ export class ContratsService {
       const tranches = decouperEnExercices(dateDebut, dateFin, statut);
       const derniere = tranches[tranches.length - 1];
       try {
+        clientsImportes.push(client.id);
         const contrat = await this.prisma.contrat.create({
           data: {
             id, clientId: client.id, compagnieId: compagnie.id, branche, produit,
@@ -1029,6 +1036,7 @@ export class ContratsService {
         }
       }
     }
+    await synchroniserStatutSouscripteurs(this.prisma, clientsImportes);
     return { crees, rejets };
   }
 }

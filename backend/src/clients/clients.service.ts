@@ -12,6 +12,7 @@ import { StorageService } from "../storage/storage.service";
 import { genererIdNumerique } from "../lib/numeric-id.util";
 import { texteBrutDeCellule } from "../lib/excel-cell.util";
 import { numeroPolice } from "../lib/police.util";
+import { STATUTS_CONTRAT_ACTIFS, synchroniserStatutSouscripteurs } from "./statut-souscripteur.util";
 
 const UPLOADS_LOGOS_DIR = path.join(UPLOADS_ROOT, "logos-clients");
 
@@ -60,11 +61,13 @@ function normaliserEntete(s: string): string {
 // Shapes the response to match what the frontend's Client type expects
 // (a `contrats` count + cumulative `prime`), computed from the related
 // Contrat rows rather than stored redundantly.
-function withAggregates<T extends { contrats: { prime: unknown }[] }>(client: T) {
+function withAggregates<T extends { contrats: { prime: unknown; statut?: string; estTest?: boolean }[] }>(client: T) {
   const { contrats, ...rest } = client;
   return {
     ...rest,
     contrats: contrats.length,
+    // Contrats actifs (hors test) — un souscripteur n'est désactivable qu'à 0.
+    contratsActifs: contrats.filter((c) => !c.estTest && STATUTS_CONTRAT_ACTIFS.includes(c.statut ?? "")).length,
     prime: contrats.reduce((sum, c) => sum + Number(c.prime), 0),
   };
 }
@@ -85,7 +88,7 @@ export class ClientsService {
     const clients = await this.prisma.client.findMany({
       where: compagnieId ? { contrats: { some: { compagnieId } } } : undefined,
       orderBy: { createdAt: "desc" },
-      include: { contrats: { select: { prime: true } } },
+      include: { contrats: { select: { prime: true, statut: true, estTest: true } } },
     });
     return clients.map(withAggregates);
   }
@@ -93,7 +96,7 @@ export class ClientsService {
   async findOne(id: string) {
     const client = await this.prisma.client.findUnique({
       where: { id },
-      include: { contrats: { select: { prime: true } } },
+      include: { contrats: { select: { prime: true, statut: true, estTest: true } } },
     });
     if (!client) throw new NotFoundException(`Client ${id} introuvable`);
     return withAggregates(client);
@@ -149,8 +152,24 @@ export class ClientsService {
   }
 
   async update(id: string, dto: UpdateClientDto) {
-    await this.findOne(id);
+    const client = await this.findOne(id);
+    // Désactivation (2026-09) — seulement sans contrat actif : un
+    // souscripteur couvert ne peut pas être "Inactif".
+    if (dto.statut === "Inactif" && client.statut !== "Inactif" && client.contratsActifs > 0) {
+      const actifs = await this.prisma.contrat.findMany({ where: { clientId: id, estTest: false, statut: { in: STATUTS_CONTRAT_ACTIFS } }, select: { numeroPolice: true } });
+      throw new BadRequestException(
+        `Ce souscripteur a encore ${actifs.length} contrat(s) actif(s) (police ${actifs.map((c) => numeroPolice(c)).join(", ")}) — il ne peut être désactivé qu'une fois ses contrats résiliés ou expirés.`,
+      );
+    }
     return this.prisma.client.update({ where: { id }, data: dto });
+  }
+
+  // Rattrapage : souscripteurs dont le statut ne correspond pas à leurs
+  // contrats (simulation par défaut). Voir statut-souscripteur.util.ts.
+  async synchroniserStatuts(appliquer: boolean) {
+    const clients = await this.prisma.client.findMany({ select: { id: true } });
+    const changements = await synchroniserStatutSouscripteurs(this.prisma, clients.map((c) => c.id), !appliquer);
+    return { appliquer, total: changements.length, changements };
   }
 
   async remove(id: string) {

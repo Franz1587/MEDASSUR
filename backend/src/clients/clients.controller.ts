@@ -7,6 +7,8 @@ import { CreateClientDto } from "./dto/create-client.dto";
 import { UpdateClientDto } from "./dto/update-client.dto";
 import { ImportClientsDto } from "./dto/import-clients.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { RolesGuard } from "../auth/roles.guard";
+import { Roles } from "../auth/roles.decorator";
 
 @Controller("clients")
 @UseGuards(JwtAuthGuard)
@@ -51,6 +53,15 @@ export class ClientsController {
   @Get(":id/portfolio")
   findPortfolio(@Param("id") id: string) {
     return this.clientsService.findPortfolio(id);
+  }
+
+  // Rattrapage du statut des souscripteurs selon leurs contrats (2026-09) —
+  // simulation par défaut, ?appliquer=true pour exécuter.
+  @Post("synchroniser-statuts")
+  @UseGuards(RolesGuard)
+  @Roles("administrateur", "direction_generale", "directeur_technique")
+  synchroniserStatuts(@Query("appliquer") appliquer?: string) {
+    return this.clientsService.synchroniserStatuts(appliquer === "true");
   }
 
   @Post()

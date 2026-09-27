@@ -419,6 +419,40 @@ export default function ClientsView() {
                 <h3 className="font-bold text-foreground">{selected.nom}</h3>
                 <p className="text-xs text-muted-foreground">{selected.type === "Entreprise" ? (selected.categorieMorale ?? selected.type) : selected.type} · {selected.id}</p>
                 <div className="mt-2"><Badge variant={selected.statut === "Actif" ? "success" : "neutral"}>{selected.statut}</Badge></div>
+                {/* Désactivation (2026-09) — voir demande utilisateur : "désactiver un
+                    souscripteur n'ayant plus de contrats actifs". Automatique à la
+                    fin du dernier contrat actif ; bouton pour le faire à la main,
+                    refusé tant qu'un contrat est actif. */}
+                <div className="mt-3 flex flex-col items-center gap-1">
+                  {selected.statut === "Actif" ? (
+                    <Btn
+                      variant="ghost"
+                      disabled={(selected.contratsActifs ?? 0) > 0}
+                      onClick={async () => {
+                        if (!window.confirm(`Désactiver le souscripteur ${selected.nom} ?`)) return;
+                        try { await updateClient(selected.id, { statut: "Inactif" }); toast.success("Souscripteur désactivé."); refreshClients(); }
+                        catch (err) { toast.error(err instanceof Error ? err.message : "Désactivation impossible."); }
+                      }}
+                    >
+                      Désactiver
+                    </Btn>
+                  ) : (
+                    <Btn
+                      variant="ghost"
+                      onClick={async () => {
+                        try { await updateClient(selected.id, { statut: "Actif" }); toast.success("Souscripteur réactivé."); refreshClients(); }
+                        catch (err) { toast.error(err instanceof Error ? err.message : "Réactivation impossible."); }
+                      }}
+                    >
+                      Réactiver
+                    </Btn>
+                  )}
+                  <p className="text-[10.5px] text-muted-foreground">
+                    {(selected.contratsActifs ?? 0) > 0
+                      ? `${selected.contratsActifs} contrat(s) actif(s) — désactivable une fois tous ses contrats résiliés ou expirés.`
+                      : "Aucun contrat actif — passe automatiquement Inactif à la fin de son dernier contrat."}
+                  </p>
+                </div>
               </div>
               <div className="space-y-3">
                 {[

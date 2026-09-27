@@ -5,6 +5,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { withComputedPrime, type PrimeInput } from "../contrats/prime.util";
 import { CreateAvenantDto } from "./dto/create-avenant.dto";
 import { UpdateAvenantDto } from "./dto/update-avenant.dto";
+import { synchroniserStatutSouscripteurs } from "../clients/statut-souscripteur.util";
 
 const INCLUDE = { contrat: { include: { client: true, compagnie: true } }, avenantAssures: true } as const;
 
@@ -206,6 +207,9 @@ export class AvenantsService {
       await this.prisma.contrat.update({ where: { id: avenant.contratId }, data: { prime: avenant.primeApres } });
     }
 
+    // Renouvellement / Résiliation : statut du souscripteur réaligné sur ses
+    // contrats (voir clients/statut-souscripteur.util.ts).
+    await synchroniserStatutSouscripteurs(this.prisma, [contrat.clientId]);
     return this.prisma.avenant.update({ where: { id }, data: { statut: "Appliqué" }, include: INCLUDE });
   }
 
