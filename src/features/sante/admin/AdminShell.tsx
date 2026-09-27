@@ -6,7 +6,7 @@ import { useAlertesMessagerie } from "@/lib/useAlertesMessagerie";
 import { useAlertesDossiers } from "@/lib/useAlertesDossiers";
 import { getAccordsPrealables } from "@/services/accordPrealable.service";
 import { getDemandesClient } from "@/services/demandeClient.service";
-import { GuideView } from "@/features/guide/GuideView";
+import { GuideView, type GuideProfil } from "@/features/guide/GuideView";
 import { useShellNavigation } from "@/layout/ShellNavigationContext";
 import { viewIcons, type View } from "@/layout/navConfig";
 import { santeAdminNavTree } from "@/features/sante/admin/navTree";
@@ -15,9 +15,9 @@ import { BackButton } from "@/components/shared/BackButton";
 import { SignatureManager } from "@/components/shared/SignatureManager";
 import { getNotifications, marquerNotificationLue, marquerToutesNotificationsLues } from "@/services/notifications.service";
 import { getNonLus as getMessagerieNonLus } from "@/services/messagerie.service";
-import { runSilently } from "@/lib/http";
 import type { AppNotification } from "@/types/notifications";
 import logoMark from "@/assets/logo-mark.png";
+import { runSilently } from "@/lib/http";
 
 // Rafraîchissement de la bulle de notification (2026-08) — pas de canal
 // temps réel (WebSocket) côté backend pour l'instant, un polling à
@@ -246,6 +246,7 @@ export function AdminShell({
   const [profileOpen, setProfileOpen] = useState(false);
   const [showProfilePage, setShowProfilePage] = useState(false);
   const [showGuidePage, setShowGuidePage] = useState(false);
+  const [guideProfil, setGuideProfil] = useState<GuideProfil>("global");
   const [phone, setPhone] = useState("+241 00 00 00 00");
   const [address, setAddress] = useState("Libreville, Gabon");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -861,7 +862,11 @@ export function AdminShell({
               </div>
             </div>
           ) : showGuidePage ? (
-            <GuideView profil="interne" onBack={() => setShowGuidePage(false)} />
+            <GuideView
+              profil={guideProfil}
+              onBack={() => setShowGuidePage(false)}
+              onSelectProfil={setGuideProfil}
+            />
           ) : (
             children
           )}

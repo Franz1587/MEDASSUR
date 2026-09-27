@@ -13,10 +13,10 @@ import { ShellNavigationProvider } from "@/layout/ShellNavigationContext";
 import { Badge } from "@/components/shared/Badge";
 import { getNotifications, marquerNotificationLue, marquerToutesNotificationsLues } from "@/services/notifications.service";
 import { getNonLus as getMessagerieNonLus } from "@/services/messagerie.service";
-import { runSilently } from "@/lib/http";
 import type { AppNotification } from "@/types/notifications";
 import type { PortalMeta } from "@/portals/portalMeta";
 import logoMark from "@/assets/logo-mark.png";
+import { runSilently } from "@/lib/http";
 
 // Cloche de notification (2026-08) — voir demande utilisateur : "que ce soit
 // du côté de l'assuré principal ou côté client, il faut mettre la cloche de
@@ -125,7 +125,10 @@ export function PortalShell({ meta }: { meta: PortalMeta }) {
   // expert sinistres) n'a pas encore de contenu dédié : le bouton reste
   // masqué plutôt que d'ouvrir un guide vide.
   const [showGuide, setShowGuide] = useState(false);
-  const guideProfil: GuideProfil | undefined = currentRole ? GUIDE_PROFIL_PAR_ROLE[currentRole.id] : undefined;
+  const [guideProfil, setGuideProfil] = useState<GuideProfil | undefined>(currentRole ? GUIDE_PROFIL_PAR_ROLE[currentRole.id] : undefined);
+  useEffect(() => {
+    setGuideProfil(currentRole ? GUIDE_PROFIL_PAR_ROLE[currentRole.id] ?? "global" : undefined);
+  }, [currentRole]);
   useEffect(() => {
     // Badge de fond — jamais l'overlay de chargement plein écran
     // (PageLoader), voir AdminShell.tsx (même principe).
@@ -359,7 +362,15 @@ export function PortalShell({ meta }: { meta: PortalMeta }) {
               boutons d'accès rapide" — le Tableau de bord a besoin de
               changer de vue lui-même, comme les zones internes. */}
           <ShellNavigationProvider value={{ current: view, setView, shellActionRequest: null, triggerShellAction: () => undefined, scrollToTop: () => contentRef.current?.scrollTo({ top: 0 }) }}>
-            {showGuide && guideProfil ? <GuideView profil={guideProfil} onBack={() => setShowGuide(false)} /> : <ActiveView />}
+            {showGuide && guideProfil ? (
+              <GuideView
+                profil={guideProfil}
+                onBack={() => setShowGuide(false)}
+                onSelectProfil={(next) => setGuideProfil(next)}
+              />
+            ) : (
+              <ActiveView />
+            )}
           </ShellNavigationProvider>
         </main>
       </div>

@@ -4,13 +4,13 @@
   "version": "0.0.1",
   "type": "commonjs",
   "scripts": {
-    "build": "nest build",
-    "dev": "nest start --watch",
+    "build": "prisma generate && nest build",
+    "dev": "prisma generate && nest start --watch",
     "start": "node dist/src/main.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "prisma generate && tsc --noEmit",
     "swagger:export": "node dist/src/export-openapi.js"
   },
   "dependencies": {

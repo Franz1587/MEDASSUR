@@ -19,7 +19,10 @@ function statutVariant(s: string): BadgeVariant {
 // ligne, laquelle des deux proposer (aucune des deux pour les autres
 // familles, ex. Pharmacie/Dentaire/Kinésithérapie).
 const GROUPES_EXAMEN = new Set(["Analyse", "Imagerie", "ActesSpecialites"]);
-function typeFormulaire(acteFamille: string | null | undefined): "soins" | "examen" | null {
+function typeFormulaire(type: string | null | undefined, acteFamille: string | null | undefined): "soins" | "examen" | null {
+  const typeNormalise = type?.trim().toLowerCase();
+  if (typeNormalise === "consultation" || typeNormalise === "consultations") return "soins";
+  if (typeNormalise === "analyse" || typeNormalise === "analyses médicale" || typeNormalise === "imagerie" || typeNormalise === "actes de spécialités") return "examen";
   const groupe = GROUPES_ACTES.find((g) => acteFamille && g.familles.includes(acteFamille))?.cle;
   if (groupe === "Consultation") return "soins";
   if (groupe && GROUPES_EXAMEN.has(groupe)) return "examen";
@@ -201,7 +204,7 @@ export default function MembreHistoriqueView() {
                                   <FileDown className="w-3.5 h-3.5" />Décompte
                                 </button>
                               )}
-                              {!groupe && typeFormulaire(l.acteFamille) === "soins" && (
+                              {!groupe && typeFormulaire(l.type, l.acteFamille) === "soins" && (
                                 <button
                                   type="button"
                                   onClick={() => telechargerFormulaire(l, "soins")}
@@ -210,7 +213,7 @@ export default function MembreHistoriqueView() {
                                   <FileDown className="w-3.5 h-3.5" />Feuille de soins
                                 </button>
                               )}
-                              {!groupe && typeFormulaire(l.acteFamille) === "examen" && (
+                              {!groupe && typeFormulaire(l.type, l.acteFamille) === "examen" && (
                                 <button
                                   type="button"
                                   onClick={() => telechargerFormulaire(l, "examen")}
@@ -223,7 +226,7 @@ export default function MembreHistoriqueView() {
                             {ouvert && groupe && (
                               <div className="mt-3 pt-3 border-t border-border/60 space-y-2">
                                 {l.lignes!.map((item) => {
-                                  const type = typeFormulaire(item.acteFamille);
+                                  const type = typeFormulaire(item.type, item.acteFamille);
                                   return (
                                     <div key={item.id} className="flex items-center justify-between gap-2 py-1 border-b border-border/40 last:border-0 text-[12px]">
                                       <div className="min-w-0">

@@ -80,6 +80,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     try {
       res = await fetch(`${API_URL}${path}`, {
         ...init,
+        ...(lecture ? { cache: "no-store" as const } : {}),
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),

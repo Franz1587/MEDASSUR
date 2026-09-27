@@ -136,7 +136,7 @@ export default function MembreDashboardView() {
             <div className="bg-card border border-border rounded-2xl p-4">
               <p className="text-[12.5px] font-semibold text-foreground flex items-center gap-2 mb-3"><Layers className="w-4 h-4 text-primary" />Par rubrique</p>
               <div className="space-y-2">
-                {data.parRubrique.slice(0, 6).map((r) => (
+                {data.parRubrique.map((r) => (
                   <div key={r.rubrique} className="flex items-center justify-between text-[12px]">
                     <span className="text-muted-foreground truncate pr-2">{r.rubrique}</span>
                     <span className="text-foreground font-medium flex-shrink-0" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(r.total)} FCFA</span>

@@ -43,7 +43,10 @@ export const GROUPES_ACTES: GroupeActe[] = [
 // pour les autres familles (Pharmacie/Dentaire/Kinésithérapie/Hospitalisation).
 const GROUPES_EXAMEN = new Set(["Analyse", "Imagerie", "ActesSpecialites"]);
 
-export function typeFormulaire(acteFamille: string | null | undefined): "soins" | "examen" | null {
+export function typeFormulaire(type: string | null | undefined, acteFamille: string | null | undefined): "soins" | "examen" | null {
+  const typeNormalise = type?.trim().toLowerCase();
+  if (typeNormalise === "consultation" || typeNormalise === "consultations") return "soins";
+  if (typeNormalise === "analyse" || typeNormalise === "analyses médicale" || typeNormalise === "imagerie" || typeNormalise === "actes de spécialités") return "examen";
   const groupe = GROUPES_ACTES.find((g) => acteFamille && g.familles.includes(acteFamille))?.cle;
   if (groupe === "Consultation") return "soins";
   if (groupe && GROUPES_EXAMEN.has(groupe)) return "examen";

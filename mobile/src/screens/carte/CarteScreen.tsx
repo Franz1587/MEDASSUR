@@ -69,6 +69,7 @@ export function CarteScreen() {
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(2);
   const [pdfError, setPdfError] = useState(false);
+  const [carteVersion, setCarteVersion] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -78,6 +79,7 @@ export function CarteScreen() {
       setMoi(m);
       setFamille(f);
       setToken(t);
+      setCarteVersion((version) => version + 1);
     } catch (err) {
       setError(messageErreur(err, "Impossible de charger votre carte."));
     } finally {
@@ -189,11 +191,11 @@ export function CarteScreen() {
               </>
             ) : (
               <Pdf
-                key={selected.id}
+                key={`${selected.id}-${carteVersion}`}
                 source={{
-                  uri: `${API_URL}${cheminCarteDe(selected.id)}`,
+                  uri: `${API_URL}${cheminCarteDe(selected.id)}?v=${carteVersion}`,
                   headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-                  cache: true,
+                  cache: false,
                 }}
                 page={page}
                 singlePage

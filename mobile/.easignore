@@ -24,3 +24,7 @@ ios/
 .env*.local
 *.tsbuildinfo
 builds/
+*.apk
+*.aab
+*.ipa
+*.tar.gz

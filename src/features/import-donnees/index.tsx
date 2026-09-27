@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { jsPDF } from "jspdf";
 import { UploadCloud, Receipt, HandCoins, ClipboardCheck, Image as ImageIcon, FolderUp, FolderTree, CheckCircle2, AlertTriangle, Building2, FileText, Users, Globe2, RefreshCw, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
@@ -433,6 +434,18 @@ function ChoixContratPuis({ titre, onClose, children }: { titre: string; onClose
 // même patron que Photos ci-dessous. Les rejets sont plafonnés à
 // l'affichage (jamais des milliers de lignes rendues d'un coup).
 const PLAFOND_REJETS_AFFICHES = 200;
+function telechargerRapportRejetsExcel(rejets: { ligne: number; motif: string }[]) {
+  const rows = rejets.map((r) => `<tr><td>${r.ligne}</td><td>${r.motif.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</td></tr>`).join("");
+  const blob = new Blob([`<table><tr><th>Ligne</th><th>Motif</th></tr>${rows}</table>`], { type: "application/vnd.ms-excel;charset=utf-8" });
+  const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "rapport-rejets-import-factures.xls"; a.click(); URL.revokeObjectURL(url);
+}
+function telechargerRapportRejetsPdf(rejets: { ligne: number; motif: string }[]) {
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  doc.setFontSize(14); doc.text("Rapport des lignes rejetées - import de factures", 40, 45);
+  doc.setFontSize(9); let y = 70;
+  rejets.forEach((r) => { const lines = doc.splitTextToSize(`Ligne ${r.ligne} - ${r.motif}`, 510); if (y + lines.length * 13 > 800) { doc.addPage(); y = 45; } doc.text(lines, 40, y); y += lines.length * 13 + 6; });
+  doc.save("rapport-rejets-import-factures.pdf");
+}
 function ImportFacturesGlobalModal({ onClose, onImporte }: { onClose: () => void; onImporte: () => void }) {
   const [fichier, setFichier] = useState<File | null>(null);
   const [envoi, setEnvoi] = useState(false);
@@ -465,7 +478,7 @@ function ImportFacturesGlobalModal({ onClose, onImporte }: { onClose: () => void
         <div className="p-5 overflow-y-auto flex-1 space-y-4">
           <div className="rounded-xl border border-border p-4 space-y-3">
             <p className="text-[12px] text-muted-foreground">
-              Chaque ligne n'a besoin que du <span className="font-semibold text-foreground">matricule</span> de l'assuré — recherché dans la population de <span className="font-semibold text-foreground">tous les contrats</span>. Une ligne dont le matricule ne correspond encore à aucune population chargée n'est jamais perdue : elle est mise en attente, puis synchronisée automatiquement dès que sa population arrive.
+              Chaque ligne doit contenir le <span className="font-semibold text-foreground">matricule</span> et, lorsque la personne existe sur plusieurs contrats, le <span className="font-semibold text-foreground">numéro de police compagnie</span>. Une ligne dont le matricule ne correspond encore à aucune population chargée n'est jamais perdue : elle est mise en attente, puis synchronisée automatiquement dès que sa population arrive.
             </p>
             <Btn variant="secondary" onClick={() => telechargerModeleImportFacturesGlobal()}><UploadCloud className="w-4 h-4" />Télécharger le modèle .xlsx</Btn>
           </div>
@@ -494,6 +507,10 @@ function ImportFacturesGlobalModal({ onClose, onImporte }: { onClose: () => void
               )}
               {resultat.rejets.length > 0 && (
                 <div className="space-y-1 max-h-56 overflow-y-auto">
+                  <div className="flex gap-2 mb-2">
+                    <Btn variant="secondary" onClick={() => telechargerRapportRejetsExcel(resultat.rejets)}><FileText className="w-3.5 h-3.5" />Télécharger Excel</Btn>
+                    <Btn variant="secondary" onClick={() => telechargerRapportRejetsPdf(resultat.rejets)}><FileText className="w-3.5 h-3.5" />Télécharger PDF</Btn>
+                  </div>
                   {resultat.rejets.slice(0, PLAFOND_REJETS_AFFICHES).map((r, i) => (
                     <p key={i} className="text-[11.5px] text-red-700 dark:text-red-300 bg-red-500/10 border border-red-500/25 rounded-lg px-2.5 py-1.5 flex items-start gap-1.5">
                       <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />Ligne {r.ligne} — {r.motif}

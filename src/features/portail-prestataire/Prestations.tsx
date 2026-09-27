@@ -49,7 +49,10 @@ function groupeDeFamilleActe(famille: string | undefined): string | null {
 // une feuille d'examen. Le but est de dématérialiser cela" — décide,
 // famille par famille, laquelle des deux proposer par ligne.
 const GROUPES_EXAMEN = new Set(["Analyse", "Imagerie", "ActesSpecialites"]);
-function typeFormulaire(famille: string | undefined): "soins" | "examen" | null {
+function typeFormulaire(type: string | undefined, famille: string | undefined): "soins" | "examen" | null {
+  const typeNormalise = type?.trim().toLowerCase();
+  if (typeNormalise === "consultation" || typeNormalise === "consultations") return "soins";
+  if (typeNormalise === "analyse" || typeNormalise === "analyses médicale" || typeNormalise === "imagerie" || typeNormalise === "actes de spécialités") return "examen";
   const groupe = groupeDeFamilleActe(famille);
   if (groupe === "Consultation") return "soins";
   if (groupe && GROUPES_EXAMEN.has(groupe)) return "examen";
@@ -938,7 +941,7 @@ export default function PrestatairePrestationsView() {
                     <td className="px-3 py-2 text-right text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{l.resteACharge != null ? fmtM(l.resteACharge) : "—"}</td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       {!annulee && (() => {
-                        const type = typeFormulaire(actes.find((a) => a.id === l.acteMedicalId)?.famille);
+                        const type = typeFormulaire(l.typePrestation, actes.find((a) => a.id === l.acteMedicalId)?.famille);
                         return (
                           <div className="inline-flex items-center gap-1">
                             {type === "soins" && (

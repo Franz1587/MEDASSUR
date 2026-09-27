@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { AppState } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -63,6 +64,18 @@ export function MainTabs() {
   const insets = useSafeAreaInsets();
   const [pecEnAttente, setPecEnAttente] = useState(0);
   const [messagesNonLus, setMessagesNonLus] = useState(0);
+  const [versionDonnees, setVersionDonnees] = useState(0);
+
+  // Toutes les rubriques mobiles sont remontées depuis la même API PostgreSQL.
+  // Quand l'application revient au premier plan, remonter la clé du
+  // navigateur force les écrans conservés en mémoire à recharger leurs GET;
+  // le cache local ne sert alors qu'en cas de vraie coupure réseau.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") setVersionDonnees((value) => value + 1);
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     const rafraichir = () => {
@@ -82,6 +95,7 @@ export function MainTabs() {
 
   return (
     <Tab.Navigator
+      key={versionDonnees}
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: colors.primary,

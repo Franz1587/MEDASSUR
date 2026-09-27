@@ -73,7 +73,7 @@ async function fetchAvecRelance(url: string, init: RequestInit, tentatives: numb
   let derniereErreur: unknown;
   for (let i = 0; i <= tentatives; i++) {
     try {
-      return await fetch(url, init);
+      return await fetch(url, { ...init, ...(methodeEstLecture(init) ? { cache: "no-store" as const } : {}) });
     } catch (err) {
       derniereErreur = err;
       if (i < tentatives) await attendre(400 * (i + 1));

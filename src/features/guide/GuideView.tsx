@@ -5,10 +5,12 @@ import { BackButton } from "@/components/shared/BackButton";
 import { chapitresInterne, chapitresSuperAdmin, type GuideChapitre } from "./guideContent";
 import { chapitresAssure } from "./guideContentAssure";
 import { chapitresClient } from "./guideContentClient";
+import { chapitresGlobal } from "./guideContentGlobal";
 import { chapitresMedecin } from "./guideContentMedecin";
+import { chapitresMobile } from "./guideContentMobile";
 import { chapitresPrestataire } from "./guideContentPrestataire";
 
-export type GuideProfil = "interne" | "super_admin" | "assure" | "client" | "medecin" | "prestataire";
+export type GuideProfil = "global" | "interne" | "super_admin" | "assure" | "client" | "medecin" | "prestataire" | "mobile";
 
 // Chapitres + titre/sous-titre d'en-tête par profil (2026-09) — extension du
 // guide aux 4 portails externes (assuré, client/souscripteur, médecin
@@ -18,6 +20,11 @@ export type GuideProfil = "interne" | "super_admin" | "assure" | "client" | "med
 // (interne/super_admin) — plus lisible à 6 profils qu'une chaîne de
 // ternaires.
 const GUIDE_PAR_PROFIL: Record<GuideProfil, { chapitres: GuideChapitre[]; titre: string; description: string }> = {
+  global: {
+    chapitres: chapitresGlobal,
+    titre: "Guide global MedAssur",
+    description: "Vue d’ensemble de la plateforme, de la navigation et des différents espaces utilisateur.",
+  },
   interne: {
     chapitres: chapitresInterne,
     titre: "Espace Société",
@@ -48,6 +55,11 @@ const GUIDE_PAR_PROFIL: Record<GuideProfil, { chapitres: GuideChapitre[]; titre:
     titre: "Espace Prestataire",
     description: "Comment utiliser votre espace prestataire de santé MedAssur : patients, prestations et traitement des bons.",
   },
+  mobile: {
+    chapitres: chapitresMobile,
+    titre: "Application mobile",
+    description: "Comment utiliser l’application mobile MedAssur pour consulter sa carte, ses garanties et ses demandes de remboursement.",
+  },
 };
 
 // Guide d'utilisateur intégré (2026-09) — voir demande utilisateur : "je
@@ -61,8 +73,8 @@ const GUIDE_PAR_PROFIL: Record<GuideProfil, { chapitres: GuideChapitre[]; titre:
 // PortalShell.tsx (portail Super Admin) — seul le jeu de chapitres change
 // (`profil`), la mécanique d'affichage (sommaire + sections texte/capture +
 // étapes numérotées + zoom + export) est identique.
-export function GuideView({ profil, onBack }: { profil: GuideProfil; onBack: () => void }) {
-  const { chapitres, titre: titreProfil, description: descriptionProfil } = GUIDE_PAR_PROFIL[profil] ?? GUIDE_PAR_PROFIL.interne;
+export function GuideView({ profil, onBack, onSelectProfil }: { profil: GuideProfil; onBack: () => void; onSelectProfil?: (next: GuideProfil) => void }) {
+  const { chapitres, titre: titreProfil, description: descriptionProfil } = GUIDE_PAR_PROFIL[profil] ?? GUIDE_PAR_PROFIL.global;
   const [chapitreId, setChapitreId] = useState(chapitres[0]?.id);
   const [imageAgrandie, setImageAgrandie] = useState<string | null>(null);
   const [export_, setExport] = useState<"pdf" | "word" | null>(null);
@@ -101,6 +113,18 @@ export function GuideView({ profil, onBack }: { profil: GuideProfil; onBack: () 
             <p className="text-[12px] text-muted-foreground mt-1">{descriptionProfil}</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            {onSelectProfil && (
+              <select
+                value={profil}
+                onChange={(e) => onSelectProfil(e.target.value as GuideProfil)}
+                className="h-9 rounded-xl border border-border bg-background px-2.5 text-[12px] text-foreground outline-none"
+                aria-label="Choisir le guide"
+              >
+                {Object.entries(GUIDE_PAR_PROFIL).map(([key, value]) => (
+                  <option key={key} value={key}>{value.titre}</option>
+                ))}
+              </select>
+            )}
             <button
               type="button" onClick={() => lancerExport("pdf")} disabled={!!export_}
               className="h-9 px-3.5 rounded-xl border border-border text-[12.5px] text-foreground hover:bg-secondary/40 inline-flex items-center gap-1.5 disabled:opacity-60"

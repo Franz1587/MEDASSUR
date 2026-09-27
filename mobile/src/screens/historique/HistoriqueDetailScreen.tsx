@@ -90,7 +90,7 @@ export function HistoriqueDetailScreen() {
 
   const groupe = (ligne.lignes?.length ?? 0) > 1;
   const ligneDecompte = groupe ? ligne.lignes![0] : ligne;
-  const formulaire = !groupe ? typeFormulaire(ligne.acteFamille) : null;
+  const formulaire = !groupe ? typeFormulaire(ligne.type, ligne.acteFamille) : null;
   const montantPrincipal = ligne.modePaiement === "Remboursement" && ligne.baseRemboursement != null
     ? { texte: formatMontant(ligne.baseRemboursement), couleur: colors.success }
     : { texte: formatMontant(ligne.montant), couleur: colors.text };
@@ -152,7 +152,7 @@ export function HistoriqueDetailScreen() {
         <Card style={{ marginTop: spacing.md }}>
           <Text style={styles.sousTitre}>Actes de cette facture ({ligne.lignes!.length})</Text>
           {ligne.lignes!.map((item) => {
-            const type = typeFormulaire(item.acteFamille);
+            const type = typeFormulaire(item.type, item.acteFamille);
             return (
               <View key={item.id} style={styles.sousLigne}>
                 <View style={{ flex: 1, minWidth: 0 }}>
