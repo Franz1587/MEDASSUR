@@ -96,7 +96,18 @@ export async function reconstituerPopulation(
   }
 
   const contrat = await prisma.contrat.findUniqueOrThrow({ where: { id: contratId } });
-  const dateDebutContrat = parseDateFr(contrat.dateDebut);
+  // ORIGINE du contrat (2026-09) — voir demande utilisateur : "la population
+  // ne remonte pas vers les autres exercices... afin que ces primes soient
+  // prises en compte lors de la génération des statistiques à ces
+  // intervalles de date pour le calcul du S/P." Contrat.dateDebut est celle
+  // de l'exercice EN COURS (réécrite à chaque renouvellement) : l'utiliser
+  // comme début de présence des fondateurs vidait tous les exercices
+  // passés. L'origine est le début du PREMIER exercice.
+  const exercicesContrat = await prisma.exercice.findMany({ where: { contratId }, select: { dateDebut: true } });
+  const debutsExercices = exercicesContrat.map((e) => parseDateFr(e.dateDebut)).filter((d) => !Number.isNaN(d.getTime()));
+  const dateDebutContrat = debutsExercices.length > 0
+    ? new Date(Math.min(...debutsExercices.map((d) => d.getTime()), parseDateFr(contrat.dateDebut).getTime()))
+    : parseDateFr(contrat.dateDebut);
   const dateDu = du ? parseDateFr(du) : new Date(0);
   const dateAu = au ? parseDateFr(au) : new Date(8_640_000_000_000_000);
 
@@ -104,10 +115,21 @@ export async function reconstituerPopulation(
   // datés du même jour (ex. une radiation automatique suivie d'une
   // réintégration le jour même) doivent rester dans leur ordre réel, sinon
   // les fenêtres de présence calculées plus bas peuvent s'inverser.
-  const mouvements = await prisma.avenantAssure.findMany({
+  const mouvementsBruts = await prisma.avenantAssure.findMany({
     where: { contratId },
     orderBy: [{ dateEffet: "asc" }, { avenant: { createdAt: "asc" } }],
+    include: { avenant: { select: { description: true } } },
   });
+  // Personne entrée par un IMPORT de population (reprise de données, voir
+  // SanteService.importPopulation — avenant "Import de N personne(s)" daté
+  // du début de l'exercice en cours au moment de l'import) : réputée
+  // présente depuis l'origine du contrat, comme un fondateur ("il faut
+  // récupérer... la même population" sur les exercices passés). Une
+  // incorporation/un retrait saisis avec une vraie date gardent leur date.
+  const origineFr = `${String(dateDebutContrat.getDate()).padStart(2, "0")}/${String(dateDebutContrat.getMonth() + 1).padStart(2, "0")}/${dateDebutContrat.getFullYear()}`;
+  const mouvements = mouvementsBruts.map((m) =>
+    m.action === "Incorporation" && m.avenant?.description?.startsWith("Import de") ? { ...m, dateEffet: origineFr } : m,
+  );
 
   const evenementsParAssure = new Map<string, typeof mouvements>();
   for (const m of mouvements) {
