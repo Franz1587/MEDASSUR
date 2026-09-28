@@ -366,6 +366,7 @@ export class ContratsService {
 
   async create(dtoComplet: CreateContratDto, gestionnaireId?: string) {
     const { contratsMaladieIds, ...dto } = dtoComplet;
+    if (dto.branche === "Assistance" && contratsMaladieIds) await this.validerContratsMaladie(dto.clientId, contratsMaladieIds);
     dto.compagnieId = (await this.resoudreCompagnieId(dto.compagnieId)) ?? dto.compagnieId;
     const imputationAgence = await this.imputerSelonAgence(dto.compagnieId, dto.agenceId);
     dto.compagnieId = imputationAgence.compagnieId ?? dto.compagnieId;
@@ -398,6 +399,7 @@ export class ContratsService {
   async update(id: string, dtoComplet: UpdateContratDto) {
     const { contratsMaladieIds, ...dto } = dtoComplet;
     const avant = await this.findOne(id);
+    if ((dto.branche ?? avant.branche) === "Assistance" && contratsMaladieIds) await this.validerContratsMaladie(dto.clientId ?? avant.clientId, contratsMaladieIds);
     // Imputation compagnie ↔ agence (voir imputerSelonAgence) dès que l'une
     // ou l'autre est touchée par la modification.
     let imputationAgence: Awaited<ReturnType<ContratsService["imputerSelonAgence"]>> | null = null;
@@ -501,18 +503,27 @@ export class ContratsService {
   // Assistance — le cocher ici le retire de l'Assistance précédente, qui
   // est recalculée aussi. Prime recalculée aussitôt sur la population
   // réunie (exercice actif).
-  async lierContratsMaladie(assistanceId: string, contratsMaladieIds: string[]) {
+  // Contrôle AVANT toute écriture (création/modification) : contrats
+  // Maladie existants, du MÊME souscripteur que l'Assistance — sinon la
+  // fiche serait enregistrée puis le lien refusé (ou, à la création, un
+  // contrat créé sans son lien).
+  private async validerContratsMaladie(clientId: string, contratsMaladieIds: string[]) {
     const ids = [...new Set(contratsMaladieIds.filter(Boolean))];
     const cibles = ids.length > 0 ? await this.prisma.contrat.findMany({ where: { id: { in: ids } }, select: { id: true, branche: true, numeroPolice: true, contratAssistanceId: true, clientId: true } }) : [];
     const pasMaladie = cibles.filter((c) => c.branche !== "Maladie");
     if (pasMaladie.length > 0) throw new BadRequestException(`Seul un contrat Maladie peut être lié à un contrat d'Assistance (police ${pasMaladie.map((c) => numeroPolice(c)).join(", ")}).`);
     if (cibles.length !== ids.length) throw new NotFoundException("Contrat Maladie introuvable.");
-    // Même souscripteur uniquement (voir detacherLiensAutreSouscripteur).
-    const assistance = await this.prisma.contrat.findUnique({ where: { id: assistanceId }, select: { clientId: true } });
-    const autreSouscripteur = cibles.filter((c) => c.clientId !== assistance?.clientId);
+    const autreSouscripteur = cibles.filter((c) => c.clientId !== clientId);
     if (autreSouscripteur.length > 0) {
       throw new BadRequestException(`Un contrat d'Assistance ne peut être lié qu'aux contrats Maladie de son propre souscripteur (police ${autreSouscripteur.map((c) => numeroPolice(c)).join(", ")} : autre souscripteur).`);
     }
+    return cibles;
+  }
+
+  async lierContratsMaladie(assistanceId: string, contratsMaladieIds: string[]) {
+    const ids = [...new Set(contratsMaladieIds.filter(Boolean))];
+    const assistance = await this.prisma.contrat.findUnique({ where: { id: assistanceId }, select: { clientId: true } });
+    const cibles = await this.validerContratsMaladie(assistance?.clientId ?? "", ids);
     const anciennesAssistances = cibles.map((c) => c.contratAssistanceId).filter((a): a is string => !!a && a !== assistanceId);
     await this.prisma.contrat.updateMany({ where: { contratAssistanceId: assistanceId, id: { notIn: ids } }, data: { contratAssistanceId: null } });
     if (ids.length > 0) await this.prisma.contrat.updateMany({ where: { id: { in: ids } }, data: { contratAssistanceId: assistanceId } });
