@@ -20,7 +20,7 @@ export interface ApiContrat {
   agence?: { nom: string } | null;
   paysSouscription?: string | null;
   extensionsTerritorialite?: string[];
-  contratMaladieLieId?: string | null;
+  contratAssistanceId?: string | null;
   tauxCouvertureAmbulatoire?: string | null;
   tauxCouvertureHospitalisation?: string | null;
   tauxAmbulatoirePublique?: string | null;
@@ -116,7 +116,7 @@ export function mapContrat(c: ApiContrat): Contrat {
     jours: Number.isNaN(jr) ? "—" : jr < 0 ? "Échu" : `${jr} jours`,
     paysSouscription: c.paysSouscription ?? "",
     extensionsTerritorialite: c.extensionsTerritorialite ?? [],
-    contratMaladieLieId: c.contratMaladieLieId ?? null,
+    contratAssistanceId: c.contratAssistanceId ?? null,
     agenceId: c.agenceId ?? null,
     tauxCouvertureAmbulatoire: c.tauxCouvertureAmbulatoire ?? null,
     tauxCouvertureHospitalisation: c.tauxCouvertureHospitalisation ?? null,
@@ -184,7 +184,9 @@ export interface ContratUpsertInput {
   periodicite?: "Mensuel" | "Trimestriel" | "Semestriel" | "Annuel";
   paysSouscription?: string;
   extensionsTerritorialite?: string[];
-  contratMaladieLieId?: string;
+  // Contrat Assistance : ses contrats Maladie liés (voir
+  // ContratsService.lierContratsMaladie côté serveur).
+  contratsMaladieIds?: string[];
   tauxCouvertureAmbulatoire?: string;
   tauxCouvertureHospitalisation?: string;
   tauxAmbulatoirePublique?: string;

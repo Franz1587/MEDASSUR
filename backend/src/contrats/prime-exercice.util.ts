@@ -1,6 +1,6 @@
 import type { PrismaService } from "../prisma/prisma.service";
 import { withComputedPrime, type PrimeInput } from "./prime.util";
-import { reconstituerPopulation } from "../mouvements/population-historique.util";
+import { populationDuContrat, type reconstituerPopulation } from "../mouvements/population-historique.util";
 
 // Prime d'un exercice (2026-09) — écriture UNIQUE partagée par la fenêtre
 // "Prime de l'exercice" (ContratsService.mettreAJourPrimeExercice) et par le
@@ -186,7 +186,8 @@ async function recalculerExercice(
 // demande utilisateur : "ça ne s'actualise pas systématiquement" et "faire
 // remonter les populations vers les précédents exercices, pas seulement
 // l'exercice actif, afin d'avoir une statistique complète, S/P y compris").
-// Population du contrat Maladie lié pour un contrat d'Assistance.
+// Population des contrats Maladie liés pour un contrat d'Assistance (voir
+// populationDuContrat : union de chaque contrat Maladie, 2026-09).
 //  - `inclurePasses` : traite aussi les exercices antérieurs ;
 //  - `repriseDepuisActif` : un exercice passé sans population sur sa
 //    période ou sans prime unitaire reprend la population ET les
@@ -198,15 +199,14 @@ async function recalculerUnContrat(
   prisma: PrismaService, contratId: string, simulation: boolean,
   options: { inclurePasses: boolean; repriseDepuisActif: boolean; passesSansPrimeSeulement?: boolean; numeros?: number[] },
 ): Promise<RecalculPrime[]> {
-  const c = await prisma.contrat.findUnique({ where: { id: contratId }, select: { id: true, numeroPolice: true, branche: true, contratMaladieLieId: true, exerciceNumero: true, statut: true, dateFin: true, compagnieId: true } });
+  const c = await prisma.contrat.findUnique({ where: { id: contratId }, select: { id: true, numeroPolice: true, exerciceNumero: true, statut: true, dateFin: true, compagnieId: true } });
   if (!c) return [];
   const exercices = await prisma.exercice.findMany({ where: { contratId }, orderBy: { numero: "asc" } });
   const actif = exercices.find((e) => e.numero === c.exerciceNumero);
   if (!actif) return [];
-  const source = c.branche === "Assistance" && c.contratMaladieLieId ? c.contratMaladieLieId : c.id;
   const echu = contratEchu(c);
 
-  const populationActive = personnesComptees(await reconstituerPopulation(prisma, source, actif.dateDebut, actif.dateFin), echu, actif.dateDebut, actif.dateFin);
+  const populationActive = personnesComptees(await populationDuContrat(prisma, contratId, actif.dateDebut, actif.dateFin), echu, actif.dateDebut, actif.dateFin);
   const resultats: RecalculPrime[] = [];
   for (const ex of exercices) {
     if (options.numeros && !options.numeros.includes(ex.numero)) continue;
@@ -215,7 +215,7 @@ async function recalculerUnContrat(
     // Un exercice passé déjà renseigné (effectifs/prime saisis) est de
     // l'historique : jamais écrasé par le rattrapage.
     if (!estActif && options.passesSansPrimeSeulement && Number(ex.prime) > 0) continue;
-    let personnes = estActif ? populationActive : personnesComptees(await reconstituerPopulation(prisma, source, ex.dateDebut, ex.dateFin), true, ex.dateDebut, ex.dateFin);
+    let personnes = estActif ? populationActive : personnesComptees(await populationDuContrat(prisma, contratId, ex.dateDebut, ex.dateFin), true, ex.dateDebut, ex.dateFin);
     let parametres = ex;
     if (!estActif && options.repriseDepuisActif) {
       if (personnes.length === 0) personnes = populationActive.map((p) => ({ ...p, poids: 1 }));
@@ -256,8 +256,9 @@ export async function recalculerPrimeSelonPopulation(
   const resultats: RecalculPrime[] = [];
   const dejaFaits = new Set<string>();
   for (const id of contratIds) {
-    const lies = await prisma.contrat.findMany({ where: { contratMaladieLieId: id }, select: { id: true } });
-    for (const cid of [id, ...lies.map((l) => l.id)]) {
+    // Contrat Assistance qui partage la population de ce contrat Maladie.
+    const lie = await prisma.contrat.findUnique({ where: { id }, select: { contratAssistanceId: true } });
+    for (const cid of [id, ...(lie?.contratAssistanceId ? [lie.contratAssistanceId] : [])]) {
       if (dejaFaits.has(cid)) continue;
       dejaFaits.add(cid);
       try {

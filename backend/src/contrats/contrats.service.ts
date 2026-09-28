@@ -14,7 +14,8 @@ import { UpdateExercicePrimeDto } from "./dto/update-exercice-prime.dto";
 import { withComputedPrime, primeAffichee } from "./prime.util";
 import { appliquerPrimeExercice, recalculerPrimeSelonPopulation } from "./prime-exercice.util";
 import { MouvementsService } from "../mouvements/mouvements.service";
-import { reconstituerPopulation } from "../mouvements/population-historique.util";
+import { populationDuContrat } from "../mouvements/population-historique.util";
+import { numeroPolice } from "../lib/police.util";
 import { normaliserDateImport } from "../lib/date-import.util";
 import { texteBrutDeCellule } from "../lib/excel-cell.util";
 import { correspondApproximativement, meilleurCandidat, motsNonApparies, ressembleAUnParticulier } from "../lib/fuzzy-name-match.util";
@@ -363,7 +364,8 @@ export class ContratsService {
     return { appliquer, total: lignes.length, lignes };
   }
 
-  async create(dto: CreateContratDto, gestionnaireId?: string) {
+  async create(dtoComplet: CreateContratDto, gestionnaireId?: string) {
+    const { contratsMaladieIds, ...dto } = dtoComplet;
     dto.compagnieId = (await this.resoudreCompagnieId(dto.compagnieId)) ?? dto.compagnieId;
     const imputationAgence = await this.imputerSelonAgence(dto.compagnieId, dto.agenceId);
     dto.compagnieId = imputationAgence.compagnieId ?? dto.compagnieId;
@@ -389,10 +391,12 @@ export class ContratsService {
       },
     });
     await synchroniserStatutSouscripteurs(this.prisma, [contrat.clientId]);
+    if (contrat.branche === "Assistance" && contratsMaladieIds) await this.lierContratsMaladie(id, contratsMaladieIds);
     return { ...contrat, imputationAgence: { imputation: imputationAgence.imputation, avertissement: imputationAgence.avertissement } };
   }
 
-  async update(id: string, dto: UpdateContratDto) {
+  async update(id: string, dtoComplet: UpdateContratDto) {
+    const { contratsMaladieIds, ...dto } = dtoComplet;
     const avant = await this.findOne(id);
     // Imputation compagnie ↔ agence (voir imputerSelonAgence) dès que l'une
     // ou l'autre est touchée par la modification.
@@ -434,17 +438,55 @@ export class ContratsService {
         });
         await this.appliquerBasculeResiliation(id, avant.statut, data.statut);
         await synchroniserStatutSouscripteurs(this.prisma, [avant.clientId, dto.clientId]);
+        await this.appliquerLiensAssistance(id, avant.branche, dto.branche, contratsMaladieIds);
         return { ...(await this.findOne(id)), ...infoImputation };
       }
       const contrat = await this.prisma.contrat.update({ where: { id }, data, include: { client: true, compagnie: true, garanties: true, agence: true } });
       await this.appliquerBasculeResiliation(id, avant.statut, data.statut);
       await synchroniserStatutSouscripteurs(this.prisma, [avant.clientId, contrat.clientId]);
-      return { ...contrat, ...infoImputation };
+      await this.appliquerLiensAssistance(id, avant.branche, dto.branche, contratsMaladieIds);
+      return { ...(await this.findOne(id)), ...infoImputation };
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
         throw new ConflictException(`Le numéro de police "${dto.numeroPolice}" est déjà utilisé pour cette compagnie.`);
       }
       throw err;
+    }
+  }
+
+  // Liens Assistance ↔ Maladie après une modification (2026-09) : un
+  // contrat devenu Maladie ne peut plus porter de contrats Maladie liés ;
+  // un contrat devenu Assistance ne peut plus être lui-même rattaché à
+  // une Assistance.
+  private async appliquerLiensAssistance(id: string, brancheAvant: string, brancheApres: string | undefined, contratsMaladieIds?: string[]) {
+    const branche = brancheApres ?? brancheAvant;
+    if (branche === "Assistance") {
+      if (brancheAvant !== "Assistance") await this.prisma.contrat.update({ where: { id }, data: { contratAssistanceId: null } });
+      if (contratsMaladieIds) await this.lierContratsMaladie(id, contratsMaladieIds);
+    } else if (brancheAvant === "Assistance") {
+      await this.lierContratsMaladie(id, []);
+    }
+  }
+
+  // Rattache EXACTEMENT ces contrats Maladie au contrat Assistance (voir
+  // demande utilisateur : "le contrat d'assistance puisse... être lié à
+  // plusieurs contrats maladie et récupérer exactement chaque population
+  // de ces contrats maladie pour le calcul de prime") : ceux qui ne sont
+  // plus dans la liste sont détachés. Un contrat Maladie n'a qu'une
+  // Assistance — le cocher ici le retire de l'Assistance précédente, qui
+  // est recalculée aussi. Prime recalculée aussitôt sur la population
+  // réunie (exercice actif).
+  async lierContratsMaladie(assistanceId: string, contratsMaladieIds: string[]) {
+    const ids = [...new Set(contratsMaladieIds.filter(Boolean))];
+    const cibles = ids.length > 0 ? await this.prisma.contrat.findMany({ where: { id: { in: ids } }, select: { id: true, branche: true, numeroPolice: true, contratAssistanceId: true } }) : [];
+    const pasMaladie = cibles.filter((c) => c.branche !== "Maladie");
+    if (pasMaladie.length > 0) throw new BadRequestException(`Seul un contrat Maladie peut être lié à un contrat d'Assistance (police ${pasMaladie.map((c) => numeroPolice(c)).join(", ")}).`);
+    if (cibles.length !== ids.length) throw new NotFoundException("Contrat Maladie introuvable.");
+    const anciennesAssistances = cibles.map((c) => c.contratAssistanceId).filter((a): a is string => !!a && a !== assistanceId);
+    await this.prisma.contrat.updateMany({ where: { contratAssistanceId: assistanceId, id: { notIn: ids } }, data: { contratAssistanceId: null } });
+    if (ids.length > 0) await this.prisma.contrat.updateMany({ where: { id: { in: ids } }, data: { contratAssistanceId: assistanceId } });
+    for (const a of [assistanceId, ...new Set(anciennesAssistances)]) {
+      await recalculerPrimeSelonPopulation(this.prisma, [a]);
     }
   }
 
@@ -668,7 +710,9 @@ export class ContratsService {
   // PDF/Excel/Word (documents.service.ts, même fonction).
   async populationHistorique(id: string, statut?: string, du?: string, au?: string) {
     await this.findOne(id);
-    const personnes = await reconstituerPopulation(this.prisma, id, du, au);
+    // Contrat Assistance : population de chacun de ses contrats Maladie,
+    // rangée par contrat Maladie (voir populationDuContrat).
+    const personnes = await populationDuContrat(this.prisma, id, du, au);
     return statut && statut !== "tous" ? personnes.filter((p) => p.statutPeriode === statut) : personnes;
   }
 

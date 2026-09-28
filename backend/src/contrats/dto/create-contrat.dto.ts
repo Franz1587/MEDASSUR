@@ -68,12 +68,16 @@ export class CreateContratDto {
   @IsString({ each: true })
   extensionsTerritorialite?: string[];
 
-  // Assistance liée (2026-08) — renseigné uniquement sur un contrat
-  // Assistance : pointe vers son contrat Maladie, dont il partage
-  // exactement la population (voir schema.prisma, model Contrat).
+  // Assistance liée (2026-08, multiple depuis 2026-09) — renseigné
+  // uniquement sur un contrat Assistance : ses contrats Maladie, dont il
+  // partage exactement la population (voir schema.prisma
+  // Contrat.contratAssistanceId). Jamais une colonne : ContratsService
+  // l'écrit sur chaque contrat Maladie. Absent = liens inchangés ; [] =
+  // plus aucun contrat Maladie lié.
   @IsOptional()
-  @IsString()
-  contratMaladieLieId?: string;
+  @IsArray()
+  @IsString({ each: true })
+  contratsMaladieIds?: string[];
 
   @IsOptional()
   @IsString()

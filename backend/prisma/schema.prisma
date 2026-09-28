@@ -1204,16 +1204,20 @@ model Contrat {
   paysSouscription         String?
   extensionsTerritorialite String[]
 
-  // Assistance liée (2026-08) — dès que la territorialité d'un contrat
-  // Maladie dépasse "Gabon Uniquement", un contrat Assistance devient
-  // obligatoire et partage EXACTEMENT la même population que son contrat
-  // Maladie (voir SanteService/ContratsService) : un contrat Assistance
-  // lié n'a jamais sa propre ligne AssureSante, sa population est lue par
-  // filtrage sur contratMaladieLieId — ce qui rend toute duplication
-  // structurellement impossible pour ce cas.
-  contratMaladieLieId String?
-  contratMaladieLie   Contrat?  @relation("ContratMaladieAssistance", fields: [contratMaladieLieId], references: [id])
-  contratsAssistanceLies Contrat[] @relation("ContratMaladieAssistance")
+  // Assistance liée (2026-08, rendu multiple 2026-09) — un contrat
+  // Assistance partage EXACTEMENT la population de ses contrats Maladie :
+  // jamais sa propre ligne AssureSante, sa population est l'union de
+  // celles des contrats Maladie liés (voir population-historique.util.ts
+  // populationDuContrat). Voir demande utilisateur : "plusieurs contrats
+  // maladie peuvent être liés au même contrat d'assistance... récupérer
+  // exactement chaque population de ces contrats maladie pour le calcul
+  // de prime." Le lien est donc porté par le contrat MALADIE (un contrat
+  // Maladie → au plus un contrat Assistance ; un contrat Assistance → N
+  // contrats Maladie). Remplace Contrat.contratMaladieLieId (Assistance →
+  // un seul Maladie).
+  contratAssistanceId String?
+  contratAssistance   Contrat?  @relation("ContratMaladieAssistance", fields: [contratAssistanceId], references: [id], onDelete: SetNull)
+  contratsMaladieLies Contrat[] @relation("ContratMaladieAssistance")
 
   // ── Garanties (2026-08) ──────────────────────────────────────────────
   // Résumé global affiché en tête du tableau de garanties (ex: "Taux
@@ -1337,6 +1341,7 @@ model Contrat {
   @@unique([compagnieId, numeroPolice])
 
   @@index([societeId])
+  @@index([contratAssistanceId])
 }
 
 // Encaissement de prime (2026-08) — voir demande utilisateur : "Bordereau

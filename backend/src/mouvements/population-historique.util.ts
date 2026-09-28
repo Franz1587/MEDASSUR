@@ -51,6 +51,11 @@ export interface PersonnePeriode {
   // (voir contrats/prime-exercice.util.ts). null si la personne est
   // toujours couverte, ou si sa sortie n'a pas de date connue.
   finPresence?: Date | null;
+  // Contrat Maladie d'origine de la personne quand la population est lue
+  // pour un contrat Assistance (voir populationDuContrat) — sert à ranger
+  // la liste par contrat Maladie.
+  contratSourceId?: string;
+  policeSource?: string | null;
 }
 
 function calculerFenetres(
@@ -169,6 +174,39 @@ export async function reconstituerPopulation(
       scolarise: fiche.scolarise, statutActuel: fiche.statut, statutPeriode,
       finPresence: retirePendantPeriode ? fenetrePertinente.fin : null,
     });
+  }
+  return resultats;
+}
+
+// Contrats dont la population compte pour `contratId` : pour un contrat
+// Assistance, ses contrats Maladie liés (voir schema.prisma
+// Contrat.contratAssistanceId), rangés par n° de police ; sinon (contrat
+// Maladie, ou Assistance sans lien — population saisie séparément) le
+// contrat lui-même.
+export async function sourcesPopulation(prisma: PrismaService, contratId: string): Promise<{ id: string; numeroPolice: string | null }[]> {
+  const contrat = await prisma.contrat.findUnique({ where: { id: contratId }, select: { id: true, branche: true, numeroPolice: true } });
+  if (!contrat) return [];
+  if (contrat.branche === "Assistance") {
+    const lies = await prisma.contrat.findMany({ where: { contratAssistanceId: contratId }, select: { id: true, numeroPolice: true } });
+    if (lies.length > 0) return lies.sort((a, b) => (a.numeroPolice ?? "").localeCompare(b.numeroPolice ?? "", "fr", { numeric: true }));
+  }
+  return [{ id: contrat.id, numeroPolice: contrat.numeroPolice }];
+}
+
+// Population d'un contrat quel que soit sa branche — voir demande
+// utilisateur : "plusieurs contrats maladie peuvent être liés au même
+// contrat d'assistance... récupérer exactement chaque population de ces
+// contrats maladie pour le calcul de prime. Il faudra ranger les listes en
+// fonction des contrats maladie." Contrat Assistance lié : population de
+// CHAQUE contrat Maladie, telle quelle (une personne affiliée à deux
+// contrats Maladie compte deux fois, comme dans chacun d'eux), dans l'ordre
+// des n° de police, chaque personne portant son contrat d'origine.
+export async function populationDuContrat(prisma: PrismaService, contratId: string, du?: string, au?: string): Promise<PersonnePeriode[]> {
+  const sources = await sourcesPopulation(prisma, contratId);
+  const resultats: PersonnePeriode[] = [];
+  for (const source of sources) {
+    const personnes = await reconstituerPopulation(prisma, source.id, du, au);
+    resultats.push(...personnes.map((p) => ({ ...p, contratSourceId: source.id, policeSource: source.numeroPolice })));
   }
   return resultats;
 }

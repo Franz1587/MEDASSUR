@@ -179,7 +179,7 @@ function emptyForm(): ContratUpsertInput {
   };
 }
 
-function contratToForm(c: Contrat, clients: Client[], compagnies: Compagnie[]): ContratUpsertInput {
+function contratToForm(c: Contrat, clients: Client[], compagnies: Compagnie[], contrats: Contrat[]): ContratUpsertInput {
   return {
     clientId: clients.find((cl) => cl.nom === c.client)?.id ?? "",
     compagnieId: compagnies.find((co) => co.nom === c.compagnie)?.id ?? "",
@@ -193,7 +193,7 @@ function contratToForm(c: Contrat, clients: Client[], compagnies: Compagnie[]): 
     produit: c.produit ?? "",
     paysSouscription: c.paysSouscription || "Gabon",
     extensionsTerritorialite: c.extensionsTerritorialite ?? [],
-    contratMaladieLieId: c.contratMaladieLieId ?? undefined,
+    contratsMaladieIds: c.branche === "Assistance" ? contrats.filter((m) => m.contratAssistanceId === c.id).map((m) => m.id) : undefined,
     tauxCouvertureAmbulatoire: c.tauxCouvertureAmbulatoire ?? "",
     tauxCouvertureHospitalisation: c.tauxCouvertureHospitalisation ?? "",
     tauxAmbulatoirePublique: c.tauxAmbulatoirePublique ?? "",
@@ -480,7 +480,7 @@ export default function ContratsView() {
   // raison), mais MODIFIER la fiche d'une personne déjà affiliée ne crée
   // aucune duplication : c'est exactement la même ligne AssureSante que
   // celle du contrat Maladie (population partagée, jamais copiée — voir
-  // Contrat.contratMaladieLieId), donc l'éditer ici la modifie aussi là-bas.
+  // Contrat.contratAssistanceId), donc l'éditer ici la modifie aussi là-bas.
   const [editPersonneId, setEditPersonneId] = useState<string | null>(null);
   const [editPersonneForm, setEditPersonneForm] = useState<UpdateAssureInput>({});
   const [editPersonneSubmitting, setEditPersonneSubmitting] = useState(false);
@@ -511,7 +511,7 @@ export default function ContratsView() {
       await updateAssure(a.id, editPersonneForm);
       toast.success("Fiche mise à jour.");
       setEditPersonneId(null);
-      getAssuresSante().then((all) => setExistingPopulation(all.filter((p) => p.contratId === form.contratMaladieLieId)));
+      chargerPopulation(form.contratsMaladieIds ?? []);
     } catch (err) {
       setEditPersonneError(err instanceof Error ? err.message : "Erreur d'enregistrement.");
     } finally {
@@ -626,15 +626,15 @@ export default function ContratsView() {
     setEditing(c);
     // Le nom peut correspondre à une vraie compagnie ou à un profil
     // Auto-Gestion (voir toggle "Type de gestion") — chercher dans les deux.
-    const f = contratToForm(c, clients, [...compagnies, ...compagniesAutoGestion]);
+    const f = contratToForm(c, clients, [...compagnies, ...compagniesAutoGestion], contrats);
     setForm(f);
     setTypeGestion(compagniesAutoGestion.some((ag) => ag.id === f.compagnieId) ? "AutoGestion" : "Classique");
     setNewPopulationRows([]);
     setGarantieRows(c.garanties.map((g) => ({ categorie: g.categorie, libelle: g.libelle, tauxAssure: g.tauxAssure ?? undefined, tauxAyantsDroit: g.tauxAyantsDroit ?? undefined, plafond: g.plafond ?? undefined })));
-    // Assistance liée : jamais sa propre population, toujours celle de son
-    // contrat Maladie lié (voir handleContratMaladieLieChange).
-    const popSourceId = c.branche === "Assistance" && c.contratMaladieLieId ? c.contratMaladieLieId : c.id;
-    getAssuresSante().then((all) => setExistingPopulation(all.filter((a) => a.contratId === popSourceId)));
+    // Assistance liée : jamais sa propre population, toujours celle de ses
+    // contrats Maladie liés (voir basculerContratMaladieLie).
+    const liesMaladie = f.contratsMaladieIds ?? [];
+    chargerPopulation(c.branche === "Assistance" && liesMaladie.length > 0 ? liesMaladie : [c.id]);
     setImportFile(null);
     setImportSearch("");
     setImportRejected([]);
@@ -759,13 +759,21 @@ export default function ContratsView() {
   // Maladie n'a jamais sa propre population : elle est lue depuis le
   // contrat Maladie choisi ici (même mécanisme existingPopulation que
   // l'édition d'un contrat existant, voir openEdit), jamais ré-importée.
-  const handleContratMaladieLieChange = (contratMaladieLieId: string) => {
-    setForm((v) => ({ ...v, contratMaladieLieId: contratMaladieLieId || undefined }));
-    if (contratMaladieLieId) {
-      getAssuresSante().then((all) => setExistingPopulation(all.filter((a) => a.contratId === contratMaladieLieId)));
-    } else {
-      setExistingPopulation([]);
-    }
+  // Plusieurs contrats Maladie par contrat Assistance (2026-09) — voir
+  // demande utilisateur : "plusieurs contrats maladie peuvent être liés au
+  // même contrat d'assistance... récupérer exactement chaque population de
+  // ces contrats maladie pour le calcul de prime." Population = union de
+  // chacun (jamais dédoublonnée : une personne affiliée à deux contrats
+  // Maladie y compte deux fois, comme dans chacun d'eux).
+  function chargerPopulation(contratIds: string[]) {
+    if (contratIds.length === 0) { setExistingPopulation([]); return; }
+    getAssuresSante().then((all) => setExistingPopulation(all.filter((a) => contratIds.includes(a.contratId))));
+  }
+  const basculerContratMaladieLie = (contratId: string) => {
+    const actuels = form.contratsMaladieIds ?? [];
+    const suivants = actuels.includes(contratId) ? actuels.filter((id) => id !== contratId) : [...actuels, contratId];
+    setForm((v) => ({ ...v, contratsMaladieIds: suivants }));
+    chargerPopulation(suivants);
   };
   // Contrats Maladie éligibles à un lien Assistance (2026-09, corrigé) —
   // voir demande utilisateur : "il faut faire remonter les contrats Maladie
@@ -780,9 +788,22 @@ export default function ContratsView() {
   // d'Assistance peut vouloir partager la population de N'IMPORTE QUEL
   // contrat Maladie du même souscripteur. Comparaison par clientId (pas
   // par nom, fragile si deux clients partagent le même nom).
-  const contratsMaladieDuClient = contrats.filter(
-    (c) => c.branche === "Maladie" && c.clientId === form.clientId,
-  );
+  // + les contrats Maladie déjà liés même s'ils appartiennent à un autre
+  // souscripteur (ne jamais faire disparaître un lien existant de la liste).
+  const contratsMaladieDuClient = contrats
+    .filter((c) => c.branche === "Maladie" && (c.clientId === form.clientId || (form.contratsMaladieIds ?? []).includes(c.id)))
+    .sort((a, b) => numeroPolice(a).localeCompare(numeroPolice(b), "fr", { numeric: true }));
+  // Population d'un contrat Assistance rangée par contrat Maladie (voir
+  // demande utilisateur : "il faudra ranger les listes en fonction des
+  // contrats maladie"), dans l'ordre des n° de police.
+  const groupesPopulationAssistance = contratsMaladieDuClient
+    .filter((m) => (form.contratsMaladieIds ?? []).includes(m.id))
+    .map((m) => ({
+      contrat: m,
+      personnes: existingPopulation
+        .filter((a) => a.contratId === m.id)
+        .sort((a, b) => `${a.nom} ${a.prenom ?? ""}`.localeCompare(`${b.nom} ${b.prenom ?? ""}`, "fr")),
+    }));
 
   // Population individualisée (avec date de naissance) disponible pour le
   // calcul de la surprime d'âge — assurés déjà affiliés (édition), lignes
@@ -1109,10 +1130,16 @@ export default function ContratsView() {
                 <td className="hidden md:table-cell px-4 py-3 whitespace-nowrap">
                   <div className="inline-flex items-center gap-1.5">
                     <Badge variant={c.branche === "Assistance" ? "info" : "neutral"}>{c.branche}</Badge>
-                    {c.branche === "Maladie" && (c.extensionsTerritorialite?.length ?? 0) > 0 && !contrats.some((a) => a.branche === "Assistance" && a.contratMaladieLieId === c.id) && (
+                    {c.branche === "Maladie" && (c.extensionsTerritorialite?.length ?? 0) > 0 && !c.contratAssistanceId && (
                       <span title="Territorialité hors Gabon Uniquement — contrat d'Assistance lié manquant"><AlertTriangle className="w-3.5 h-3.5 text-amber-500" aria-label="Contrat d'Assistance lié manquant" /></span>
                     )}
                   </div>
+                  {c.branche === "Assistance" && (() => {
+                    const lies = contrats.filter((m) => m.contratAssistanceId === c.id);
+                    return lies.length > 0 ? (
+                      <p className="mt-0.5 text-[10.5px] text-muted-foreground med-num">Maladie : {lies.map((m) => numeroPolice(m)).join(", ")}</p>
+                    ) : null;
+                  })()}
                 </td>
                 <td className="hidden lg:table-cell px-4 py-3 text-muted-foreground whitespace-nowrap">{c.compagnie}</td>
                 <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap med-num med-col-period">
@@ -1165,8 +1192,8 @@ export default function ContratsView() {
             <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
               <div>
                 <h3 className="text-[15px] font-semibold text-foreground">
-                  {editing ? `Modifier le contrat ${editing.id}` : "Créer un contrat"}
-                  {editing?.numeroPolice && <span className="ml-2 text-[12px] font-normal text-muted-foreground">— N° police {editing.numeroPolice}</span>}
+                  {editing ? `Modifier le contrat — Police ${numeroPolice(editing)}` : "Créer un contrat"}
+                  {editing && <span className="ml-2 text-[12px] font-normal text-muted-foreground">· {editing.client} · {editing.branche}</span>}
                 </h3>
                 {editing && <div className="mt-0.5"><DerniereModification entite="contrats" entiteId={editing.id} /></div>}
               </div>
@@ -1334,11 +1361,27 @@ export default function ContratsView() {
                     <label className="block"><div className={labelCls}>Date d'échéance</div><DateInput value={form.dateFin} onChange={(v) => setForm((f) => ({ ...f, dateFin: v }))} className={fieldCls} /></label>
                     {form.branche === "Assistance" && (
                       <label className="block">
-                        <div className={labelCls}>Contrat Maladie lié</div>
-                        <select value={form.contratMaladieLieId ?? ""} onChange={(e) => handleContratMaladieLieChange(e.target.value)} className={fieldCls}>
-                          <option value="">— Aucun (population saisie séparément) —</option>
-                          {contratsMaladieDuClient.map((c) => <option key={c.id} value={c.id}>{numeroPolice(c)} · {c.client}</option>)}
-                        </select>
+                        <div className={labelCls}>Contrats Maladie liés</div>
+                        {contratsMaladieDuClient.length > 0 && (
+                          <div className="rounded-lg border border-border divide-y divide-border/50 max-h-56 overflow-y-auto" role="group" aria-label="Contrats Maladie liés">
+                            {contratsMaladieDuClient.map((c) => {
+                              const coche = (form.contratsMaladieIds ?? []).includes(c.id);
+                              const autreAssistance = c.contratAssistanceId && c.contratAssistanceId !== editing?.id ? contrats.find((a) => a.id === c.contratAssistanceId) : undefined;
+                              return (
+                                <label key={c.id} className="flex items-center gap-2.5 px-3 py-2 min-h-[40px] cursor-pointer hover:bg-secondary/30">
+                                  <input type="checkbox" checked={coche} onChange={() => basculerContratMaladieLie(c.id)} className="w-4 h-4 accent-primary flex-shrink-0" />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block text-[12.5px] text-foreground med-num">Police {numeroPolice(c)}</span>
+                                    <span className="block text-[11px] text-muted-foreground truncate">{c.produit || c.client} · {c.statut}</span>
+                                  </span>
+                                  {autreAssistance && (
+                                    <span className="text-[10.5px] text-amber-600 flex-shrink-0">{coche ? "sera retiré de" : "déjà lié à"} l'Assistance {numeroPolice(autreAssistance)}</span>
+                                  )}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
                         {/* Liste vide = pas un bug : voir le filtre de contratsMaladieDuClient
                             (branche Maladie + même client, tous éligibles depuis 2026-09). Message
                             explicite plutôt qu'un select silencieusement vide — voir demande
@@ -1348,7 +1391,7 @@ export default function ContratsView() {
                         {form.clientId && contratsMaladieDuClient.length === 0 ? (
                           <p className="text-[10.5px] text-amber-600 mt-1">Aucun contrat Maladie pour ce souscripteur — créez-le d'abord si ce contrat d'Assistance doit en partager la population.</p>
                         ) : (
-                          <p className="text-[10.5px] text-muted-foreground mt-1">Facultatif : un contrat d'Assistance partage souvent la population d'un contrat Maladie du même souscripteur (population saisie une seule fois) — obligatoire si ce contrat Maladie a une extension de territorialité hors Gabon.</p>
+                          <p className="text-[10.5px] text-muted-foreground mt-1">Cochez un ou plusieurs contrats Maladie : la prime d'Assistance est calculée sur la population réunie de chacun d'eux. Aucun coché = population saisie séparément. Obligatoire pour un contrat Maladie avec une extension de territorialité hors Gabon.</p>
                         )}
                       </label>
                     )}
@@ -1524,15 +1567,25 @@ export default function ContratsView() {
                 </>
               )}
 
-              {activeTab === "population" && (form.branche === "Assistance" && form.contratMaladieLieId ? (
+              {activeTab === "population" && (form.branche === "Assistance" && (form.contratsMaladieIds ?? []).length > 0 ? (
                 <div className="space-y-3">
                   <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
-                    <p className="text-[13px] font-semibold text-foreground">Population identique au contrat Maladie {form.contratMaladieLieId}</p>
-                    <p className="text-[11.5px] text-muted-foreground mt-1">{existingPopulation.length} personne(s) — gérée exclusivement depuis ce contrat Maladie (module Participants ou son propre onglet Population). Aucun import séparé n'est possible ici, pour éviter toute duplication.</p>
+                    <p className="text-[13px] font-semibold text-foreground">
+                      Population de {groupesPopulationAssistance.length} contrat{groupesPopulationAssistance.length > 1 ? "s" : ""} Maladie : {existingPopulation.length} personne(s)
+                    </p>
+                    <p className="text-[11.5px] text-muted-foreground mt-1">Gérée exclusivement depuis chaque contrat Maladie (module Participants ou son propre onglet Population). Aucun import séparé n'est possible ici, pour éviter toute duplication.</p>
                   </div>
-                  {existingPopulation.length > 0 && (
-                    <div className="rounded-lg border border-border overflow-hidden max-h-72 overflow-y-auto divide-y divide-border/50">
-                      {existingPopulation.map((a) => {
+                  {groupesPopulationAssistance.map((groupe) => (
+                    <section key={groupe.contrat.id} className="rounded-lg border border-border overflow-hidden" aria-label={`Contrat Maladie police ${numeroPolice(groupe.contrat)}`}>
+                      <div className="flex items-center justify-between gap-3 px-3 py-2 bg-secondary/40 border-b border-border">
+                        <p className="min-w-0 text-[12px] font-semibold text-foreground truncate">Police {numeroPolice(groupe.contrat)} <span className="font-normal text-muted-foreground">· {groupe.contrat.produit || groupe.contrat.client}</span></p>
+                        <span className="text-[11px] text-muted-foreground whitespace-nowrap flex-shrink-0">{groupe.personnes.length} personne(s)</span>
+                      </div>
+                      {groupe.personnes.length === 0 ? (
+                        <p className="px-3 py-2 text-[11.5px] text-muted-foreground">Aucune personne affiliée à ce contrat Maladie.</p>
+                      ) : (
+                    <div className="max-h-72 overflow-y-auto divide-y divide-border/50">
+                      {groupe.personnes.map((a) => {
                         const ouverte = editPersonneId === a.id;
                         return (
                           <div key={a.id}>
@@ -1578,7 +1631,9 @@ export default function ContratsView() {
                         );
                       })}
                     </div>
-                  )}
+                      )}
+                    </section>
+                  ))}
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -2027,7 +2082,7 @@ export default function ContratsView() {
             const aujourdhui = new Date(); aujourdhui.setHours(0, 0, 0, 0);
             return !!(d && m && y) && new Date(y, m - 1, d) < aujourdhui;
           })()}
-          populationContratId={editing.branche === "Assistance" && editing.contratMaladieLieId ? editing.contratMaladieLieId : editing.id}
+          populationContratId={editing.id}
           exercice={exercicePrimeCible}
           onClose={() => setExercicePrimeCible(null)}
           onDone={(historique) => setHistoriqueCompagnie(historique)}

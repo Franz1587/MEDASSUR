@@ -31,7 +31,7 @@ import { StorageService } from "../storage/storage.service";
 import { genererGraphiqueBarres, genererGraphiqueBarresEtiquetees, genererGraphiqueCamembert } from "./graphiques.util";
 import { montantEnLettresFcfa } from "../lib/montant-en-lettres.util";
 import { TAUX_TPS } from "../sante/sante.service";
-import { reconstituerPopulation } from "../mouvements/population-historique.util";
+import { populationDuContrat } from "../mouvements/population-historique.util";
 import type { Prisma, ParametresEntreprise } from "@prisma/client";
 import { numeroPolice, policePourNomFichier } from "../lib/police.util";
 
@@ -3648,7 +3648,14 @@ export class DocumentsService {
   async renderPopulationExport(contratId: string, format: "pdf" | "xlsx" | "docx", res: Response, filtres: { statut?: string; du?: string; au?: string }) {
     const contrat = await this.prisma.contrat.findUnique({ where: { id: contratId }, include: { client: true } });
     if (!contrat) throw new NotFoundException("Contrat introuvable");
-    const population = await reconstituerPopulation(this.prisma, contratId, filtres.du, filtres.au);
+    // Contrat Assistance lié à plusieurs contrats Maladie (2026-09) : la
+    // population de chacun, rangée par contrat Maladie puis par famille
+    // (voir demande utilisateur : "il faudra ranger les listes en fonction
+    // des contrats maladie"), avec une colonne "Police Maladie".
+    const population = await populationDuContrat(this.prisma, contratId, filtres.du, filtres.au);
+    const ordreSource = new Map<string, number>();
+    for (const a of population) if (a.contratSourceId && !ordreSource.has(a.contratSourceId)) ordreSource.set(a.contratSourceId, ordreSource.size);
+    const parContratMaladie = population.some((a) => a.contratSourceId && a.contratSourceId !== contratId);
     // Regroupement par famille, familles triées par ordre alphabétique de
     // l'assuré principal (2026-09) — voir demande utilisateur : "il faut
     // que l'application génère les liste en rangeant les famille et non
@@ -3670,6 +3677,8 @@ export class DocumentsService {
     const assures = population
       .filter((a) => !filtres.statut || a.statutPeriode === filtres.statut)
       .sort((a, b) => {
+        const source = (ordreSource.get(a.contratSourceId ?? "") ?? 0) - (ordreSource.get(b.contratSourceId ?? "") ?? 0);
+        if (source !== 0) return source;
         const racineA = parId.get(cleFamilleDe(a)) ?? a;
         const racineB = parId.get(cleFamilleDe(b)) ?? b;
         return nomTriDe(racineA).localeCompare(nomTriDe(racineB))
@@ -3683,12 +3692,16 @@ export class DocumentsService {
     // numéro de police compagnie du contrat qui doit remonter" — cet export
     // affichait encore contrat.id brut, jamais numeroPolice.
     const sousTitre = `${contrat.client.nom}   ·   Police N° ${numeroPolice(contrat)}   ·   ${assures.length} bénéficiaire(s)`;
-    const rows = assures.map((a) => [a.matricule, `${a.nom} ${a.prenom ?? ""}`.trim(), TYPE_ASSURE_LABELS[a.typeAssure ?? ""] ?? a.typeAssure ?? "—", a.dateNaissance ?? "—", a.statutPeriode]);
+    const rows = assures.map((a) => [
+      ...(parContratMaladie ? [a.policeSource ?? "—"] : []),
+      a.matricule, `${a.nom} ${a.prenom ?? ""}`.trim(), TYPE_ASSURE_LABELS[a.typeAssure ?? ""] ?? a.typeAssure ?? "—", a.dateNaissance ?? "—", a.statutPeriode,
+    ]);
 
     if (format === "xlsx") {
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet("Assurés");
       ws.columns = [
+        ...(parContratMaladie ? [{ header: "Police Maladie", key: "police", width: 16 }] : []),
         { header: "Matricule", key: "matricule", width: 18 }, { header: "Nom et Prénom", key: "nom", width: 30 },
         { header: "Type", key: "type", width: 16 }, { header: "Date de naissance", key: "naissance", width: 18 }, { header: "Statut", key: "statut", width: 14 },
       ];
@@ -3701,7 +3714,7 @@ export class DocumentsService {
       return;
     }
     if (format === "docx") {
-      return this.envoyerDocx(res, `Liste-Assures-${policePourNomFichier(contrat)}`, titre, sousTitre, [], { headers: ["Matricule", "Nom et Prénom", "Type", "Naissance", "Statut"], rows });
+      return this.envoyerDocx(res, `Liste-Assures-${policePourNomFichier(contrat)}`, titre, sousTitre, [], { headers: [...(parContratMaladie ? ["Police Maladie"] : []), "Matricule", "Nom et Prénom", "Type", "Naissance", "Statut"], rows });
     }
 
     const p = await this.parametresEntreprise.findOne();
@@ -3720,7 +3733,9 @@ export class DocumentsService {
     doc.fillColor("#000");
 
     let y = 95;
-    const cols = [{ h: "Matricule", w: width * 0.18 }, { h: "Nom et Prénom", w: width * 0.35 }, { h: "Type", w: width * 0.15 }, { h: "Naissance", w: width * 0.16 }, { h: "Statut", w: width * 0.16 }];
+    const cols = parContratMaladie
+      ? [{ h: "Police Maladie", w: width * 0.15 }, { h: "Matricule", w: width * 0.15 }, { h: "Nom et Prénom", w: width * 0.32 }, { h: "Type", w: width * 0.12 }, { h: "Naissance", w: width * 0.13 }, { h: "Statut", w: width * 0.13 }]
+      : [{ h: "Matricule", w: width * 0.18 }, { h: "Nom et Prénom", w: width * 0.35 }, { h: "Type", w: width * 0.15 }, { h: "Naissance", w: width * 0.16 }, { h: "Statut", w: width * 0.16 }];
     const drawHeader = () => {
       doc.rect(left, y, width, 16).fill(p.couleurPrimaire);
       let cx = left;
