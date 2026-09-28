@@ -466,6 +466,31 @@ export class ContratsService {
     } else if (brancheAvant === "Assistance") {
       await this.lierContratsMaladie(id, []);
     }
+    await this.detacherLiensAutreSouscripteur(id);
+  }
+
+  // Liaison réservée au MÊME souscripteur (2026-09) — voir demande
+  // utilisateur : "la liaison ne peut se faire qu'avec les contrats maladie
+  // et le contrat d'assistance appartenant au même souscripteur." Après un
+  // changement de souscripteur, tout lien devenu inter-souscripteurs est
+  // défait (dans les deux sens) et les Assistances concernées recalculées.
+  private async detacherLiensAutreSouscripteur(id: string) {
+    const c = await this.prisma.contrat.findUnique({
+      where: { id },
+      select: { clientId: true, contratAssistanceId: true, contratAssistance: { select: { clientId: true } }, contratsMaladieLies: { select: { id: true, clientId: true } } },
+    });
+    if (!c) return;
+    const aRecalculer = new Set<string>();
+    if (c.contratAssistanceId && c.contratAssistance?.clientId !== c.clientId) {
+      await this.prisma.contrat.update({ where: { id }, data: { contratAssistanceId: null } });
+      aRecalculer.add(c.contratAssistanceId);
+    }
+    const autres = c.contratsMaladieLies.filter((m) => m.clientId !== c.clientId).map((m) => m.id);
+    if (autres.length > 0) {
+      await this.prisma.contrat.updateMany({ where: { id: { in: autres } }, data: { contratAssistanceId: null } });
+      aRecalculer.add(id);
+    }
+    for (const a of aRecalculer) await recalculerPrimeSelonPopulation(this.prisma, [a]);
   }
 
   // Rattache EXACTEMENT ces contrats Maladie au contrat Assistance (voir
@@ -478,10 +503,16 @@ export class ContratsService {
   // réunie (exercice actif).
   async lierContratsMaladie(assistanceId: string, contratsMaladieIds: string[]) {
     const ids = [...new Set(contratsMaladieIds.filter(Boolean))];
-    const cibles = ids.length > 0 ? await this.prisma.contrat.findMany({ where: { id: { in: ids } }, select: { id: true, branche: true, numeroPolice: true, contratAssistanceId: true } }) : [];
+    const cibles = ids.length > 0 ? await this.prisma.contrat.findMany({ where: { id: { in: ids } }, select: { id: true, branche: true, numeroPolice: true, contratAssistanceId: true, clientId: true } }) : [];
     const pasMaladie = cibles.filter((c) => c.branche !== "Maladie");
     if (pasMaladie.length > 0) throw new BadRequestException(`Seul un contrat Maladie peut être lié à un contrat d'Assistance (police ${pasMaladie.map((c) => numeroPolice(c)).join(", ")}).`);
     if (cibles.length !== ids.length) throw new NotFoundException("Contrat Maladie introuvable.");
+    // Même souscripteur uniquement (voir detacherLiensAutreSouscripteur).
+    const assistance = await this.prisma.contrat.findUnique({ where: { id: assistanceId }, select: { clientId: true } });
+    const autreSouscripteur = cibles.filter((c) => c.clientId !== assistance?.clientId);
+    if (autreSouscripteur.length > 0) {
+      throw new BadRequestException(`Un contrat d'Assistance ne peut être lié qu'aux contrats Maladie de son propre souscripteur (police ${autreSouscripteur.map((c) => numeroPolice(c)).join(", ")} : autre souscripteur).`);
+    }
     const anciennesAssistances = cibles.map((c) => c.contratAssistanceId).filter((a): a is string => !!a && a !== assistanceId);
     await this.prisma.contrat.updateMany({ where: { contratAssistanceId: assistanceId, id: { notIn: ids } }, data: { contratAssistanceId: null } });
     if (ids.length > 0) await this.prisma.contrat.updateMany({ where: { id: { in: ids } }, data: { contratAssistanceId: assistanceId } });

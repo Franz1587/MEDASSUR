@@ -770,7 +770,7 @@ export default function ContratsView() {
     getAssuresSante().then((all) => setExistingPopulation(all.filter((a) => contratIds.includes(a.contratId))));
   }
   const basculerContratMaladieLie = (contratId: string) => {
-    const actuels = form.contratsMaladieIds ?? [];
+    const actuels = contratsMaladieLiesValides;
     const suivants = actuels.includes(contratId) ? actuels.filter((id) => id !== contratId) : [...actuels, contratId];
     setForm((v) => ({ ...v, contratsMaladieIds: suivants }));
     chargerPopulation(suivants);
@@ -788,16 +788,21 @@ export default function ContratsView() {
   // d'Assistance peut vouloir partager la population de N'IMPORTE QUEL
   // contrat Maladie du même souscripteur. Comparaison par clientId (pas
   // par nom, fragile si deux clients partagent le même nom).
-  // + les contrats Maladie déjà liés même s'ils appartiennent à un autre
-  // souscripteur (ne jamais faire disparaître un lien existant de la liste).
+  // MÊME souscripteur uniquement — voir demande utilisateur : "la liaison
+  // ne peut se faire qu'avec les contrats maladie et le contrat
+  // d'assistance appartenant au même souscripteur" (règle aussi appliquée
+  // par le serveur, ContratsService.lierContratsMaladie).
   const contratsMaladieDuClient = contrats
-    .filter((c) => c.branche === "Maladie" && (c.clientId === form.clientId || (form.contratsMaladieIds ?? []).includes(c.id)))
+    .filter((c) => c.branche === "Maladie" && c.clientId === form.clientId)
     .sort((a, b) => numeroPolice(a).localeCompare(numeroPolice(b), "fr", { numeric: true }));
+  // Coches encore valables pour le souscripteur choisi : changer de
+  // souscripteur défait les liens vers les contrats de l'ancien.
+  const contratsMaladieLiesValides = (form.contratsMaladieIds ?? []).filter((id) => contratsMaladieDuClient.some((c) => c.id === id));
   // Population d'un contrat Assistance rangée par contrat Maladie (voir
   // demande utilisateur : "il faudra ranger les listes en fonction des
   // contrats maladie"), dans l'ordre des n° de police.
   const groupesPopulationAssistance = contratsMaladieDuClient
-    .filter((m) => (form.contratsMaladieIds ?? []).includes(m.id))
+    .filter((m) => contratsMaladieLiesValides.includes(m.id))
     .map((m) => ({
       contrat: m,
       personnes: existingPopulation
@@ -928,6 +933,7 @@ export default function ContratsView() {
       setSubmitting(true);
       const payload: ContratUpsertInput = {
         ...form,
+        contratsMaladieIds: form.branche === "Assistance" ? contratsMaladieLiesValides : undefined,
         prime: calc.primeTotaleTTC > 0 ? calc.primeTotaleTTC : form.prime,
       };
       const contrat = editing ? await updateContrat(editing.id, payload) : await createContrat(payload);
@@ -1365,7 +1371,7 @@ export default function ContratsView() {
                         {contratsMaladieDuClient.length > 0 && (
                           <div className="rounded-lg border border-border divide-y divide-border/50 max-h-56 overflow-y-auto" role="group" aria-label="Contrats Maladie liés">
                             {contratsMaladieDuClient.map((c) => {
-                              const coche = (form.contratsMaladieIds ?? []).includes(c.id);
+                              const coche = contratsMaladieLiesValides.includes(c.id);
                               const autreAssistance = c.contratAssistanceId && c.contratAssistanceId !== editing?.id ? contrats.find((a) => a.id === c.contratAssistanceId) : undefined;
                               return (
                                 <label key={c.id} className="flex items-center gap-2.5 px-3 py-2 min-h-[40px] cursor-pointer hover:bg-secondary/30">
@@ -1391,7 +1397,7 @@ export default function ContratsView() {
                         {form.clientId && contratsMaladieDuClient.length === 0 ? (
                           <p className="text-[10.5px] text-amber-600 mt-1">Aucun contrat Maladie pour ce souscripteur — créez-le d'abord si ce contrat d'Assistance doit en partager la population.</p>
                         ) : (
-                          <p className="text-[10.5px] text-muted-foreground mt-1">Cochez un ou plusieurs contrats Maladie : la prime d'Assistance est calculée sur la population réunie de chacun d'eux. Aucun coché = population saisie séparément. Obligatoire pour un contrat Maladie avec une extension de territorialité hors Gabon.</p>
+                          <p className="text-[10.5px] text-muted-foreground mt-1">Cochez un ou plusieurs contrats Maladie de ce souscripteur : la prime d'Assistance est calculée sur la population réunie de chacun d'eux. Aucun coché = population saisie séparément. Obligatoire pour un contrat Maladie avec une extension de territorialité hors Gabon.</p>
                         )}
                       </label>
                     )}
@@ -1567,11 +1573,11 @@ export default function ContratsView() {
                 </>
               )}
 
-              {activeTab === "population" && (form.branche === "Assistance" && (form.contratsMaladieIds ?? []).length > 0 ? (
+              {activeTab === "population" && (form.branche === "Assistance" && contratsMaladieLiesValides.length > 0 ? (
                 <div className="space-y-3">
                   <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
                     <p className="text-[13px] font-semibold text-foreground">
-                      Population de {groupesPopulationAssistance.length} contrat{groupesPopulationAssistance.length > 1 ? "s" : ""} Maladie : {existingPopulation.length} personne(s)
+                      Population de {groupesPopulationAssistance.length} contrat{groupesPopulationAssistance.length > 1 ? "s" : ""} Maladie : {groupesPopulationAssistance.reduce((n, g) => n + g.personnes.length, 0)} personne(s)
                     </p>
                     <p className="text-[11.5px] text-muted-foreground mt-1">Gérée exclusivement depuis chaque contrat Maladie (module Participants ou son propre onglet Population). Aucun import séparé n'est possible ici, pour éviter toute duplication.</p>
                   </div>
