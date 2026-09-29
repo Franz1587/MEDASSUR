@@ -267,7 +267,7 @@ interface DocContrat {
   primeUnitaireEnfant: Prisma.Decimal | null; primeUnitaireCouple: Prisma.Decimal | null;
   numeroQuittance: number | null;
   client: { id: string; nom: string; pays: string | null; ville?: string | null; adresse?: string | null; boitePostale?: string | null; tel: string | null };
-  compagnie: { id: string; nom: string; pays: string };
+  compagnie: { id: string; nom: string; pays: string; logo?: string | null };
   garanties: { categorie: string; libelle: string; tauxAssure: Prisma.Decimal | null; plafond: string | null }[];
 }
 
@@ -590,9 +590,11 @@ export class DocumentsService {
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
     // En-tête courtier (identité de l'entreprise exploitant l'application)
-    this.dessinerLogoEntete(doc, logoImage, left, 8);
-    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
-    doc.fontSize(8).font("Helvetica-Bold").fillColor("#333").text(p.sousTitre, left, 56);
+    this.dessinerIdentiteEntete(doc, logoImage, left, 22, 230, 70, () => {
+      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+      doc.fontSize(8).font("Helvetica-Bold").fillColor("#333").text(p.sousTitre, left, 56);
+      return 0;
+    });
     doc.fontSize(8).font("Helvetica").fillColor("#333");
     doc.text(`Tél.: ${p.telephone}`, right - 200, 40, { width: 200, align: "right" });
     doc.text(`${p.boitePostale} ${p.ville} - ${p.pays}`, right - 200, 51, { width: 200, align: "right" });
@@ -760,6 +762,7 @@ export class DocumentsService {
     const primeTotale = primeNette + montantAccessoires + montantTaxe;
     const now = new Date();
     const p = await this.parametresEntreprise.findOne();
+    const logoCompagnie = await this.chargerImage("logos", contrat.compagnie.logo, UPLOADS_LOGOS_COMPAGNIES_DIR);
 
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     res.setHeader("Content-Type", "application/pdf");
@@ -771,10 +774,17 @@ export class DocumentsService {
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
 
-    doc.fontSize(14).font("Helvetica-Bold").fillColor("#c0392b").text(contrat.compagnie.nom.toUpperCase(), left, 40);
+    // Logo de la COMPAGNIE porteuse du risque, visible et imposant (2026-09)
+    // — voir demande utilisateur : "faire remonter les logos des compagnies
+    // de façon visible et imposant sur les avenants". Sans logo : nom écrit
+    // (comportement d'origine).
+    const logoCompagniePlace = this.dessinerIdentiteEntete(doc, logoCompagnie, left, 14, 230, 62, () => {
+      doc.fontSize(14).font("Helvetica-Bold").fillColor("#c0392b").text(contrat.compagnie.nom.toUpperCase(), left, 40);
+      return 0;
+    });
     doc.fontSize(7).font("Helvetica").fillColor("#333");
-    doc.text("Entreprise régie par le Code des Assurances CIMA", left, 58);
-    doc.text(`Siège social : Libreville (${contrat.compagnie.pays})`, left, 68);
+    doc.text("Entreprise régie par le Code des Assurances CIMA", left, logoCompagniePlace > 0 ? 80 : 58);
+    doc.text(`Siège social : Libreville (${contrat.compagnie.pays})`, left, logoCompagniePlace > 0 ? 89 : 68);
     doc.fillColor(p.couleurPrimaire).fontSize(12).font("Helvetica-Bold").text(`AVENANT ${meta.suffixe} N° ${String(numero).padStart(3, "0")}`, left + 260, 45, { width: width - 260, align: "right" });
     doc.fillColor("#000");
 
@@ -1376,6 +1386,35 @@ export class DocumentsService {
       // Fichier corrompu/format non supporté par pdfkit — jamais bloquant
       // pour la génération du document.
     }
+  }
+
+  // Identité de la société en tête de document (2026-09) — voir demande
+  // utilisateur (capture annotée d'une quittance) : "Retirer cela [nom et
+  // 'Courtier d'Assurances' écrits en texte] sur tous les documents et
+  // mettre le logo de façon visible à grande taille, même dimension que ce
+  // bloc à retirer", puis "même sur le décompte et règlement maladie,
+  // règlement comptable il faut rendre le logo de LA RUCHE (ou un autre
+  // courtier, compagnie ou mutuelle) plus visible". Le logo REMPLACE le
+  // texte, agrandi au maximum dans la boîte largeurMax × hauteurMax (ratio
+  // conservé) ; sans logo configuré ou lisible, `repli` dessine l'ancien
+  // texte — jamais de document sans identité. Renvoie la largeur occupée
+  // (le décompte et le règlement y calent leur titre).
+  private dessinerIdentiteEntete(
+    doc: PDFKit.PDFDocument, image: Buffer | string | null, x: number, y: number,
+    largeurMax: number, hauteurMax: number, repli: () => number,
+  ): number {
+    if (image) {
+      try {
+        const img = (doc as unknown as { openImage(src: Buffer | string): { width: number; height: number } }).openImage(image);
+        const echelle = Math.min(largeurMax / img.width, hauteurMax / img.height);
+        const largeur = img.width * echelle;
+        doc.image(img as unknown as Buffer, x, y, { width: largeur, height: img.height * echelle });
+        return largeur;
+      } catch {
+        // Fichier corrompu/format non supporté par pdfkit — repli texte.
+      }
+    }
+    return repli();
   }
 
   // Signature électronique enregistrée par l'utilisateur (2026-09) — voir
@@ -3137,7 +3176,6 @@ export class DocumentsService {
       const right = doc.page.width - doc.page.margins.right;
       const width = right - left;
 
-      this.dessinerLogoEntete(doc, logoImage, left, 8);
       // Identité affichée en en-tête (2026-09) — voir demande utilisateur :
       // "faire remonter le logo et le vrai nom de la société qui assure et
       // gère les dossiers, et non la compagnie d'assurance si le client est
@@ -3145,12 +3183,15 @@ export class DocumentsService {
       // `p`), jamais un repli vers `contrat.compagnie.nom` (mélangerait
       // courtier et assureur porteur du risque — voir même correctif sur
       // genererFormulaire).
+      // Logo en grand à la place du nom écrit (voir dessinerIdentiteEntete).
       const nomAffiche = p.nom;
-      doc.fillColor("#000").fontSize(13).font("Helvetica");
-      const nomW = doc.widthOfString(nomAffiche);
-      doc.text(nomAffiche, left, 31);
-      doc.fontSize(8).text("Service Maladie", left, 50);
-      doc.text(`Tél.: ${p.telephone}`, left, 61);
+      const nomW = this.dessinerIdentiteEntete(doc, logoImage, left, 10, 200, 48, () => {
+        doc.fillColor("#000").fontSize(13).font("Helvetica");
+        doc.text(nomAffiche, left, 31);
+        return doc.widthOfString(nomAffiche);
+      });
+      doc.fillColor("#000").font("Helvetica").fontSize(8).text("Service Maladie", left, 62);
+      doc.text(`Tél.: ${p.telephone}`, left, 73);
 
       // Titre — même position relative que le modèle (43,6 % depuis la
       // marge gauche), avec un filet de sécurité si le nom de la société
@@ -3403,8 +3444,11 @@ export class DocumentsService {
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
 
-    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
-    doc.fontSize(8).font("Helvetica").fillColor("#333").text(p.sousTitre, left, 56);
+    this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 26, 220, 58, () => {
+      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+      doc.fontSize(8).font("Helvetica").fillColor("#333").text(p.sousTitre, left, 56);
+      return 0;
+    });
     doc.rect(right - 200, 40, 200, 30).fill(p.couleurPrimaire);
     doc.fillColor("#fff").fontSize(11).font("Helvetica-Bold").text("RELEVÉ PRESTATAIRE", right - 200, 47, { width: 200, align: "center" });
     doc.fontSize(8).text(`N° ${releve.numero}`, right - 200, 62, { width: 200, align: "center" });
@@ -3727,7 +3771,10 @@ export class DocumentsService {
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
 
-    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+    this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 28, 200, 58, () => {
+      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+      return 0;
+    });
     doc.fontSize(11).font("Helvetica-Bold").fillColor("#000").text(titre, left, 60, { width, align: "right" });
     doc.fontSize(8).font("Helvetica").fillColor("#555").text(sousTitre, left, 74, { width, align: "right" });
     doc.fillColor("#000");
@@ -3816,7 +3863,10 @@ export class DocumentsService {
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
 
-    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+    this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 28, 200, 58, () => {
+      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+      return 0;
+    });
     doc.fontSize(11).font("Helvetica-Bold").fillColor("#000").text(titre, left, 60, { width, align: "right" });
     doc.fontSize(8).font("Helvetica").fillColor("#555").text(sousTitre, left, 74, { width, align: "right" });
     doc.fillColor("#000");
@@ -4666,12 +4716,15 @@ export class DocumentsService {
     const width = right - left;
     let y = 40;
 
-    doc.fontSize(12).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, y);
+    this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 28, 200, 46, () => {
+      doc.fontSize(12).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+      return 0;
+    });
     doc.fontSize(12).font("Helvetica-Bold").fillColor("#000").text(titre, left, y, { width, align: "right" });
     y += 16;
     doc.fontSize(8).font("Helvetica").fillColor("#555").text(sousTitre, left, y, { width, align: "right" });
     doc.fillColor("#000");
-    y += 20;
+    y = Math.max(y + 20, 82);
 
     const drawHeader = () => {
       doc.rect(left, y, width, 16).fill(p.couleurPrimaire);
@@ -4785,7 +4838,10 @@ export class DocumentsService {
     for (let i = 0; i < cotations.length; i++) {
       if (i > 0) doc.addPage();
       const c = cotations[i];
-      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+      this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 28, 200, 66, () => {
+        doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+        return 0;
+      });
       doc.fontSize(12).font("Helvetica-Bold").fillColor("#000").text(`OFFRE DE COTATION — ${c.branche.toUpperCase()}`, left, 60, { width, align: "right" });
       doc.fontSize(9).font("Helvetica").text(`Client : ${c.clientNom}`, left, 78, { width, align: "right" });
 
@@ -4829,10 +4885,13 @@ export class DocumentsService {
     const width = right - left;
     let y = 40;
 
-    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, y);
+    const largeurLogo = this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 28, 200, 50, () => {
+      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, y);
+      return 0;
+    });
     doc.fontSize(12).font("Helvetica-Bold").fillColor("#000").text("RÉSEAU DE SOINS CONVENTIONNÉ", left, y, { width, align: "right" });
     doc.fillColor("#000");
-    y += 30;
+    y = largeurLogo > 0 ? 90 : y + 30;
 
     const cols = [{ h: "Prestataire", w: width * 0.3 }, { h: "Type", w: width * 0.18 }, { h: "Ville", w: width * 0.15 }, { h: "Adresse", w: width * 0.22 }, { h: "Téléphone", w: width * 0.15 }];
     const drawHeader = () => {
@@ -4868,7 +4927,10 @@ export class DocumentsService {
     const left = doc.page.margins.left;
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
-    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+    this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 28, 200, 62, () => {
+      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+      return 0;
+    });
     doc.fontSize(13).font("Helvetica-Bold").fillColor("#000").text(pr.nom, left, 65, { width, align: "right" });
     let y = 100;
     const champs: [string, string][] = [
@@ -4894,9 +4956,11 @@ export class DocumentsService {
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
 
-    this.dessinerLogoEntete(doc, logoImage, left, 15, 30);
-    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 50);
-    doc.fontSize(8).font("Helvetica").fillColor("#333").text(`${p.boitePostale} ${p.ville} - ${p.pays}   Tél.: ${p.telephone}`, left, 66);
+    this.dessinerIdentiteEntete(doc, logoImage, left, 14, 200, 56, () => {
+      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 50);
+      return 0;
+    });
+    doc.fontSize(8).font("Helvetica").fillColor("#333").text(`${p.boitePostale} ${p.ville} - ${p.pays}   Tél.: ${p.telephone}`, left, 74);
     doc.fillColor("#000");
     doc.fontSize(9).text(`Réf. ${c.reference}`, right - 200, 50, { width: 200, align: "right" });
     doc.text(c.dateCreation, right - 200, 62, { width: 200, align: "right" });
@@ -5001,8 +5065,10 @@ export class DocumentsService {
     // destinataire en position FIXE (345, 118), indépendante de la hauteur
     // de l'en-tête ; corps de lettre démarrant à une position FIXE (y=230),
     // indépendante de la hauteur du bloc destinataire.
-    this.dessinerLogoEntete(doc, logoImage, left, 8);
-    doc.fontSize(11).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 39);
+    this.dessinerIdentiteEntete(doc, logoImage, left, 4, 200, 46, () => {
+      doc.fontSize(11).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 39);
+      return 0;
+    });
     doc.fillColor("#000").fontSize(11).font("Helvetica").text(`${p.ville}, le ${lettre.dateEmission}`, left, 39, { width, align: "right" });
     doc.fillColor("#333").fontSize(10).font("Helvetica");
     doc.text("Adresse :", left, 53);
@@ -5415,12 +5481,15 @@ export class DocumentsService {
       const right = doc.page.width - doc.page.margins.right;
       const width = right - left;
 
-      this.dessinerLogoEntete(doc, logoImage, left, 8);
-      doc.fillColor("#000").fontSize(13).font("Helvetica");
-      const nomW = doc.widthOfString(p.nom);
-      doc.text(p.nom, left, 24);
-      doc.fontSize(8).text("Service Maladie", left, 49);
-      doc.text(`Tél.: ${p.telephone}`, left, 60);
+      // Logo en grand à la place du nom écrit (voir dessinerIdentiteEntete).
+      const nomW = this.dessinerIdentiteEntete(doc, logoImage, left, 6, 200, 48, () => {
+        doc.fillColor("#000").fontSize(13).font("Helvetica");
+        doc.text(p.nom, left, 24);
+        return doc.widthOfString(p.nom);
+      });
+      doc.fillColor("#000").font("Helvetica").fontSize(8).text("Service Maladie", left, 58);
+      doc.text(`Tél.: ${p.telephone}`, left, 69);
+      doc.fontSize(13);
       // Titre centré sur la pleine largeur (comme le modèle) avec un filet
       // de sécurité si le nom de la société est particulièrement long.
       // SANS accent sur le E ("REGLEMENT", pas "RÈGLEMENT") — reproduction
@@ -5666,8 +5735,11 @@ export class DocumentsService {
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
 
-    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
-    doc.fontSize(8).font("Helvetica").fillColor("#333").text(`${p.boitePostale} ${p.ville} - ${p.pays}`, left, 56);
+    const logoAvis = this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 20, 200, 52, () => {
+      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+      return 0;
+    });
+    doc.fontSize(8).font("Helvetica").fillColor("#333").text(`${p.boitePostale} ${p.ville} - ${p.pays}`, left, logoAvis > 0 ? 76 : 56);
     doc.fillColor("#000").fontSize(9).font("Helvetica").text(`${p.ville}, le ${new Date().toLocaleDateString("fr-FR")}`, left, 40, { width, align: "right" });
     doc.text("Page 1 / 1", left, 54, { width, align: "right" });
 
@@ -5788,7 +5860,10 @@ export class DocumentsService {
     const left = doc.page.margins.left;
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
-    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+    this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 24, 220, 60, () => {
+      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+      return 0;
+    });
     doc.fontSize(12).font("Helvetica-Bold").fillColor("#000").text(`QUITTANCE — TRANCHE N° ${tranche.numero}`, left, 60, { width, align: "right" });
     doc.fillColor("#000");
     let y = 90;
