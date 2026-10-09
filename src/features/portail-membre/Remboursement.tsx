@@ -46,7 +46,7 @@ export default function MembreRemboursementView() {
   const [lignes, setLignes] = useState<MembrePriseEnCharge[] | null>(null);
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
   const [form, setForm] = useState<CreateRemboursementInput>(emptyForm());
-  const [fichiers, setFichiers] = useState<Partial<Record<DocSlot["cle"], File>>>({});
+  const [fichiers, setFichiers] = useState<Partial<Record<DocSlot["cle"], File[]>>>({});
   const [envoi, setEnvoi] = useState(false);
   const [prestataires, setPrestataires] = useState<PrestataireReseau[]>([]);
   const [actes, setActes] = useState<ActeMedical[]>([]);
@@ -79,7 +79,7 @@ export default function MembreRemboursementView() {
       toast.error("La date est obligatoire.");
       return;
     }
-    if (Object.keys(fichiers).length === 0) {
+    if (Object.values(fichiers).every((v) => !v || v.length === 0)) {
       toast.error("Merci de joindre au moins un justificatif.");
       return;
     }
@@ -87,7 +87,7 @@ export default function MembreRemboursementView() {
     try {
       const cree = await creerRemboursement({ ...form, beneficiaireId });
       await Promise.all(
-        SLOTS.filter((s) => fichiers[s.cle]).map((s) => UPLOADERS[s.cle](cree.id, fichiers[s.cle]!)),
+        SLOTS.filter((s) => (fichiers[s.cle]?.length ?? 0) > 0).map((s) => UPLOADERS[s.cle](cree.id, fichiers[s.cle]!)),
       );
       toast.success("Demande de remboursement envoyée.");
       setFormulaireOuvert(false);
@@ -206,12 +206,22 @@ export default function MembreRemboursementView() {
                 <div className={labelCls}>{s.label}</div>
                 <div className="flex items-center gap-2 border border-dashed border-border rounded-lg px-3 py-2.5">
                   <Upload className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  <input type="file" onChange={(e) => setFichiers((f) => ({ ...f, [s.cle]: e.target.files?.[0] }))} className="text-[12px] text-muted-foreground w-full" />
-                  {fichiers[s.cle] && <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />}
+                  <input type="file" multiple onChange={(e) => { setFichiers((f) => ({ ...f, [s.cle]: [...(f[s.cle] ?? []), ...Array.from(e.target.files ?? [])] })); e.target.value = ""; }} className="text-[12px] text-muted-foreground w-full" />
+                  {(fichiers[s.cle]?.length ?? 0) > 0 && <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />}
                 </div>
+                {(fichiers[s.cle]?.length ?? 0) > 0 && (
+                  <ul className="mt-1.5 space-y-1">
+                    {fichiers[s.cle]!.map((f, i) => (
+                      <li key={`${f.name}-${i}`} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <span className="flex-1 truncate">{f.name}</span>
+                        <button type="button" onClick={() => setFichiers((v) => ({ ...v, [s.cle]: (v[s.cle] ?? []).filter((_, j) => j !== i) }))} className="text-destructive hover:underline flex-shrink-0">Retirer</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </label>
             ))}
-            <p className="text-[10.5px] text-muted-foreground -mt-2">Au moins un justificatif est obligatoire pour envoyer la demande.</p>
+            <p className="text-[10.5px] text-muted-foreground -mt-2">Au moins un justificatif est obligatoire pour envoyer la demande. Plusieurs pièces possibles par type (réunies en un seul document).</p>
 
             <div className="flex items-center gap-2 pt-1">
               <button type="button" onClick={() => setFormulaireOuvert(false)} className="flex-1 h-10 rounded-lg border border-border text-[13px] text-foreground hover:bg-secondary/40">Annuler</button>

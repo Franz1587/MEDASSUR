@@ -1,5 +1,6 @@
 import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
+import ReactNativeBlobUtil from "react-native-blob-util";
 import { lireCache, ecrireCache, ajouterActionEnAttente, genererCleIdempotence } from "../utils/offlineStore";
 
 // Client API MEDASSUR — appelle directement le backend de PRODUCTION
@@ -176,37 +177,74 @@ export const http = {
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 
-// Upload multipart (RN FormData avec { uri, name, type }) — équivalent RN de
-// uploadFile()/fetch(FormData) côté web, qui utilise un vrai objet File du
-// navigateur (inexistant en React Native).
+// Upload multipart — un ou plusieurs fichiers locaux (uri de la caméra, de
+// la galerie ou du sélecteur de document).
 export interface RnFilePart {
   uri: string;
   name: string;
   type: string;
 }
 
-export async function uploadFile<T>(path: string, file: RnFilePart, champ = "fichier", extraFields?: Record<string, string>, method: "POST" | "PATCH" = "POST"): Promise<T> {
+// Transport PAR react-native-blob-util, jamais par fetch (2026-10) — voir
+// demande utilisateur : "je ne parviens pas à importer les pièces jointes
+// pour la demande de prise en charge". Depuis Expo SDK 57, le `fetch`
+// global est remplacé par l'implémentation WinterCG d'Expo (voir
+// expo/src/winter/runtime.native.ts), qui ne sait PAS construire la partie
+// multipart d'un fichier décrit par { uri, name, type } (convention React
+// Native classique) — elle lève "Unsupported FormDataPart implementation"
+// pour CE cas précis (voir expo/src/winter/fetch/convertFormData.ts, et son
+// propre test qui reproduit exactement cette erreur). C'est le même bug que
+// celui déjà contourné pour l'envoi de la signature (voir profil.ts
+// uploaderMaSignature, plus ancien) — généralisé ici à TOUS les envois de
+// fichiers (ordonnance/devis d'entente préalable, pièces de remboursement,
+// photo du carnet de santé), plutôt que de multiplier les contournements
+// ponctuels. react-native-blob-util passe par le client HTTP natif
+// Android/iOS, hors de portée du fetch d'Expo.
+function cheminNatif(uri: string): string {
+  return uri.startsWith("file://") ? uri.slice("file://".length) : uri;
+}
+
+async function requeteMultipart<T>(
+  path: string, parts: { name: string; filename?: string; type?: string; data: string }[], method: "POST" | "PATCH",
+): Promise<T> {
   const token = await getAccessToken();
-  const form = new FormData();
-  // @ts-expect-error — RN's FormData accepts {uri,name,type} for file parts,
-  // unlike the web File/Blob type expected by the DOM lib typings.
-  form.append(champ, { uri: file.uri, name: file.name, type: file.type });
-  if (extraFields) {
-    for (const [k, v] of Object.entries(extraFields)) form.append(k, v);
-  }
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await ReactNativeBlobUtil.fetch(
     method,
-    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: form,
-  });
-  if (!res.ok) {
-    if (res.status === 401) unauthorizedListeners.forEach((l) => l());
-    const bodyText = await res.text();
+    `${API_URL}${path}`,
+    { ...(token ? { Authorization: `Bearer ${token}` } : {}), "Content-Type": "multipart/form-data" },
+    parts,
+  );
+  const statut = res.respInfo.status;
+  if (statut === 401) unauthorizedListeners.forEach((l) => l());
+  if (statut < 200 || statut >= 300) {
+    const bodyText = String(res.text());
     let corpsJson: unknown;
-    try { corpsJson = JSON.parse(bodyText); } catch { /* noop */ }
-    throw new ApiError(`${method} ${path} failed (${res.status}): ${bodyText}`, res.status, corpsJson);
+    try { corpsJson = JSON.parse(bodyText); } catch { /* réponse non-JSON */ }
+    throw new ApiError(`${method} ${path} failed (${statut}): ${bodyText}`, statut, corpsJson);
   }
-  return (await res.json()) as T;
+  return res.json() as T;
+}
+
+// Un seul fichier sous `champ` (compat historique — garde cette signature
+// pour tous les appelants existants).
+export async function uploadFile<T>(path: string, file: RnFilePart, champ = "fichier", extraFields?: Record<string, string>, method: "POST" | "PATCH" = "POST"): Promise<T> {
+  return uploadFiles(path, [file], champ, extraFields, method);
+}
+
+// Plusieurs fichiers sous LE MÊME champ (2026-10) — voir demande
+// utilisateur : "l'application permette... la sélection de plusieurs
+// pièces jointes". Le serveur (voir backend/src/lib/pieces-jointes.util.ts)
+// réunit les fichiers envoyés sous "fichiers" en un seul document ou en
+// plusieurs messages selon l'écran.
+export async function uploadFiles<T>(
+  path: string, files: RnFilePart[], champ = "fichiers", extraFields?: Record<string, string>, method: "POST" | "PATCH" = "POST",
+): Promise<T> {
+  const parts: { name: string; filename?: string; type?: string; data: string }[] =
+    files.map((f) => ({ name: champ, filename: f.name, type: f.type, data: ReactNativeBlobUtil.wrap(cheminNatif(f.uri)) }));
+  if (extraFields) {
+    for (const [k, v] of Object.entries(extraFields)) parts.push({ name: k, data: v });
+  }
+  return requeteMultipart<T>(path, parts, method);
 }
 
 export function toNumber(v: string | number | null | undefined): number {

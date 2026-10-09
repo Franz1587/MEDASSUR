@@ -429,10 +429,12 @@ export async function creerDevis(payload: CreateDevisInput): Promise<DevisMedica
   return http.post<DevisMedical>("/portail-prestataire/devis", payload);
 }
 
-async function uploadFichierDevis(id: string, type: "ordonnance" | "devis", file: File): Promise<void> {
+// Plusieurs pièces pour le même document (2026-10) — réunies côté serveur
+// en un seul fichier (voir backend/src/lib/pieces-jointes.util.ts).
+async function uploadFichierDevis(id: string, type: "ordonnance" | "devis", files: File[]): Promise<void> {
   const token = getAccessToken();
   const form = new FormData();
-  form.append("fichier", file);
+  for (const f of files) form.append("fichiers", f);
   const res = await fetch(`${API_URL}/portail-prestataire/devis/${id}/${type}`, {
     method: "POST",
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -441,8 +443,8 @@ async function uploadFichierDevis(id: string, type: "ordonnance" | "devis", file
   if (!res.ok) throw new Error(`Envoi du document impossible (${res.status})`);
 }
 
-export const uploaderOrdonnanceDevis = (id: string, file: File) => uploadFichierDevis(id, "ordonnance", file);
-export const uploaderPieceDevis = (id: string, file: File) => uploadFichierDevis(id, "devis", file);
+export const uploaderOrdonnanceDevis = (id: string, files: File[]) => uploadFichierDevis(id, "ordonnance", files);
+export const uploaderPieceDevis = (id: string, files: File[]) => uploadFichierDevis(id, "devis", files);
 
 export function voirCertificatDevis(id: string): Promise<void> {
   return openDocument(`/portail-prestataire/devis/${id}/certificat`);

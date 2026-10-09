@@ -247,10 +247,12 @@ export async function creerRemboursement(payload: CreateRemboursementInput): Pro
   return mapPriseEnCharge(p);
 }
 
-async function uploadFichierRemboursement(id: string, type: "prescription" | "facture" | "quittance" | "autre", file: File): Promise<void> {
+// Plusieurs pièces pour le même document (2026-10) — réunies côté serveur
+// en un seul fichier (voir backend/src/lib/pieces-jointes.util.ts).
+async function uploadFichierRemboursement(id: string, type: "prescription" | "facture" | "quittance" | "autre", files: File[]): Promise<void> {
   const token = getAccessToken();
   const form = new FormData();
-  form.append("fichier", file);
+  for (const f of files) form.append("fichiers", f);
   const res = await fetch(`${API_URL}/portail-membre/remboursements/${id}/document?type=${type}`, {
     method: "POST",
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -259,10 +261,10 @@ async function uploadFichierRemboursement(id: string, type: "prescription" | "fa
   if (!res.ok) throw new Error(`Envoi du document impossible (${res.status})`);
 }
 
-export const uploaderPrescriptionRemboursement = (id: string, file: File) => uploadFichierRemboursement(id, "prescription", file);
-export const uploaderFactureRemboursement = (id: string, file: File) => uploadFichierRemboursement(id, "facture", file);
-export const uploaderQuittanceRemboursement = (id: string, file: File) => uploadFichierRemboursement(id, "quittance", file);
-export const uploaderAutreRemboursement = (id: string, file: File) => uploadFichierRemboursement(id, "autre", file);
+export const uploaderPrescriptionRemboursement = (id: string, files: File[]) => uploadFichierRemboursement(id, "prescription", files);
+export const uploaderFactureRemboursement = (id: string, files: File[]) => uploadFichierRemboursement(id, "facture", files);
+export const uploaderQuittanceRemboursement = (id: string, files: File[]) => uploadFichierRemboursement(id, "quittance", files);
+export const uploaderAutreRemboursement = (id: string, files: File[]) => uploadFichierRemboursement(id, "autre", files);
 
 export interface MembreAccordPrealable {
   id: string;
@@ -313,10 +315,12 @@ export async function creerAccordPrealable(payload: CreateAccordPrealableInput):
   return http.post<MembreAccordPrealable>("/portail-membre/accords-prealables", payload);
 }
 
-async function uploadFichierAccordPrealable(id: string, type: "ordonnance" | "devis", file: File): Promise<void> {
+// Plusieurs pièces pour le même document (2026-10) — réunies côté serveur
+// en un seul fichier (voir backend/src/lib/pieces-jointes.util.ts).
+async function uploadFichierAccordPrealable(id: string, type: "ordonnance" | "devis", files: File[]): Promise<void> {
   const token = getAccessToken();
   const form = new FormData();
-  form.append("fichier", file);
+  for (const f of files) form.append("fichiers", f);
   const res = await fetch(`${API_URL}/portail-membre/accords-prealables/${id}/${type}`, {
     method: "POST",
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -325,8 +329,8 @@ async function uploadFichierAccordPrealable(id: string, type: "ordonnance" | "de
   if (!res.ok) throw new Error(`Envoi du document impossible (${res.status})`);
 }
 
-export const uploaderOrdonnanceAccordPrealable = (id: string, file: File) => uploadFichierAccordPrealable(id, "ordonnance", file);
-export const uploaderDevisAccordPrealable = (id: string, file: File) => uploadFichierAccordPrealable(id, "devis", file);
+export const uploaderOrdonnanceAccordPrealable = (id: string, files: File[]) => uploadFichierAccordPrealable(id, "ordonnance", files);
+export const uploaderDevisAccordPrealable = (id: string, files: File[]) => uploadFichierAccordPrealable(id, "devis", files);
 
 // Documents générés côté interne, remontés au portail (2026-08) — voir
 // demande utilisateur : "les documents de prise en charge et de

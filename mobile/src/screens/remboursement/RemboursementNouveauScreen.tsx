@@ -5,8 +5,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp as NavPropAlias } from "@react-navigation/native-stack";
-import * as ImagePicker from "expo-image-picker";
-import * as DocumentPicker from "expo-document-picker";
 import { Ionicons } from "@expo/vector-icons";
 import type { RootStackParamList } from "../../navigation/types";
 import {
@@ -20,6 +18,7 @@ import {
 import { getReseauSoins, type PrestataireReseau } from "../../api/reseauSoins";
 import { getActesMedicaux, type ActeMedical } from "../../api/actesMedicaux";
 import { messageErreur, type RnFilePart } from "../../api/http";
+import { choisirFichiers } from "../../utils/choisirFichiers";
 
 // Nouvelle demande de remboursement (route "RemboursementNouveau", sans
 // params). Référence web : src/features/portail-membre/Remboursement.tsx.
@@ -48,39 +47,6 @@ function isValidFrDate(v: string): boolean {
   const yyyy = Number(m[3]);
   const d = new Date(yyyy, mm - 1, dd);
   return d.getFullYear() === yyyy && d.getMonth() === mm - 1 && d.getDate() === dd;
-}
-
-async function choisirFichier(): Promise<RnFilePart | null> {
-  return new Promise((resolve) => {
-    Alert.alert(
-      "Ajouter un document",
-      "Photo prise sur le champ, ou fichier existant (PDF, image…).",
-      [
-        {
-          text: "Prendre une photo",
-          onPress: async () => {
-            const perm = await ImagePicker.requestCameraPermissionsAsync();
-            if (!perm.granted) { resolve(null); return; }
-            const res = await ImagePicker.launchCameraAsync({ quality: 0.7 });
-            if (res.canceled || !res.assets?.[0]) { resolve(null); return; }
-            const a = res.assets[0];
-            resolve({ uri: a.uri, name: a.fileName ?? `photo-${Date.now()}.jpg`, type: a.mimeType ?? "image/jpeg" });
-          },
-        },
-        {
-          text: "Choisir un fichier",
-          onPress: async () => {
-            const res = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
-            if (res.canceled || !res.assets?.[0]) { resolve(null); return; }
-            const a = res.assets[0];
-            resolve({ uri: a.uri, name: a.name ?? `document-${Date.now()}`, type: a.mimeType ?? "application/octet-stream" });
-          },
-        },
-        { text: "Annuler", style: "cancel", onPress: () => resolve(null) },
-      ],
-      { cancelable: true, onDismiss: () => resolve(null) },
-    );
-  });
 }
 
 // Modal de recherche générique (façon Combobox web) — filtre côté client
@@ -158,7 +124,7 @@ export function RemboursementNouveauScreen() {
   const [montant, setMontant] = useState("");
   const [prestataires, setPrestataires] = useState<PrestataireReseau[]>([]);
   const [actes, setActes] = useState<ActeMedical[]>([]);
-  const [fichiers, setFichiers] = useState<Partial<Record<TypeDocumentRemboursement, RnFilePart>>>({});
+  const [fichiers, setFichiers] = useState<Partial<Record<TypeDocumentRemboursement, RnFilePart[]>>>({});
   const [modalPrestataireVisible, setModalPrestataireVisible] = useState(false);
   const [modalActeVisible, setModalActeVisible] = useState(false);
   const [suggestionsPrestataireOuvertes, setSuggestionsPrestataireOuvertes] = useState(false);
@@ -201,7 +167,7 @@ export function RemboursementNouveauScreen() {
         beneficiaireId,
       });
       await Promise.all(
-        SLOTS.filter((s) => fichiers[s.cle]).map((s) => uploaderDocumentRemboursement(cree.id, s.cle, fichiers[s.cle]!)),
+        SLOTS.filter((s) => (fichiers[s.cle]?.length ?? 0) > 0).map((s) => uploaderDocumentRemboursement(cree.id, s.cle, fichiers[s.cle]!)),
       );
       Alert.alert("Demande envoyée", "Votre demande de remboursement a bien été transmise.", [
         { text: "OK", onPress: () => navigation.goBack() },
@@ -305,20 +271,27 @@ export function RemboursementNouveauScreen() {
           <View key={s.cle} style={[styles.docRow, i === SLOTS.length - 1 && { borderBottomWidth: 0 }]}>
             <View style={{ flex: 1 }}>
               <Text style={styles.docLabel}>{s.label}</Text>
-              {fichiers[s.cle] ? <Text style={styles.docNom} numberOfLines={1}>{fichiers[s.cle]!.name}</Text> : null}
+              {(fichiers[s.cle] ?? []).map((f, j) => (
+                <View key={`${f.uri}-${j}`} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Text style={styles.docNom} numberOfLines={1}>{f.name}</Text>
+                  <Pressable onPress={() => setFichiers((v) => ({ ...v, [s.cle]: (v[s.cle] ?? []).filter((_, k) => k !== j) }))}>
+                    <Ionicons name="close-circle" size={15} color={colors.danger} />
+                  </Pressable>
+                </View>
+              ))}
             </View>
             <PrimaryButton
-              label={fichiers[s.cle] ? "Changer" : "Ajouter"}
+              label="Ajouter"
               variant="outline"
               icon="cloud-upload-outline"
               onPress={async () => {
-                const f = await choisirFichier();
-                if (f) setFichiers((v) => ({ ...v, [s.cle]: f }));
+                const choisies = await choisirFichiers();
+                if (choisies.length > 0) setFichiers((v) => ({ ...v, [s.cle]: [...(v[s.cle] ?? []), ...choisies] }));
               }}
             />
           </View>
         ))}
-        <Text style={styles.hint}>Au moins un justificatif est obligatoire pour envoyer la demande.</Text>
+        <Text style={styles.hint}>Au moins un justificatif est obligatoire pour envoyer la demande. Plusieurs pièces possibles par type (réunies en un seul document).</Text>
       </Card>
 
       {erreur ? <Text style={styles.erreur}>{erreur}</Text> : null}

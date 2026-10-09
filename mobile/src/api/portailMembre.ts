@@ -1,4 +1,4 @@
-import { http, toNumber, uploadFile, API_URL, type RnFilePart } from "./http";
+import { http, toNumber, uploadFile, uploadFiles, API_URL, type RnFilePart } from "./http";
 
 // Miroir mobile de src/services/portailMembre.service.ts (web) — MÊME
 // contrat d'API, même backend de production (https://medassur.cloud/api).
@@ -208,8 +208,10 @@ export async function creerRemboursement(payload: CreateRemboursementInput): Pro
 
 export type TypeDocumentRemboursement = "prescription" | "facture" | "quittance" | "autre";
 
-export function uploaderDocumentRemboursement(id: string, type: TypeDocumentRemboursement, file: RnFilePart): Promise<void> {
-  return uploadFile(`/portail-membre/remboursements/${id}/document?type=${type}`, file, "fichier").then(() => undefined);
+// Plusieurs pièces pour le même document (2026-10) — réunies côté serveur
+// en un seul fichier (voir backend/src/lib/pieces-jointes.util.ts).
+export function uploaderDocumentRemboursement(id: string, type: TypeDocumentRemboursement, files: RnFilePart[]): Promise<void> {
+  return uploadFiles(`/portail-membre/remboursements/${id}/document?type=${type}`, files, "fichiers").then(() => undefined);
 }
 
 // Ligne de devis d'un dossier de prise en charge (2026-09, ajout additif
@@ -275,8 +277,10 @@ export async function creerAccordPrealable(payload: CreateAccordPrealableInput):
 
 export type TypeDocumentAccordPrealable = "ordonnance" | "devis";
 
-export function uploaderDocumentAccordPrealable(id: string, type: TypeDocumentAccordPrealable, file: RnFilePart): Promise<void> {
-  return uploadFile(`/portail-membre/accords-prealables/${id}/${type}`, file, "fichier").then(() => undefined);
+// Plusieurs pièces pour le même document (2026-10) — réunies côté serveur
+// en un seul fichier (voir backend/src/lib/pieces-jointes.util.ts).
+export function uploaderDocumentAccordPrealable(id: string, type: TypeDocumentAccordPrealable, files: RnFilePart[]): Promise<void> {
+  return uploadFiles(`/portail-membre/accords-prealables/${id}/${type}`, files, "fichiers").then(() => undefined);
 }
 
 // ── Documents PDF générés côté interne (voir src/api/documents.ts pour

@@ -49,11 +49,14 @@ export function getMessages(conversationId: string): Promise<Message[]> {
 
 // Envoi avec pièce jointe optionnelle (2026-08) — multipart comme
 // uploadFichierAccordPrealable, jamais le helper http (pas de multipart).
-export async function envoyerMessage(conversationId: string, contenu: string, fichier?: File): Promise<Message> {
+// Plusieurs pièces jointes en un envoi (2026-10) — voir demande
+// utilisateur : "la sélection de plusieurs pièces jointes (de tout format
+// de document et d'image)". Le serveur les répartit en autant de messages.
+export async function envoyerMessage(conversationId: string, contenu: string, fichiers: File[] = []): Promise<Message> {
   const token = getAccessToken();
   const form = new FormData();
   form.append("contenu", contenu);
-  if (fichier) form.append("fichier", fichier);
+  for (const f of fichiers) form.append("fichiers", f);
   const res = await fetch(`${API_URL}/messagerie/conversations/${conversationId}/messages`, {
     method: "POST",
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },

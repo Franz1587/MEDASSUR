@@ -2,8 +2,6 @@ import { useCallback, useState } from "react";
 import { View, Text, StyleSheet, Alert } from "react-native";
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import * as ImagePicker from "expo-image-picker";
-import * as DocumentPicker from "expo-document-picker";
 import { Ionicons } from "@expo/vector-icons";
 import type { RootStackParamList } from "../../navigation/types";
 import {
@@ -15,46 +13,14 @@ import {
   getMesPrisesEnChargePrealables, uploaderDocumentAccordPrealable, cheminCertificatAccordPrealable,
   type MembreAccordPrealable, type TypeDocumentAccordPrealable,
 } from "../../api/portailMembre";
-import { messageErreur, type RnFilePart } from "../../api/http";
+import { messageErreur } from "../../api/http";
 import { marquerVu } from "../../utils/vus";
+import { choisirFichiers } from "../../utils/choisirFichiers";
 
 // Détail d'une demande de prise en charge (route "AccordDetail", { id }).
 // Pas d'endpoint GET/:id dédié côté backend (voir
 // PortailMembreController — seul findAll existe) : on recharge la liste
 // complète et on retrouve le dossier par id, comme le ferait le web.
-async function choisirFichier(): Promise<RnFilePart | null> {
-  return new Promise((resolve) => {
-    Alert.alert(
-      "Ajouter un document",
-      "Photo prise sur le champ, ou fichier existant (PDF, image…).",
-      [
-        {
-          text: "Prendre une photo",
-          onPress: async () => {
-            const perm = await ImagePicker.requestCameraPermissionsAsync();
-            if (!perm.granted) { resolve(null); return; }
-            const res = await ImagePicker.launchCameraAsync({ quality: 0.7 });
-            if (res.canceled || !res.assets?.[0]) { resolve(null); return; }
-            const a = res.assets[0];
-            resolve({ uri: a.uri, name: a.fileName ?? `photo-${Date.now()}.jpg`, type: a.mimeType ?? "image/jpeg" });
-          },
-        },
-        {
-          text: "Choisir un fichier",
-          onPress: async () => {
-            const res = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
-            if (res.canceled || !res.assets?.[0]) { resolve(null); return; }
-            const a = res.assets[0];
-            resolve({ uri: a.uri, name: a.name ?? `document-${Date.now()}`, type: a.mimeType ?? "application/octet-stream" });
-          },
-        },
-        { text: "Annuler", style: "cancel", onPress: () => resolve(null) },
-      ],
-      { cancelable: true, onDismiss: () => resolve(null) },
-    );
-  });
-}
-
 function InfoLine({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
   return (
     <View style={styles.infoRow}>
@@ -130,12 +96,12 @@ export function PriseEnChargeDetailScreen() {
   );
 
   const uploader = async (type: TypeDocumentAccordPrealable) => {
-    const fichier = await choisirFichier();
-    if (!fichier) return;
+    const fichiers = await choisirFichiers();
+    if (fichiers.length === 0) return;
     const setEnvoi = type === "ordonnance" ? setEnvoiOrdonnance : setEnvoiDevis;
     setEnvoi(true);
     try {
-      await uploaderDocumentAccordPrealable(id, type, fichier);
+      await uploaderDocumentAccordPrealable(id, type, fichiers);
       await charger();
     } catch (err) {
       Alert.alert("Envoi impossible", messageErreur(err));

@@ -1,4 +1,4 @@
-import { http, API_URL, getAccessToken, postOffline, type RnFilePart } from "./http";
+import { http, API_URL, postOffline, uploadFiles, type RnFilePart } from "./http";
 
 // Miroir mobile de src/services/messagerie.service.ts (web).
 export interface Conversation {
@@ -50,24 +50,16 @@ export function getMessages(conversationId: string): Promise<Message[]> {
 // message AVEC pièce jointe reste synchrone uniquement : mettre en file un
 // fichier binaire demanderait de le conserver sur disque en plus du texte,
 // hors du périmètre retenu pour cette première version du mode hors-ligne.
-export async function envoyerMessage(conversationId: string, contenu: string, fichier?: RnFilePart): Promise<Message> {
-  if (!fichier) {
+// Plusieurs pièces jointes en un envoi (2026-10) — voir demande
+// utilisateur : "la sélection de plusieurs pièces jointes (de tout format
+// de document et d'image)". Le serveur répartit les pièces en autant de
+// messages (voir messagerie.service.ts envoyerMessage), le texte restant
+// sur le premier.
+export async function envoyerMessage(conversationId: string, contenu: string, fichiers: RnFilePart[] = []): Promise<Message> {
+  if (fichiers.length === 0) {
     return postOffline<Message>(`/messagerie/conversations/${conversationId}/messages`, { contenu }, `Message : "${contenu.slice(0, 60)}"`);
   }
-  const token = await getAccessToken();
-  const form = new FormData();
-  form.append("contenu", contenu);
-  if (fichier) {
-    // @ts-expect-error — RN's FormData accepts {uri,name,type} for file parts.
-    form.append("fichier", { uri: fichier.uri, name: fichier.name, type: fichier.type });
-  }
-  const res = await fetch(`${API_URL}/messagerie/conversations/${conversationId}/messages`, {
-    method: "POST",
-    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: form,
-  });
-  if (!res.ok) throw new Error(`Envoi du message impossible (${res.status})`);
-  return (await res.json()) as Message;
+  return uploadFiles<Message>(`/messagerie/conversations/${conversationId}/messages`, fichiers, "fichiers", { contenu });
 }
 
 export function prendreConversation(conversationId: string): Promise<Conversation> {

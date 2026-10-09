@@ -114,21 +114,31 @@ export class MessagerieService {
     return this.prisma.message.findMany({ where: { conversationId: id }, orderBy: { dateEnvoi: "asc" } });
   }
 
-  async envoyerMessage(id: string, userId: string, roleId: string, contenu: string, file?: Express.Multer.File) {
+  // Plusieurs pièces jointes en un envoi (2026-10) — voir demande
+  // utilisateur : "il faut que l'application permette dans un échange de
+  // message... la sélection de plusieurs pièces jointes". Un message porte
+  // une seule pièce (Message.pieceJointe, lu tel quel par l'agent IA pour
+  // rattacher ordonnance/devis aux dossiers) : N pièces = N messages
+  // consécutifs, le texte sur le premier. L'agent IA n'est relancé qu'UNE
+  // fois, après l'enregistrement de toutes les pièces, pour qu'il les voie
+  // toutes ensemble. Renvoie le premier message créé.
+  async envoyerMessage(id: string, userId: string, roleId: string, contenu: string, fichiers: Express.Multer.File[] = []) {
     const conversation = await this.conversationAccessible(id, userId, roleId);
-    if (!contenu?.trim() && !file) throw new BadRequestException("Message vide.");
+    if (!contenu?.trim() && fichiers.length === 0) throw new BadRequestException("Message vide.");
 
-    let pieceJointe: string | undefined;
-    if (file) {
+    const piecesJointes: (string | undefined)[] = [];
+    for (const file of fichiers) {
       const ext = path.extname(file.originalname) || "";
-      pieceJointe = `${id}-${Date.now()}-${randomUUID().slice(0, 6)}${ext.toLowerCase()}`;
+      const nom = `${id}-${Date.now()}-${randomUUID().slice(0, 6)}${ext.toLowerCase()}`;
       if (this.storage.actif) {
-        await this.storage.upload("messagerie", pieceJointe, file.buffer, file.mimetype);
+        await this.storage.upload("messagerie", nom, file.buffer, file.mimetype);
       } else {
         await fs.promises.mkdir(UPLOADS_MESSAGERIE_DIR, { recursive: true });
-        await fs.promises.writeFile(path.join(UPLOADS_MESSAGERIE_DIR, pieceJointe), file.buffer);
+        await fs.promises.writeFile(path.join(UPLOADS_MESSAGERIE_DIR, nom), file.buffer);
       }
+      piecesJointes.push(nom);
     }
+    if (piecesJointes.length === 0) piecesJointes.push(undefined);
 
     const auteurType = estRoleInterne(roleId) ? "Agent" : "Utilisateur";
     // Un agent qui répond à une conversation encore dans la file la
@@ -153,9 +163,14 @@ export class MessagerieService {
     // support assistant message prefill. The conversation must end with a
     // user message.") — silencieusement avalé par le .catch(), donc invisible
     // pour l'interlocuteur qui ne recevait simplement jamais de réponse.
-    const cree = await this.prisma.message.create({
-      data: { conversationId: id, auteurId: userId, auteurType, contenu: contenu?.trim() ?? "", pieceJointe },
-    });
+    let cree: Awaited<ReturnType<PrismaService["message"]["create"]>> | undefined;
+    for (const [i, pieceJointe] of piecesJointes.entries()) {
+      const message = await this.prisma.message.create({
+        data: { conversationId: id, auteurId: userId, auteurType, contenu: i === 0 ? (contenu?.trim() ?? "") : "", pieceJointe },
+      });
+      cree ??= message;
+    }
+    if (!cree) throw new BadRequestException("Message vide.");
     // Relance de l'agent IA (2026-08) — un demandeur qui répond dans une
     // conversation encore "EnCoursIA" (pas escaladée) obtient une nouvelle
     // réponse automatique, même mécanisme qu'à l'ouverture (voir creer()).

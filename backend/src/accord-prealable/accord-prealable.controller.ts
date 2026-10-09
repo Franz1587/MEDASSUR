@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UploadedFile, UploadedFiles, UseGuards, UseInterceptors } from "@nestjs/common";
 import type { Request } from "express";
-import { FileInterceptor } from "@nestjs/platform-express";
+import { FileFieldsInterceptor, FileInterceptor } from "@nestjs/platform-express";
+import { CHAMPS_PIECES, TAILLE_MAX_PIECE, piecesRecues, reunirEnUnFichier, type PiecesRecues } from "../lib/pieces-jointes.util";
 import { memoryStorage } from "multer";
 import { AccordPrealableService } from "./accord-prealable.service";
 import { CreateAccordPrealableDto } from "./dto/create-accord-prealable.dto";
@@ -64,14 +65,16 @@ export class AccordPrealableController {
   }
 
   @Post(":id/ordonnance")
-  @UseInterceptors(FileInterceptor("fichier", { storage: memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } }))
-  uploadOrdonnance(@Param("id") id: string, @UploadedFile() file: Express.Multer.File) {
+  @UseInterceptors(FileFieldsInterceptor(CHAMPS_PIECES, { storage: memoryStorage(), limits: { fileSize: TAILLE_MAX_PIECE } }))
+  async uploadOrdonnance(@Param("id") id: string, @UploadedFiles() recues: PiecesRecues) {
+    const file = (await reunirEnUnFichier(piecesRecues(recues))) as Express.Multer.File;
     return this.service.uploadDocument(id, "ordonnance", file);
   }
 
   @Post(":id/devis")
-  @UseInterceptors(FileInterceptor("fichier", { storage: memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } }))
-  uploadDevis(@Param("id") id: string, @UploadedFile() file: Express.Multer.File) {
+  @UseInterceptors(FileFieldsInterceptor(CHAMPS_PIECES, { storage: memoryStorage(), limits: { fileSize: TAILLE_MAX_PIECE } }))
+  async uploadDevis(@Param("id") id: string, @UploadedFiles() recues: PiecesRecues) {
+    const file = (await reunirEnUnFichier(piecesRecues(recues))) as Express.Multer.File;
     return this.service.uploadDocument(id, "devis", file);
   }
 }

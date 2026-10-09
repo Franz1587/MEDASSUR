@@ -1,6 +1,7 @@
-import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Query, Req, Res, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Query, Req, Res, UploadedFile, UploadedFiles, UseGuards, UseInterceptors } from "@nestjs/common";
 import type { Request, Response } from "express";
-import { FileInterceptor } from "@nestjs/platform-express";
+import { FileFieldsInterceptor, FileInterceptor } from "@nestjs/platform-express";
+import { CHAMPS_PIECES, TAILLE_MAX_PIECE, piecesRecues, reunirEnUnFichier, type PiecesRecues } from "../lib/pieces-jointes.util";
 import { memoryStorage } from "multer";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
@@ -472,15 +473,17 @@ export class PortailPrestataireController {
   }
 
   @Post("devis/:id/ordonnance")
-  @UseInterceptors(FileInterceptor("fichier", { storage: memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } }))
-  async uploaderOrdonnanceDevis(@Param("id") id: string, @UploadedFile() file: Express.Multer.File, @Req() req: PortailPrestataireRequest) {
+  @UseInterceptors(FileFieldsInterceptor(CHAMPS_PIECES, { storage: memoryStorage(), limits: { fileSize: TAILLE_MAX_PIECE } }))
+  async uploaderOrdonnanceDevis(@Param("id") id: string, @UploadedFiles() recues: PiecesRecues, @Req() req: PortailPrestataireRequest) {
+    const file = (await reunirEnUnFichier(piecesRecues(recues))) as Express.Multer.File;
     await this.verifierDevisAppartientA(id, this.prestataireIdDe(req));
     return this.accordPrealable.uploadDocument(id, "ordonnance", file);
   }
 
   @Post("devis/:id/devis")
-  @UseInterceptors(FileInterceptor("fichier", { storage: memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } }))
-  async uploaderPieceDevis(@Param("id") id: string, @UploadedFile() file: Express.Multer.File, @Req() req: PortailPrestataireRequest) {
+  @UseInterceptors(FileFieldsInterceptor(CHAMPS_PIECES, { storage: memoryStorage(), limits: { fileSize: TAILLE_MAX_PIECE } }))
+  async uploaderPieceDevis(@Param("id") id: string, @UploadedFiles() recues: PiecesRecues, @Req() req: PortailPrestataireRequest) {
+    const file = (await reunirEnUnFichier(piecesRecues(recues))) as Express.Multer.File;
     await this.verifierDevisAppartientA(id, this.prestataireIdDe(req));
     return this.accordPrealable.uploadDocument(id, "devis", file);
   }

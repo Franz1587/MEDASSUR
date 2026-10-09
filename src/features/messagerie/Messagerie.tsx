@@ -145,7 +145,7 @@ export default function MessagerieView() {
   const [envoi, setEnvoi] = useState(false);
   const [modalOuvert, setModalOuvert] = useState(false);
   const fichierRef = useRef<HTMLInputElement>(null);
-  const [fichier, setFichier] = useState<File | null>(null);
+  const [fichiers, setFichiers] = useState<File[]>([]);
   const finRef = useRef<HTMLDivElement>(null);
   // Champ de saisie qui s'agrandit avec le texte (2026-09) — voir demande
   // utilisateur : "on ne parvient pas à lire tout le message avant de
@@ -200,12 +200,12 @@ export default function MessagerieView() {
   };
 
   const envoyer = async () => {
-    if (!selectedId || (!texte.trim() && !fichier)) return;
+    if (!selectedId || (!texte.trim() && fichiers.length === 0)) return;
     setEnvoi(true);
     try {
-      await envoyerMessage(selectedId, texte.trim(), fichier ?? undefined);
+      await envoyerMessage(selectedId, texte.trim(), fichiers);
       setTexte("");
-      setFichier(null);
+      setFichiers([]);
       if (fichierRef.current) fichierRef.current.value = "";
       const frais = await getMessages(selectedId);
       setMessages(frais);
@@ -329,14 +329,18 @@ export default function MessagerieView() {
               </div>
 
               <div className="px-4 py-3 border-t border-border flex-shrink-0 space-y-2">
-                {fichier && (
-                  <div className="flex items-center gap-2 text-[11.5px] text-muted-foreground">
-                    <Paperclip className="w-3.5 h-3.5" />{fichier.name}
-                    <button type="button" onClick={() => { setFichier(null); if (fichierRef.current) fichierRef.current.value = ""; }} className="text-destructive hover:underline">Retirer</button>
+                {fichiers.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {fichiers.map((f, i) => (
+                      <div key={`${f.name}-${i}`} className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground bg-secondary/40 rounded-lg px-2 py-1">
+                        <Paperclip className="w-3.5 h-3.5" />{f.name}
+                        <button type="button" onClick={() => setFichiers((v) => v.filter((_, j) => j !== i))} className="text-destructive hover:underline">✕</button>
+                      </div>
+                    ))}
                   </div>
                 )}
                 <div className="flex items-end gap-2">
-                  <input ref={fichierRef} type="file" className="hidden" onChange={(e) => setFichier(e.target.files?.[0] ?? null)} />
+                  <input ref={fichierRef} type="file" multiple className="hidden" onChange={(e) => { setFichiers((v) => [...v, ...Array.from(e.target.files ?? [])]); if (fichierRef.current) fichierRef.current.value = ""; }} />
                   <button type="button" onClick={() => fichierRef.current?.click()} className="h-9 w-9 flex-shrink-0 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/40 flex items-center justify-center">
                     <Paperclip className="w-4 h-4" />
                   </button>
@@ -350,7 +354,7 @@ export default function MessagerieView() {
                     className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-[12.5px] text-foreground resize-none overflow-y-auto leading-relaxed"
                   />
                   <button
-                    type="button" onClick={envoyer} disabled={envoi || (!texte.trim() && !fichier)}
+                    type="button" onClick={envoyer} disabled={envoi || (!texte.trim() && fichiers.length === 0)}
                     className="h-9 w-9 flex-shrink-0 rounded-lg bg-primary text-primary-foreground disabled:opacity-50 flex items-center justify-center"
                   >
                     <Send className="w-4 h-4" />

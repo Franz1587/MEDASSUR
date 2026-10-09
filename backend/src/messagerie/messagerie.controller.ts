@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Req, UploadedFiles, UseGuards, UseInterceptors } from "@nestjs/common";
 import type { Request } from "express";
-import { FileInterceptor } from "@nestjs/platform-express";
+import { FileFieldsInterceptor, FileInterceptor } from "@nestjs/platform-express";
+import { CHAMPS_PIECES, TAILLE_MAX_PIECE, piecesRecues, type PiecesRecues } from "../lib/pieces-jointes.util";
 import { memoryStorage } from "multer";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { MessagerieService } from "./messagerie.service";
@@ -43,14 +44,14 @@ export class MessagerieController {
   }
 
   @Post("conversations/:id/messages")
-  @UseInterceptors(FileInterceptor("fichier", { storage: memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } }))
+  @UseInterceptors(FileFieldsInterceptor(CHAMPS_PIECES, { storage: memoryStorage(), limits: { fileSize: TAILLE_MAX_PIECE } }))
   envoyerMessage(
     @Param("id") id: string,
     @Body("contenu") contenu: string,
-    @UploadedFile() file: Express.Multer.File | undefined,
+    @UploadedFiles() recues: PiecesRecues,
     @Req() req: MessagerieRequest,
   ) {
-    return this.messagerie.envoyerMessage(id, req.user.userId, req.user.roleId, contenu, file);
+    return this.messagerie.envoyerMessage(id, req.user.userId, req.user.roleId, contenu, piecesRecues(recues));
   }
 
   @Patch("conversations/:id/prendre")

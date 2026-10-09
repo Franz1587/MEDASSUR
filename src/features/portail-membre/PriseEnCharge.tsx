@@ -49,8 +49,8 @@ export default function MembrePriseEnChargeView() {
   const [acteAAjouter, setActeAAjouter] = useState<ActeMedical | null>(null);
   const [prestataires, setPrestataires] = useState<PrestataireReseau[]>([]);
   const [actes, setActes] = useState<ActeMedical[]>([]);
-  const [ordonnance, setOrdonnance] = useState<File | null>(null);
-  const [devis, setDevis] = useState<File | null>(null);
+  const [ordonnance, setOrdonnance] = useState<File[]>([]);
+  const [devis, setDevis] = useState<File[]>([]);
   const [envoi, setEnvoi] = useState(false);
 
   const rafraichir = () => getMesPrisesEnChargePrealables().then(setDossiers);
@@ -108,22 +108,22 @@ export default function MembrePriseEnChargeView() {
       toast.error("Prestataire et date sont obligatoires.");
       return;
     }
-    if (!ordonnance && !devis) {
+    if (ordonnance.length === 0 && devis.length === 0) {
       toast.error("Merci de joindre l'ordonnance ou le devis.");
       return;
     }
     setEnvoi(true);
     try {
       const cree = await creerAccordPrealable({ ...enTete, lignes: lignesForm });
-      if (ordonnance) await uploaderOrdonnanceAccordPrealable(cree.id, ordonnance);
-      if (devis) await uploaderDevisAccordPrealable(cree.id, devis);
+      if (ordonnance.length > 0) await uploaderOrdonnanceAccordPrealable(cree.id, ordonnance);
+      if (devis.length > 0) await uploaderDevisAccordPrealable(cree.id, devis);
       toast.success("Demande envoyée.");
       setFormulaireOuvert(false);
       setEnTete(emptyEnTete(categoriesGarantie[0] ?? ""));
       setPrestataireChoisi(null);
       setLignesForm([]);
-      setOrdonnance(null);
-      setDevis(null);
+      setOrdonnance([]);
+      setDevis([]);
       rafraichir();
     } catch (err) {
       toast.error(messageErreur(err, "Envoi impossible."));
@@ -236,21 +236,41 @@ export default function MembrePriseEnChargeView() {
             )}
 
             <label className="block">
-              <div className={labelCls}>Ordonnance {!devis && "*"}</div>
+              <div className={labelCls}>Ordonnance {devis.length === 0 && "*"}</div>
               <div className="flex items-center gap-2 border border-dashed border-border rounded-lg px-3 py-2.5">
                 <Upload className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                <input type="file" onChange={(e) => setOrdonnance(e.target.files?.[0] ?? null)} className="text-[12px] text-muted-foreground w-full" />
-                {ordonnance && <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />}
+                <input type="file" multiple onChange={(e) => { setOrdonnance((v) => [...v, ...Array.from(e.target.files ?? [])]); e.target.value = ""; }} className="text-[12px] text-muted-foreground w-full" />
+                {ordonnance.length > 0 && <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />}
               </div>
+              {ordonnance.length > 0 && (
+                <ul className="mt-1.5 space-y-1">
+                  {ordonnance.map((f, i) => (
+                    <li key={`${f.name}-${i}`} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <span className="flex-1 truncate">{f.name}</span>
+                      <button type="button" onClick={() => setOrdonnance((v) => v.filter((_, j) => j !== i))} className="text-destructive hover:underline flex-shrink-0">Retirer</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </label>
             <label className="block">
-              <div className={labelCls}>Devis {!ordonnance && "*"}</div>
+              <div className={labelCls}>Devis {ordonnance.length === 0 && "*"}</div>
               <div className="flex items-center gap-2 border border-dashed border-border rounded-lg px-3 py-2.5">
                 <Upload className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                <input type="file" onChange={(e) => setDevis(e.target.files?.[0] ?? null)} className="text-[12px] text-muted-foreground w-full" />
-                {devis && <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />}
+                <input type="file" multiple onChange={(e) => { setDevis((v) => [...v, ...Array.from(e.target.files ?? [])]); e.target.value = ""; }} className="text-[12px] text-muted-foreground w-full" />
+                {devis.length > 0 && <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />}
               </div>
-              <p className="text-[10.5px] text-muted-foreground mt-1">Ordonnance ou devis obligatoire pour envoyer la demande.</p>
+              {devis.length > 0 && (
+                <ul className="mt-1.5 space-y-1">
+                  {devis.map((f, i) => (
+                    <li key={`${f.name}-${i}`} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <span className="flex-1 truncate">{f.name}</span>
+                      <button type="button" onClick={() => setDevis((v) => v.filter((_, j) => j !== i))} className="text-destructive hover:underline flex-shrink-0">Retirer</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-[10.5px] text-muted-foreground mt-1">Ordonnance ou devis obligatoire pour envoyer la demande. Plusieurs pièces possibles (réunies en un seul document).</p>
             </label>
 
             <div className="flex items-center gap-2 pt-1">

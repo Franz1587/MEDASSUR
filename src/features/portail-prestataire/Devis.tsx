@@ -55,8 +55,8 @@ export default function PrestataireDevisView() {
   const [lignesForm, setLignesForm] = useState<(LigneDevisInput & { libelle: string })[]>([]);
   const [acteAAjouter, setActeAAjouter] = useState<ActeMedical | null>(null);
   const [actes, setActes] = useState<ActeMedical[]>([]);
-  const [ordonnance, setOrdonnance] = useState<File | null>(null);
-  const [devisFichier, setDevisFichier] = useState<File | null>(null);
+  const [ordonnance, setOrdonnance] = useState<File[]>([]);
+  const [devisFichier, setDevisFichier] = useState<File[]>([]);
   const [envoi, setEnvoi] = useState(false);
   // Saisie des critères (2026-08) — voir demande utilisateur : "je veux des
   // zones de saisie de date séparées et non le système actuel, et le
@@ -144,8 +144,8 @@ export default function PrestataireDevisView() {
   const allerListe = () => {
     setPatient(null);
     setDetail(null);
-    setOrdonnance(null);
-    setDevisFichier(null);
+    setOrdonnance([]);
+    setDevisFichier([]);
     setVue("liste");
   };
 
@@ -154,19 +154,19 @@ export default function PrestataireDevisView() {
       toast.error("Date de la demande obligatoire.");
       return;
     }
-    if (type === "Hospitalisation" && !ordonnance) {
+    if (type === "Hospitalisation" && ordonnance.length === 0) {
       toast.error("Merci de joindre la déclaration d'hospitalisation.");
       return;
     }
-    if (type !== "Hospitalisation" && !ordonnance && !devisFichier) {
+    if (type !== "Hospitalisation" && ordonnance.length === 0 && devisFichier.length === 0) {
       toast.error("Merci de joindre l'ordonnance ou le devis.");
       return;
     }
     setEnvoi(true);
     try {
       const cree = await creerDevis({ assureId: patient.id, type, dateDemande, lignes: lignesForm });
-      if (ordonnance) await uploaderOrdonnanceDevis(cree.id, ordonnance);
-      if (devisFichier) await uploaderPieceDevis(cree.id, devisFichier);
+      if (ordonnance.length > 0) await uploaderOrdonnanceDevis(cree.id, ordonnance);
+      if (devisFichier.length > 0) await uploaderPieceDevis(cree.id, devisFichier);
       toast.success("Devis envoyé à l'assurance.");
       rafraichir();
       allerListe();
@@ -263,28 +263,58 @@ export default function PrestataireDevisView() {
               <div className="text-[12px] text-muted-foreground mb-1.5">Déclaration d'hospitalisation *</div>
               <div className="flex items-center gap-2 border border-dashed border-border rounded-lg px-3 py-2.5">
                 <Upload className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                <input type="file" onChange={(e) => setOrdonnance(e.target.files?.[0] ?? null)} className="text-[12px] text-muted-foreground w-full" />
-                {ordonnance && <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />}
+                <input type="file" multiple onChange={(e) => { setOrdonnance((v) => [...v, ...Array.from(e.target.files ?? [])]); e.target.value = ""; }} className="text-[12px] text-muted-foreground w-full" />
+                {ordonnance.length > 0 && <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />}
               </div>
+              {ordonnance.length > 0 && (
+                <ul className="mt-1.5 space-y-1">
+                  {ordonnance.map((f, i) => (
+                    <li key={`${f.name}-${i}`} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <span className="flex-1 truncate">{f.name}</span>
+                      <button type="button" onClick={() => setOrdonnance((v) => v.filter((_, j) => j !== i))} className="text-destructive hover:underline flex-shrink-0">Retirer</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </label>
           ) : (
             <>
               <label className="block">
-                <div className="text-[12px] text-muted-foreground mb-1.5">Ordonnance {!devisFichier && "*"}</div>
+                <div className="text-[12px] text-muted-foreground mb-1.5">Ordonnance {devisFichier.length === 0 && "*"}</div>
                 <div className="flex items-center gap-2 border border-dashed border-border rounded-lg px-3 py-2.5">
                   <Upload className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  <input type="file" onChange={(e) => setOrdonnance(e.target.files?.[0] ?? null)} className="text-[12px] text-muted-foreground w-full" />
-                  {ordonnance && <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />}
+                  <input type="file" multiple onChange={(e) => { setOrdonnance((v) => [...v, ...Array.from(e.target.files ?? [])]); e.target.value = ""; }} className="text-[12px] text-muted-foreground w-full" />
+                  {ordonnance.length > 0 && <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />}
                 </div>
+                {ordonnance.length > 0 && (
+                  <ul className="mt-1.5 space-y-1">
+                    {ordonnance.map((f, i) => (
+                      <li key={`${f.name}-${i}`} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <span className="flex-1 truncate">{f.name}</span>
+                        <button type="button" onClick={() => setOrdonnance((v) => v.filter((_, j) => j !== i))} className="text-destructive hover:underline flex-shrink-0">Retirer</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </label>
               <label className="block">
-                <div className="text-[12px] text-muted-foreground mb-1.5">Devis {!ordonnance && "*"}</div>
+                <div className="text-[12px] text-muted-foreground mb-1.5">Devis {ordonnance.length === 0 && "*"}</div>
                 <div className="flex items-center gap-2 border border-dashed border-border rounded-lg px-3 py-2.5">
                   <Upload className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  <input type="file" onChange={(e) => setDevisFichier(e.target.files?.[0] ?? null)} className="text-[12px] text-muted-foreground w-full" />
-                  {devisFichier && <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />}
+                  <input type="file" multiple onChange={(e) => { setDevisFichier((v) => [...v, ...Array.from(e.target.files ?? [])]); e.target.value = ""; }} className="text-[12px] text-muted-foreground w-full" />
+                  {devisFichier.length > 0 && <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />}
                 </div>
-                <p className="text-[10.5px] text-muted-foreground mt-1">Ordonnance ou devis obligatoire pour envoyer la demande.</p>
+                {devisFichier.length > 0 && (
+                  <ul className="mt-1.5 space-y-1">
+                    {devisFichier.map((f, i) => (
+                      <li key={`${f.name}-${i}`} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <span className="flex-1 truncate">{f.name}</span>
+                        <button type="button" onClick={() => setDevisFichier((v) => v.filter((_, j) => j !== i))} className="text-destructive hover:underline flex-shrink-0">Retirer</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="text-[10.5px] text-muted-foreground mt-1">Ordonnance ou devis obligatoire pour envoyer la demande. Plusieurs pièces possibles (réunies en un seul document).</p>
               </label>
             </>
           )}

@@ -6,12 +6,11 @@ import { useNavigation, useRoute, type RouteProp } from "@react-navigation/nativ
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
-import * as DocumentPicker from "expo-document-picker";
 import { LoadingView, ErrorView } from "../../components/ui";
 import { colors, radius, spacing } from "../../theme/colors";
 import { useAuth } from "../../auth/AuthContext";
 import { messageErreur, QueuedOfflineError, type RnFilePart } from "../../api/http";
+import { choisirFichiers } from "../../utils/choisirFichiers";
 import {
   getMessages, envoyerMessage, marquerConversationLue, urlPieceJointeMessagerie, type Message,
 } from "../../api/messagerie";
@@ -36,7 +35,7 @@ export function MessagerieConversationScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [texte, setTexte] = useState("");
-  const [piece, setPiece] = useState<RnFilePart | null>(null);
+  const [pieces, setPieces] = useState<RnFilePart[]>([]);
   const [envoi, setEnvoi] = useState(false);
   const listRef = useRef<FlatList<Message>>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -78,40 +77,18 @@ export function MessagerieConversationScreen() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [id, charger]);
 
-  const choisirPieceJointe = () => {
-    Alert.alert("Pièce jointe", "Que souhaitez-vous joindre ?", [
-      { text: "Photo", onPress: choisirPhoto },
-      { text: "Document", onPress: choisirDocument },
-      { text: "Annuler", style: "cancel" },
-    ]);
-  };
-
-  const choisirPhoto = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert("Autorisation requise", "Autorisez l'accès à vos photos pour joindre une image.");
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
-    if (result.canceled || !result.assets?.[0]) return;
-    const asset = result.assets[0];
-    setPiece({ uri: asset.uri, name: asset.fileName ?? `photo-${Date.now()}.jpg`, type: asset.mimeType ?? "image/jpeg" });
-  };
-
-  const choisirDocument = async () => {
-    const result = await DocumentPicker.getDocumentAsync({ type: "*/*", copyToCacheDirectory: true });
-    if (result.canceled || !result.assets?.[0]) return;
-    const asset = result.assets[0];
-    setPiece({ uri: asset.uri, name: asset.name, type: asset.mimeType ?? "application/octet-stream" });
+  const choisirPieceJointe = async () => {
+    const choisies = await choisirFichiers();
+    if (choisies.length > 0) setPieces((v) => [...v, ...choisies]);
   };
 
   const envoyer = async () => {
-    if (!texte.trim() && !piece) return;
+    if (!texte.trim() && pieces.length === 0) return;
     setEnvoi(true);
     try {
-      await envoyerMessage(id, texte.trim(), piece ?? undefined);
+      await envoyerMessage(id, texte.trim(), pieces);
       setTexte("");
-      setPiece(null);
+      setPieces([]);
       await charger(true);
       listRef.current?.scrollToEnd({ animated: true });
     } catch (err) {
@@ -120,7 +97,7 @@ export function MessagerieConversationScreen() {
         // reconnexion (voir syncManager.ts) — on vide quand même le
         // composeur pour ne pas donner l'impression que l'envoi a échoué.
         setTexte("");
-        setPiece(null);
+        setPieces([]);
         Alert.alert("Pas de connexion", "Votre message a été enregistré et sera envoyé dès le retour du réseau.");
       } else {
         Alert.alert("Envoi impossible", messageErreur(err));
@@ -170,13 +147,13 @@ export function MessagerieConversationScreen() {
       />
 
       <View style={[styles.composerWrap, { paddingBottom: Math.max(spacing.sm, insets.bottom), marginBottom: keyboardHeight }]}>
-        {piece ? (
-          <View style={styles.pieceRow}>
+        {pieces.map((p, i) => (
+          <View key={`${p.uri}-${i}`} style={styles.pieceRow}>
             <Ionicons name="attach" size={14} color={colors.textMuted} />
-            <Text style={styles.pieceNom} numberOfLines={1}>{piece.name}</Text>
-            <Pressable onPress={() => setPiece(null)}><Ionicons name="close-circle" size={16} color={colors.danger} /></Pressable>
+            <Text style={styles.pieceNom} numberOfLines={1}>{p.name}</Text>
+            <Pressable onPress={() => setPieces((v) => v.filter((_, j) => j !== i))}><Ionicons name="close-circle" size={16} color={colors.danger} /></Pressable>
           </View>
-        ) : null}
+        ))}
         <View style={styles.composer}>
           <Pressable onPress={choisirPieceJointe} style={styles.attachBtn}>
             <Ionicons name="attach" size={20} color={colors.textMuted} />
@@ -189,7 +166,7 @@ export function MessagerieConversationScreen() {
             style={styles.input}
             multiline
           />
-          <Pressable onPress={envoyer} disabled={envoi || (!texte.trim() && !piece)} style={[styles.sendBtn, (envoi || (!texte.trim() && !piece)) && { opacity: 0.5 }]}>
+          <Pressable onPress={envoyer} disabled={envoi || (!texte.trim() && pieces.length === 0)} style={[styles.sendBtn, (envoi || (!texte.trim() && pieces.length === 0)) && { opacity: 0.5 }]}>
             {envoi ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="send" size={17} color="#fff" />}
           </Pressable>
         </View>
