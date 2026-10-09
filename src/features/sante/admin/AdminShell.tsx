@@ -869,15 +869,13 @@ export function AdminShell({
                 </div>
               </div>
             </div>
-          ) : null}
-
-          {showGuidePage && (
+          ) : showGuidePage ? (
             <GuideView
               profil={guideProfil}
               onBack={() => setShowGuidePage(false)}
               onSelectProfil={setGuideProfil}
             />
-          )}
+          ) : null}
         </div>
       </div>
     </div>

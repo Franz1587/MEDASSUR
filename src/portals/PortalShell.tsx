@@ -381,14 +381,15 @@ export function PortalShell({ meta }: { meta: PortalMeta }) {
             <div className={showPresentation || (showGuide && !!guideProfil) ? "hidden" : ""}>
               <ActiveView />
             </div>
-            {showPresentation && <PresentationView onBack={() => setShowPresentation(false)} />}
-            {showGuide && guideProfil && (
+            {showPresentation ? (
+              <PresentationView onBack={() => setShowPresentation(false)} />
+            ) : showGuide && guideProfil ? (
               <GuideView
                 profil={guideProfil}
                 onBack={() => setShowGuide(false)}
                 onSelectProfil={(next) => setGuideProfil(next)}
               />
-            )}
+            ) : null}
           </ShellNavigationProvider>
         </main>
       </div>
