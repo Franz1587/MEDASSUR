@@ -246,7 +246,7 @@ export function AdminShell({
   const [profileOpen, setProfileOpen] = useState(false);
   const [showProfilePage, setShowProfilePage] = useState(false);
   const [showGuidePage, setShowGuidePage] = useState(false);
-  const [guideProfil, setGuideProfil] = useState<GuideProfil>("global");
+  const [guideProfil, setGuideProfil] = useState<GuideProfil>("interne");
   const [phone, setPhone] = useState("+241 00 00 00 00");
   const [address, setAddress] = useState("Libreville, Gabon");
   const [currentPassword, setCurrentPassword] = useState("");
