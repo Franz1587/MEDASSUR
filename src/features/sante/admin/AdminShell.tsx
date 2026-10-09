@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Users, Receipt, Bell, UserCircle, Home, LayoutGrid, Package, ShieldAlert, Building2, Plus, Search, List, Settings2, Mail, Send, Stethoscope, IdCard, BarChart3, CreditCard, ClipboardCheck, CheckCheck, BookOpen, Menu, X, WifiOff, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Users, Receipt, Bell, UserCircle, Home, LayoutGrid, Package, ShieldAlert, Building2, Plus, Search, List, Settings2, Mail, Send, Stethoscope, IdCard, BarChart3, CreditCard, ClipboardCheck, CheckCheck, BookOpen, Presentation, Menu, X, WifiOff, RefreshCw } from "lucide-react";
 import { onFileAttenteChangee, synchroniser } from "@/lib/syncManager";
 import { listerActionsEnAttente } from "@/lib/offlineStore";
 import { useAlertesMessagerie } from "@/lib/useAlertesMessagerie";
@@ -7,6 +7,7 @@ import { useAlertesDossiers } from "@/lib/useAlertesDossiers";
 import { getAccordsPrealables } from "@/services/accordPrealable.service";
 import { getDemandesClient } from "@/services/demandeClient.service";
 import { GuideView, type GuideProfil } from "@/features/guide/GuideView";
+import { PresentationView } from "@/features/presentation/PresentationView";
 import { useShellNavigation } from "@/layout/ShellNavigationContext";
 import { viewIcons, type View } from "@/layout/navConfig";
 import { santeAdminNavTree } from "@/features/sante/admin/navTree";
@@ -247,6 +248,7 @@ export function AdminShell({
   const [showProfilePage, setShowProfilePage] = useState(false);
   const [showGuidePage, setShowGuidePage] = useState(false);
   const [guideProfil, setGuideProfil] = useState<GuideProfil>("global");
+  const [showPresentationPage, setShowPresentationPage] = useState(false);
   const [phone, setPhone] = useState("+241 00 00 00 00");
   const [address, setAddress] = useState("Libreville, Gabon");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -399,7 +401,7 @@ export function AdminShell({
         .filter((zone) => zone.items.length > 0)
     : zoneSections;
 
-  const activeBreadcrumb = showProfilePage ? ["Profil utilisateur"] : showGuidePage ? ["Guide d'utilisateur"] : breadcrumb;
+  const activeBreadcrumb = showProfilePage ? ["Profil utilisateur"] : showGuidePage ? ["Guide d'utilisateur"] : showPresentationPage ? ["Présentation commerciale"] : breadcrumb;
   const currentNav = santeAdminNavTree.find((item) => item.id === current);
   const currentSubMenus = currentNav?.children ?? [];
   const activeHorizontal = horizontalTabs[current] ?? currentSubMenus[0]?.label ?? "";
@@ -559,6 +561,12 @@ export function AdminShell({
             <BookOpen
               className="w-[18px] h-[18px] cursor-pointer hover:text-sidebar-foreground"
               onClick={handleOpenGuide}
+            />
+          </span>
+          <span title="Présentation commerciale">
+            <Presentation
+              className="w-[18px] h-[18px] cursor-pointer hover:text-sidebar-foreground"
+              onClick={() => setShowPresentationPage(true)}
             />
           </span>
           <button
@@ -867,6 +875,8 @@ export function AdminShell({
               onBack={() => setShowGuidePage(false)}
               onSelectProfil={setGuideProfil}
             />
+          ) : showPresentationPage ? (
+            <PresentationView onBack={() => setShowPresentationPage(false)} />
           ) : (
             children
           )}

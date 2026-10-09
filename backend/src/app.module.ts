@@ -69,6 +69,7 @@ import { MedecinsModule } from "./medecins/medecins.module";
 import { PortailMedecinModule } from "./portail-medecin/portail-medecin.module";
 import { CodesAffectionModule } from "./codes-affection/codes-affection.module";
 import { AbonnementModule } from "./abonnement/abonnement.module";
+import { PresentationsModule } from "./presentations/presentations.module";
 
 @Module({
   imports: [
@@ -140,6 +141,7 @@ import { AbonnementModule } from "./abonnement/abonnement.module";
     CodesAffectionModule,
     AbonnementModule,
     IdempotenceModule,
+    PresentationsModule,
   ],
   providers: [
     // Isolation multi-tenant (2026-09, Phase 2) — voir tenant-context.ts.
