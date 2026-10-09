@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "next-themes";
-import { LogOut, Sun, Moon, Shield, Bell, CheckCheck, BookOpen, Menu, X, WifiOff, RefreshCw } from "lucide-react";
+import { LogOut, Sun, Moon, Shield, Bell, CheckCheck, BookOpen, Presentation, Menu, X, WifiOff, RefreshCw } from "lucide-react";
 import { onFileAttenteChangee, synchroniser } from "@/lib/syncManager";
 import { listerActionsEnAttente } from "@/lib/offlineStore";
 import { useAlertesMessagerie } from "@/lib/useAlertesMessagerie";
 import { MonProfilModal } from "@/portals/MonProfilModal";
 import { GuideView, type GuideProfil } from "@/features/guide/GuideView";
+import { PresentationView } from "@/features/presentation/PresentationView";
 import { useAuth } from "@/auth/AuthContext";
 import { viewLabels, moduleIcons, type View } from "@/layout/navConfig";
 import { viewRegistry } from "@/layout/viewRegistry";
@@ -125,7 +126,9 @@ export function PortalShell({ meta }: { meta: PortalMeta }) {
   // expert sinistres) n'a pas encore de contenu dédié : le bouton reste
   // masqué plutôt que d'ouvrir un guide vide.
   const [showGuide, setShowGuide] = useState(false);
+  const [showPresentation, setShowPresentation] = useState(false);
   const [guideProfil, setGuideProfil] = useState<GuideProfil | undefined>(currentRole ? GUIDE_PROFIL_PAR_ROLE[currentRole.id] : undefined);
+  const isSuperAdmin = currentRole?.id === "super_admin";
   useEffect(() => {
     setGuideProfil(currentRole ? GUIDE_PROFIL_PAR_ROLE[currentRole.id] ?? "global" : undefined);
   }, [currentRole]);
@@ -330,6 +333,16 @@ export function PortalShell({ meta }: { meta: PortalMeta }) {
                 <BookOpen className="w-4 h-4" />
               </button>
             )}
+            {isSuperAdmin && (
+              <button
+                type="button"
+                onClick={() => setShowPresentation(true)}
+                title="Présentation commerciale"
+                className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Presentation className="w-4 h-4" />
+              </button>
+            )}
             <div className="flex items-center gap-1.5 sm:gap-2.5 border-l border-border pl-2 sm:pl-3">
               <button
                 type="button" onClick={() => setProfileOpen(true)}
@@ -362,7 +375,9 @@ export function PortalShell({ meta }: { meta: PortalMeta }) {
               boutons d'accès rapide" — le Tableau de bord a besoin de
               changer de vue lui-même, comme les zones internes. */}
           <ShellNavigationProvider value={{ current: view, setView, shellActionRequest: null, triggerShellAction: () => undefined, scrollToTop: () => contentRef.current?.scrollTo({ top: 0 }) }}>
-            {showGuide && guideProfil ? (
+            {showPresentation ? (
+              <PresentationView onBack={() => setShowPresentation(false)} />
+            ) : showGuide && guideProfil ? (
               <GuideView
                 profil={guideProfil}
                 onBack={() => setShowGuide(false)}
