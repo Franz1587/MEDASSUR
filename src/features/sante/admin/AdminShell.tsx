@@ -434,11 +434,11 @@ export function AdminShell({
             <Menu className="w-[18px] h-[18px]" />
           </button>
           <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center flex-shrink-0 shadow-sm p-1">
-            <img src={logoMark} alt="MedAssur" className="w-full h-full object-contain" />
+            <img src={logoMark} alt="MEDASSUR+" className="w-full h-full object-contain" />
           </div>
           {!collapsed && (
             <div className="leading-tight hidden sm:block">
-              <div className="text-sidebar-foreground font-bold text-[15px] tracking-wide">MedAssur</div>
+              <div className="text-sidebar-foreground font-bold text-[15px] tracking-wide">MEDASSUR+</div>
               <div className="text-sidebar-foreground/68 text-[10px] tracking-wide">Espace Santé Administration</div>
             </div>
           )}
@@ -647,9 +647,9 @@ export function AdminShell({
           <div className="flex items-center justify-between px-4 h-14 border-b border-sidebar-border/70">
             <div className="flex items-center gap-2.5">
               <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center flex-shrink-0 shadow-sm p-1">
-                <img src={logoMark} alt="MedAssur" className="w-full h-full object-contain" />
+                <img src={logoMark} alt="MEDASSUR+" className="w-full h-full object-contain" />
               </div>
-              <span className="text-sidebar-foreground font-bold text-[13.5px] tracking-wide">MedAssur</span>
+              <span className="text-sidebar-foreground font-bold text-[13.5px] tracking-wide">MEDASSUR+</span>
             </div>
             <button
               type="button"

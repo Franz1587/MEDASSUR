@@ -269,7 +269,7 @@ function GenererFactureModal({ societes, onClose, onSaved }: { societes: Societe
                           {rubriques.filter((r) => r.actif).map((r) => <option key={r.code} value={r.code}>{r.libelle}</option>)}
                         </select>
                       </td>
-                      <td className="px-2.5 py-1.5"><input value={l.designation} onChange={(e) => majLigne(i, { designation: e.target.value })} placeholder="ex. Licence MedAssur — module Contrats" className="w-full bg-transparent outline-none" /></td>
+                      <td className="px-2.5 py-1.5"><input value={l.designation} onChange={(e) => majLigne(i, { designation: e.target.value })} placeholder="ex. Licence MEDASSUR+ — module Contrats" className="w-full bg-transparent outline-none" /></td>
                       <td className="px-2.5 py-1.5"><input type="number" min={0.01} step="0.01" value={l.quantite ?? 1} onChange={(e) => majLigne(i, { quantite: Number(e.target.value) })} className="w-full bg-transparent outline-none text-right" /></td>
                       <td className="px-2.5 py-1.5"><input type="number" min={0} value={l.prixUnitaire || ""} onChange={(e) => majLigne(i, { prixUnitaire: Number(e.target.value) })} className="w-full bg-transparent outline-none text-right" /></td>
                       <td className="px-2.5 py-1.5 text-right text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmt((l.quantite ?? 1) * (l.prixUnitaire || 0))}</td>

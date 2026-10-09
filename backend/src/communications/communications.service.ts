@@ -142,7 +142,7 @@ export class CommunicationsService {
           id: randomUUID(), canal: "SMS", destinataireType: "Prestataire", destinataireId: p.id,
           destinataireNom: p.nom, destinataireContact: telephone,
           objet: "Mise à jour du réseau — liste des clients actualisée",
-          contenu: `Bonjour, un nouveau contrat vient d'être activé (${nomClientDeclencheur}). Veuillez trouver ci-joint la liste actualisée des clients MedAssur avec leurs taux de couverture et plafond de chambre.`,
+          contenu: `Bonjour, un nouveau contrat vient d'être activé (${nomClientDeclencheur}). Veuillez trouver ci-joint la liste actualisée des clients MEDASSUR+ avec leurs taux de couverture et plafond de chambre.`,
           pieceJointe: fichier, statut: this.simulerEnvoi(), declencheur: "NouveauContrat",
         },
       });

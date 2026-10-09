@@ -484,7 +484,7 @@ export default function TraiterBonView() {
                   <span className="font-semibold text-foreground">Total : {totalMontant.toLocaleString("fr-FR")} FCFA</span>
                   {apercusPrets ? (
                     <>
-                      <span className="text-muted-foreground">Part MedAssur : <span className="font-medium text-foreground">{totalBase.toLocaleString("fr-FR")} FCFA</span></span>
+                      <span className="text-muted-foreground">Part MEDASSUR+ : <span className="font-medium text-foreground">{totalBase.toLocaleString("fr-FR")} FCFA</span></span>
                       <span className="text-muted-foreground">Part assuré : <span className="font-medium text-foreground">{totalResteACharge.toLocaleString("fr-FR")} FCFA</span></span>
                     </>
                   ) : (

@@ -21,5 +21,5 @@ export function PortailPrestatairePlaceholder({ titre, description }: Placeholde
   );
 }
 
-export const PrestataireContactsView = () => <PortailPrestatairePlaceholder titre="Contacts & Interlocuteurs" description="Vos interlocuteurs chez MedAssur et les organismes partenaires." />;
+export const PrestataireContactsView = () => <PortailPrestatairePlaceholder titre="Contacts & Interlocuteurs" description="Vos interlocuteurs chez MEDASSUR+ et les organismes partenaires." />;
 export const PrestataireLogistiqueView = () => <PortailPrestatairePlaceholder titre="Logistique" description="Gestion des ressources et équipements de l'établissement." />;

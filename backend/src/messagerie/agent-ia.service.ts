@@ -1178,7 +1178,7 @@ export class MessagerieAgentIaService {
     // n'existe pas ou n'a pas de nom — comportement historique inchangé
     // pour la société bootstrap et tout contexte sans société.
     const parametres = await this.prisma.parametresEntreprise.findUnique({ where: { id: conversation.societeId ?? "societe-bootstrap" } });
-    const nomEntreprise = parametres?.nom?.trim() || "MedAssur";
+    const nomEntreprise = parametres?.nom?.trim() || "MEDASSUR+";
     const ctx: OutilContexte = {
       demandeurId: demandeur.id, demandeurRole: demandeur.roleId, assureSanteId: demandeur.assureSanteId,
       prestataireId: demandeur.prestataireId, nomEntreprise, societeId: conversation.societeId,

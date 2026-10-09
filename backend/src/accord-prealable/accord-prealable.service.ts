@@ -366,7 +366,7 @@ export class AccordPrealableService {
         // l'application". Décision prise par un gestionnaire humain — le cas
         // "décidé par Ariana" est déjà couvert par l'annonce en conversation
         // (voir agent-ia.service.ts repondre()).
-        this.pushNotifications.envoyerAUtilisateur(compte.id, "MedAssur", `Votre demande de prise en charge a été ${libelle}.`, { accordId: id }).catch(() => undefined);
+        this.pushNotifications.envoyerAUtilisateur(compte.id, "MEDASSUR+", `Votre demande de prise en charge a été ${libelle}.`, { accordId: id }).catch(() => undefined);
       }
       const telephone = accord.assure.telephone
         ?? (accord.assure.familleId

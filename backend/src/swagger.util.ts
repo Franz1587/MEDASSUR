@@ -14,9 +14,9 @@ import type { Request, Response, NextFunction } from "express";
 
 export function buildOpenApiDocument(app: INestApplication) {
   const config = new DocumentBuilder()
-    .setTitle("MedAssur API")
+    .setTitle("MEDASSUR+ API")
     .setDescription(
-      "API du backend MedAssur (NestJS/Prisma) — gestion d'assurance santé (contrats, prises en charge, facturation, règlement, comptabilité, portails externes). " +
+      "API du backend MEDASSUR+ (NestJS/Prisma) — gestion d'assurance santé (contrats, prises en charge, facturation, règlement, comptabilité, portails externes). " +
       "Authentification : obtenir un jeton via POST /api/auth/login, puis cliquer sur \"Authorize\" ci-dessus et coller le jeton (sans le préfixe \"Bearer \").",
     )
     .setVersion("1.0")
@@ -43,6 +43,6 @@ export function protegerSwagger(req: Request, res: Response, next: NextFunction)
     const [fourni, motDePasseFourni] = Buffer.from(header.slice(6), "base64").toString("utf8").split(":");
     if (fourni === user && motDePasseFourni === pass) return next();
   }
-  res.setHeader("WWW-Authenticate", "Basic realm=\"MedAssur API docs\"");
+  res.setHeader("WWW-Authenticate", "Basic realm=\"MEDASSUR+ API docs\"");
   res.status(401).send("Authentification requise.");
 }

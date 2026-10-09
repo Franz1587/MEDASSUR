@@ -201,13 +201,13 @@ export function PortalShell({ meta }: { meta: PortalMeta }) {
       >
         <div className="h-16 flex-shrink-0 flex items-center gap-2.5 px-4 border-b border-sidebar-border/85">
           <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center flex-shrink-0 shadow-sm p-1.5">
-            <img src={logoMark} alt="MedAssur" className="w-full h-full object-contain" />
+            <img src={logoMark} alt="MEDASSUR+" className="w-full h-full object-contain" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <h1 className="text-[13.5px] font-bold text-sidebar-foreground truncate">{meta.label}</h1>
             </div>
-            <Badge variant="gold">MedAssur</Badge>
+            <Badge variant="gold">MEDASSUR+</Badge>
           </div>
           <button
             type="button"

@@ -120,9 +120,9 @@ export const chapitresMedecin: GuideChapitre[] = [
     titre: "Messagerie",
     sections: [
       {
-        titre: "Échanger directement avec MedAssur",
+        titre: "Échanger directement avec MEDASSUR+",
         texte: [
-          "La « Messagerie » vous permet d'ouvrir une conversation directe avec MedAssur — utile pour toute question qui ne relève pas d'un dossier patient (support, question administrative…). Contrairement à la messagerie interne, il n'y a pas ici de distinction « File d'attente »/« Mes conversations » : vous voyez directement la liste de vos propres conversations.",
+          "La « Messagerie » vous permet d'ouvrir une conversation directe avec MEDASSUR+ — utile pour toute question qui ne relève pas d'un dossier patient (support, question administrative…). Contrairement à la messagerie interne, il n'y a pas ici de distinction « File d'attente »/« Mes conversations » : vous voyez directement la liste de vos propres conversations.",
         ],
         image: img("medecin-08-messagerie.png"),
         etapes: [

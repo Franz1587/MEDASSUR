@@ -124,7 +124,7 @@ export const chapitresPrestataire: GuideChapitre[] = [
           },
           {
             titre: "Sélectionner les lignes à traiter et fixer le tarif",
-            texte: "Une fois le bon ouvert, chaque ligne prescrite est affichée avec son libellé et, si renseignée, sa posologie. Cochez les lignes à traiter aujourd'hui — la quantité et, si un prix de référence existe au catalogue, le montant sont pré-remplis au reste disponible, mais restent librement modifiables (la quantité ne peut jamais dépasser le reste à servir). Dès qu'une ligne est cochée, sa quote-part se calcule et s'affiche automatiquement : base remboursée par MedAssur, taux appliqué et reste à charge du patient. Un bandeau de totaux récapitule, pour l'ensemble de la sélection, le montant total, la part MedAssur et la part assuré. Réglez la Date puis cliquez sur « Traiter la sélection » — une facture est enregistrée automatiquement à partir des lignes cochées.",
+            texte: "Une fois le bon ouvert, chaque ligne prescrite est affichée avec son libellé et, si renseignée, sa posologie. Cochez les lignes à traiter aujourd'hui — la quantité et, si un prix de référence existe au catalogue, le montant sont pré-remplis au reste disponible, mais restent librement modifiables (la quantité ne peut jamais dépasser le reste à servir). Dès qu'une ligne est cochée, sa quote-part se calcule et s'affiche automatiquement : base remboursée par MEDASSUR+, taux appliqué et reste à charge du patient. Un bandeau de totaux récapitule, pour l'ensemble de la sélection, le montant total, la part MEDASSUR+ et la part assuré. Réglez la Date puis cliquez sur « Traiter la sélection » — une facture est enregistrée automatiquement à partir des lignes cochées.",
           },
           {
             titre: "Accéder à la feuille de soins / d'examen du bon",
@@ -151,7 +151,7 @@ export const chapitresPrestataire: GuideChapitre[] = [
       {
         titre: "Rubrique pas encore développée",
         texte: [
-          "L'écran « Contacts & Interlocuteurs » affiche actuellement un message « Bientôt disponible » — cette rubrique, destinée à présenter vos interlocuteurs chez MedAssur et les organismes partenaires, n'est pas encore fonctionnelle à ce jour.",
+          "L'écran « Contacts & Interlocuteurs » affiche actuellement un message « Bientôt disponible » — cette rubrique, destinée à présenter vos interlocuteurs chez MEDASSUR+ et les organismes partenaires, n'est pas encore fonctionnelle à ce jour.",
         ],
         image: img("prestataire-05-contacts.png"),
       },
@@ -242,9 +242,9 @@ export const chapitresPrestataire: GuideChapitre[] = [
     titre: "Messagerie",
     sections: [
       {
-        titre: "Échanger directement avec MedAssur",
+        titre: "Échanger directement avec MEDASSUR+",
         texte: [
-          "La « Messagerie » du portail prestataire liste vos conversations avec MedAssur (par exemple au sujet d'un règlement), chacune avec un statut (« En cours »…). Contrairement à la messagerie interne, il n'y a pas de distinction « File d'attente »/« Mes conversations » côté externe : vous voyez uniquement vos propres échanges. Toute réponse peut provenir de l'assistant IA (identité « Ariana ») ou d'un agent humain qui reprend la main de façon transparente, sans que cela change l'apparence de la conversation.",
+          "La « Messagerie » du portail prestataire liste vos conversations avec MEDASSUR+ (par exemple au sujet d'un règlement), chacune avec un statut (« En cours »…). Contrairement à la messagerie interne, il n'y a pas de distinction « File d'attente »/« Mes conversations » côté externe : vous voyez uniquement vos propres échanges. Toute réponse peut provenir de l'assistant IA (identité « Ariana ») ou d'un agent humain qui reprend la main de façon transparente, sans que cela change l'apparence de la conversation.",
           "Cliquez sur une conversation dans la colonne de gauche pour l'ouvrir et lire les messages échangés ; le panneau de droite affiche « Sélectionnez une conversation » tant qu'aucune n'est choisie.",
         ],
         image: img("prestataire-09-messagerie.png"),

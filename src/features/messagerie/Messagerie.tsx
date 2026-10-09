@@ -54,7 +54,7 @@ function statutLabel(statut: string, interne: boolean): string {
 function auteurLabel(m: Message, interne: boolean): string {
   if (!interne) return "Ariana";
   if (m.auteurType === "IA") return "Ariana";
-  if (m.auteurType === "Agent") return "Agent MedAssur";
+  if (m.auteurType === "Agent") return "Agent MEDASSUR+";
   return "Vous";
 }
 
@@ -251,7 +251,7 @@ export default function MessagerieView() {
         <div>
           <h1 className="text-[1.2rem] font-bold text-foreground flex items-center gap-2"><MessageCircle className="w-5 h-5 text-primary" />Messagerie</h1>
           <p className="text-[12.5px] text-muted-foreground mt-0.5">
-            {interne ? "Échanges avec les assurés, clients et prestataires." : "Échangez directement avec MedAssur."}
+            {interne ? "Échanges avec les assurés, clients et prestataires." : "Échangez directement avec MEDASSUR+."}
           </p>
         </div>
         {!interne && (

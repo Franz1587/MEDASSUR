@@ -22,43 +22,43 @@ export type GuideProfil = "global" | "interne" | "super_admin" | "assure" | "cli
 const GUIDE_PAR_PROFIL: Record<GuideProfil, { chapitres: GuideChapitre[]; titre: string; description: string }> = {
   global: {
     chapitres: chapitresGlobal,
-    titre: "Guide global MedAssur",
+    titre: "Guide global MEDASSUR+",
     description: "Vue d’ensemble de la plateforme, de la navigation et des différents espaces utilisateur.",
   },
   interne: {
     chapitres: chapitresInterne,
     titre: "Espace Société",
-    description: "Comment exploiter MedAssur au quotidien, écran par écran, jusqu'au moindre bouton.",
+    description: "Comment exploiter MEDASSUR+ au quotidien, écran par écran, jusqu'au moindre bouton.",
   },
   super_admin: {
     chapitres: chapitresSuperAdmin,
     titre: "Espace Super Admin",
-    description: "Comment administrer la plateforme MedAssur depuis le compte Super Admin.",
+    description: "Comment administrer la plateforme MEDASSUR+ depuis le compte Super Admin.",
   },
   assure: {
     chapitres: chapitresAssure,
     titre: "Espace Assuré",
-    description: "Comment utiliser votre espace assuré MedAssur : carte, garanties, prises en charge, remboursements et carnet de santé.",
+    description: "Comment utiliser votre espace assuré MEDASSUR+ : carte, garanties, prises en charge, remboursements et carnet de santé.",
   },
   client: {
     chapitres: chapitresClient,
     titre: "Espace Client",
-    description: "Comment gérer vos contrats, vos bénéficiaires et vos demandes depuis votre espace souscripteur MedAssur.",
+    description: "Comment gérer vos contrats, vos bénéficiaires et vos demandes depuis votre espace souscripteur MEDASSUR+.",
   },
   medecin: {
     chapitres: chapitresMedecin,
     titre: "Espace Médecin",
-    description: "Comment utiliser votre espace médecin prescripteur MedAssur : file d'attente, consultations et dossiers patients.",
+    description: "Comment utiliser votre espace médecin prescripteur MEDASSUR+ : file d'attente, consultations et dossiers patients.",
   },
   prestataire: {
     chapitres: chapitresPrestataire,
     titre: "Espace Prestataire",
-    description: "Comment utiliser votre espace prestataire de santé MedAssur : patients, prestations et traitement des bons.",
+    description: "Comment utiliser votre espace prestataire de santé MEDASSUR+ : patients, prestations et traitement des bons.",
   },
   mobile: {
     chapitres: chapitresMobile,
     titre: "Application mobile",
-    description: "Comment utiliser l’application mobile MedAssur pour consulter sa carte, ses garanties et ses demandes de remboursement.",
+    description: "Comment utiliser l’application mobile MEDASSUR+ pour consulter sa carte, ses garanties et ses demandes de remboursement.",
   },
 };
 

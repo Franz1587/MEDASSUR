@@ -154,7 +154,7 @@ export default function ImportDonneesView() {
     <div>
       <ModuleHeader
         title="Import de données"
-        subtitle="Reprise d'antériorité — pour une société d'assurance qui bascule vers MedAssur"
+        subtitle="Reprise d'antériorité — pour une société d'assurance qui bascule vers MEDASSUR+"
         icon={UploadCloud}
       />
 

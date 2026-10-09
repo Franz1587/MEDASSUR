@@ -151,7 +151,7 @@ export class SocietesService {
     if (smsEnvoye) {
       await this.messaging.envoyer(
         dto.telephone,
-        `Vos accès administrateur MedAssur pour ${dto.nom.trim()}\nIdentifiant : ${dto.adminEmail}\nMot de passe temporaire : ${MOT_DE_PASSE_INITIAL}\nCe mot de passe vous sera demandé de changer dès la première connexion.`,
+        `Vos accès administrateur MEDASSUR+ pour ${dto.nom.trim()}\nIdentifiant : ${dto.adminEmail}\nMot de passe temporaire : ${MOT_DE_PASSE_INITIAL}\nCe mot de passe vous sera demandé de changer dès la première connexion.`,
       );
     }
 

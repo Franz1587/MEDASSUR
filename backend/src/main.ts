@@ -122,6 +122,6 @@ async function bootstrap() {
   }
   const port = process.env.PORT ?? 3001;
   await app.listen(port);
-  console.log(`MedAssur API listening on http://localhost:${port}/api`);
+  console.log(`MEDASSUR+ API listening on http://localhost:${port}/api`);
 }
 bootstrap();

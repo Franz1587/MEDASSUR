@@ -11,7 +11,7 @@ import type { LettrageClient, LettrageFournisseur } from "@/types/lettrage";
 // LA RUCHE... réelles". Ce texte-ci reste générique par nature (un accueil),
 // rien à brancher sur une API.
 const IA_WELCOME_MESSAGE =
-  "Bonjour ! Je suis l'assistant IA de MedAssur. Je peux vous aider à rédiger des courriers, expliquer des garanties, répondre à des questions de gestion santé/CIMA, ou faire le lettrage d'un compte. Comment puis-je vous aider ?";
+  "Bonjour ! Je suis l'assistant IA de MEDASSUR+. Je peux vous aider à rédiger des courriers, expliquer des garanties, répondre à des questions de gestion santé/CIMA, ou faire le lettrage d'un compte. Comment puis-je vous aider ?";
 
 const IA_SUGGESTIONS = [
   "Rédiger un courrier de relance impayé",

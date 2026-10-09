@@ -1199,7 +1199,7 @@ export class DocumentsService {
         basLigne2 = Math.max(basLigne2, y2 + 1 + 20);
       }
       doc.fillColor("#1a1a1a").fontSize(8.2).font("Helvetica-Bold")
-        .text("MedAssur", decalageTexte, y2 + 7, { width: CARD_WIDTH - decalageTexte - 8, lineBreak: false });
+        .text("MEDASSUR+", decalageTexte, y2 + 7, { width: CARD_WIDTH - decalageTexte - 8, lineBreak: false });
 
       // Lignes 3-4 (éditables) — téléphone d'assistance puis explication du
       // QR Code. ⚠️ Piège réel corrigé ici : faire dépendre le rectangle

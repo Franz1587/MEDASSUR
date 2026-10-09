@@ -245,7 +245,7 @@ export class PrestatairesService {
   // signal le plus honnête accessible sans changer ce contrat partagé.
   private async envoyerIdentifiants(telephone: string | null, posteLabel: string, email: string, motDePasse: string): Promise<boolean> {
     if (!this.messaging.numeroValide(telephone)) return false;
-    await this.messaging.envoyer(telephone, `Portail prestataire MedAssur — compte "${posteLabel}" — identifiant : ${email} / mot de passe : ${motDePasse}`);
+    await this.messaging.envoyer(telephone, `Portail prestataire MEDASSUR+ — compte "${posteLabel}" — identifiant : ${email} / mot de passe : ${motDePasse}`);
     return true;
   }
 
@@ -418,7 +418,7 @@ export class PrestatairesService {
   ): Promise<{ statut: "trouve"; lat: number; lon: number; ville: string | null } | { statut: "introuvable" } | { statut: "erreur" }> {
     await this.attendreLimiteNominatim();
     const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=${encodeURIComponent(q)}`;
-    const res = await fetch(url, { headers: { "User-Agent": "MedAssur/1.0 (contact: contact@medassur.ga)" } });
+    const res = await fetch(url, { headers: { "User-Agent": "MEDASSUR+/1.0 (contact: contact@medassur.ga)" } });
     if (res.status === 429) {
       if (tentative >= 3) return { statut: "erreur" };
       await new Promise((r) => setTimeout(r, 3000 * (tentative + 1)));

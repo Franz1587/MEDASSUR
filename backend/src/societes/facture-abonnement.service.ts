@@ -136,7 +136,7 @@ export class FactureAbonnementService {
       const montantModules = await this.calculerMontantPeriode(societeId);
       const periodeFin = dto.periodeFin ?? ajouterMois(new Date(), mois);
       if (montantModules != null) {
-        lignes.push({ rubriqueCode: "abonnement-modules", designation: `Abonnement MedAssur (${societe.cycleFacturation}) — jusqu'au ${periodeFin}`, quantite: 1, prixUnitaire: montantModules });
+        lignes.push({ rubriqueCode: "abonnement-modules", designation: `Abonnement MEDASSUR+ (${societe.cycleFacturation}) — jusqu'au ${periodeFin}`, quantite: 1, prixUnitaire: montantModules });
       }
 
       // Licence annuelle par personne assurée (2026-09) — voir demande
@@ -157,7 +157,7 @@ export class FactureAbonnementService {
       }
 
       if (lignes.length === 0) {
-        return [{ rubriqueCode: "abonnement-modules", designation: `Abonnement MedAssur — ${societe.nom} (montant à saisir)`, quantite: 1, prixUnitaire: 0 }];
+        return [{ rubriqueCode: "abonnement-modules", designation: `Abonnement MEDASSUR+ — ${societe.nom} (montant à saisir)`, quantite: 1, prixUnitaire: 0 }];
       }
       return lignes;
     }
@@ -571,7 +571,7 @@ export class FactureAbonnementService {
   async genererPdf(id: string, res: Response): Promise<void> {
     const facture = await this.findOne(id);
     const emetteur = await this.prisma.parametresEntreprise.findUnique({ where: { id: "default" } });
-    const nomEmetteur = emetteur?.nom ?? "MedAssur";
+    const nomEmetteur = emetteur?.nom ?? "MEDASSUR+";
     const couleur = emetteur?.couleurPrimaire ?? "#0f4c81";
     // Intl "fr-FR" sépare les milliers par une espace fine insécable
     // (U+202F), absente de la police Helvetica standard de pdfkit — elle

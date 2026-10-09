@@ -183,7 +183,7 @@ export class MessagerieService {
     // couvert dans agent-ia.service.ts repondre()). Jamais vers soi-même :
     // seul le demandeur d'origine (l'externe) reçoit cette notification.
     if (auteurType === "Agent" && cree.contenu) {
-      this.pushNotifications.envoyerAUtilisateur(conversation.demandeurId, "MedAssur", cree.contenu.slice(0, 180), { conversationId: id }).catch(() => undefined);
+      this.pushNotifications.envoyerAUtilisateur(conversation.demandeurId, "MEDASSUR+", cree.contenu.slice(0, 180), { conversationId: id }).catch(() => undefined);
     }
     return cree;
   }

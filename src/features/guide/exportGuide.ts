@@ -110,7 +110,7 @@ export async function exporterGuidePdf(
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(24);
-  doc.text("MedAssur", margin, 70);
+  doc.text("MEDASSUR+", margin, 70);
   doc.setFontSize(16);
   doc.text(titre, margin, 100);
   doc.setFontSize(10);
@@ -198,10 +198,10 @@ export async function exporterGuidePdf(
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
     doc.setTextColor(140, 140, 140);
-    doc.text(`MedAssur — Guide d'utilisateur — ${p} / ${total}`, pageW / 2, pageH - 18, { align: "center" });
+    doc.text(`MEDASSUR+ — Guide d'utilisateur — ${p} / ${total}`, pageW / 2, pageH - 18, { align: "center" });
   }
 
-  doc.save(`MedAssur-${titre.replace(/[^\w-]+/g, "-")}.pdf`);
+  doc.save(`MEDASSUR-PLUS-${titre.replace(/[^\w-]+/g, "-")}.pdf`);
 }
 
 // ── Word (docx) ────────────────────────────────────────────────────────
@@ -213,7 +213,7 @@ export async function exporterGuideWord(
   await precharger(chapitres, onProgress);
 
   const enfants: (Paragraph)[] = [
-    new Paragraph({ text: "MedAssur", heading: HeadingLevel.TITLE }),
+    new Paragraph({ text: "MEDASSUR+", heading: HeadingLevel.TITLE }),
     new Paragraph({ text: titre, heading: HeadingLevel.HEADING_1 }),
     new Paragraph({ text: `Généré le ${new Date().toLocaleDateString("fr-FR")}`, spacing: { after: 400 } }),
   ];
@@ -271,5 +271,5 @@ export async function exporterGuideWord(
 
   const doc = new Document({ sections: [{ children: enfants }] });
   const blob = await Packer.toBlob(doc);
-  saveAs(blob, `MedAssur-${titre.replace(/[^\w-]+/g, "-")}.docx`);
+  saveAs(blob, `MEDASSUR-PLUS-${titre.replace(/[^\w-]+/g, "-")}.docx`);
 }

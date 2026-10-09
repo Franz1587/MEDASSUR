@@ -10,7 +10,7 @@ import logoMark from "@/assets/logo-mark.png";
 // la fiche Play Store existe : remplacer cette URL par
 // "https://play.google.com/store/apps/details?id=com.medassur.app" — rien
 // d'autre dans le composant n'a besoin de bouger.
-const LIEN_TELECHARGEMENT_ANDROID = "/downloads/MedAssur.apk";
+const LIEN_TELECHARGEMENT_ANDROID = "/downloads/MedAssur.apk"; // nom de fichier historique, inchangé côté serveur
 
 // Mode démo retiré de l'écran de connexion (2026-09) — voir demande
 // utilisateur : "masque à présent tous les compte demo qui apparaissent
@@ -32,7 +32,7 @@ export function LoginView() {
       >
         <ProfessionsCarousel />
         <div className="absolute top-10 left-10 bg-white rounded-2xl px-5 py-4 inline-block shadow-[0_16px_34px_rgba(6,49,81,0.28)] w-fit z-10">
-          <img src={logoFull} alt="MedAssur" className="h-20 w-auto" />
+          <img src={logoFull} alt="MEDASSUR+" className="h-20 w-auto" />
         </div>
       </div>
 
@@ -40,9 +40,9 @@ export function LoginView() {
       <div className="flex-1 flex flex-col items-center justify-center p-6 relative z-10">
         <div className="lg:hidden flex items-center gap-2.5 mb-8">
           <div className="bg-white rounded-xl p-1.5 shadow-sm border border-border/70 flex-shrink-0">
-            <img src={logoMark} alt="MedAssur" className="h-8 w-auto" />
+            <img src={logoMark} alt="MEDASSUR+" className="h-8 w-auto" />
           </div>
-          <p className="text-base font-bold text-foreground" style={{ fontFamily: "'Outfit', sans-serif" }}>MedAssur</p>
+          <p className="text-base font-bold text-foreground" style={{ fontFamily: "'Outfit', sans-serif" }}>MEDASSUR+</p>
         </div>
 
         <div className="hidden lg:block w-full max-w-sm mb-7">
@@ -85,7 +85,7 @@ export function LoginView() {
           </span>
         </a>
 
-        <p className="hidden lg:block mt-6 w-full max-w-sm text-xs text-muted-foreground/80">© 2026 MedAssur</p>
+        <p className="hidden lg:block mt-6 w-full max-w-sm text-xs text-muted-foreground/80">© 2026 MEDASSUR+</p>
       </div>
     </div>
   );

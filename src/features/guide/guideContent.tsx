@@ -1206,7 +1206,7 @@ export const chapitresSuperAdmin: GuideChapitre[] = [
       {
         titre: "Vue 360° de la plateforme",
         texte: [
-          "Le compte Super Admin est celui de l'éditeur de MedAssur — il voit et administre l'ensemble des sociétés qui exploitent l'application (courtiers, mutuelles, compagnies), contrairement à un compte Administrateur qui ne voit que les données de sa propre société.",
+          "Le compte Super Admin est celui de l'éditeur de MEDASSUR+ — il voit et administre l'ensemble des sociétés qui exploitent l'application (courtiers, mutuelles, compagnies), contrairement à un compte Administrateur qui ne voit que les données de sa propre société.",
           "Le tableau de bord résume le nombre de sociétés actives et leur activité globale sur la plateforme, avec des accès rapides vers Plans d'abonnement, Comptabilité & Facturation et Performance & Usage.",
         ],
         image: img("20-super-admin-home.png"),
@@ -1220,7 +1220,7 @@ export const chapitresSuperAdmin: GuideChapitre[] = [
       {
         titre: "Créer et administrer une société cliente",
         texte: [
-          "L'écran « Sociétés » liste toutes les sociétés utilisatrices de MedAssur, leur plan d'abonnement, leur nombre de comptes utilisateurs et leur statut. Sélectionner une société ouvre son détail (onglets « Aperçu » et « Utilisateurs »).",
+          "L'écran « Sociétés » liste toutes les sociétés utilisatrices de MEDASSUR+, leur plan d'abonnement, leur nombre de comptes utilisateurs et leur statut. Sélectionner une société ouvre son détail (onglets « Aperçu » et « Utilisateurs »).",
         ],
         image: img("21-societes.png"),
         etapes: [

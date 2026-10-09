@@ -31,7 +31,7 @@ export async function enregistrerPushToken(): Promise<void> {
       // notification arriver silencieusement — voir aussi channelId ajouté
       // côté serveur (backend/src/notifications/push-notifications.service.ts).
       await Notifications.setNotificationChannelAsync("default", {
-        name: "MedAssur",
+        name: "MEDASSUR+",
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 200, 100, 200],
         lightColor: "#0a426f",

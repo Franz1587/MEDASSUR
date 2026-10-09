@@ -128,14 +128,14 @@ export function MessagerieListScreen() {
 
   return (
     <Screen onRefresh={() => load()} refreshing={loading}>
-      <ScreenHeader title="Messagerie" subtitle="Échangez directement avec MedAssur" />
+      <ScreenHeader title="Messagerie" subtitle="Échangez directement avec MEDASSUR+" />
 
       <PrimaryButton label="Nouvelle conversation" icon="add" onPress={() => setModalOuvert(true)} />
 
       <View style={{ height: spacing.lg }} />
 
       {!conversations || conversations.length === 0 ? (
-        <EmptyState icon="chatbubbles-outline" title="Aucune conversation" subtitle="Démarrez une conversation avec MedAssur." />
+        <EmptyState icon="chatbubbles-outline" title="Aucune conversation" subtitle="Démarrez une conversation avec MEDASSUR+." />
       ) : (
         [...conversations].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((c) => (
           <Pressable

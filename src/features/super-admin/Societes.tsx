@@ -307,7 +307,7 @@ export default function SuperAdminSocietesView() {
   return (
     <div className="p-6">
       <ModuleHeader
-        title="Sociétés" subtitle="Sociétés d'assurance utilisant MedAssur comme outil métier" icon={Building2}
+        title="Sociétés" subtitle="Sociétés d'assurance utilisant MEDASSUR+ comme outil métier" icon={Building2}
         actions={<Btn variant="primary" onClick={openCreate}><Plus className="w-4 h-4" />Nouvelle société</Btn>}
       />
 

@@ -133,7 +133,7 @@ export default function ParametresEntrepriseView() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <label className="block">
               <div className={labelCls}>Nom (courtier / compagnie)</div>
-              <input value={form.nom} onChange={(e) => set("nom", e.target.value)} className={fieldCls} placeholder="ex: MedAssur" />
+              <input value={form.nom} onChange={(e) => set("nom", e.target.value)} className={fieldCls} placeholder="ex: MEDASSUR+" />
             </label>
             <label className="block">
               <div className={labelCls}>Sous-titre</div>

@@ -32,7 +32,7 @@ export class SocieteUsersService {
   // utilisateur : "je ne reçois toujours pas de sms... pour le compte de
   // la ruche excellence le courtier et la société".
   private construireMessageAcces(email: string, motDePasse: string): string {
-    return `Vos accès MedAssur\nIdentifiant : ${email}\nMot de passe temporaire : ${motDePasse}\nCe mot de passe vous sera demandé de changer dès la première connexion.`;
+    return `Vos accès MEDASSUR+\nIdentifiant : ${email}\nMot de passe temporaire : ${motDePasse}\nCe mot de passe vous sera demandé de changer dès la première connexion.`;
   }
 
   private async societe(societeId: string) {
