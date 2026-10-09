@@ -96,6 +96,11 @@ function aujourdhuiFr(): string {
 function normaliserNom(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z\s]/g, " ").trim().replace(/\s+/g, " ");
 }
+// Normalise un numéro de téléphone pour comparaison : retire espaces, tirets,
+// parenthèses et préfixes internationaux (+241 / 00241) — reste les chiffres.
+function normaliserTelephone(s: string): string {
+  return s.replace(/[\s\-().]/g, "").replace(/^\+241/, "").replace(/^00241/, "").replace(/\D/g, "");
+}
 function nomsCorrespondent(attendu: string, lu: string): boolean {
   const a = normaliserNom(attendu);
   const l = normaliserNom(lu);
@@ -232,6 +237,9 @@ const OUTIL_DECIDER_CHAMBRE: Anthropic.Tool = {
       nomPatientLuSurOrdonnance: { type: "string", description: "Nom du patient tel qu'écrit sur la déclaration d'hospitalisation (la première pièce reçue)." },
       nomPatientLuSurDevis: { type: "string", description: "Nom du patient tel qu'écrit sur le devis (la seconde pièce reçue)." },
       nomPrestataireLuSurDevis: { type: "string", description: "Nom de l'établissement émetteur tel qu'écrit sur le devis (en-tête/logo)." },
+      telephonePrestataireLuSurDevis: { type: "string", description: "Numéro de téléphone de l'établissement lu sur le devis, si présent (laisser vide sinon)." },
+      villePrestataireLueSurDevis: { type: "string", description: "Ville de l'établissement lue sur le devis ou l'en-tête, si présente (laisser vide sinon)." },
+      adressePrestataireLueSurDevis: { type: "string", description: "Adresse de l'établissement lue sur le devis, si présente (laisser vide sinon)." },
     },
     required: ["accordId", "montantChambreParJour", "nombreJours", "nomPatientLuSurOrdonnance", "nomPatientLuSurDevis", "nomPrestataireLuSurDevis"],
   },
@@ -262,6 +270,9 @@ const OUTIL_TRAITER_GARANTIE: Anthropic.Tool = {
       nomPatientLuSurOrdonnance: { type: "string", description: "Nom du patient tel qu'écrit sur l'ordonnance (la première pièce reçue)." },
       nomPatientLuSurDevis: { type: "string", description: "Nom du patient tel qu'écrit sur le devis (la seconde pièce reçue)." },
       nomPrestataireLuSurDevis: { type: "string", description: "Nom de l'établissement/praticien émetteur tel qu'écrit sur le devis (en-tête/logo)." },
+      telephonePrestataireLuSurDevis: { type: "string", description: "Numéro de téléphone de l'établissement lu sur le devis, si présent (laisser vide sinon)." },
+      villePrestataireLueSurDevis: { type: "string", description: "Ville de l'établissement lue sur le devis ou l'en-tête, si présente (laisser vide sinon)." },
+      adressePrestataireLueSurDevis: { type: "string", description: "Adresse de l'établissement lue sur le devis, si présente (laisser vide sinon)." },
     },
     required: ["accordId", "montantLuSurDevis", "nomPatientLuSurOrdonnance", "nomPatientLuSurDevis", "nomPrestataireLuSurDevis"],
   },
@@ -721,14 +732,21 @@ export class MessagerieAgentIaService {
         const patientOrdonnanceOk = tousFamilleChambre.some((m) => nomsCorrespondent(`${m.nom} ${m.prenom ?? ""}`.trim(), nomOrdonnanceChambre));
         const patientDevisOk = tousFamilleChambre.some((m) => nomsCorrespondent(`${m.nom} ${m.prenom ?? ""}`.trim(), nomDevisChambre));
 
-        let prestataireReel: { nom: string; statutConvention: string | null } | null = dossier.prestataireId
-          ? await this.prisma.prestataire.findUnique({ where: { id: dossier.prestataireId }, select: { nom: true, statutConvention: true } })
+        const selectPrestataire = { nom: true, statutConvention: true, telephone: true, adresse: true, ville: true } as const;
+        let prestataireReel: { nom: string; statutConvention: string | null; telephone: string | null; adresse: string | null; ville: string | null } | null = dossier.prestataireId
+          ? await this.prisma.prestataire.findUnique({ where: { id: dossier.prestataireId }, select: selectPrestataire })
           : null;
         if (!prestataireReel) {
-          prestataireReel = await this.prisma.prestataire.findFirst({ where: { nom: { contains: dossier.prestataire, mode: "insensitive" } }, select: { nom: true, statutConvention: true } });
+          prestataireReel = await this.prisma.prestataire.findFirst({ where: { nom: { contains: dossier.prestataire, mode: "insensitive" } }, select: selectPrestataire });
         }
         const nomLuPrestataire = String(args.nomPrestataireLuSurDevis ?? "");
-        const prestataireCorrespondDossier = nomsCorrespondent(dossier.prestataire, nomLuPrestataire);
+        const telLuPrestataire = normaliserTelephone(String(args.telephonePrestataireLuSurDevis ?? ""));
+        const adresseLuePrestataire = String(args.adressePrestataireLueSurDevis ?? "").trim();
+        const telReel = normaliserTelephone(prestataireReel?.telephone ?? "");
+        const prestataireCorrespondDossier =
+          nomsCorrespondent(dossier.prestataire, nomLuPrestataire) ||
+          (telLuPrestataire.length >= 6 && telReel.length >= 6 && telLuPrestataire === telReel) ||
+          (adresseLuePrestataire.length > 4 && !!prestataireReel?.adresse && nomsCorrespondent(adresseLuePrestataire, prestataireReel.adresse));
         const prestataireConventionne = prestataireReel?.statutConvention === "Conventionné";
 
         const identiteMismatchChambre = !patientOrdonnanceOk || !patientDevisOk;
@@ -841,14 +859,21 @@ export class MessagerieAgentIaService {
         const patientOrdonnanceOk = tousFamilleGarantie.some((m) => nomsCorrespondent(`${m.nom} ${m.prenom ?? ""}`.trim(), nomOrdonnanceGarantie));
         const patientDevisOk = tousFamilleGarantie.some((m) => nomsCorrespondent(`${m.nom} ${m.prenom ?? ""}`.trim(), nomDevisGarantie));
 
-        let prestataireReel: { nom: string; statutConvention: string | null } | null = dossier.prestataireId
-          ? await this.prisma.prestataire.findUnique({ where: { id: dossier.prestataireId }, select: { nom: true, statutConvention: true } })
+        const selectPrestataireGarantie = { nom: true, statutConvention: true, telephone: true, adresse: true, ville: true } as const;
+        let prestataireReel: { nom: string; statutConvention: string | null; telephone: string | null; adresse: string | null; ville: string | null } | null = dossier.prestataireId
+          ? await this.prisma.prestataire.findUnique({ where: { id: dossier.prestataireId }, select: selectPrestataireGarantie })
           : null;
         if (!prestataireReel) {
-          prestataireReel = await this.prisma.prestataire.findFirst({ where: { nom: { contains: dossier.prestataire, mode: "insensitive" } }, select: { nom: true, statutConvention: true } });
+          prestataireReel = await this.prisma.prestataire.findFirst({ where: { nom: { contains: dossier.prestataire, mode: "insensitive" } }, select: selectPrestataireGarantie });
         }
         const nomLuPrestataire = String(args.nomPrestataireLuSurDevis ?? "");
-        const prestataireCorrespondDossier = nomsCorrespondent(dossier.prestataire, nomLuPrestataire);
+        const telLuPrestataireGarantie = normaliserTelephone(String(args.telephonePrestataireLuSurDevis ?? ""));
+        const adresseLuePrestataireGarantie = String(args.adressePrestataireLueSurDevis ?? "").trim();
+        const telReelGarantie = normaliserTelephone(prestataireReel?.telephone ?? "");
+        const prestataireCorrespondDossier =
+          nomsCorrespondent(dossier.prestataire, nomLuPrestataire) ||
+          (telLuPrestataireGarantie.length >= 6 && telReelGarantie.length >= 6 && telLuPrestataireGarantie === telReelGarantie) ||
+          (adresseLuePrestataireGarantie.length > 4 && !!prestataireReel?.adresse && nomsCorrespondent(adresseLuePrestataireGarantie, prestataireReel.adresse));
         const prestataireConventionne = prestataireReel?.statutConvention === "Conventionné";
 
         // Montant déclaré vs montant réellement lu sur le devis (2026-08) —
