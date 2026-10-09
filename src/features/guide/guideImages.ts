@@ -1,9 +1,9 @@
-// Images du guide servies dynamiquement par le backend (2026-10) — les PNG
-// ne sont plus bundlés dans le build Vite. Cela permet de les mettre à jour
-// sur le VPS sans rebuilder le frontend (copier les nouvelles captures dans
-// backend/assets/guide/ suffit). L'endpoint GET /guide-assets/:filename est
-// public (pas d'auth) car les images sont chargées via <img src> côté client.
+// Images du guide (2026-10) — servies par l'API (/api/guide-assets/:filename)
+// avec Cache-Control: max-age=86400 (24 h). Après la première visite, toutes
+// les captures sont en cache navigateur : plus aucune requête réseau pour les
+// 20+ images d'un chapitre. Chemin public (pas d'auth), voir GuideAssetsController.
+const API = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 export function img(filename: string): string {
   if (!filename) return "";
-  return `/guide-assets/${filename}`;
+  return `${API}/guide-assets/${filename}`;
 }

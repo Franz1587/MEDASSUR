@@ -111,7 +111,16 @@ async function bootstrap() {
     // être revalidé.
     app.useStaticAssets(frontendDir, {
       setHeaders: (res, filePath) => {
-        if (path.basename(filePath) === "index.html") res.setHeader("Cache-Control", "no-cache");
+        const basename = path.basename(filePath);
+        if (basename === "index.html") {
+          res.setHeader("Cache-Control", "no-cache");
+        } else if (/\.[0-9a-f]{8,}\.(js|css|woff2?)$/i.test(basename)) {
+          // Fichiers JS/CSS/polices avec hash Vite dans le nom — immuables
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        } else {
+          // Images, SVG, assets sans hash (guide-assets/*.png…) — 24 h
+          res.setHeader("Cache-Control", "public, max-age=86400");
+        }
       },
     });
     app.use((req: Request, res: Response, next: NextFunction) => {
