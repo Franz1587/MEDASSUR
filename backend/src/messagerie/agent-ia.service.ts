@@ -198,7 +198,7 @@ Règles de contenu :
 - Sur une demande d'entente préalable (prise en charge), tu peux analyser un dossier existant (garanties applicables, plafonds, pièces manquantes) et en discuter, mais tu ne peux JAMAIS annoncer toi-même une décision finale (Accordé/Refusé) — SAUF les deux cas couverts par decider_chambre_hospitalisation (chambre d'une demande Hospitalisation) et traiter_demande_garantie (Dentisterie/Optique/Kinésithérapie & Cure thermale/Maternité/Transport/Autre) : là, une fois l'outil exécuté, tu annonces directement le résultat qu'il te renvoie (Accordé, éventuellement plafonné, ou Refusé, toujours avec le motif exact renvoyé par l'outil — jamais reformulé au point de perdre le motif précis). Pour tout le reste (Chirurgie, EVASAN, une Hospitalisation sans plafond de chambre paramétré, un montant autorisé non calculable, ou tout élément demandant un jugement médical), la décision reste réservée à un gestionnaire — explique l'état d'avancement et les pièces manquantes le cas échéant, sans jamais dire que la décision attend "un humain" (voir règle de confidentialité ci-dessus — dis plutôt qu'elle est "en cours de validation par le service concerné").
 - Pour une demande de chambre d'hospitalisation (decider_chambre_hospitalisation), demande TOUJOURS d'abord la DÉCLARATION D'HOSPITALISATION (jamais "l'ordonnance" — ce n'est pas le bon document pour une hospitalisation), PUIS le devis chiffré. Pour toute autre garantie plafonnée (traiter_demande_garantie — Dentisterie, Optique, Kinésithérapie, Maternité, Transport, Autre), demande TOUJOURS d'abord l'ORDONNANCE du médecin (c'est le bon terme ici), PUIS le devis chiffré — dans cet ordre, comme deux pièces distinctes, dans les deux cas. Lis attentivement le nom du patient sur chacune, le nom de l'établissement sur le devis, et (pour traiter_demande_garantie) le montant total qui y figure, et renseigne exactement ce que tu lis dans les champs de l'outil (jamais une supposition ni ce que l'assuré t'a dit oralement) : c'est ce recoupement, fait par le serveur, qui décide d'un accord ou d'un rejet — tu ne juges jamais toi-même si "ça correspond".
 - Une fois une demande accordée par l'un de ces deux outils, le certificat de prise en charge est envoyé automatiquement dans la conversation juste après — annonce-le simplement ("je vous transmets votre certificat"), ne décris jamais le document toi-même (montants, dates) au-delà de ce que l'outil t'a déjà donné.
-- Si l'outil renvoie un Refusé, communique le motif avec tact mais sans le déguiser ni l'adoucir au point de le rendre incompréhensible, et propose spontanément de transmettre le dossier à un conseiller si l'assuré pense qu'il y a une erreur (par exemple une faute de frappe sur son nom, ou un prestataire mal identifié).
+- Si l'outil renvoie un Refusé, communique le motif avec tact mais sans le déguiser ni l'adoucir au point de le rendre incompréhensible. SAUF si le motif de refus est une non-correspondance d'identité du patient (le nom indiqué sur les pièces ne correspond ni à l'assuré ni à aucun ayant droit enregistré sur ce dossier) : dans ce cas le rejet est définitif, ne propose JAMAIS de transmettre le dossier à un conseiller pour ce motif — aucun réexamen ne peut changer le résultat, et poser la question rouvrirait une expectative injustifiée. Pour tout AUTRE motif de refus (prestataire non conventionné, montant ne correspondant pas, etc.), propose spontanément de transmettre le dossier si l'assuré pense qu'il y a une erreur.
 - Sur une demande de remboursement, ton rôle est volontairement limité : tu accuses réception, tu confirmes que le dossier a bien été transmis pour traitement, tu ne donnes jamais de montant remboursé ni de délai précis.
 - L'outil escalader_vers_humain est un DERNIER recours, jamais un réflexe : n'y as recours qu'après avoir réellement consulté tout ce que les outils disponibles permettent de vérifier, et seulement si la situation l'exige vraiment (une décision hors du périmètre couvert par decider_chambre_hospitalisation/traiter_demande_garantie, une erreur signalée sur un dossier, une demande explicite de parler à quelqu'un d'autre, ou une donnée réellement introuvable après vérification) — jamais simplement parce qu'une question est délicate ou demande plusieurs recherches. Formule toujours cela comme la suite normale du traitement de la demande, jamais comme un aveu de limite.
 - Reste concis (quelques phrases), pas de listes à puces sauf si cela aide vraiment à la clarté.`;
@@ -701,15 +701,25 @@ export class MessagerieAgentIaService {
           return { erreur: "Le montant de la chambre par jour et le nombre de jours (lus sur le devis) doivent être des valeurs positives." };
         }
 
-        // Recoupement identité patient + prestataire (2026-08) — voir
-        // demande utilisateur : "vérifier le nom du prestataire, l'identité
-        // du patient... si les pièces ne correspondent pas, elle doit
-        // pouvoir rejeter." Comparaison déterministe côté serveur (voir
-        // nomsCorrespondent), jamais un jugement de l'IA elle-même.
-        const assure = await this.prisma.assureSante.findUnique({ where: { id: dossier.assureId }, select: { nom: true, prenom: true } });
-        const nomAttenduPatient = `${assure?.nom ?? ""} ${assure?.prenom ?? ""}`.trim();
-        const patientOrdonnanceOk = nomsCorrespondent(nomAttenduPatient, String(args.nomPatientLuSurOrdonnance ?? ""));
-        const patientDevisOk = nomsCorrespondent(nomAttenduPatient, String(args.nomPatientLuSurDevis ?? ""));
+        // Recoupement identité patient (toute la famille) + prestataire
+        // (2026-10) — la vérification porte sur L'ENSEMBLE de la famille
+        // assurée (assuré principal + tous ses ayants droit), pas seulement
+        // l'assuré nommé sur le dossier : un dossier ouvert pour "Jean
+        // Dupont" doit aussi accepter un document au nom de son conjoint ou
+        // enfant enregistré. Si AUCUN membre de la famille ne correspond, le
+        // rejet est définitif — l'IA ne propose plus d'escalade dans ce cas
+        // (voir prompt système). Comparaison toujours déterministe côté
+        // serveur (voir nomsCorrespondent), jamais un jugement de l'IA.
+        const assureDossier = await this.prisma.assureSante.findUnique({ where: { id: dossier.assureId }, select: { nom: true, prenom: true, familleId: true } });
+        const racineIdChambre = assureDossier?.familleId ?? dossier.assureId;
+        const tousFamilleChambre = await this.prisma.assureSante.findMany({
+          where: { OR: [{ id: racineIdChambre }, { familleId: racineIdChambre }] },
+          select: { nom: true, prenom: true },
+        });
+        const nomOrdonnanceChambre = String(args.nomPatientLuSurOrdonnance ?? "");
+        const nomDevisChambre = String(args.nomPatientLuSurDevis ?? "");
+        const patientOrdonnanceOk = tousFamilleChambre.some((m) => nomsCorrespondent(`${m.nom} ${m.prenom ?? ""}`.trim(), nomOrdonnanceChambre));
+        const patientDevisOk = tousFamilleChambre.some((m) => nomsCorrespondent(`${m.nom} ${m.prenom ?? ""}`.trim(), nomDevisChambre));
 
         let prestataireReel: { nom: string; statutConvention: string | null } | null = dossier.prestataireId
           ? await this.prisma.prestataire.findUnique({ where: { id: dossier.prestataireId }, select: { nom: true, statutConvention: true } })
@@ -721,9 +731,10 @@ export class MessagerieAgentIaService {
         const prestataireCorrespondDossier = nomsCorrespondent(dossier.prestataire, nomLuPrestataire);
         const prestataireConventionne = prestataireReel?.statutConvention === "Conventionné";
 
+        const identiteMismatchChambre = !patientOrdonnanceOk || !patientDevisOk;
         const motifsRefus: string[] = [];
-        if (!patientOrdonnanceOk) motifsRefus.push("le nom du patient sur la déclaration d'hospitalisation ne correspond pas à l'assuré de ce dossier");
-        if (!patientDevisOk) motifsRefus.push("le nom du patient sur le devis ne correspond pas à l'assuré de ce dossier");
+        if (!patientOrdonnanceOk) motifsRefus.push(`le nom du patient sur la déclaration d'hospitalisation (« ${nomOrdonnanceChambre || "non lisible"} ») ne correspond ni à l'assuré ni à aucun ayant droit enregistré sur ce dossier`);
+        if (!patientDevisOk) motifsRefus.push(`le nom du patient sur le devis (« ${nomDevisChambre || "non lisible"} ») ne correspond ni à l'assuré ni à aucun ayant droit enregistré sur ce dossier`);
         if (!prestataireCorrespondDossier) motifsRefus.push(`le prestataire indiqué sur le devis ("${nomLuPrestataire || "non lisible"}") ne correspond pas au prestataire déclaré sur ce dossier ("${dossier.prestataire}")`);
         if (!prestataireReel) motifsRefus.push(`le prestataire "${dossier.prestataire}" n'a pas été retrouvé dans le réseau conventionné ${ctx.nomEntreprise}`);
         else if (!prestataireConventionne) motifsRefus.push(`${prestataireReel.nom} n'est pas (ou plus) conventionné avec ${ctx.nomEntreprise}`);
@@ -739,10 +750,13 @@ export class MessagerieAgentIaService {
             await this.notifications.create("Assuré", compteRefus.id, `Votre demande de prise en charge (${accordId}) a été refusée : ${motif}.`).catch(() => undefined);
           }
           await this.notifierAgentsHumains(conversationId, `Chambre hospitalisation REJETÉE automatiquement par ${NOM_AGENT} pour le dossier ${accordId} — motif : ${motif}. À vérifier par un gestionnaire.`);
-          return {
-            decision: "Refusé", motif,
-            message: `Votre demande n'a malheureusement pas pu être accordée : ${motif}. Si vous pensez qu'il s'agit d'une erreur, un conseiller ${ctx.nomEntreprise} peut réexaminer votre dossier — souhaitez-vous que je le transmette ?`,
-          };
+          // Message définitif si c'est un problème d'identité (aucun membre
+          // de la famille ne correspond) — ne pas inviter à l'escalade, voir
+          // prompt système et demande utilisateur 2026-10.
+          const messageRefusChambre = identiteMismatchChambre
+            ? `Votre demande ne peut pas être traitée : ${motif}. La demande est refusée de manière définitive.`
+            : `Votre demande n'a malheureusement pas pu être accordée : ${motif}. Si vous pensez qu'il s'agit d'une erreur, un conseiller ${ctx.nomEntreprise} peut réexaminer votre dossier — souhaitez-vous que je le transmette ?`;
+          return { decision: "Refusé", motif, identiteMismatch: identiteMismatchChambre, message: messageRefusChambre };
         }
 
         const montantDevisChambre = arrondi2(montantParJour * jours);
@@ -814,12 +828,18 @@ export class MessagerieAgentIaService {
           return { erreur: motifs.join(" ; ") };
         }
 
-        // Recoupement identité patient + prestataire — même logique que
-        // decider_chambre_hospitalisation (voir nomsCorrespondent).
-        const assure = await this.prisma.assureSante.findUnique({ where: { id: dossier.assureId }, select: { nom: true, prenom: true } });
-        const nomAttenduPatient = `${assure?.nom ?? ""} ${assure?.prenom ?? ""}`.trim();
-        const patientOrdonnanceOk = nomsCorrespondent(nomAttenduPatient, String(args.nomPatientLuSurOrdonnance ?? ""));
-        const patientDevisOk = nomsCorrespondent(nomAttenduPatient, String(args.nomPatientLuSurDevis ?? ""));
+        // Recoupement identité patient sur TOUTE la famille (assuré principal +
+        // ayants droit) — même logique que decider_chambre_hospitalisation.
+        const assureGarantie = await this.prisma.assureSante.findUnique({ where: { id: dossier.assureId }, select: { nom: true, prenom: true, familleId: true } });
+        const racineIdGarantie = assureGarantie?.familleId ?? dossier.assureId;
+        const tousFamilleGarantie = await this.prisma.assureSante.findMany({
+          where: { OR: [{ id: racineIdGarantie }, { familleId: racineIdGarantie }] },
+          select: { nom: true, prenom: true },
+        });
+        const nomOrdonnanceGarantie = String(args.nomPatientLuSurOrdonnance ?? "");
+        const nomDevisGarantie = String(args.nomPatientLuSurDevis ?? "");
+        const patientOrdonnanceOk = tousFamilleGarantie.some((m) => nomsCorrespondent(`${m.nom} ${m.prenom ?? ""}`.trim(), nomOrdonnanceGarantie));
+        const patientDevisOk = tousFamilleGarantie.some((m) => nomsCorrespondent(`${m.nom} ${m.prenom ?? ""}`.trim(), nomDevisGarantie));
 
         let prestataireReel: { nom: string; statutConvention: string | null } | null = dossier.prestataireId
           ? await this.prisma.prestataire.findUnique({ where: { id: dossier.prestataireId }, select: { nom: true, statutConvention: true } })
@@ -841,9 +861,10 @@ export class MessagerieAgentIaService {
         const toleranceMontant = montantDeclare != null ? Math.max(1000, montantDeclare * 0.02) : Infinity;
         const montantCorrespond = montantDeclare == null || Math.abs(montantLu - montantDeclare) <= toleranceMontant;
 
+        const identiteMismatchGarantie = !patientOrdonnanceOk || !patientDevisOk;
         const motifsRefus: string[] = [];
-        if (!patientOrdonnanceOk) motifsRefus.push("le nom du patient sur l'ordonnance ne correspond pas à l'assuré de ce dossier");
-        if (!patientDevisOk) motifsRefus.push("le nom du patient sur le devis ne correspond pas à l'assuré de ce dossier");
+        if (!patientOrdonnanceOk) motifsRefus.push(`le nom du patient sur l'ordonnance (« ${nomOrdonnanceGarantie || "non lisible"} ») ne correspond ni à l'assuré ni à aucun ayant droit enregistré sur ce dossier`);
+        if (!patientDevisOk) motifsRefus.push(`le nom du patient sur le devis (« ${nomDevisGarantie || "non lisible"} ») ne correspond ni à l'assuré ni à aucun ayant droit enregistré sur ce dossier`);
         if (!prestataireCorrespondDossier) motifsRefus.push(`le prestataire indiqué sur le devis ("${nomLuPrestataire || "non lisible"}") ne correspond pas au prestataire déclaré sur ce dossier ("${dossier.prestataire}")`);
         if (!prestataireReel) motifsRefus.push(`le prestataire "${dossier.prestataire}" n'a pas été retrouvé dans le réseau conventionné ${ctx.nomEntreprise}`);
         else if (!prestataireConventionne) motifsRefus.push(`${prestataireReel.nom} n'est pas (ou plus) conventionné avec ${ctx.nomEntreprise}`);
@@ -860,10 +881,10 @@ export class MessagerieAgentIaService {
             await this.notifications.create("Assuré", compteRefus.id, `Votre demande de prise en charge (${accordId}) a été refusée : ${motif}.`).catch(() => undefined);
           }
           await this.notifierAgentsHumains(conversationId, `Demande de garantie (${dossier.type}) REJETÉE automatiquement par ${NOM_AGENT} pour le dossier ${accordId} — motif : ${motif}. À vérifier par un gestionnaire.`);
-          return {
-            decision: "Refusé", motif,
-            message: `Votre demande n'a malheureusement pas pu être accordée : ${motif}. Si vous pensez qu'il s'agit d'une erreur, un conseiller ${ctx.nomEntreprise} peut réexaminer votre dossier — souhaitez-vous que je le transmette ?`,
-          };
+          const messageRefusGarantie = identiteMismatchGarantie
+            ? `Votre demande ne peut pas être traitée : ${motif}. La demande est refusée de manière définitive.`
+            : `Votre demande n'a malheureusement pas pu être accordée : ${motif}. Si vous pensez qu'il s'agit d'une erreur, un conseiller ${ctx.nomEntreprise} peut réexaminer votre dossier — souhaitez-vous que je le transmette ?`;
+          return { decision: "Refusé", motif, identiteMismatch: identiteMismatchGarantie, message: messageRefusGarantie };
         }
 
         // Montant autorisé = EXACTEMENT le même calcul que verrait un
