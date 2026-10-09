@@ -3,9 +3,7 @@
 // sur le VPS sans rebuilder le frontend (copier les nouvelles captures dans
 // backend/assets/guide/ suffit). L'endpoint GET /guide-assets/:filename est
 // public (pas d'auth) car les images sont chargées via <img src> côté client.
-const API = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
-
 export function img(filename: string): string {
   if (!filename) return "";
-  return `${API}/guide-assets/${filename}`;
+  return `/guide-assets/${filename}`;
 }
