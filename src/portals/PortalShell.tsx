@@ -135,6 +135,11 @@ export function PortalShell({ meta }: { meta: PortalMeta }) {
   useEffect(() => {
     contentRef.current?.scrollTo({ top: 0 });
   }, [showGuide, showPresentation]);
+
+  useEffect(() => {
+    setShowGuide(false);
+    setShowPresentation(false);
+  }, [view]);
   useEffect(() => {
     // Badge de fond — jamais l'overlay de chargement plein écran
     // (PageLoader), voir AdminShell.tsx (même principe).

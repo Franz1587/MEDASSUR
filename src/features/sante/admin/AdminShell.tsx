@@ -425,6 +425,11 @@ export function AdminShell({
     contentRef.current?.scrollTo({ top: 0 });
   }, [showGuidePage, showProfilePage]);
 
+  useEffect(() => {
+    setShowGuidePage(false);
+    setShowProfilePage(false);
+  }, [current]);
+
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-sidebar text-sidebar-foreground" style={{ fontFamily: "'Source Sans 3', sans-serif" }}>
       {/* Top bar */}
