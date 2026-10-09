@@ -421,6 +421,10 @@ export function AdminShell({
     contentRef.current?.scrollTo({ top: 0 });
   }, [nestedKey, activeNested]);
 
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [showGuidePage, showProfilePage]);
+
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-sidebar text-sidebar-foreground" style={{ fontFamily: "'Source Sans 3', sans-serif" }}>
       {/* Top bar */}
@@ -742,6 +746,10 @@ export function AdminShell({
             </div>
           )}
 
+          <div className={showProfilePage || showGuidePage ? "hidden" : ""}>
+            {children}
+          </div>
+
           {showProfilePage ? (
             <div className="p-4 md:p-5 pb-24">
               <div className="bg-card/92 border border-border/80 rounded-2xl p-4 md:p-5 shadow-[0_12px_28px_rgba(17,66,102,0.1)]">
@@ -861,14 +869,14 @@ export function AdminShell({
                 </div>
               </div>
             </div>
-          ) : showGuidePage ? (
+          ) : null}
+
+          {showGuidePage && (
             <GuideView
               profil={guideProfil}
               onBack={() => setShowGuidePage(false)}
               onSelectProfil={setGuideProfil}
             />
-          ) : (
-            children
           )}
         </div>
       </div>

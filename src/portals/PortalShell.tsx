@@ -133,6 +133,9 @@ export function PortalShell({ meta }: { meta: PortalMeta }) {
     setGuideProfil(currentRole ? GUIDE_PROFIL_PAR_ROLE[currentRole.id] ?? "global" : undefined);
   }, [currentRole]);
   useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [showGuide, showPresentation]);
+  useEffect(() => {
     // Badge de fond — jamais l'overlay de chargement plein écran
     // (PageLoader), voir AdminShell.tsx (même principe).
     const refresh = () => runSilently(() => getNotifications()).then(setNotifications).catch(() => undefined);
@@ -375,16 +378,16 @@ export function PortalShell({ meta }: { meta: PortalMeta }) {
               boutons d'accès rapide" — le Tableau de bord a besoin de
               changer de vue lui-même, comme les zones internes. */}
           <ShellNavigationProvider value={{ current: view, setView, shellActionRequest: null, triggerShellAction: () => undefined, scrollToTop: () => contentRef.current?.scrollTo({ top: 0 }) }}>
-            {showPresentation ? (
-              <PresentationView onBack={() => setShowPresentation(false)} />
-            ) : showGuide && guideProfil ? (
+            <div className={showPresentation || (showGuide && !!guideProfil) ? "hidden" : ""}>
+              <ActiveView />
+            </div>
+            {showPresentation && <PresentationView onBack={() => setShowPresentation(false)} />}
+            {showGuide && guideProfil && (
               <GuideView
                 profil={guideProfil}
                 onBack={() => setShowGuide(false)}
                 onSelectProfil={(next) => setGuideProfil(next)}
               />
-            ) : (
-              <ActiveView />
             )}
           </ShellNavigationProvider>
         </main>
