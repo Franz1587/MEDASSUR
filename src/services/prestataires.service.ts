@@ -247,6 +247,29 @@ export async function creerComptesPortailManquants(): Promise<ResultatComptesPor
   return http.post<ResultatComptesPortailManquants>("/prestataires/comptes-portail-manquants");
 }
 
+// Sociétés partenaires multi-clients portail (2026-10) — voir demande
+// utilisateur : "permettre au prestataire de sélectionner pour le compte
+// de quel client il veut faire l'identification". Géré depuis l'onglet
+// "Portail" de la fiche prestataire (côté administration interne).
+export interface AccesSocietePrestataire {
+  id: string;
+  societeId: string;
+  nom: string;
+  type: string;
+}
+
+export async function getAccesSocietesPrestataire(prestataireId: string): Promise<AccesSocietePrestataire[]> {
+  return http.get<AccesSocietePrestataire[]>(`/prestataires/${prestataireId}/acces-societes`);
+}
+
+export async function ajouterAccesSocietePrestataire(prestataireId: string, societeId: string): Promise<void> {
+  await http.post(`/prestataires/${prestataireId}/acces-societes`, { societeId });
+}
+
+export async function retirerAccesSocietePrestataire(prestataireId: string, societeId: string): Promise<void> {
+  await http.delete(`/prestataires/${prestataireId}/acces-societes/${societeId}`);
+}
+
 export async function getPrestataireStatistiques(id: string): Promise<PrestataireStatistiques> {
   const data = await http.get<ApiPrestataireStatistiques>(`/prestataires/${id}/statistiques`);
   return {

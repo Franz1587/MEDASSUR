@@ -7,6 +7,7 @@ import { assurePhotoUrl } from "@/services/sante.service";
 import {
   rechercherPatients, getPatient, getMoiPrestataire, type CanalRecherchePatient, type PatientFamilleMembre, type PatientDetail,
 } from "@/services/portailPrestataire.service";
+import { useClientSociete } from "./ClientSocieteContext";
 import { GROUPES_ACTES } from "./prestationTypes";
 
 const LABEL_TYPE: Record<string, string> = { AS: "Bénéficiaire Principal", CJ: "Conjoint(e)", EF: "Enfant" };
@@ -50,6 +51,7 @@ export function IdentificationAssure({ onNouvellePrestation, titreAction = "Nouv
   const [selectionne, setSelectionne] = useState<PatientDetail | null>(null);
   const [chargementDetail, setChargementDetail] = useState(false);
   const [categoriesActesVisibles, setCategoriesActesVisibles] = useState<string[]>([]);
+  const { clientActif } = useClientSociete();
 
   useEffect(() => { getMoiPrestataire().then((p) => setCategoriesActesVisibles(p.categoriesActesVisibles)); }, []);
   // categoriesActesVisibles vide = aucune restriction (voir
@@ -66,7 +68,7 @@ export function IdentificationAssure({ onNouvellePrestation, titreAction = "Nouv
     setFamille(null);
     setSelectionne(null);
     try {
-      const resultats = await rechercherPatients(canalRecherche, valeurRecherche.trim());
+      const resultats = await rechercherPatients(canalRecherche, valeurRecherche.trim(), clientActif?.id);
       if (resultats.length === 0) toast.error("Aucun assuré trouvé pour cette recherche.");
       setFamille(resultats);
     } catch (err) {

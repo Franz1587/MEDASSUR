@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { KeyRound, Loader2, MessageSquareText, UserPlus, Copy, Check } from "lucide-react";
+import { KeyRound, Loader2, MessageSquareText, UserPlus, Copy, Check, Building2, Plus, X } from "lucide-react";
 import { Btn } from "@/components/shared/Btn";
 import {
   getComptesPortailPrestataire, creerComptePortailPrestataire, reinitialiserMotDePassePortailPrestataire,
-  type ComptePortailPoste, type IdentifiantsPortail,
+  getAccesSocietesPrestataire, ajouterAccesSocietePrestataire, retirerAccesSocietePrestataire,
+  type ComptePortailPoste, type IdentifiantsPortail, type AccesSocietePrestataire,
 } from "@/services/prestataires.service";
+import { getSocietes } from "@/services/societes.service";
+import type { Societe } from "@/types/societes";
 
 // Onglet "Portail" de la fiche prestataire (2026-09) — voir demande
 // utilisateur : "pour chaque prestataire de la ruche excellence, il faut
@@ -25,11 +28,48 @@ export function PortailTab({ prestataireId }: { prestataireId: string }) {
   const [identifiants, setIdentifiants] = useState<{ poste: string; data: IdentifiantsPortail } | null>(null);
   const [copie, setCopie] = useState(false);
 
+  const [accesClientsSocietes, setAccesClientsSocietes] = useState<AccesSocietePrestataire[]>([]);
+  const [toutesLesSocietes, setToutesLesSocietes] = useState<Societe[]>([]);
+  const [ajoutEnCours, setAjoutEnCours] = useState(false);
+  const [societeSelectionnee, setSocieteSelectionnee] = useState("");
+
   const rafraichir = () => {
     setChargement(true);
     getComptesPortailPrestataire(prestataireId).then(setPostes).catch(() => undefined).finally(() => setChargement(false));
   };
   useEffect(() => { setIdentifiants(null); rafraichir(); }, [prestataireId]);
+
+  useEffect(() => {
+    getAccesSocietesPrestataire(prestataireId).then(setAccesClientsSocietes).catch(() => undefined);
+    getSocietes().then(setToutesLesSocietes).catch(() => undefined);
+  }, [prestataireId]);
+
+  const ajouterSociete = async () => {
+    if (!societeSelectionnee) return;
+    setAjoutEnCours(true);
+    try {
+      await ajouterAccesSocietePrestataire(prestataireId, societeSelectionnee);
+      const liste = await getAccesSocietesPrestataire(prestataireId);
+      setAccesClientsSocietes(liste);
+      setSocieteSelectionnee("");
+      toast.success("Société partenaire ajoutée.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ajout impossible.");
+    } finally {
+      setAjoutEnCours(false);
+    }
+  };
+
+  const retirerSociete = async (societeId: string, nom: string) => {
+    if (!window.confirm(`Retirer l'accès de ce prestataire à "${nom}" ?`)) return;
+    try {
+      await retirerAccesSocietePrestataire(prestataireId, societeId);
+      setAccesClientsSocietes((prev) => prev.filter((a) => a.societeId !== societeId));
+      toast.success("Accès retiré.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Retrait impossible.");
+    }
+  };
 
   const creer = async (poste: string) => {
     setEnCours(poste);
@@ -130,6 +170,58 @@ export function PortailTab({ prestataireId }: { prestataireId: string }) {
             )}
           </div>
         ))}
+      </div>
+
+      {/* Sociétés partenaires multi-clients (2026-10) */}
+      <div className="pt-4 border-t border-border space-y-3">
+        <div className="flex items-center gap-2">
+          <Building2 className="w-4 h-4 text-muted-foreground" />
+          <p className="text-[13px] font-semibold text-foreground">Sociétés partenaires (multi-clients)</p>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Sociétés MEDASSUR+ supplémentaires dont ce prestataire peut identifier les assurés via son portail.
+          La société d'origine de ce prestataire est toujours accessible par défaut.
+        </p>
+
+        {accesClientsSocietes.length > 0 && (
+          <div className="space-y-2">
+            {accesClientsSocietes.map((a) => (
+              <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-medium text-foreground truncate">{a.nom}</p>
+                  <p className="text-[11px] text-muted-foreground">{a.type}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => retirerSociete(a.societeId, a.nom)}
+                  className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors flex-shrink-0"
+                  title="Retirer cet accès"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <select
+            value={societeSelectionnee}
+            onChange={(e) => setSocieteSelectionnee(e.target.value)}
+            className="flex-1 h-9 rounded-lg border border-border bg-background text-[12.5px] text-foreground px-2.5 focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            <option value="">— Sélectionner une société à ajouter —</option>
+            {toutesLesSocietes
+              .filter((s) => !accesClientsSocietes.some((a) => a.societeId === s.id))
+              .map((s) => (
+                <option key={s.id} value={s.id}>{s.nom} ({s.type})</option>
+              ))}
+          </select>
+          <Btn variant="primary" onClick={ajouterSociete} disabled={!societeSelectionnee || ajoutEnCours}>
+            {ajoutEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+            Ajouter
+          </Btn>
+        </div>
       </div>
     </div>
   );

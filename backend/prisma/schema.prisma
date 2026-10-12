@@ -329,6 +329,7 @@ model SocieteAssurance {
   prestataireAlias PrestataireAlias[]
   lotsCheques LotCheques[]
   agences Agence[]
+  portailAccesPrestataires PortailSocieteAcces[]
 
   @@index([planAbonnementId])
 }
@@ -2378,6 +2379,10 @@ model Prestataire {
   // Alias de reprise d'antériorité (2026-08 — voir PrestataireAlias
   // ci-dessous).
   aliases PrestataireAlias[]
+  // Accès multi-clients portail (2026-10) — liste des sociétés utilisatrices
+  // de MEDASSUR+ que ce prestataire peut servir EN PLUS de sa propre société.
+  // Voir PortailSocieteAcces ci-dessous.
+  accesMultiClients PortailSocieteAcces[]
 
   @@index([societeId])
 }
@@ -2410,6 +2415,28 @@ model PrestataireAlias {
   // sociétés peuvent légitimement avoir chacune un prestataire dont le nom
   // d'origine (fichier importé) coïncide.
   @@unique([societeId, nomOrigine])
+  @@index([societeId])
+}
+
+// Accès multi-clients portail prestataire (2026-10) — voir demande
+// utilisateur : "permettre au prestataire de sélectionner pour le compte
+// de quel client il veut faire l'identification". Un prestataire physique
+// (hôpital, pharmacie, clinique) peut servir des patients couverts par
+// PLUSIEURS sociétés utilisant MEDASSUR+ (compagnies, courtiers, mutuelles).
+// Ce modèle liste les sociétés SUPPLÉMENTAIRES autorisées, au-delà de la
+// société d'origine du prestataire (celle qui a créé ses comptes portail).
+// Volontairement EXCLU de TENANT_MODELS : table de jonction inter-sociétés,
+// le filtrage automatique par societeId n'aurait pas de sens ici.
+model PortailSocieteAcces {
+  id            String           @id @default(cuid())
+  prestataireId String
+  societeId     String           // société cliente (compagnie, courtier, mutuelle)
+  createdAt     DateTime         @default(now())
+  prestataire   Prestataire      @relation(fields: [prestataireId], references: [id], onDelete: Cascade)
+  societe       SocieteAssurance @relation(fields: [societeId], references: [id], onDelete: Cascade)
+
+  @@unique([prestataireId, societeId])
+  @@index([prestataireId])
   @@index([societeId])
 }
 

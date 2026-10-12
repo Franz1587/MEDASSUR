@@ -18,6 +18,8 @@ import type { AppNotification } from "@/types/notifications";
 import type { PortalMeta } from "@/portals/portalMeta";
 import logoMark from "@/assets/logo-mark.png";
 import { runSilently } from "@/lib/http";
+import { ClientSocieteProvider, useClientSociete, BadgeClientActif } from "@/features/portail-prestataire/ClientSocieteContext";
+import SelecteurClientSociete from "@/features/portail-prestataire/SelecteurClientSociete";
 
 // Cloche de notification (2026-08) — voir demande utilisateur : "que ce soit
 // du côté de l'assuré principal ou côté client, il faut mettre la cloche de
@@ -52,8 +54,23 @@ const MESSAGERIE_POLL_MS = 15_000;
 // AdminShell.tsx) pour rester cohérent visuellement avec le reste de
 // l'application, en plus simple : le portail n'a que 4-5 modules à plat,
 // pas de zones/groupes à replier.
+// Multi-clients portail prestataire (2026-10) — voir demande utilisateur :
+// "permettre au prestataire de sélectionner pour le compte de quel client il
+// veut faire l'identification". PortalShell ajoute ClientSocieteProvider
+// uniquement pour le rôle prestataire_sante ; les autres rôles ignorent
+// ce contexte (valeurs par défaut inertes, aucun appel réseau supplémentaire).
 export function PortalShell({ meta }: { meta: PortalMeta }) {
+  const { currentRole } = useAuth();
+  if (currentRole?.id === "prestataire_sante") {
+    return <ClientSocieteProvider><PortalShellCore meta={meta} /></ClientSocieteProvider>;
+  }
+  return <PortalShellCore meta={meta} />;
+}
+
+function PortalShellCore({ meta }: { meta: PortalMeta }) {
   const { currentUser, currentRole, logout } = useAuth();
+  const isPrestataire = currentRole?.id === "prestataire_sante";
+  const { clients, clientActif, pret } = useClientSociete();
   const { resolvedTheme, setTheme } = useTheme();
   // Droits RÉELS par utilisateur (2026-08) — voir demande utilisateur :
   // "donner des droits sur les rubriques du menu" à des utilisateurs
@@ -201,6 +218,17 @@ export function PortalShell({ meta }: { meta: PortalMeta }) {
     setNotifications((prev) => prev.map((n) => ({ ...n, statut: "Lue" })));
   };
 
+  if (isPrestataire && !pret) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <p className="text-sm text-muted-foreground">Chargement…</p>
+      </div>
+    );
+  }
+  if (isPrestataire && !clientActif && clients.length > 1) {
+    return <SelecteurClientSociete />;
+  }
+
   return (
     <div className="min-h-screen bg-background flex">
       {mobileNavOpen && (
@@ -271,6 +299,7 @@ export function PortalShell({ meta }: { meta: PortalMeta }) {
             <p className="text-xs font-semibold text-foreground truncate sm:hidden">{meta.label}</p>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
+            <BadgeClientActif />
             {(horsLigne || enAttente > 0) && (
               <button
                 type="button"

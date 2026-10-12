@@ -1,4 +1,5 @@
 import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Query, Req, Res, UploadedFile, UploadedFiles, UseGuards, UseInterceptors } from "@nestjs/common";
+import { TenantContext } from "../tenant/tenant-context";
 import type { Request, Response } from "express";
 import { FileFieldsInterceptor, FileInterceptor } from "@nestjs/platform-express";
 import { CHAMPS_PIECES, TAILLE_MAX_PIECE, piecesRecues, reunirEnUnFichier, type PiecesRecues } from "../lib/pieces-jointes.util";
@@ -27,7 +28,7 @@ import { PrescriptionsService, TYPES_TRAITANT_EXAMEN, TYPES_TRAITANT_ORDONNANCE 
 import { TraiterBonDto } from "../prescriptions/dto/traiter-bon.dto";
 import { MessagerieAgentIaService } from "../messagerie/agent-ia.service";
 
-type PortailPrestataireRequest = Request & { user: { userId: string; nom: string; roleId: string; prestataireId: string | null } };
+type PortailPrestataireRequest = Request & { user: { userId: string; nom: string; roleId: string; prestataireId: string | null; societeId: string | null } };
 
 // Portail prestataire (2026-08) — voir demande utilisateur : "portail
 // externe dédié au prestataire médical", capture de référence fournie par
@@ -72,6 +73,50 @@ export class PortailPrestataireController {
   private prestataireIdDe(req: PortailPrestataireRequest): string {
     if (!req.user.prestataireId) throw new ForbiddenException("Ce compte n'est rattaché à aucun établissement.");
     return req.user.prestataireId;
+  }
+
+  // Multi-clients portail (2026-10) — valide que le prestataire est autorisé
+  // à servir la clientSocieteId donnée (soit sa propre société, soit une
+  // société listée dans PortailSocieteAcces). Lance l'opération fn() dans le
+  // contexte tenant de cette société cliente, sans modifier le contexte de la
+  // requête principale (AsyncLocalStorage.run isole la chaîne async).
+  private async avecClientSociete<T>(
+    prestataireId: string,
+    homeSocieteId: string | null,
+    clientSocieteId: string | undefined,
+    userId: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    if (!clientSocieteId || clientSocieteId === homeSocieteId) return fn();
+    const acces = await this.prisma.portailSocieteAcces.findFirst({
+      where: { prestataireId, societeId: clientSocieteId },
+    });
+    if (!acces) throw new ForbiddenException("Accès à cette société non autorisé pour ce prestataire.");
+    return TenantContext.run(clientSocieteId, fn, userId);
+  }
+
+  // Liste des sociétés MEDASSUR+ que ce prestataire peut servir (2026-10) —
+  // sa propre société + celles listées dans PortailSocieteAcces. Appelé au
+  // démarrage du portail pour afficher le sélecteur "Pour quel client ?".
+  @Get("mes-clients")
+  async mesClients(@Req() req: PortailPrestataireRequest) {
+    const prestataireId = this.prestataireIdDe(req);
+    const homeSocieteId = req.user.societeId;
+    const [propre, acces] = await Promise.all([
+      homeSocieteId
+        ? this.prisma.societeAssurance.findUnique({ where: { id: homeSocieteId }, select: { id: true, nom: true, type: true } })
+        : Promise.resolve(null),
+      this.prisma.portailSocieteAcces.findMany({
+        where: { prestataireId },
+        include: { societe: { select: { id: true, nom: true, type: true } } },
+      }),
+    ]);
+    const clients = [];
+    if (propre) clients.push({ id: propre.id, nom: propre.nom, type: propre.type });
+    for (const a of acces) {
+      if (a.societeId !== homeSocieteId) clients.push({ id: a.societe.id, nom: a.societe.nom, type: a.societe.type });
+    }
+    return clients;
   }
 
   // Prix des médicaments/quote-part JAMAIS visibles côté clinique/cabinet/
@@ -146,37 +191,37 @@ export class PortailPrestataireController {
   // (pour que le prestataire soit explicitement prévenu qu'il n'est plus
   // couvert, voir patient() ci-dessous), pas silencieusement invisible.
   @Get("patients/recherche")
-  async rechercherPatients(@Query() dto: RechercherPatientDto) {
-    let trouve: Awaited<ReturnType<typeof this.prisma.assureSante.findFirst>> = null;
-    if (dto.type === "telephone") {
-      const cible = dto.valeur.replace(/\D/g, "");
-      const candidats = await this.prisma.assureSante.findMany({ where: { telephone: { not: null } } });
-      trouve = candidats.find((c) => {
-        const n = c.telephone!.replace(/\D/g, "");
-        return n === cible || n.endsWith(cible) || cible.endsWith(n);
-      }) ?? null;
-    } else {
-      trouve = await this.prisma.assureSante.findFirst({ where: { [dto.type]: dto.valeur } });
-      // Repli sur l'historique (2026-10) : la carte affiche désormais le
-      // matricule LRX- mais AssureSante.matricule peut encore contenir
-      // l'ancien format ; le prestataire doit pouvoir scanner l'un ou l'autre.
-      if (!trouve && dto.type === "matricule") {
-        const alias = await this.prisma.matriculeAssuree.findFirst({
-          where: { matricule: { equals: dto.valeur, mode: "insensitive" } },
-          select: { identiteId: true },
-        });
-        if (alias) {
-          trouve = await this.prisma.assureSante.findFirst({ where: { identiteId: alias.identiteId } });
+  async rechercherPatients(@Query() dto: RechercherPatientDto, @Req() req: PortailPrestataireRequest) {
+    const prestataireId = this.prestataireIdDe(req);
+    return this.avecClientSociete(prestataireId, req.user.societeId, dto.clientSocieteId, req.user.userId, async () => {
+      let trouve: Awaited<ReturnType<typeof this.prisma.assureSante.findFirst>> = null;
+      if (dto.type === "telephone") {
+        const cible = dto.valeur.replace(/\D/g, "");
+        const candidats = await this.prisma.assureSante.findMany({ where: { telephone: { not: null } } });
+        trouve = candidats.find((c) => {
+          const n = c.telephone!.replace(/\D/g, "");
+          return n === cible || n.endsWith(cible) || cible.endsWith(n);
+        }) ?? null;
+      } else {
+        trouve = await this.prisma.assureSante.findFirst({ where: { [dto.type]: dto.valeur } });
+        if (!trouve && dto.type === "matricule") {
+          const alias = await this.prisma.matriculeAssuree.findFirst({
+            where: { matricule: { equals: dto.valeur, mode: "insensitive" } },
+            select: { identiteId: true },
+          });
+          if (alias) {
+            trouve = await this.prisma.assureSante.findFirst({ where: { identiteId: alias.identiteId } });
+          }
         }
       }
-    }
-    if (!trouve) return [];
-    const racineId = trouve.familleId ?? trouve.id;
-    const [racine, membres] = await Promise.all([
-      trouve.familleId ? this.prisma.assureSante.findUnique({ where: { id: racineId } }) : Promise.resolve(trouve),
-      this.prisma.assureSante.findMany({ where: { familleId: racineId } }),
-    ]);
-    return [racine, ...membres].filter((p): p is NonNullable<typeof p> => p != null);
+      if (!trouve) return [];
+      const racineId = trouve.familleId ?? trouve.id;
+      const [racine, membres] = await Promise.all([
+        trouve.familleId ? this.prisma.assureSante.findUnique({ where: { id: racineId } }) : Promise.resolve(trouve),
+        this.prisma.assureSante.findMany({ where: { familleId: racineId } }),
+      ]);
+      return [racine, ...membres].filter((p): p is NonNullable<typeof p> => p != null);
+    });
   }
 
   // "Mes patients" (2026-08) — voir demande utilisateur : "ajouter des

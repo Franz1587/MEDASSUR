@@ -33,6 +33,18 @@ export async function getMoiPrestataire(): Promise<PrestataireIdentite> {
   return http.get<PrestataireIdentite>("/portail-prestataire/moi");
 }
 
+// Multi-clients portail (2026-10) — sociétés MEDASSUR+ que ce prestataire
+// peut servir. Retourné au démarrage pour afficher le sélecteur de client.
+export interface ClientSociete {
+  id: string;
+  nom: string;
+  type: string; // Courtier | Mutuelle | Compagnie
+}
+
+export async function getMesClients(): Promise<ClientSociete[]> {
+  return http.get<ClientSociete[]>("/portail-prestataire/mes-clients");
+}
+
 export interface PrestataireDashboard {
   nom: string;
   statutConvention: string;
@@ -71,8 +83,10 @@ export interface PatientFamilleMembre {
 
 export type CanalRecherchePatient = "telephone" | "matricule" | "numeroAssure";
 
-export async function rechercherPatients(type: CanalRecherchePatient, valeur: string): Promise<PatientFamilleMembre[]> {
-  return http.get<PatientFamilleMembre[]>(`/portail-prestataire/patients/recherche?type=${type}&valeur=${encodeURIComponent(valeur)}`);
+export async function rechercherPatients(type: CanalRecherchePatient, valeur: string, clientSocieteId?: string): Promise<PatientFamilleMembre[]> {
+  const params = new URLSearchParams({ type, valeur });
+  if (clientSocieteId) params.set("clientSocieteId", clientSocieteId);
+  return http.get<PatientFamilleMembre[]>(`/portail-prestataire/patients/recherche?${params}`);
 }
 
 // "Mes patients" (2026-08) — voir demande utilisateur : "ajouter des

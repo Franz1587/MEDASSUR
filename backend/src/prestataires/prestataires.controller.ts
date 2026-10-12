@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards, NotFoundException } from "@nestjs/common";
+import { PrismaService } from "../prisma/prisma.service";
 import { PrestatairesService } from "./prestataires.service";
 import { CreatePrestataireDto } from "./dto/create-prestataire.dto";
 import { UpdatePrestataireDto } from "./dto/update-prestataire.dto";
@@ -7,7 +8,10 @@ import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 @Controller("prestataires")
 @UseGuards(JwtAuthGuard)
 export class PrestatairesController {
-  constructor(private readonly prestatairesService: PrestatairesService) {}
+  constructor(
+    private readonly prestatairesService: PrestatairesService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   // Réseau de soins (2026-08) — déclarées AVANT ":id", sinon NestJS route
   // "reseau" vers findOne(":id") (même piège que facture-production, voir
@@ -95,5 +99,33 @@ export class PrestatairesController {
   @Post(":id/comptes-portail/:poste/reinitialiser")
   reinitialiserMotDePassePortail(@Param("id") id: string, @Param("poste") poste: string) {
     return this.prestatairesService.reinitialiserMotDePassePortail(id, poste);
+  }
+
+  // Multi-clients portail (2026-10) — sociétés MEDASSUR+ que ce prestataire
+  // peut servir en plus de sa propre société (voir PortailSocieteAcces).
+  @Get(":id/acces-societes")
+  async accesSocietes(@Param("id") id: string) {
+    const acces = await this.prisma.portailSocieteAcces.findMany({
+      where: { prestataireId: id },
+      include: { societe: { select: { id: true, nom: true, type: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+    return acces.map((a: typeof acces[number]) => ({ id: a.id, societeId: a.societe.id, nom: a.societe.nom, type: a.societe.type }));
+  }
+
+  @Post(":id/acces-societes")
+  async ajouterAccesSociete(@Param("id") id: string, @Body("societeId") societeId: string) {
+    if (!societeId) throw new NotFoundException("societeId requis");
+    return this.prisma.portailSocieteAcces.upsert({
+      where: { prestataireId_societeId: { prestataireId: id, societeId } },
+      create: { prestataireId: id, societeId },
+      update: {},
+    });
+  }
+
+  @Delete(":id/acces-societes/:societeId")
+  async retirerAccesSociete(@Param("id") id: string, @Param("societeId") societeId: string) {
+    await this.prisma.portailSocieteAcces.deleteMany({ where: { prestataireId: id, societeId } });
+    return { ok: true };
   }
 }
