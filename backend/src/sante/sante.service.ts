@@ -286,16 +286,26 @@ export class SanteService {
     if (!criteresAvances) {
       return this.prisma.assureSante.findMany({ where: filtres?.contratId ? { contratId: filtres.contratId } : undefined, select: SELECT_ASSURE_LISTE });
     }
-    const where: Prisma.AssureSanteWhereInput = {
-      ...(filtres?.contratId ? { contratId: filtres.contratId } : {}),
-      ...(filtres?.typeAssure ? { typeAssure: filtres.typeAssure } : {}),
-      ...(filtres?.statut ? { statut: filtres.statut } : {}),
-      ...(filtres?.sexe ? { sexe: filtres.sexe } : {}),
-      ...(filtres?.matricule ? { matricule: { contains: filtres.matricule, mode: "insensitive" } } : {}),
-      ...(filtres?.nom
-        ? { OR: [{ nom: { contains: filtres.nom, mode: "insensitive" } }, { prenom: { contains: filtres.nom, mode: "insensitive" } }] }
-        : {}),
-    };
+    const conds: Prisma.AssureSanteWhereInput[] = [];
+    if (filtres?.contratId) conds.push({ contratId: filtres.contratId });
+    if (filtres?.typeAssure) conds.push({ typeAssure: filtres.typeAssure });
+    if (filtres?.statut) conds.push({ statut: filtres.statut });
+    if (filtres?.sexe) conds.push({ sexe: filtres.sexe });
+    if (filtres?.matricule) {
+      // Recherche sur le matricule courant ET l'historique (2026-10) —
+      // permet de retrouver un assuré par son ancien OU nouveau matricule.
+      conds.push({ OR: [
+        { matricule: { contains: filtres.matricule, mode: "insensitive" } },
+        { identite: { matricules: { some: { matricule: { contains: filtres.matricule, mode: "insensitive" } } } } },
+      ]});
+    }
+    if (filtres?.nom) {
+      conds.push({ OR: [
+        { nom: { contains: filtres.nom, mode: "insensitive" } },
+        { prenom: { contains: filtres.nom, mode: "insensitive" } },
+      ]});
+    }
+    const where: Prisma.AssureSanteWhereInput = conds.length > 0 ? { AND: conds } : {};
     const correspondances = await this.prisma.assureSante.findMany({ where, select: { id: true, familleId: true } });
     if (correspondances.length === 0) return [];
     const racinesIds = [...new Set(correspondances.map((m) => m.familleId ?? m.id))];

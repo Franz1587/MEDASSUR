@@ -157,6 +157,18 @@ export class PortailPrestataireController {
       }) ?? null;
     } else {
       trouve = await this.prisma.assureSante.findFirst({ where: { [dto.type]: dto.valeur } });
+      // Repli sur l'historique (2026-10) : la carte affiche désormais le
+      // matricule LRX- mais AssureSante.matricule peut encore contenir
+      // l'ancien format ; le prestataire doit pouvoir scanner l'un ou l'autre.
+      if (!trouve && dto.type === "matricule") {
+        const alias = await this.prisma.matriculeAssuree.findFirst({
+          where: { matricule: { equals: dto.valeur, mode: "insensitive" } },
+          select: { identiteId: true },
+        });
+        if (alias) {
+          trouve = await this.prisma.assureSante.findFirst({ where: { identiteId: alias.identiteId } });
+        }
+      }
     }
     if (!trouve) return [];
     const racineId = trouve.familleId ?? trouve.id;

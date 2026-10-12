@@ -844,6 +844,38 @@ export class ImportService {
       const liste = assureParMatricule.get(cle);
       if (liste) liste.push(a); else assureParMatricule.set(cle, [a]);
     }
+    // Repli sur l'historique des matricules (2026-10) — un matricule non
+    // résolu directement (ex. ancien format chiffres-chiffres non mis à jour
+    // dans AssureSante) peut exister dans MatriculeAssuree ; on l'indexe
+    // sous sa forme originale pour que la résolution ci-dessous le retrouve.
+    {
+      const nonResolus = matricules.filter((m) => !assureParMatricule.has(m.trim().toLowerCase()));
+      if (nonResolus.length > 0) {
+        const aliases = await this.prisma.matriculeAssuree.findMany({
+          where: { matricule: { in: nonResolus, mode: "insensitive" } },
+          select: { matricule: true, identiteId: true },
+        });
+        if (aliases.length > 0) {
+          const identiteIds = [...new Set(aliases.map((a) => a.identiteId))];
+          const assuresHist = await this.prisma.assureSante.findMany({
+            where: { identiteId: { in: identiteIds } },
+            include: { contrat: { select: { numeroPolice: true, statut: true } } },
+          });
+          const parIdentite = new Map<string, typeof assuresHist>();
+          for (const a of assuresHist) {
+            if (!a.identiteId) continue;
+            const lst = parIdentite.get(a.identiteId);
+            if (lst) lst.push(a); else parIdentite.set(a.identiteId, [a]);
+          }
+          for (const alias of aliases) {
+            const cle = alias.matricule.trim().toLowerCase();
+            if (assureParMatricule.has(cle)) continue;
+            const affiliated = parIdentite.get(alias.identiteId);
+            if (affiliated && affiliated.length > 0) assureParMatricule.set(cle, affiliated);
+          }
+        }
+      }
+    }
 
     // Alias déclaré puis auto-création EN LOTS — voir
     // resoudrePrestatairesEnLot (même mécanisme que le mode par contrat,
@@ -952,6 +984,36 @@ export class ImportService {
       const cle = a.matricule.trim().toLowerCase();
       const liste = assureParMatricule.get(cle);
       if (liste) liste.push(a); else assureParMatricule.set(cle, [a]);
+    }
+    // Repli sur l'historique des matricules (2026-10) — même logique
+    // qu'importerFacturesGlobal ci-dessus.
+    {
+      const nonResolus = matricules.filter((m) => !assureParMatricule.has(m.trim().toLowerCase()));
+      if (nonResolus.length > 0) {
+        const aliases = await this.prisma.matriculeAssuree.findMany({
+          where: { matricule: { in: nonResolus, mode: "insensitive" } },
+          select: { matricule: true, identiteId: true },
+        });
+        if (aliases.length > 0) {
+          const identiteIds = [...new Set(aliases.map((a) => a.identiteId))];
+          const assuresHist = await this.prisma.assureSante.findMany({
+            where: { identiteId: { in: identiteIds } },
+            include: { contrat: { select: { numeroPolice: true, statut: true } } },
+          });
+          const parIdentite = new Map<string, typeof assuresHist>();
+          for (const a of assuresHist) {
+            if (!a.identiteId) continue;
+            const lst = parIdentite.get(a.identiteId);
+            if (lst) lst.push(a); else parIdentite.set(a.identiteId, [a]);
+          }
+          for (const alias of aliases) {
+            const cle = alias.matricule.trim().toLowerCase();
+            if (assureParMatricule.has(cle)) continue;
+            const affiliated = parIdentite.get(alias.identiteId);
+            if (affiliated && affiliated.length > 0) assureParMatricule.set(cle, affiliated);
+          }
+        }
+      }
     }
 
     const resolues = enAttente.filter((l) => (assureParMatricule.get(l.matricule.trim().toLowerCase())?.length ?? 0) >= 1);
