@@ -55,6 +55,10 @@ export interface AuthUser {
   // régénération d'accès mobile) — voir App.tsx ProtectedRoute, qui bloque
   // tout accès aux données tant que ce n'est pas résolu.
   doitChangerMotDePasse?: boolean;
+  // Consentement RGPD (2026-10) — null = jamais accepté (modal bloquant
+  // affiché à chaque connexion tant que non accepté). ISO string une fois
+  // accepté (date de la première acceptation, conservée à vie).
+  consentementAccepteAt?: string | null;
 }
 
 type LoginResult = { ok: true } | { ok: false; error: string };
@@ -84,6 +88,10 @@ interface AuthContextValue {
   // sans ça, le nom affiché dans l'en-tête (currentUser.nom) resterait
   // l'instantané pris à la connexion après une modification du profil.
   refreshCurrentUser: () => Promise<void>;
+  // Consentement RGPD (2026-10) — voir ConsentementModal : appelée quand
+  // l'utilisateur coche et valide le modal. Met à jour currentUser localement
+  // ET côté serveur (POST /auth/consentement).
+  accepterConsentement: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -241,12 +249,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(frais);
   };
 
+  const accepterConsentement = async () => {
+    await http.post("/auth/consentement", {});
+    if (user) {
+      const mis = { ...user, consentementAccepteAt: new Date().toISOString() };
+      stockerUtilisateur(mis);
+      setUser(mis);
+    }
+  };
+
   const currentUser = user;
   const currentRole = user ? roles[user.roleId] : null;
   const assistance = assistanceSocieteNom ? { societeNom: assistanceSocieteNom } : null;
 
   return (
-    <AuthContext.Provider value={{ currentUser, currentRole, login, logout, assistance, startAssistance, endAssistance, refreshCurrentUser }}>
+    <AuthContext.Provider value={{ currentUser, currentRole, login, logout, assistance, startAssistance, endAssistance, refreshCurrentUser, accepterConsentement }}>
       {children}
     </AuthContext.Provider>
   );

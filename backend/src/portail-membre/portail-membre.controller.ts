@@ -69,6 +69,72 @@ export class PortailMembreController {
     return [...new Set(familleEtendue.map((a) => a.id))];
   }
 
+  // Abonnement individuel (2026-10) — voir demande utilisateur : "si un
+  // assuré est suspendu/radié, une page d'abonnement annuel doit
+  // s'afficher". Renvoie le statut d'accès et l'abonnement individuel
+  // actif (le cas échéant) pour décider si la gate doit s'afficher ou
+  // non côté portail.
+  @Get("statut-acces")
+  async statutAcces(@Req() req: PortailMembreRequest) {
+    const assureId = this.assureSanteIdDe(req);
+    const [assure, abonnement, societe] = await Promise.all([
+      this.prisma.assureSante.findUnique({ where: { id: assureId }, select: { statut: true, societeId: true } }),
+      this.prisma.abonnementIndividuel.findFirst({
+        where: { assureId, statut: "Actif", dateFin: { gte: new Date() } },
+        orderBy: { dateFin: "desc" },
+        select: { id: true, dateFin: true, dateDebut: true, montantXaf: true },
+      }),
+      req.user.assureSanteId
+        ? this.prisma.assureSante.findUnique({
+            where: { id: assureId },
+            select: { societeId: true },
+          }).then((a) => a?.societeId
+            ? this.prisma.societeAssurance.findUnique({ where: { id: a.societeId }, select: { prixAbonnementIndividuelXaf: true, nom: true } })
+            : null)
+        : Promise.resolve(null),
+    ]);
+    const statut = assure?.statut ?? "Actif";
+    const accesBloqueStatuts = ["Suspendu (radié)", "Suspendu", "Radié"];
+    const accesBloque = accesBloqueStatuts.includes(statut);
+    return {
+      statut,
+      accesBloque,
+      abonnementActif: !!abonnement,
+      abonnement: abonnement
+        ? { id: abonnement.id, dateFin: abonnement.dateFin, dateDebut: abonnement.dateDebut, montantXaf: abonnement.montantXaf }
+        : null,
+      prixAnnuelXaf: societe?.prixAbonnementIndividuelXaf ?? null,
+    };
+  }
+
+  @Post("abonnement/demander")
+  async demanderAbonnement(@Req() req: PortailMembreRequest) {
+    const assureId = this.assureSanteIdDe(req);
+    const assure = await this.prisma.assureSante.findUnique({ where: { id: assureId }, select: { statut: true, societeId: true, nom: true } });
+    if (!assure) throw new NotFoundException("Assuré introuvable.");
+    const societe = assure.societeId
+      ? await this.prisma.societeAssurance.findUnique({ where: { id: assure.societeId }, select: { prixAbonnementIndividuelXaf: true } })
+      : null;
+    const prix = societe?.prixAbonnementIndividuelXaf;
+    if (!prix) throw new BadRequestException("L'abonnement individuel n'est pas disponible pour votre société.");
+    const existant = await this.prisma.abonnementIndividuel.findFirst({
+      where: { assureId, statut: { in: ["Actif", "EnAttente"] }, dateFin: { gte: new Date() } },
+    });
+    if (existant) throw new BadRequestException("Vous avez déjà un abonnement en cours ou en attente de validation.");
+    const now = new Date();
+    await this.prisma.abonnementIndividuel.create({
+      data: {
+        societeId: assure.societeId!,
+        assureId,
+        dateDebut: now,
+        dateFin: new Date(now.getFullYear() + 1, now.getMonth(), now.getDate()),
+        montantXaf: prix,
+        statut: "EnAttente",
+      },
+    });
+    return { ok: true, message: "Demande d'abonnement enregistrée — en attente de validation par votre société." };
+  }
+
   // Jeton Expo Push (2026-09) — voir demande utilisateur : "l'application
   // mobile doit pouvoir activer les notifications... afin que l'assuré soit
   // informé des nouvelles entrées même quand il n'est pas dans

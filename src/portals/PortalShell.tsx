@@ -20,6 +20,9 @@ import logoMark from "@/assets/logo-mark.png";
 import { runSilently } from "@/lib/http";
 import { ClientSocieteProvider, useClientSociete, BadgeClientActif } from "@/features/portail-prestataire/ClientSocieteContext";
 import SelecteurClientSociete from "@/features/portail-prestataire/SelecteurClientSociete";
+import { ConsentementModal } from "@/features/consentement/ConsentementModal";
+import { AbonnementGate } from "@/features/membre/AbonnementGate";
+import { getStatutAccesMembre } from "@/services/portailMembre.service";
 
 // Cloche de notification (2026-08) — voir demande utilisateur : "que ce soit
 // du côté de l'assuré principal ou côté client, il faut mettre la cloche de
@@ -70,7 +73,18 @@ export function PortalShell({ meta }: { meta: PortalMeta }) {
 function PortalShellCore({ meta }: { meta: PortalMeta }) {
   const { currentUser, currentRole, logout } = useAuth();
   const isPrestataire = currentRole?.id === "prestataire_sante";
+  const isAssure = currentRole?.id === "assure_principal";
   const { clients, clientActif, pret } = useClientSociete();
+
+  // Gate abonnement individuel (2026-10) — uniquement pour assure_principal.
+  // null = en cours de chargement, true = accès bloqué sans abo, false = OK.
+  const [accesBlocke, setAccesBloque] = useState<boolean | null>(isAssure ? null : false);
+  useEffect(() => {
+    if (!isAssure) return;
+    getStatutAccesMembre()
+      .then((s) => setAccesBloque(s.accesBloque && !s.abonnementActif))
+      .catch(() => setAccesBloque(false));
+  }, [isAssure]);
   const { resolvedTheme, setTheme } = useTheme();
   // Droits RÉELS par utilisateur (2026-08) — voir demande utilisateur :
   // "donner des droits sur les rubriques du menu" à des utilisateurs
@@ -227,6 +241,18 @@ function PortalShellCore({ meta }: { meta: PortalMeta }) {
   }
   if (isPrestataire && !clientActif && clients.length > 1) {
     return <SelecteurClientSociete />;
+  }
+
+  // Gate abonnement (2026-10) — chargement en cours ou accès bloqué.
+  if (isAssure && accesBlocke === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <p className="text-sm text-muted-foreground">Chargement…</p>
+      </div>
+    );
+  }
+  if (isAssure && accesBlocke === true) {
+    return <AbonnementGate />;
   }
 
   return (
@@ -429,6 +455,12 @@ function PortalShellCore({ meta }: { meta: PortalMeta }) {
       </div>
 
       {profileOpen && <MonProfilModal onClose={() => setProfileOpen(false)} />}
+
+      {/* Consentement RGPD (2026-10) — bloquant, z-[200], une seule fois par
+          compte. Voir ConsentementModal.tsx et User.consentementAccepteAt. */}
+      {currentRole?.family === "externe" && !currentUser?.consentementAccepteAt && (
+        <ConsentementModal />
+      )}
     </div>
   );
 }

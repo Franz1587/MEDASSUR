@@ -429,3 +429,21 @@ export async function supprimerCarnetSante(id: string): Promise<void> {
 export function urlCarnetSante(fichier: string): string {
   return `${API_URL.replace(/\/api\/?$/, "")}/uploads/carnet-sante/${fichier}`;
 }
+
+// Abonnement individuel (2026-10) — voir demande utilisateur : "si un
+// assuré est radié, une page d'abonnement annuel doit s'afficher".
+export interface StatutAccesMembre {
+  statut: string;            // statut de l'AssureSante
+  accesBloque: boolean;      // true si statut empêche l'accès normal
+  abonnementActif: boolean;  // true si un AbonnementIndividuel Actif existe
+  abonnement: { id: string; dateFin: string; dateDebut: string; montantXaf: number } | null;
+  prixAnnuelXaf: number | null; // prix configuré par la société
+}
+
+export async function getStatutAccesMembre(): Promise<StatutAccesMembre> {
+  return http.get<StatutAccesMembre>("/portail-membre/statut-acces");
+}
+
+export async function demanderAbonnementIndividuel(): Promise<{ ok: boolean; message: string }> {
+  return http.post<{ ok: boolean; message: string }>("/portail-membre/abonnement/demander", {});
+}

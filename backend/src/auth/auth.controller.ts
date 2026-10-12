@@ -19,4 +19,11 @@ export class AuthController {
   moi(@Req() req: { user: { userId: string } }) {
     return this.authService.moi(req.user.userId);
   }
+
+  // Consentement RGPD (2026-10) — voir AuthService.accepterConsentement.
+  @Post("consentement")
+  @UseGuards(JwtAuthGuard)
+  accepterConsentement(@Req() req: { user: { userId: string } }) {
+    return this.authService.accepterConsentement(req.user.userId);
+  }
 }

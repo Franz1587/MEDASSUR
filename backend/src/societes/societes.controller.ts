@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Req, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
@@ -9,6 +9,7 @@ import { CreateSocieteDto } from "./dto/create-societe.dto";
 import { UpdateSocieteDto } from "./dto/update-societe.dto";
 import { SuspendreSocieteDto } from "./dto/suspendre-societe.dto";
 import { ParametresEntrepriseService } from "../parametres-entreprise/parametres-entreprise.service";
+import { PrismaService } from "../prisma/prisma.service";
 
 // Super Admin (2026-09) — voir demande utilisateur : "c'est lui qui crée
 // les sociétés d'assurances qui vont utiliser l'application comme outil
@@ -23,6 +24,7 @@ export class SocietesController {
   constructor(
     private readonly service: SocietesService,
     private readonly parametresEntreprise: ParametresEntrepriseService,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Get()
@@ -81,5 +83,50 @@ export class SocietesController {
   @Delete(":id/parametres-entreprise/logo")
   deleteLogo(@Param("id") id: string) {
     return this.parametresEntreprise.deleteLogo(id);
+  }
+
+  // Abonnement individuel (2026-10) — Super Admin configure le prix par
+  // société et gère les demandes d'abonnement des assurés radiés/suspendus.
+  @Patch(":id/prix-abonnement-individuel")
+  async setPrixAbonnementIndividuel(@Param("id") id: string, @Body("prix") prix: number | null) {
+    await this.prisma.societeAssurance.update({
+      where: { id },
+      data: { prixAbonnementIndividuelXaf: prix === null || prix === undefined ? null : Math.round(Number(prix)) },
+    });
+    return { ok: true };
+  }
+
+  @Get(":id/abonnements-individuels")
+  async abonnementsIndividuels(@Param("id") id: string) {
+    const abonnements = await this.prisma.abonnementIndividuel.findMany({
+      where: { societeId: id },
+      include: { assure: { select: { nom: true, prenom: true, matricule: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    return abonnements.map((a) => ({
+      id: a.id, statut: a.statut, dateDebut: a.dateDebut, dateFin: a.dateFin,
+      montantXaf: a.montantXaf, createdAt: a.createdAt,
+      assure: a.assure,
+    }));
+  }
+
+  @Patch(":societeId/abonnements-individuels/:id/activer")
+  async activerAbonnementIndividuel(@Param("id") id: string) {
+    const abo = await this.prisma.abonnementIndividuel.findUnique({ where: { id } });
+    if (!abo) throw new NotFoundException("Abonnement introuvable.");
+    const now = new Date();
+    await this.prisma.abonnementIndividuel.update({
+      where: { id },
+      data: { statut: "Actif", dateDebut: now, dateFin: new Date(now.getFullYear() + 1, now.getMonth(), now.getDate()) },
+    });
+    return { ok: true };
+  }
+
+  @Patch(":societeId/abonnements-individuels/:id/annuler")
+  async annulerAbonnementIndividuel(@Param("id") id: string, @Body("motif") motif?: string) {
+    const abo = await this.prisma.abonnementIndividuel.findUnique({ where: { id } });
+    if (!abo) throw new NotFoundException("Abonnement introuvable.");
+    await this.prisma.abonnementIndividuel.update({ where: { id }, data: { statut: "Annulé", motifAnnulation: motif ?? null } });
+    return { ok: true };
   }
 }
