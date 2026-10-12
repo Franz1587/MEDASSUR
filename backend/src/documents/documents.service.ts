@@ -1923,16 +1923,22 @@ export class DocumentsService {
   async renderCarteUnique(assureId: string, res: Response) {
     const assure = await this.prisma.assureSante.findUnique({
       where: { id: assureId },
-      include: { contrat: { include: { client: true, compagnie: true } }, famille: { select: { telephone: true, nom: true, prenom: true } } },
+      include: {
+        contrat: { include: { client: true, compagnie: true } },
+        famille: { select: { telephone: true, nom: true, prenom: true } },
+        identite: { include: { matricules: { where: { statut: "Actuel" }, orderBy: { createdAt: "desc" }, take: 1, select: { matricule: true } } } },
+      },
     });
     if (!assure) throw new NotFoundException(`Assuré ${assureId} introuvable`);
     const p = await this.parametresEntreprise.findOne();
 
+    // Afficher le matricule le plus récent (LRX-) si disponible dans l'historique
+    const matriculeCarte = assure.identite?.matricules?.[0]?.matricule ?? assure.matricule;
     const doc = new PDFDocument({ size: [CARD_WIDTH, CARD_HEIGHT], margin: 0, autoFirstPage: false });
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="Carte-${assure.matricule}.pdf"`);
+    res.setHeader("Content-Disposition", `inline; filename="Carte-${matriculeCarte}.pdf"`);
     doc.pipe(res);
-    await this.ajouterCarteRectoVerso(doc, assure, p);
+    await this.ajouterCarteRectoVerso(doc, { ...assure, matricule: matriculeCarte }, p);
     doc.end();
   }
 
@@ -1975,13 +1981,19 @@ export class DocumentsService {
       const lotIds = idsOrdonnes.slice(i, i + BATCH_SIZE);
       const lot = await this.prisma.assureSante.findMany({
         where: { id: { in: lotIds } },
-        include: { contrat: { include: { client: true, compagnie: true } }, famille: { select: { telephone: true, nom: true, prenom: true } } },
+        include: {
+          contrat: { include: { client: true, compagnie: true } },
+          famille: { select: { telephone: true, nom: true, prenom: true } },
+          identite: { include: { matricules: { where: { statut: "Actuel" }, orderBy: { createdAt: "desc" }, take: 1, select: { matricule: true } } } },
+        },
       });
       const parId = new Map(lot.map((a) => [a.id, a]));
       for (const id of lotIds) {
         const a = parId.get(id);
         if (!a) continue;
-        await this.ajouterCarteRectoVerso(doc, a, p, dto.rectoUniquement);
+        // Afficher le matricule le plus récent (LRX-) si disponible dans l'historique
+        const matriculeCarte = a.identite?.matricules?.[0]?.matricule ?? a.matricule;
+        await this.ajouterCarteRectoVerso(doc, { ...a, matricule: matriculeCarte }, p, dto.rectoUniquement);
         nombreCartes++;
       }
     }

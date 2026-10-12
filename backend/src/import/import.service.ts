@@ -187,11 +187,26 @@ export class ImportService {
   // différence de l'ancien resoudreAssureParMatricule).
   private async resoudreAssureDuContrat(contratId: string, identite: { matricule?: string; nom?: string; prenom?: string }) {
     if (identite.matricule) {
+      const mat = identite.matricule.trim();
       const trouves = await this.prisma.assureSante.findMany({
-        where: { contratId, matricule: { equals: identite.matricule.trim(), mode: "insensitive" } },
+        where: { contratId, matricule: { equals: mat, mode: "insensitive" } },
       });
       if (trouves.length === 1) return { ok: true as const, assure: trouves[0] };
-      if (trouves.length > 1) return { ok: false as const, erreur: `Plusieurs assurés de ce contrat partagent le matricule "${identite.matricule}" — corrigez les données avant import.` };
+      if (trouves.length > 1) return { ok: false as const, erreur: `Plusieurs assurés de ce contrat partagent le matricule "${mat}" — corrigez les données avant import.` };
+      // Repli sur l'historique (2026-10) : le fichier peut porter l'ancien
+      // format chiffres-chiffres ou le nouveau LRX-, alors que
+      // AssureSante.matricule contient l'autre format.
+      const alias = await this.prisma.matriculeAssuree.findFirst({
+        where: { matricule: { equals: mat, mode: "insensitive" } },
+        select: { identiteId: true },
+      });
+      if (alias) {
+        const trouvesAlias = await this.prisma.assureSante.findMany({
+          where: { contratId, identiteId: alias.identiteId },
+        });
+        if (trouvesAlias.length === 1) return { ok: true as const, assure: trouvesAlias[0] };
+        if (trouvesAlias.length > 1) return { ok: false as const, erreur: `Plusieurs assurés de ce contrat correspondent à l'historique du matricule "${mat}" — précisez le matricule courant.` };
+      }
     }
     if (identite.nom) {
       const trouves = await this.prisma.assureSante.findMany({
@@ -241,11 +256,29 @@ export class ImportService {
   // chaque fichier apparié par son nom = matricule, quel que soit le
   // contrat de la personne). Factures/Prises en charge, eux, passent
   // désormais par resoudreAssureDuContrat ci-dessus, scopée à UN contrat.
+  // Repli sur MatriculeAssuree (2026-10) — un assuré peut avoir deux
+  // matricules successifs (ancien format chiffres-chiffres + nouveau LRX-) ;
+  // le nom du fichier photo peut porter l'un ou l'autre.
   private async resoudreAssureParMatriculeGlobal(matricule: string) {
-    const trouves = await this.prisma.assureSante.findMany({ where: { matricule: { equals: matricule.trim(), mode: "insensitive" } } });
-    if (trouves.length === 0) return { ok: false as const, erreur: `Assuré introuvable pour le matricule "${matricule}".` };
-    if (trouves.length > 1) return { ok: false as const, erreur: `Plusieurs assurés partagent le matricule "${matricule}" — corrigez les données avant import.` };
-    return { ok: true as const, assure: trouves[0] };
+    const mat = matricule.trim();
+    const trouves = await this.prisma.assureSante.findMany({ where: { matricule: { equals: mat, mode: "insensitive" } } });
+    if (trouves.length === 1) return { ok: true as const, assure: trouves[0] };
+    if (trouves.length > 1) return { ok: false as const, erreur: `Plusieurs assurés partagent le matricule "${mat}" — corrigez les données avant import.` };
+    // Repli sur l'historique des matricules
+    const alias = await this.prisma.matriculeAssuree.findFirst({
+      where: { matricule: { equals: mat, mode: "insensitive" } },
+      select: { identiteId: true },
+    });
+    if (alias) {
+      const affiliations = await this.prisma.assureSante.findMany({
+        where: { identiteId: alias.identiteId },
+      });
+      if (affiliations.length >= 1) {
+        const active = affiliations.find((a) => a.statut !== "Radié") ?? affiliations[0];
+        return { ok: true as const, assure: active };
+      }
+    }
+    return { ok: false as const, erreur: `Assuré introuvable pour le matricule "${mat}" (ni matricule courant ni historique).` };
   }
 
   // Réservée aux chemins de CONFIRMATION (jamais l'aperçu, qui ne doit rien
