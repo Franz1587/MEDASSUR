@@ -65,4 +65,8 @@ export class UpdateAssureDto {
   @IsOptional()
   @IsString()
   fax?: string;
+
+  @IsOptional()
+  @IsIn(["AS", "CJ", "EF"])
+  typeAssure?: string;
 }

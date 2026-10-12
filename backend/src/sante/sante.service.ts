@@ -51,6 +51,8 @@ const SELECT_ASSURE_LISTE = {
   motifRadiation: true, photo: true, familleId: true, typeAssure: true, scolarise: true,
   nationalite: true, sexe: true, adresse: true, nomJeuneFille: true, lieuNaissance: true,
   email: true, telephoneFixe: true, autreNumero: true, fax: true,
+  // Matricule le plus récent (LRX-) si disponible dans l'historique (2026-10)
+  identite: { select: { matricules: { where: { statut: "Actuel" }, orderBy: { createdAt: "desc" }, take: 1, select: { matricule: true } } } },
 } satisfies Prisma.AssureSanteSelect;
 
 // TPS — 9,5% de la base de remboursement assurance, prélevée uniquement
@@ -439,6 +441,17 @@ export class SanteService {
       if (erreurAge) throw new BadRequestException(erreurAge);
     }
 
+    if (dto.typeAssure !== undefined) {
+      // On ne permet le changement que dans la même catégorie d'appartenance
+      // (ayant droit → ayant droit ou AS → AS) ; changer de AS à EF/CJ
+      // nécessiterait d'affecter un familleId (hors périmètre de ce patch).
+      if (dto.typeAssure === "AS" && existant.familleId) {
+        throw new BadRequestException("Impossible de changer en Assuré Principal un ayant droit rattaché à une famille — retirez-le d'abord du contrat.");
+      }
+      if (dto.typeAssure !== "AS" && !existant.familleId) {
+        throw new BadRequestException("Impossible de changer le type d'un assuré principal en CJ/EF sans le rattacher à une famille.");
+      }
+    }
     const miseAJour = await this.prisma.assureSante.update({
       where: { id },
       data: {
@@ -456,6 +469,7 @@ export class SanteService {
         telephoneFixe: dto.telephoneFixe,
         autreNumero: dto.autreNumero,
         fax: dto.fax,
+        typeAssure: dto.typeAssure,
       },
       include: { contrat: true, membres: true },
     });

@@ -488,7 +488,7 @@ export default function ParticipantsView() {
                       {a.nom} {a.prenom ?? ""}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{a.matricule}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{a.identite?.matricules?.[0]?.matricule ?? a.matricule}</td>
                   <td className="px-4 py-3 text-center text-foreground font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>{nbMembres}</td>
                   <td className="px-4 py-3 text-xs text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(a.cotisation)}</td>
                   <td className="px-4 py-3"><Badge variant={a.statutCarte === "Bloquée" ? "danger" : "neutral"}>{a.statutCarte ?? "—"}</Badge></td>
@@ -531,13 +531,25 @@ export default function ParticipantsView() {
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5">
                 <UserPlus className="w-3.5 h-3.5 text-muted-foreground" />
-                <p className="text-xs text-muted-foreground">Ayants droit ({membresFamille.length})</p>
+                <p className="text-xs text-muted-foreground">Famille ({membresFamille.length + 1})</p>
               </div>
               {estRacineSelectionnee && (
                 <button type="button" onClick={openAjoutAyant} className="text-[11px] text-primary hover:underline">+ Ajouter</button>
               )}
             </div>
             <div className="space-y-1.5">
+              {/* Assuré principal toujours en tête pour naviguer rapidement */}
+              {racineSelected && (
+                <button key={racineSelected.id} type="button" onClick={() => { setSelected(racineSelected); scrollToTop(); }}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs text-left transition-colors ${selected.id === racineSelected.id ? "bg-primary/10 ring-1 ring-primary/30" : "bg-secondary/30 hover:bg-secondary/50"}`}
+                >
+                  <span className="flex items-center gap-2 text-foreground">
+                    <Avatar photo={racineSelected.photo} taille={22} />
+                    {racineSelected.nom} {racineSelected.prenom ?? ""} <span className="text-muted-foreground">— Principal</span>
+                  </span>
+                  <Badge variant={racineSelected.statut === "Actif" ? "success" : racineSelected.statut === "Radié" ? "danger" : "warning"}>{racineSelected.statut}</Badge>
+                </button>
+              )}
               {membresFamille.map((m) => (
                 <button key={m.id} type="button" onClick={() => { setSelected(m); scrollToTop(); }}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs text-left transition-colors ${selected.id === m.id ? "bg-primary/10 ring-1 ring-primary/30" : "bg-secondary/30 hover:bg-secondary/50"}`}
@@ -549,7 +561,7 @@ export default function ParticipantsView() {
                   <Badge variant={m.statut === "Actif" ? "success" : m.statut === "Radié" ? "danger" : "warning"}>{m.statut}</Badge>
                 </button>
               ))}
-              {membresFamille.length === 0 && <p className="text-xs text-muted-foreground">Aucun ayant droit déclaré</p>}
+              {membresFamille.length === 0 && !racineSelected && <p className="text-xs text-muted-foreground">Aucun membre de famille déclaré</p>}
             </div>
           </div>
           <div className="flex gap-2 pt-2 border-t border-border">
@@ -691,7 +703,17 @@ export default function ParticipantsView() {
                     <p className={sectionCls}>Identité</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <label className="block"><div className="text-[12px] text-muted-foreground mb-1.5">Sexe</div><select value={editForm.sexe ?? ""} onChange={(e) => setEditForm((v) => ({ ...v, sexe: e.target.value as UpdateAssureInput["sexe"] }))} className={fieldCls}><option value="">—</option><option value="M">Masculin</option><option value="F">Féminin</option></select></label>
-                      <div className="block"><div className="text-[12px] text-muted-foreground mb-1.5">Catégorie de l'assuré</div><p className="text-[13px] text-foreground px-3 py-2">{selected.typeAssure ? CATEGORIE_LABEL[selected.typeAssure] ?? selected.typeAssure : "—"}</p></div>
+                      {selected.familleId ? (
+                        <label className="block">
+                          <div className="text-[12px] text-muted-foreground mb-1.5">Catégorie de l'assuré</div>
+                          <select value={editForm.typeAssure ?? selected.typeAssure ?? ""} onChange={(e) => setEditForm((v) => ({ ...v, typeAssure: e.target.value as "CJ" | "EF" }))} className={fieldCls}>
+                            <option value="CJ">Conjoint(e)</option>
+                            <option value="EF">Enfant</option>
+                          </select>
+                        </label>
+                      ) : (
+                        <div className="block"><div className="text-[12px] text-muted-foreground mb-1.5">Catégorie de l'assuré</div><p className="text-[13px] text-foreground px-3 py-2">Assuré principal</p></div>
+                      )}
                       <label className="block"><div className="text-[12px] text-muted-foreground mb-1.5">Prénom</div><input value={editForm.prenom ?? ""} onChange={(e) => setEditForm((v) => ({ ...v, prenom: e.target.value }))} className={fieldCls} /></label>
                       <label className="block"><div className="text-[12px] text-muted-foreground mb-1.5">Nom</div><input value={editForm.nom ?? ""} onChange={(e) => setEditForm((v) => ({ ...v, nom: e.target.value }))} className={fieldCls} /></label>
                       <label className="block"><div className="text-[12px] text-muted-foreground mb-1.5">Statut marital</div><select value={editForm.statutMatrimonial ?? ""} onChange={(e) => setEditForm((v) => ({ ...v, statutMatrimonial: e.target.value as UpdateAssureInput["statutMatrimonial"] }))} className={fieldCls}><option value="">Sélectionnez</option><option>Célibataire</option><option>Marié</option><option>Divorcé</option><option>Veuf</option></select></label>
@@ -703,7 +725,7 @@ export default function ParticipantsView() {
                       <label className="block"><div className="text-[12px] text-muted-foreground mb-1.5">Date de naissance</div><DateInput value={editForm.dateNaissance ?? ""} onChange={(v) => setEditForm((f) => ({ ...f, dateNaissance: v }))} className={fieldCls} /></label>
                       <div className="block"><div className="text-[12px] text-muted-foreground mb-1.5">Âge (ans)</div><p className="text-[13px] text-foreground px-3 py-2">{calculerAge(editForm.dateNaissance) ?? "—"}</p></div>
                       <label className="block"><div className="text-[12px] text-muted-foreground mb-1.5">Lieu de naissance</div><input value={editForm.lieuNaissance ?? ""} onChange={(e) => setEditForm((v) => ({ ...v, lieuNaissance: e.target.value }))} className={fieldCls} /></label>
-                      {selected.typeAssure === "EF" && (
+                      {(editForm.typeAssure ?? selected.typeAssure) === "EF" && (
                         <label className="flex items-center gap-2 md:col-span-2 pt-1">
                           <input type="checkbox" checked={editForm.scolarise ?? false} onChange={(e) => setEditForm((v) => ({ ...v, scolarise: e.target.checked }))} className="w-4 h-4 accent-primary" />
                           <span className="text-[13px] text-foreground">Enfant scolarisé (limite d'âge étendue du contrat)</span>
@@ -714,7 +736,7 @@ export default function ParticipantsView() {
 
                     <p className={sectionCls}>Identification & coordonnées</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="block"><div className="text-[12px] text-muted-foreground mb-1.5">Matricule</div><p className="text-[13px] text-foreground px-3 py-2" style={{ fontFamily: "'DM Mono', monospace" }}>{selected.matricule}</p></div>
+                      <div className="block"><div className="text-[12px] text-muted-foreground mb-1.5">Matricule</div><p className="text-[13px] text-foreground px-3 py-2" style={{ fontFamily: "'DM Mono', monospace" }}>{selected.identite?.matricules?.[0]?.matricule ?? selected.matricule}</p></div>
                       <div className="block"><div className="text-[12px] text-muted-foreground mb-1.5">N° Assuré</div><p className="text-[13px] text-foreground px-3 py-2" style={{ fontFamily: "'DM Mono', monospace" }}>{selected.numeroAssure ?? "—"}</p></div>
                       <label className="block"><div className="text-[12px] text-muted-foreground mb-1.5">Email</div><input type="email" value={editForm.email ?? ""} onChange={(e) => setEditForm((v) => ({ ...v, email: e.target.value }))} className={fieldCls} /></label>
                       {!selected.familleId ? (

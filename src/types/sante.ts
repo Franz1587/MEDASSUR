@@ -40,6 +40,8 @@ export interface AssureSante {
   telephoneFixe?: string;
   autreNumero?: string;
   fax?: string;
+  // Identité transverse — matricule le plus récent (LRX-) si disponible (2026-10)
+  identite?: { matricules: { matricule: string }[] } | null;
 }
 
 export interface PriseEnCharge {

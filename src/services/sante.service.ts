@@ -62,6 +62,7 @@ export interface ApiAssureSante {
   telephoneFixe?: string;
   autreNumero?: string;
   fax?: string;
+  identite?: { matricules: { matricule: string }[] } | null;
 }
 
 interface ApiPriseEnCharge {
@@ -130,6 +131,7 @@ export function mapAssure(a: ApiAssureSante): AssureSante {
     telephoneFixe: a.telephoneFixe,
     autreNumero: a.autreNumero,
     fax: a.fax,
+    identite: a.identite,
   };
 }
 
@@ -216,6 +218,7 @@ export interface UpdateAssureInput {
   telephoneFixe?: string;
   autreNumero?: string;
   fax?: string;
+  typeAssure?: "CJ" | "EF";
 }
 
 export async function updateAssure(id: string, payload: UpdateAssureInput): Promise<AssureSante> {
