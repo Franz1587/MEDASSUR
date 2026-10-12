@@ -35,11 +35,9 @@ model User {
   // titulaire choisit lui-même son mot de passe (UsersService.
   // changerMotDePasse, seul endroit qui exige l'ancien mot de passe).
   doitChangerMotDePasse Boolean @default(false)
-  // Consentement RGPD (2026-10) — voir demande utilisateur : "ajouter une
-  // clause de consentement adaptée à son profil... il devra cocher et
-  // accepter avant d'aller plus loin". Null = jamais accepté (affiche le
-  // modal bloquant à la connexion). Stocké pour traçabilité/audit.
-  consentementAccepteAt DateTime?
+  // consentementAccepteAt — champ non encore migré en prod (2026-10).
+  // Réintégrer dans le schéma après avoir appliqué la migration SQL :
+  // ALTER TABLE "User" ADD COLUMN "consentementAccepteAt" TIMESTAMP(3);
   createdAt    DateTime @default(now())
 
   // Coordonnées personnelles + photo de profil (2026-08) — voir demande
@@ -263,15 +261,10 @@ model SocieteAssurance {
   prixAbonnement    Decimal? @db.Decimal(18, 2)
   fraisInstallation Decimal? @db.Decimal(18, 2)
 
-  // Abonnement individuel (2026-10) — voir demande utilisateur : "si un
-  // assuré est radié, il peut souscrire un abonnement annuel pour accéder
-  // à l'historique de ses données et à l'E-carnet santé". Prix en FCFA
-  // entiers (jamais de centimes en pratique). Null = abonnement individuel
-  // non proposé par cette société.
-  prixAbonnementIndividuelXaf Int?
+  // prixAbonnementIndividuelXaf + abonnementsIndividuels — non encore migrés
+  // en prod (2026-10). Réintégrer après migration SQL.
 
   facturesAbonnement      FactureAbonnement[]
-  abonnementsIndividuels  AbonnementIndividuel[]
 
   // Nature juridique de la société utilisatrice (2026-09) — voir demande
   // utilisateur : "il faut pouvoir dire le type de société qui va utiliser
@@ -2171,7 +2164,6 @@ model AssureSante {
   // l'assuré lui-même quand le prestataire ne les a pas saisis
   // systématiquement (photo → PDF, voir CarnetSanteDocument).
   carnetSante            CarnetSanteDocument[]
-  abonnementsIndividuels AbonnementIndividuel[]
 
   @@unique([contratId, matricule])
 
@@ -4100,20 +4092,5 @@ model RequeteIdempotente {
 // l'historique de ses données et bénéficier de certains avantages de
 // l'application comme l'E-carnet Santé, il devra souscrire un abonnement
 // annuel." Cloisonné par societeId (même tenant que l'assure d'origine).
-model AbonnementIndividuel {
-  id          String   @id @default(cuid())
-  societeId   String
-  assureId    String
-  dateDebut   DateTime
-  dateFin     DateTime
-  montantXaf  Int
-  statut      String   @default("Actif") // Actif | Expiré | Annulé | EnAttente
-  motifAnnulation String?
-  createdAt   DateTime @default(now())
-
-  societe SocieteAssurance @relation(fields: [societeId], references: [id])
-  assure  AssureSante      @relation(fields: [assureId], references: [id])
-
-  @@index([assureId])
-  @@index([societeId])
-}
+// AbonnementIndividuel — migration non encore appliquée en prod (2026-10).
+// Réintégrer le modèle complet après avoir appliqué la migration SQL complète.

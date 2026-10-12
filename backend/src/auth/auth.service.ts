@@ -108,7 +108,7 @@ export class AuthService {
         id: user.id, nom: user.nom, email: user.email, roleId: user.roleId, initiales: user.initiales,
         modules: user.modules, clientId: user.clientId, assureSanteId: user.assureSanteId, prestataireId: user.prestataireId,
         medecinId: user.medecinId, societeId: user.societeId, doitChangerMotDePasse: user.doitChangerMotDePasse,
-        consentementAccepteAt: user.consentementAccepteAt?.toISOString() ?? null,
+        consentementAccepteAt: null, // colonne non encore migrée en prod — réactiver après migration
       },
     };
   }
@@ -128,20 +128,14 @@ export class AuthService {
       id: user.id, nom: user.nom, email: user.email, roleId: user.roleId, initiales: user.initiales,
       modules: user.modules, clientId: user.clientId, assureSanteId: user.assureSanteId, prestataireId: user.prestataireId,
       medecinId: user.medecinId, societeId: user.societeId, doitChangerMotDePasse: user.doitChangerMotDePasse,
-      consentementAccepteAt: user.consentementAccepteAt?.toISOString() ?? null,
+      consentementAccepteAt: null, // colonne non encore migrée en prod — réactiver après migration
     };
   }
 
-  // Consentement RGPD (2026-10) — voir demande utilisateur : "ajouter une
-  // clause de consentement adaptée à son profil... il devra cocher et
-  // accepter avant d'aller plus loin". Idempotente : si déjà accepté, ne
-  // réécrit pas la date initiale (traçabilité de la PREMIÈRE acceptation).
-  async accepterConsentement(userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { consentementAccepteAt: true } });
-    if (!user) throw new UnauthorizedException("Compte introuvable");
-    if (!user.consentementAccepteAt) {
-      await this.prisma.user.update({ where: { id: userId }, data: { consentementAccepteAt: new Date() } });
-    }
+  // Consentement RGPD (2026-10) — stocké en localStorage côté client tant que
+  // la colonne User.consentementAccepteAt n'est pas migrée en prod.
+  // Réactiver la vraie persistance DB après migration.
+  async accepterConsentement(_userId: string) {
     return { ok: true };
   }
 }

@@ -457,9 +457,10 @@ function PortalShellCore({ meta }: { meta: PortalMeta }) {
       {profileOpen && <MonProfilModal onClose={() => setProfileOpen(false)} />}
 
       {/* Consentement RGPD (2026-10) — bloquant, z-[200], une seule fois par
-          compte. Voir ConsentementModal.tsx et User.consentementAccepteAt. */}
+          compte. Stocké en localStorage tant que la migration DB n'est pas
+          appliquée (backend retourne consentementAccepteAt: null). */}
       {currentRole?.family === "externe" && !currentUser?.consentementAccepteAt && (
-        <ConsentementModal />
+        <ConsentementModal userId={currentUser?.id ?? ""} />
       )}
     </div>
   );

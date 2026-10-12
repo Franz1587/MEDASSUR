@@ -53,16 +53,22 @@ function profilPourRole(roleId: string): keyof typeof PROFIL_CONTENU {
   return "client";
 }
 
+const CLE_CONSENTEMENT = (userId: string) => `medassur-consentement-${userId}`;
+
 // Bloque tout l'écran tant que l'utilisateur n'a pas accepté. Ne peut PAS
 // être fermé sans cliquer "J'accepte" — seule la déconnexion permet de
-// sortir sans accepter. Affiché UNIQUEMENT une fois (voir PortalShell.tsx,
-// condition sur currentUser.consentementAccepteAt).
-export function ConsentementModal() {
+// sortir sans accepter. Affiché UNIQUEMENT une fois par compte (stocké en
+// localStorage tant que la migration User.consentementAccepteAt n'est pas
+// appliquée en prod — voir PortalShell.tsx).
+export function ConsentementModal({ userId }: { userId: string }) {
   const { currentUser, accepterConsentement, logout } = useAuth();
   const [coche, setCoche] = useState(false);
   const [enCours, setEnCours] = useState(false);
+  const [accepted, setAccepted] = useState(() => {
+    try { return !!localStorage.getItem(CLE_CONSENTEMENT(userId)); } catch { return false; }
+  });
 
-  if (!currentUser) return null;
+  if (!currentUser || accepted) return null;
   const profil = profilPourRole(currentUser.roleId);
   const contenu = PROFIL_CONTENU[profil];
 
@@ -71,6 +77,8 @@ export function ConsentementModal() {
     setEnCours(true);
     try {
       await accepterConsentement();
+      try { localStorage.setItem(CLE_CONSENTEMENT(userId), new Date().toISOString()); } catch { /* quota */ }
+      setAccepted(true);
     } finally {
       setEnCours(false);
     }
