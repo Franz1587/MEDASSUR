@@ -26,6 +26,7 @@ import { MessagerieConversationScreen } from "../screens/messagerie/MessagerieCo
 import { MonProfilScreen } from "../screens/profil/MonProfilScreen";
 import { DocumentViewerScreen } from "../screens/documents/DocumentViewerScreen";
 import { ChangementMotDePasseObligatoireScreen } from "../screens/auth/ChangementMotDePasseObligatoireScreen";
+import { ConsentementScreen } from "../screens/consentement/ConsentementScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -34,7 +35,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 // poussés par-dessus (mêmes routes que src/layout/navConfig.ts vues
 // membreXxx côté web, éclatées en écrans natifs distincts).
 export function RootNavigator() {
-  const { currentUser, isLoading } = useAuth();
+  const { currentUser, isLoading, consentementDonne } = useAuth();
 
   if (isLoading) {
     return (
@@ -49,11 +50,12 @@ export function RootNavigator() {
       {!currentUser ? (
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
       ) : currentUser.doitChangerMotDePasse ? (
-        // Mot de passe temporaire (2026-09) — voir demande utilisateur : "la
-        // saisie du mot de passe pour la première fois ne demande pas de
-        // réinitialiser le mot de passe à la première connexion". Aucun
-        // autre écran accessible tant que ce n'est pas résolu.
         <Stack.Screen name="ChangementMotDePasseObligatoire" component={ChangementMotDePasseObligatoireScreen} options={{ headerShown: false }} />
+      ) : !consentementDonne ? (
+        // Consentement RGPD (2026-10) — miroir de ConsentementModal.tsx côté
+        // web. Affiché une seule fois par compte (SecureStore). Aucun autre
+        // écran accessible tant que l'utilisateur n'a pas accepté.
+        <Stack.Screen name="Consentement" component={ConsentementScreen} options={{ headerShown: false }} />
       ) : (
         <>
           <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />

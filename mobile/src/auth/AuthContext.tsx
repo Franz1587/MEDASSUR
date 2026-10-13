@@ -23,10 +23,8 @@ export interface AuthUser {
   assureSanteId?: string | null;
   prestataireId?: string | null;
   medecinId?: string | null;
-  // Mot de passe temporaire (2026-09) — voir backend schema.prisma
-  // User.doitChangerMotDePasse ; voir RootNavigator, qui bloque l'accès à
-  // l'application tant que ce n'est pas résolu.
   doitChangerMotDePasse?: boolean;
+  consentementAccepteAt?: string | null;
 }
 
 type LoginResult = { ok: true } | { ok: false; error: string };
@@ -34,16 +32,21 @@ type LoginResult = { ok: true } | { ok: false; error: string };
 interface AuthContextValue {
   currentUser: AuthUser | null;
   isLoading: boolean;
+  consentementDonne: boolean;
   login: (email: string, password: string) => Promise<LoginResult>;
   logout: () => Promise<void>;
   refreshCurrentUser: () => Promise<void>;
+  accepterConsentement: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const CLE_CONSENTEMENT = (userId: string) => `medassur-consentement-${userId}`;
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [consentementDonne, setConsentementDonne] = useState(false);
   const bootstrapped = useRef(false);
 
   useEffect(() => {
@@ -55,12 +58,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (stored) {
           const parsed = JSON.parse(stored) as AuthUser;
           setUser(parsed);
-          // Resynchronise depuis le serveur (même logique que le web) —
-          // silencieux : un token invalide déclenchera déjà onUnauthorized.
+          // Consentement — vérifié depuis SecureStore (fallback tant que la
+          // migration User.consentementAccepteAt n'est pas appliquée en prod).
+          const consenti = await SecureStore.getItemAsync(CLE_CONSENTEMENT(parsed.id));
+          setConsentementDonne(!!consenti || !!parsed.consentementAccepteAt);
           try {
             const frais = await http.get<AuthUser>("/auth/me");
             await SecureStore.setItemAsync(USER_STORAGE_KEY, JSON.stringify(frais));
             setUser(frais);
+            const consentiFrequent = await SecureStore.getItemAsync(CLE_CONSENTEMENT(frais.id));
+            setConsentementDonne(!!consentiFrequent || !!frais.consentementAccepteAt);
           } catch {
             /* voir onUnauthorized ci-dessous pour le cas token expiré */
           }
@@ -101,6 +108,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await setAccessToken(accessToken);
       await SecureStore.setItemAsync(USER_STORAGE_KEY, JSON.stringify(authUser));
       setUser(authUser);
+      const consenti = await SecureStore.getItemAsync(CLE_CONSENTEMENT(authUser.id));
+      setConsentementDonne(!!consenti || !!authUser.consentementAccepteAt);
       return { ok: true };
     } catch (err) {
       return { ok: false, error: messageErreur(err, "Email ou mot de passe incorrect.") };
@@ -111,16 +120,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await setAccessToken(null);
     await SecureStore.deleteItemAsync(USER_STORAGE_KEY);
     setUser(null);
+    setConsentementDonne(false);
   };
 
   const refreshCurrentUser = async () => {
     const frais = await http.get<AuthUser>("/auth/me");
     await SecureStore.setItemAsync(USER_STORAGE_KEY, JSON.stringify(frais));
     setUser(frais);
+    const consenti = await SecureStore.getItemAsync(CLE_CONSENTEMENT(frais.id));
+    setConsentementDonne(!!consenti || !!frais.consentementAccepteAt);
+  };
+
+  const accepterConsentement = async () => {
+    if (!user) return;
+    try { await http.post("/auth/consentement", {}); } catch { /* no-op côté serveur tant que la migration n'est pas appliquée */ }
+    await SecureStore.setItemAsync(CLE_CONSENTEMENT(user.id), new Date().toISOString());
+    setConsentementDonne(true);
   };
 
   return (
-    <AuthContext.Provider value={{ currentUser: user, isLoading, login, logout, refreshCurrentUser }}>
+    <AuthContext.Provider value={{ currentUser: user, isLoading, consentementDonne, login, logout, refreshCurrentUser, accepterConsentement }}>
       {children}
     </AuthContext.Provider>
   );

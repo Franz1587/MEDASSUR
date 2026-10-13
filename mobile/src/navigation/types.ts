@@ -4,6 +4,7 @@
 export type RootStackParamList = {
   Login: undefined;
   ChangementMotDePasseObligatoire: undefined;
+  Consentement: undefined;
   Main: undefined;
 
   CarteMembre: { assureId: string; nom: string };
