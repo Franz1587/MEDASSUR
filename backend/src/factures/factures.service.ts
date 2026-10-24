@@ -95,6 +95,11 @@ export class FacturesService {
   // jamais apparaître dans la comptabilité/facturation réelle de la
   // société, quel que soit le filtre demandé par l'appelant.
   async findAll(filtres?: { prestataireId?: string; contratId?: string; clientId?: string; statut?: string; reference?: string; du?: string; au?: string; gestionnaireId?: string }) {
+    // Sans filtre ciblé (prestataire/contrat/client), limiter à 200 factures
+    // récentes pour éviter de charger l'intégralité des 11 000+ factures +
+    // leurs lignes d'un coup (timeout). L'utilisateur doit utiliser les
+    // filtres pour affiner sa recherche au-delà.
+    const hasFiltreEtendu = filtres?.prestataireId || filtres?.contratId || filtres?.clientId || filtres?.reference;
     const factures = await this.prisma.facture.findMany({
       where: {
         prestataireId: filtres?.prestataireId, contratId: filtres?.contratId, statut: filtres?.statut,
@@ -112,6 +117,7 @@ export class FacturesService {
       },
       select: SELECT_FACTURE,
       orderBy: { createdAt: "desc" },
+      ...(hasFiltreEtendu ? {} : { take: 200 }),
     });
     const du = parseDateFr(filtres?.du);
     const au = parseDateFr(filtres?.au);

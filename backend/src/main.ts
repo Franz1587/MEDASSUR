@@ -1,4 +1,6 @@
 import * as path from "path";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const compression = require("compression");
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { NestExpressApplication } from "@nestjs/platform-express";
@@ -16,6 +18,7 @@ const MIME_PAR_EXTENSION: Record<string, string> = {
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.use(compression());
   // exposedHeaders : sans ça, le frontend ne peut pas lire Content-Disposition
   // sur une réponse cross-origin (fetch authentifié + blob, voir
   // src/services/documents.service.ts) — nécessaire pour que les documents

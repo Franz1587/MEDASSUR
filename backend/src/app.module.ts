@@ -71,6 +71,7 @@ import { CodesAffectionModule } from "./codes-affection/codes-affection.module";
 import { AbonnementModule } from "./abonnement/abonnement.module";
 import { PresentationsModule } from "./presentations/presentations.module";
 import { GuideAssetsModule } from "./guide-assets/guide-assets.module";
+import { EbillingModule } from "./ebilling/ebilling.module";
 
 @Module({
   imports: [
@@ -144,6 +145,7 @@ import { GuideAssetsModule } from "./guide-assets/guide-assets.module";
     IdempotenceModule,
     PresentationsModule,
     GuideAssetsModule,
+    EbillingModule,
   ],
   providers: [
     // Isolation multi-tenant (2026-09, Phase 2) — voir tenant-context.ts.

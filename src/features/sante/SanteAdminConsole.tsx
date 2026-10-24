@@ -54,6 +54,7 @@ import MessagerieView from "@/features/messagerie/Messagerie";
 import CommunicationsView from "@/features/communications";
 import ImportDonneesView from "@/features/import-donnees";
 import ProfessionnelsSanteView from "@/features/medecins";
+import EbillingView from "@/features/ebilling";
 
 /**
  * The console renders inside the single application shell (AdminShell):
@@ -114,6 +115,7 @@ const consoleRegistry: Partial<Record<View, React.ComponentType>> = {
   communications: CommunicationsView,
   importDonnees: ImportDonneesView,
   professionnelsSante: ProfessionnelsSanteView,
+  ebilling: EbillingView,
 };
 
 export default function SanteAdminConsole() {

@@ -19,7 +19,7 @@ export const GROUPES_MODULES: { label: string; views: View[] }[] = [
   { label: "Production", views: ["sante", "contrats", "renouvellements", "avenants", "resiliations", "participants", "factureProduction", "demandesClient"] },
   { label: "Factures & Prises en charge", views: ["prisesEnCharge", "accordPrealable", "sinistres"] },
   { label: "Réseau de Soins", views: ["prestataires", "reglementPrestataire", "professionnelsSante"] },
-  { label: "Finance", views: ["comptabilite", "reglementComptable", "etatTps", "commissions", "recouvrement", "tresorerie", "fondsDeRoulement", "honoraires", "bordereauSinistres", "bordereauProduction", "bordereauEncaissement"] },
+  { label: "Finance", views: ["comptabilite", "reglementComptable", "etatTps", "commissions", "recouvrement", "tresorerie", "fondsDeRoulement", "honoraires", "bordereauSinistres", "bordereauProduction", "bordereauEncaissement", "ebilling"] },
   { label: "Outils", views: ["ged", "ia", "rapports", "journalOperations", "suiviAgents", "statistiques", "courrierMaladie", "messagerie", "rapportsIa"] },
   { label: "Système", views: ["admin", "parametresEntreprise", "compagnies", "autoGestion", "garantiesCatalogue", "cartesAssurance", "actesMedicaux", "lettresCles", "modelesCourrier", "fraude", "reglesConsignes", "banques", "agences", "importDonnees"] },
 ];

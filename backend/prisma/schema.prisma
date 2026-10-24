@@ -336,6 +336,7 @@ model SocieteAssurance {
   lotsCheques LotCheques[]
   agences Agence[]
   portailAccesPrestataires PortailSocieteAcces[]
+  transactions             Transaction[]
 
   @@index([planAbonnementId])
 }
@@ -4094,3 +4095,35 @@ model RequeteIdempotente {
 // annuel." Cloisonné par societeId (même tenant que l'assure d'origine).
 // AbonnementIndividuel — migration non encore appliquée en prod (2026-10).
 // Réintégrer le modèle complet après avoir appliqué la migration SQL complète.
+
+// ── E-Billing / Paiement électronique ────────────────────────────────
+// Moteur de paiement Digitech Africa (2026-10) — PAYIN (collecte via
+// Airtel Money / Moov Money / Visa-Mastercard) et PAYOUT (décaissement
+// vers prestataires / assurés). Cloisonné par societeId.
+model Transaction {
+  id                     String    @id @default(cuid())
+  societeId              String
+  reference              String    @unique
+  type                   String    // "PAYIN" | "PAYOUT"
+  montant                Float
+  description            String
+  statut                 String    @default("created") // created|pending|paid|expired|failed
+  ebillingId             String?   // E-Billing bill_id (PAYIN)
+  payoutId               String?   // SHAP payout_id (PAYOUT)
+  operateur              String?   // airtelmoney | moovmoney4 | SIMU
+  transactionIdOperateur String?
+  fraisBilling           Float?    // Commission Digitech Africa (FCFA)
+  payeurMsisdn           String?
+  payeurNom              String?
+  payeurEmail            String?
+  contratId              String?
+  prestataireId          String?
+  gestionnaireId         String?
+  createdAt              DateTime  @default(now())
+  paidAt                 DateTime?
+
+  societe SocieteAssurance @relation(fields: [societeId], references: [id])
+
+  @@index([societeId])
+  @@index([statut])
+}

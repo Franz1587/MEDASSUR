@@ -97,6 +97,7 @@ const zoneSections = [
       { label: "Trésorerie", view: "tresorerie" as const, icon: viewIcons.tresorerie },
       { label: "Fonds de Roulement", view: "fondsDeRoulement" as const, icon: viewIcons.fondsDeRoulement },
       { label: "Honoraires de Gestion", view: "honoraires" as const, icon: viewIcons.honoraires },
+      { label: "E-paiement", view: "ebilling" as const, icon: viewIcons.ebilling },
     ],
   },
   {

@@ -94,6 +94,7 @@ import SuperAdminFacturationView from "@/features/super-admin/Facturation";
 import SuperAdminPerformanceView from "@/features/super-admin/Performance";
 import SuperAdminTarificationView from "@/features/super-admin/Tarification";
 import SuperAdminModelesCarteView from "@/features/super-admin/ModelesCarte";
+import EbillingView from "@/features/ebilling";
 
 export const viewRegistry: Record<View, React.ComponentType> = {
   dashboard: RoleDashboard,
@@ -189,4 +190,5 @@ export const viewRegistry: Record<View, React.ComponentType> = {
   superAdminPerformance: SuperAdminPerformanceView,
   superAdminTarification: SuperAdminTarificationView,
   superAdminModelesCarte: SuperAdminModelesCarteView,
+  ebilling: EbillingView,
 };

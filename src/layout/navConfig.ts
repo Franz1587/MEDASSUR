@@ -5,7 +5,7 @@ import {
   ClipboardCheck, ShieldAlert, HandCoins, UserCheck, ShieldCheck, IdCard, Palette, UserCog,
   ClipboardList, Receipt, Landmark, Hash, History, Gauge, FileSpreadsheet, Mail, PieChart,
   ScrollText, MapPinned, KeyRound, TrendingUp, Coins, Home, Users2, Briefcase, MessageCircle, Syringe,
-  ListOrdered, FolderClock, Send, Banknote, UploadCloud, Layers, Sparkles,
+  ListOrdered, FolderClock, Send, Banknote, UploadCloud, Layers, Sparkles, Smartphone,
 } from "lucide-react";
 
 export type View =
@@ -129,7 +129,10 @@ export type View =
   // écran de facturation."
   | "superAdminDashboard" | "superAdminSocietes" | "superAdminPlans"
   | "superAdminFacturation" | "superAdminPerformance" | "superAdminTarification" | "superAdminModelesCarte"
-  | "superAdminUtilisateurs";
+  | "superAdminUtilisateurs"
+  // Paiements électroniques E-Billing (2026-10) — Digitech Africa
+  // PAYIN (Airtel Money / Moov Money / Visa-MC) + PAYOUT (décaissement).
+  | "ebilling";
 
 /** Full icon coverage for every `View`, used by the app's one shell
  * (AdminShell) and by the external portal headers. */
@@ -227,6 +230,7 @@ export const viewIcons: Record<View, React.ElementType> = {
   superAdminTarification: Coins,
   superAdminModelesCarte: IdCard,
   superAdminUtilisateurs: Users,
+  ebilling: Smartphone,
 };
 
 export const allViews: View[] = Object.keys(viewIcons) as View[];
@@ -310,4 +314,5 @@ export const viewLabels: Record<View, string> = {
   superAdminTarification: "Tarification",
   superAdminModelesCarte: "Modèles de carte",
   superAdminUtilisateurs: "Utilisateurs",
+  ebilling: "Paiements électroniques",
 };
