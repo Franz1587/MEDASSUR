@@ -25,6 +25,11 @@ export interface BordereauReglement {
   // structure". Absent = règlement à l'ordre de la structure elle-même.
   medecinId?: string | null;
   medecinNom?: string | null;
+  // Paiement Mobile Money (2026-10) — référence de la Transaction E-Billing liée
+  transactionEbillingId?: string | null;
+  referenceTransaction?: string | null;
+  // Téléphone du prestataire pour pré-remplir le PAYOUT
+  prestataireTelephone?: string | null;
 }
 
 // Détail complet d'un règlement — écran de consultation (voir

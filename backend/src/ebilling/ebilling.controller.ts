@@ -65,6 +65,7 @@ export class EbillingController {
       nom?: string;
       prestataireId?: string;
       gestionnaireId?: string;
+      bordereauIds?: string[];
     },
   ) {
     return this.service.creerPayout(body);

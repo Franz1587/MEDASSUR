@@ -17,10 +17,12 @@ interface ApiBordereau {
   dateReception: string;
   datePaiement?: string;
   referenceVirement?: string;
-  prestataire: { nom: string };
+  prestataire: { nom: string; telephone?: string | null };
   medecinId?: string | null;
   medecin?: { nom: string; prenom?: string | null; titre?: string | null } | null;
   lettreCheque?: { numero: string; numeroCheque: number; banque: { nom: string } } | null;
+  transactionEbillingId?: string | null;
+  transactionEbilling?: { reference: string } | null;
 }
 
 function mapBordereau(b: ApiBordereau): BordereauReglement {
@@ -42,6 +44,9 @@ function mapBordereau(b: ApiBordereau): BordereauReglement {
     banqueNom: b.lettreCheque?.banque.nom,
     medecinId: b.medecinId,
     medecinNom: b.medecin ? `${b.medecin.titre ? `${b.medecin.titre} ` : ""}${b.medecin.nom}${b.medecin.prenom ? ` ${b.medecin.prenom}` : ""}` : null,
+    transactionEbillingId: b.transactionEbillingId,
+    referenceTransaction: b.transactionEbilling?.reference ?? null,
+    prestataireTelephone: b.prestataire.telephone ?? null,
   };
 }
 

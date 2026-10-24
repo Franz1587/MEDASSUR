@@ -3245,6 +3245,12 @@ model BordereauReglement {
   // la saisie libre de `payer()` par une vraie traçabilité bancaire.
   lettreChequeId String?
 
+  // Règlement par Mobile Money (2026-10) — Transaction E-Billing PAYOUT liée
+  // à ce bordereau. Miroir de lettreChequeId pour le mode chèque : quand le
+  // callback Digitech confirme le paiement, le bordereau passe "Payé" et
+  // referenceVirement reçoit la référence de la Transaction.
+  transactionEbillingId String?
+
   // Règlement à l'ordre d'un médecin (2026-08) — voir demande utilisateur :
   // "lorsqu'on fait un règlement pour une structure médicale, que le
   // règlement se fasse à l'ordre d'un médecin intervenant dans la
@@ -3261,14 +3267,16 @@ model BordereauReglement {
   // bordereaux créés avant ce champ.
   creeParId String?
 
-  prestataire    Prestataire     @relation(fields: [prestataireId], references: [id])
-  medecin        Medecin?        @relation(fields: [medecinId], references: [id])
-  creePar        User?           @relation(fields: [creeParId], references: [id])
-  prisesEnCharge PriseEnCharge[]
-  lettreCheque   LettreCheque?   @relation(fields: [lettreChequeId], references: [id])
+  prestataire         Prestataire     @relation(fields: [prestataireId], references: [id])
+  medecin             Medecin?        @relation(fields: [medecinId], references: [id])
+  creePar             User?           @relation(fields: [creeParId], references: [id])
+  prisesEnCharge      PriseEnCharge[]
+  lettreCheque        LettreCheque?   @relation(fields: [lettreChequeId], references: [id])
+  transactionEbilling Transaction?    @relation(fields: [transactionEbillingId], references: [id])
 
   @@index([societeId])
   @@index([creeParId])
+  @@index([transactionEbillingId])
 }
 
 // ── Règlement comptable (lettre chèque) — 2026-08 ─────────────────────
@@ -4122,7 +4130,8 @@ model Transaction {
   createdAt              DateTime  @default(now())
   paidAt                 DateTime?
 
-  societe SocieteAssurance @relation(fields: [societeId], references: [id])
+  societe    SocieteAssurance    @relation(fields: [societeId], references: [id])
+  bordereaux BordereauReglement[]
 
   @@index([societeId])
   @@index([statut])

@@ -21,7 +21,14 @@ export class ReglementPrestataireService {
   // src/features/reglement-prestataire).
   findAll() {
     return this.prisma.bordereauReglement.findMany({
-      include: { prestataire: true, medecin: true, prisesEnCharge: true, lettreCheque: { include: { banque: true } } },
+      include: {
+        prestataire: true,
+        medecin: true,
+        prisesEnCharge: true,
+        lettreCheque: { include: { banque: true } },
+        // Mobile Money (2026-10) — référence et statut de la Transaction liée
+        transactionEbilling: { select: { reference: true } },
+      },
       orderBy: { dateReception: "desc" },
     });
   }

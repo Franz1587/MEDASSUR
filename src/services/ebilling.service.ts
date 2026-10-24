@@ -41,6 +41,7 @@ export interface PayoutInput {
   nom?: string;
   prestataireId?: string;
   gestionnaireId?: string;
+  bordereauIds?: string[];
 }
 
 export async function getTransactions(type?: string, statut?: string): Promise<Transaction[]> {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FileStack, Plus, CheckCircle, XCircle, Banknote, HandCoins, Printer, Search, History } from "lucide-react";
+import { FileStack, Plus, CheckCircle, XCircle, Banknote, HandCoins, Printer, Search, History, Smartphone, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/shared/Badge";
 import { Btn } from "@/components/shared/Btn";
@@ -10,22 +10,147 @@ import { fmtM } from "@/lib/format";
 import { getBordereaux, validerBordereau, rejeterBordereau, payerBordereau, getHistoriqueReglements } from "@/services/reglement.service";
 import { openReglement, openHistoriqueReglements } from "@/services/documents.service";
 import { getPrestataires } from "@/services/prestataires.service";
+import { initierPayout } from "@/services/ebilling.service";
 import GenererReglementModal from "./GenererReglementModal";
 import ReglementDetail from "./ReglementDetail";
 import type { BordereauReglement, HistoriqueReglementResultat } from "@/types/reglement";
 import type { Prestataire } from "@/types/prestataires";
+
+// ── Modal paiement Mobile Money d'un bordereau ──────────────────────────────
+
+const OPERATEURS_PAYOUT = [
+  { value: "airtelmoney", label: "Airtel Money (07x)" },
+  { value: "moovmoney4", label: "Moov Money (06x)" },
+];
+
+function operateurFromMsisdn(msisdn: string): "airtelmoney" | "moovmoney4" {
+  return msisdn.replace(/\s/g, "").startsWith("06") ? "moovmoney4" : "airtelmoney";
+}
+
+function PayerMobileMoneyModal({
+  bordereau,
+  onClose,
+  onSuccess,
+}: {
+  bordereau: BordereauReglement;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const msisdnInitial = bordereau.prestataireTelephone?.replace(/\s/g, "") ?? "";
+  const [msisdn, setMsisdn] = useState(msisdnInitial);
+  const [operateur, setOperateur] = useState<"airtelmoney" | "moovmoney4">(
+    msisdnInitial ? operateurFromMsisdn(msisdnInitial) : "airtelmoney"
+  );
+  const [montant, setMontant] = useState(bordereau.montantValide ?? bordereau.montantTotal);
+  const [description, setDescription] = useState(
+    `Règlement bordereau ${bordereau.numero} — ${bordereau.prestataireNom}`
+  );
+  const [loading, setLoading] = useState(false);
+
+  const field = "w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40";
+  const lbl = "text-[12px] text-muted-foreground mb-1";
+
+  const submit = async () => {
+    if (!msisdn || !montant || !description) {
+      toast.error("Numéro, montant et description requis.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await initierPayout({
+        montant,
+        msisdn,
+        operateur,
+        description,
+        nom: bordereau.prestataireNom,
+        prestataireId: bordereau.prestataireId,
+        bordereauIds: [bordereau.id],
+      });
+      toast.success(`Paiement Mobile Money initié — réf. ${res.reference}`);
+      onSuccess();
+      onClose();
+    } catch {
+      toast.error("Échec du paiement Mobile Money.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md bg-card rounded-2xl shadow-2xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
+            <Smartphone className="w-4 h-4 text-blue-500" />
+            Payer par Mobile Money
+          </h3>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Récapitulatif du bordereau */}
+        <div className="bg-muted/40 rounded-xl p-3 space-y-1 text-[13px]">
+          <p className="font-semibold text-foreground">{bordereau.prestataireNom}</p>
+          <p className="text-muted-foreground">Bordereau {bordereau.numero} · {bordereau.periode}</p>
+          <p className="text-muted-foreground">{bordereau.nbPrisesEnCharge} prestation(s) · validé {fmtM(bordereau.montantValide ?? bordereau.montantTotal)}</p>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <p className={lbl}>Numéro Mobile Money du prestataire *</p>
+            <input type="tel" className={field} value={msisdn}
+              onChange={(e) => { setMsisdn(e.target.value); if (e.target.value) setOperateur(operateurFromMsisdn(e.target.value)); }}
+              placeholder="Ex. 077000001" />
+            {!bordereau.prestataireTelephone && (
+              <p className="text-[11px] text-amber-600 mt-0.5">⚠ Aucun numéro enregistré pour ce prestataire.</p>
+            )}
+          </div>
+          <div>
+            <p className={lbl}>Opérateur *</p>
+            <select className={field} value={operateur} onChange={(e) => setOperateur(e.target.value as "airtelmoney" | "moovmoney4")}>
+              {OPERATEURS_PAYOUT.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <p className={lbl}>Montant à virer (FCFA) *</p>
+            <input type="number" className={field} min={1} value={montant || ""}
+              onChange={(e) => setMontant(Number(e.target.value))} />
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Montant validé : {fmtM(bordereau.montantValide ?? bordereau.montantTotal)}
+            </p>
+          </div>
+          <div>
+            <p className={lbl}>Motif / Description *</p>
+            <input type="text" className={field} value={description}
+              onChange={(e) => setDescription(e.target.value)} />
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <Btn variant="ghost" onClick={onClose} className="flex-1">Annuler</Btn>
+          <Btn onClick={submit} disabled={loading} className="flex-1">
+            {loading ? "Envoi…" : "Initier le virement Mobile Money"}
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const fieldCls = "w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground";
 const labelCls = "text-[12px] text-muted-foreground mb-1.5 whitespace-nowrap truncate";
 
 const statutVariant: Record<string, "success" | "warning" | "danger" | "info" | "neutral"> = {
   "Reçu": "info", "En validation": "warning", "Validé": "success", "Payé": "success", "Rejeté": "danger",
+  "En attente MM": "warning",
 };
 
 export default function ReglementPrestataireView() {
   const [bordereaux, setBordereaux] = useState<BordereauReglement[]>([]);
   const [showGenerer, setShowGenerer] = useState(false);
   const [bordereauOuvert, setBordereauOuvert] = useState<string | null>(null);
+  const [bordereauMM, setBordereauMM] = useState<BordereauReglement | null>(null);
 
   const [prestataires, setPrestataires] = useState<Prestataire[]>([]);
   const [histPrestataireId, setHistPrestataireId] = useState("");
@@ -227,6 +352,13 @@ export default function ReglementPrestataireView() {
                       <span title={`Lettre chèque ${b.lettreChequeNumero}`}>
                         <Badge variant="success">Chèque N° {b.numeroCheque} — {b.banqueNom}</Badge>
                       </span>
+                    ) : b.transactionEbillingId ? (
+                      <span title={`Mobile Money — réf. ${b.referenceTransaction ?? b.transactionEbillingId}`}>
+                        <Badge variant={b.statut === "Payé" ? "success" : "warning"}>
+                          <Smartphone className="w-3 h-3 inline mr-0.5" />
+                          {b.statut === "Payé" ? `MM — ${b.referenceTransaction ?? "confirmé"}` : "MM en attente"}
+                        </Badge>
+                      </span>
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
@@ -241,7 +373,12 @@ export default function ReglementPrestataireView() {
                         </>
                       )}
                       {b.statut === "Validé" && (
-                        <Btn variant="ghost" onClick={() => handlePayer(b.id)}><Banknote className="w-4 h-4" />Marquer payé</Btn>
+                        <>
+                          <Btn variant="ghost" onClick={() => handlePayer(b.id)}><Banknote className="w-4 h-4" />Marquer payé</Btn>
+                          <Btn variant="ghost" onClick={() => setBordereauMM(b)}>
+                            <Smartphone className="w-4 h-4 text-blue-500" />Mobile Money
+                          </Btn>
+                        </>
                       )}
                     </div>
                   </td>
@@ -259,6 +396,13 @@ export default function ReglementPrestataireView() {
       )}
       {bordereauOuvert && (
         <ReglementDetail bordereauId={bordereauOuvert} onClose={() => setBordereauOuvert(null)} onChanged={refresh} />
+      )}
+      {bordereauMM && (
+        <PayerMobileMoneyModal
+          bordereau={bordereauMM}
+          onClose={() => setBordereauMM(null)}
+          onSuccess={refresh}
+        />
       )}
     </div>
   );

@@ -244,6 +244,7 @@ export class EbillingService {
     nom?: string;
     prestataireId?: string;
     gestionnaireId?: string;
+    bordereauIds?: string[]; // IDs de BordereauReglement à lier et marquer payés
   }): Promise<{ reference: string }> {
     const societeId = TenantContext.getSocieteId() ?? 'societe-bootstrap';
     const reference = `OUT-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 6).toUpperCase()}`;
@@ -266,8 +267,20 @@ export class EbillingService {
         prestataireId: dto.prestataireId,
         gestionnaireId: dto.gestionnaireId,
         statut: 'created',
+        // Lier les bordereaux de règlement prestataire (paiement Mobile Money)
+        ...(dto.bordereauIds?.length
+          ? { bordereaux: { connect: dto.bordereauIds.map((id) => ({ id })) } }
+          : {}),
       },
     });
+
+    // Marquer les bordereaux liés "En attente paiement Mobile Money"
+    if (dto.bordereauIds?.length) {
+      await this.prisma.bordereauReglement.updateMany({
+        where: { id: { in: dto.bordereauIds } },
+        data: { statut: 'En attente MM' },
+      });
+    }
 
     try {
       const token = await this.getShapToken();
@@ -321,6 +334,7 @@ export class EbillingService {
     const statut =
       body.status === 'success' || body.status === 'paid' ? 'paid' : 'failed';
     const frais = body.fees ?? body.fee_amount ?? undefined;
+    const now = new Date();
 
     await this.prisma.transaction.updateMany({
       where: { reference: body.reference },
@@ -329,9 +343,41 @@ export class EbillingService {
         payoutId: body.payout_id ?? undefined,
         transactionIdOperateur: body.transaction_id ?? undefined,
         fraisBilling: frais != null ? Number(frais) : undefined,
-        paidAt: statut === 'paid' ? new Date() : undefined,
+        paidAt: statut === 'paid' ? now : undefined,
       },
     });
+
+    // Si paiement confirmé → marquer les bordereaux liés comme "Payé"
+    if (statut === 'paid') {
+      const tx = await this.prisma.transaction.findFirst({
+        where: { reference: body.reference },
+        select: { id: true, reference: true },
+      });
+      if (tx) {
+        const dateStr = now.toISOString().slice(0, 10);
+        await this.prisma.bordereauReglement.updateMany({
+          where: { transactionEbillingId: tx.id },
+          data: {
+            statut: 'Payé',
+            datePaiement: dateStr,
+            referenceVirement: body.reference,
+          },
+        });
+        this.logger.log(`Bordereaux liés à ${body.reference} marqués Payé`);
+      }
+    } else if (statut === 'failed') {
+      // Paiement échoué → remettre les bordereaux en "Validé"
+      const tx = await this.prisma.transaction.findFirst({
+        where: { reference: body.reference },
+        select: { id: true },
+      });
+      if (tx) {
+        await this.prisma.bordereauReglement.updateMany({
+          where: { transactionEbillingId: tx.id, statut: 'En attente MM' },
+          data: { statut: 'Validé', transactionEbillingId: null },
+        });
+      }
+    }
 
     this.logger.log(`Callback PAYOUT ${body.reference} → ${statut}${frais != null ? ` (frais: ${frais} XAF)` : ''}`);
   }
@@ -348,6 +394,9 @@ export class EbillingService {
         ...(type ? { type } : {}),
         ...(statut ? { statut } : {}),
       },
+      include: {
+        bordereaux: { select: { id: true, numero: true, montantValide: true } },
+      },
       orderBy: { createdAt: 'desc' },
       take: 200,
     });
@@ -359,6 +408,9 @@ export class EbillingService {
 
     return this.prisma.transaction.findFirst({
       where: { societeId, reference },
+      include: {
+        bordereaux: { select: { id: true, numero: true, montantValide: true, prestataireId: true } },
+      },
     });
   }
 }
