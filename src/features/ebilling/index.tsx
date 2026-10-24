@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { Badge, type BadgeVariant } from "@/components/shared/Badge";
+import { Combobox } from "@/components/shared/Combobox";
 import { fmtM } from "@/lib/format";
 import {
   getTransactions,
@@ -13,6 +14,8 @@ import {
   type PayinInput,
   type PayoutInput,
 } from "@/services/ebilling.service";
+import { getPrestataires } from "@/services/prestataires.service";
+import type { Prestataire } from "@/types/prestataires";
 
 // Opérateurs disponibles (Gabon)
 const OPERATEURS_PAYIN = [
@@ -184,11 +187,58 @@ function PayinModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: ()
 
 // ── Formulaire PAYOUT ─────────────────────────────────────────────────────────
 
+const MOTIFS_PAYOUT = [
+  { value: "reglement_facture",      label: "Règlement facture prestataire",  tpl: (nom: string) => `Règlement facture — ${nom}` },
+  { value: "remboursement_assure",   label: "Remboursement assuré",           tpl: (nom: string) => `Remboursement assuré — ${nom}` },
+  { value: "paiement_prestation",    label: "Paiement prestation santé",      tpl: (nom: string) => `Paiement prestation santé — ${nom}` },
+  { value: "evacuation_sanitaire",   label: "Évacuation sanitaire",           tpl: (nom: string) => `Évacuation sanitaire — ${nom}` },
+  { value: "autre",                  label: "Autre (saisie libre)",            tpl: () => "" },
+];
+
+function operateurFromMsisdn(msisdn: string): "airtelmoney" | "moovmoney4" {
+  const n = msisdn.replace(/\s/g, "");
+  if (n.startsWith("06") || n.startsWith("+24106")) return "moovmoney4";
+  return "airtelmoney";
+}
+
 function PayoutModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [typeBenef, setTypeBenef] = useState<"prestataire" | "autre">("prestataire");
+  const [prestataires, setPrestataires] = useState<Prestataire[]>([]);
+  const [prestataire, setPrestataire] = useState<Prestataire | null>(null);
+  const [motif, setMotif] = useState(MOTIFS_PAYOUT[0].value);
   const [form, setForm] = useState<PayoutInput>({
     montant: 0, msisdn: "", operateur: "airtelmoney", description: "",
   });
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    getPrestataires().then(setPrestataires).catch(() => {});
+  }, []);
+
+  // Quand un prestataire est sélectionné : auto-remplir MSISDN, nom, opérateur, description
+  const selectionnerPrestataire = (p: Prestataire | null) => {
+    setPrestataire(p);
+    if (!p) return;
+    const msisdn = p.telephone?.replace(/\s/g, "") ?? "";
+    const motifObj = MOTIFS_PAYOUT.find((m) => m.value === motif) ?? MOTIFS_PAYOUT[0];
+    setForm((f) => ({
+      ...f,
+      msisdn,
+      nom: p.nom,
+      operateur: msisdn ? operateurFromMsisdn(msisdn) : f.operateur,
+      description: motifObj.value !== "autre" ? motifObj.tpl(p.nom) : f.description,
+    }));
+  };
+
+  // Quand le motif change : re-générer la description si un bénéficiaire est déjà sélectionné
+  const changerMotif = (v: string) => {
+    setMotif(v);
+    const motifObj = MOTIFS_PAYOUT.find((m) => m.value === v) ?? MOTIFS_PAYOUT[0];
+    const nom = prestataire?.nom ?? form.nom ?? "";
+    if (motifObj.value !== "autre" && nom) {
+      setForm((f) => ({ ...f, description: motifObj.tpl(nom) }));
+    }
+  };
 
   const set = (k: keyof PayoutInput, v: unknown) =>
     setForm((f) => ({ ...f, [k]: v }));
@@ -212,11 +262,11 @@ function PayoutModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
   };
 
   const field = "w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40";
-  const label = "text-[12px] text-muted-foreground mb-1";
+  const lbl = "text-[12px] text-muted-foreground mb-1";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md bg-card rounded-2xl shadow-2xl p-5 space-y-4">
+      <div className="w-full max-w-md bg-card rounded-2xl shadow-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between">
           <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
             <ArrowUpCircle className="w-4 h-4 text-blue-500" />
@@ -228,27 +278,92 @@ function PayoutModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
         </div>
 
         <div className="space-y-3">
+          {/* Type de bénéficiaire */}
           <div>
-            <p className={label}>Opérateur *</p>
+            <p className={lbl}>Type de bénéficiaire *</p>
+            <div className="flex gap-2">
+              {(["prestataire", "autre"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => { setTypeBenef(t); setPrestataire(null); setForm((f) => ({ ...f, msisdn: "", nom: "" })); }}
+                  className={`flex-1 py-2 rounded-lg text-[12px] font-medium border transition-colors ${typeBenef === t ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-secondary"}`}
+                >
+                  {t === "prestataire" ? "Prestataire de santé" : "Autre bénéficiaire"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Sélection prestataire */}
+          {typeBenef === "prestataire" && (
+            <div>
+              <p className={lbl}>Prestataire *</p>
+              <Combobox
+                options={prestataires}
+                value={prestataire}
+                onChange={selectionnerPrestataire}
+                getId={(p) => p.id}
+                getLabel={(p) => p.nom}
+                getSubLabel={(p) => [p.telephone, p.type].filter(Boolean).join(" · ")}
+                placeholder="Rechercher un prestataire…"
+              />
+              {prestataire?.telephone && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Mobile : <span className="font-mono text-foreground">{prestataire.telephone}</span>
+                  {" · "}Opérateur détecté : <span className="text-foreground">{operateurFromMsisdn(prestataire.telephone) === "airtelmoney" ? "Airtel Money" : "Moov Money"}</span>
+                </p>
+              )}
+              {prestataire && !prestataire.telephone && (
+                <p className="text-[11px] text-amber-600 mt-1">⚠ Aucun numéro enregistré pour ce prestataire — saisie manuelle requise.</p>
+              )}
+            </div>
+          )}
+
+          {/* Saisie manuelle si Autre ou prestataire sans téléphone */}
+          {(typeBenef === "autre" || (typeBenef === "prestataire" && prestataire && !prestataire.telephone)) && (
+            <>
+              <div>
+                <p className={lbl}>Numéro du bénéficiaire *</p>
+                <input type="tel" className={field} value={form.msisdn}
+                  onChange={(e) => { set("msisdn", e.target.value); if (e.target.value) set("operateur", operateurFromMsisdn(e.target.value)); }}
+                  placeholder="Ex. 077000001" />
+              </div>
+              <div>
+                <p className={lbl}>Nom du bénéficiaire</p>
+                <input type="text" className={field} value={form.nom ?? ""} onChange={(e) => set("nom", e.target.value)} placeholder="Ex. Jean-Pierre Ondo" />
+              </div>
+            </>
+          )}
+
+          {/* Opérateur */}
+          <div>
+            <p className={lbl}>Opérateur *</p>
             <select className={field} value={form.operateur} onChange={(e) => set("operateur", e.target.value)}>
               {OPERATEURS_PAYOUT.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
+
+          {/* Montant */}
           <div>
-            <p className={label}>Montant (FCFA) *</p>
+            <p className={lbl}>Montant (FCFA) *</p>
             <input type="number" className={field} min={1} value={form.montant || ""} onChange={(e) => set("montant", Number(e.target.value))} placeholder="Ex. 150000" />
           </div>
+
+          {/* Motif structuré */}
           <div>
-            <p className={label}>Numéro du bénéficiaire *</p>
-            <input type="tel" className={field} value={form.msisdn} onChange={(e) => set("msisdn", e.target.value)} placeholder="Ex. 077000001" />
+            <p className={lbl}>Nature du décaissement *</p>
+            <select className={field} value={motif} onChange={(e) => changerMotif(e.target.value)}>
+              {MOTIFS_PAYOUT.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
           </div>
+
+          {/* Description (pré-remplie, éditable) */}
           <div>
-            <p className={label}>Nom du bénéficiaire</p>
-            <input type="text" className={field} value={form.nom ?? ""} onChange={(e) => set("nom", e.target.value)} placeholder="Optionnel" />
-          </div>
-          <div>
-            <p className={label}>Description *</p>
-            <input type="text" className={field} value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Ex. Règlement prestataire Clinique Amissa" />
+            <p className={lbl}>Description / Motif *</p>
+            <input type="text" className={field} value={form.description} onChange={(e) => set("description", e.target.value)}
+              placeholder="Ex. Règlement facture — Clinique Amissa" />
+            <p className="text-[11px] text-muted-foreground mt-0.5">Pré-rempli selon la sélection — modifiable.</p>
           </div>
         </div>
 
