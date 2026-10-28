@@ -15,16 +15,15 @@ function statutVariant(s: string): BadgeVariant {
 // Feuille de soins / feuille d'examen (2026-08) — voir demande utilisateur :
 // "chaque fiche de consultation génère aussi une feuille de soins et
 // chaque saisie d'un examen, actes de spécialité, analyse médicale génère
-// une feuille d'examen. Le but est de dématérialiser cela" — décide, par
-// ligne, laquelle des deux proposer (aucune des deux pour les autres
-// familles, ex. Pharmacie/Dentaire/Kinésithérapie).
+// une feuille d'examen. La pharmacie génère aussi une feuille de soins."
 const GROUPES_EXAMEN = new Set(["Analyse", "Imagerie", "ActesSpecialites"]);
 function typeFormulaire(type: string | null | undefined, acteFamille: string | null | undefined): "soins" | "examen" | null {
   const typeNormalise = type?.trim().toLowerCase();
   if (typeNormalise === "consultation" || typeNormalise === "consultations") return "soins";
+  if (typeNormalise === "pharmacie") return "soins";
   if (typeNormalise === "analyse" || typeNormalise === "analyses médicale" || typeNormalise === "imagerie" || typeNormalise === "actes de spécialités") return "examen";
   const groupe = GROUPES_ACTES.find((g) => acteFamille && g.familles.includes(acteFamille))?.cle;
-  if (groupe === "Consultation") return "soins";
+  if (groupe === "Consultation" || groupe === "Autre") return "soins";
   if (groupe && GROUPES_EXAMEN.has(groupe)) return "examen";
   return null;
 }

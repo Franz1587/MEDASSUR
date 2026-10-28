@@ -52,9 +52,10 @@ const GROUPES_EXAMEN = new Set(["Analyse", "Imagerie", "ActesSpecialites"]);
 function typeFormulaire(type: string | undefined, famille: string | undefined): "soins" | "examen" | null {
   const typeNormalise = type?.trim().toLowerCase();
   if (typeNormalise === "consultation" || typeNormalise === "consultations") return "soins";
+  if (typeNormalise === "pharmacie") return "soins";
   if (typeNormalise === "analyse" || typeNormalise === "analyses médicale" || typeNormalise === "imagerie" || typeNormalise === "actes de spécialités") return "examen";
   const groupe = groupeDeFamilleActe(famille);
-  if (groupe === "Consultation") return "soins";
+  if (groupe === "Consultation" || groupe === "Autre") return "soins";
   if (groupe && GROUPES_EXAMEN.has(groupe)) return "examen";
   return null;
 }
