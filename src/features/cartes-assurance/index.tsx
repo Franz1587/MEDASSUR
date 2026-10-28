@@ -64,8 +64,8 @@ export default function CartesAssuranceView() {
   const refreshPopulation = () => {
     if (!contratId) { setPopulation([]); return; }
     setLoadingPopulation(true);
-    getAssuresSante()
-      .then((all) => setPopulation(all.filter((a) => a.contratId === contratId && a.statut !== "Radié")))
+    getAssuresSante(contratId)
+      .then((all) => setPopulation(all.filter((a) => a.statut !== "Radié")))
       .finally(() => setLoadingPopulation(false));
   };
 

@@ -32,7 +32,7 @@ export default defineConfig({
   },
   server: {
     watch: {
-      ignored: ['**/unnamed*.webp'],
+      ignored: ['**/unnamed*.webp', '**/Modèle import pour La Ruche/**'],
     },
   },
 

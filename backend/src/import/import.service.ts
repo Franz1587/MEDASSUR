@@ -309,25 +309,24 @@ export class ImportService {
   // Détection de ré-import (2026-09 — voir demande utilisateur : "si
   // import à nouveau des factures en utilisant un fichier qui avait déjà
   // des lignes importées, que l'application sache ignorer les lignes
-  // importées et n'ajoute que celles qui n'existent pas encore"). Une
-  // ligne est considérée déjà importée quand une PriseEnCharge existe déjà
-  // pour EXACTEMENT le même (prestataire, référence facture, assuré, date
-  // de prestation, type de prestation, montant) — volontairement SANS
-  // l'acte médical (souvent résolu de façon approximative/générique en
-  // reprise d'antériorité, voir LIBELLE_ACTE_NON_DETAILLE — l'exiger
-  // identique laisserait passer un vrai doublon si le mapping d'acte a
-  // changé d'une tentative d'import à l'autre).
+  // importées et n'ajoute que celles qui n'existent pas encore"). Clé
+  // naturelle : (prestataire, référence facture, assuré, date, type) —
+  // sans le montant (2026-10 : le montant peut changer si la source avait
+  // mal mappé frais réels vs part assurance ; on corrige en place plutôt
+  // que de créer un doublon). Volontairement SANS l'acte médical (souvent
+  // résolu de façon approximative/générique en reprise d'antériorité, voir
+  // LIBELLE_ACTE_NON_DETAILLE — l'exiger identique laisserait passer un
+  // vrai doublon si le mapping d'acte a changé d'une tentative à l'autre).
   private async ligneFactureExisteDeja(
-    prestataireId: string, referenceFacture: string, assureId: string, datePrestation: string, typePrestation: string, montant: number,
-  ): Promise<boolean> {
-    const existante = await this.prisma.priseEnCharge.findFirst({
+    prestataireId: string, referenceFacture: string, assureId: string, datePrestation: string, typePrestation: string,
+  ): Promise<{ id: string; montant: { toNumber: () => number }; baseRemboursement: { toNumber: () => number } | null } | null> {
+    return this.prisma.priseEnCharge.findFirst({
       where: {
-        assureId, date: datePrestation, type: typePrestation, montant,
+        assureId, date: datePrestation, type: typePrestation,
         facture: { prestataireId, referenceFacture },
       },
-      select: { id: true },
-    });
-    return !!existante;
+      select: { id: true, montant: true, baseRemboursement: true },
+    }) as any;
   }
 
   // Même résolution que resoudrePrestataire ci-dessus, mais EN LOTS — pour
@@ -543,6 +542,7 @@ export class ImportService {
           // taux du contrat, qui ne sont d'ailleurs pas toujours renseignés
           // sur un contrat repris.
           baseRemboursementImpose: statutInitial === "Rejeté" ? 0 : l.montant,
+          ignorerRetrait: true,
         });
       }));
       resultats.forEach((res, idx) => {
@@ -624,8 +624,10 @@ export class ImportService {
         const prestataireExistant = await this.resoudrePrestataireLectureSeule(prestataire);
         if (prestataireExistant) {
           const datePrestationNorm = datePrestationParsed;
-          const dejaImportee = await this.ligneFactureExisteDeja(prestataireExistant.id, referenceFacture, resAssure.assure.id, datePrestationNorm, typePrestation, Number(montant));
-          if (dejaImportee) {
+          const existanteApercu = await this.ligneFactureExisteDeja(prestataireExistant.id, referenceFacture, resAssure.assure.id, datePrestationNorm, typePrestation);
+          // Même montant → vraie ligne identique déjà connue, on ignore.
+          // Montant différent → sera corrigée à la confirmation (importerFactures).
+          if (existanteApercu !== null && Math.round(existanteApercu.montant.toNumber()) === Math.round(Number(montant))) {
             rejets.push({ ligne: r, motif: `Déjà importée — une ligne identique existe pour ${resAssure.assure.nom} ${resAssure.assure.prenom ?? ""} chez "${prestataire}" (facture ${referenceFacture}, ${datePrestationNorm}, ${montant} FCFA). Ignorée automatiquement.` });
             continue;
           }
@@ -681,9 +683,26 @@ export class ImportService {
       // entre-temps par ailleurs. Avant toute création d'en-tête — pour ne
       // jamais laisser une Facture vide si TOUTES ses lignes sont déjà
       // connues.
-      const montantVerif = Number(ligne.montant);
-      if (Number.isFinite(montantVerif) && await this.ligneFactureExisteDeja(prestataireRow.id, ligne.referenceFacture, resAssure.assure.id, datePrestation, ligne.typePrestation, montantVerif)) {
-        rejets.push({ ligne: i + 1, motif: `Déjà importée — une ligne identique existe pour ${resAssure.assure.nom} ${resAssure.assure.prenom ?? ""} chez "${prestataireRow.nom}" (facture ${ligne.referenceFacture}, ${datePrestation}, ${ligne.montant} FCFA). Ignorée automatiquement.` });
+      const montant = Number(ligne.montant);
+      if (!Number.isFinite(montant) || montant < 0) { rejets.push({ ligne: i + 1, motif: `Montant "${ligne.montant}" invalide.` }); continue; }
+      // partAssurance = montant pris en charge par l'assurance (Part
+      // financeur du logiciel source). Si absent, on suppose que le
+      // montant importé est déjà le net à payer (comportement historique).
+      const partAssurance = ligne.partAssurance ? Number(ligne.partAssurance) : montant;
+
+      const existante = await this.ligneFactureExisteDeja(prestataireRow.id, ligne.referenceFacture, resAssure.assure.id, datePrestation, ligne.typePrestation);
+      if (existante) {
+        if (Math.round(existante.montant.toNumber()) === Math.round(montant)) {
+          // Ligne exactement identique — rien à faire.
+          rejets.push({ ligne: i + 1, motif: `Déjà importée — une ligne identique existe pour ${resAssure.assure.nom} ${resAssure.assure.prenom ?? ""} chez "${prestataireRow.nom}" (facture ${ligne.referenceFacture}, ${datePrestation}, ${ligne.montant} FCFA). Ignorée automatiquement.` });
+        } else {
+          // Frais réels différents (import précédent mal mappé) → correction.
+          await this.prisma.priseEnCharge.update({
+            where: { id: existante.id },
+            data: { montant, resteACharge: montant - (existante.baseRemboursement?.toNumber() ?? 0) },
+          });
+          crees++;
+        }
         continue;
       }
 
@@ -708,8 +727,6 @@ export class ImportService {
         }
       }
 
-      const montant = Number(ligne.montant);
-      if (!Number.isFinite(montant) || montant < 0) { rejets.push({ ligne: i + 1, motif: `Montant "${ligne.montant}" invalide.` }); continue; }
       // Acte facultatif (voir resoudreActe/LIBELLE_ACTE_NON_DETAILLE) —
       // repli sur le repère générique plutôt qu'un rejet.
       const acte = await this.resoudreActe(ligne.acteMedical);
@@ -724,11 +741,13 @@ export class ImportService {
           statutInitial, motifRejet: ligne.motifRejet,
         }, {
           ignorerDoublonMemeJour: true, exigerAffection: false,
-          // Reprise d'antériorité — voir creerFacturesDepuisLignesResolues
-          // ci-dessous pour le détail (même règle, même demande
-          // utilisateur : "le montant qui remonte... c'est déjà le net à
-          // payer").
-          baseRemboursementImpose: statutInitial === "Rejeté" ? 0 : montant,
+          // partAssurance = net pris en charge par l'assurance (Part
+          // financeur). Distinct de `montant` (frais réels) quand la
+          // source est un export détaillé (col "Total ligne" vs "Part
+          // financeur"). Absent → `montant` joue les deux rôles
+          // (comportement historique : montant = net à payer).
+          baseRemboursementImpose: statutInitial === "Rejeté" ? 0 : partAssurance,
+          ignorerRetrait: true,
         });
         crees++;
       } catch (err) {

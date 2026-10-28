@@ -416,7 +416,7 @@ export function downloadPopulationTemplate() {
  * réellement manquantes restent vides à compléter. Retourne le nombre de
  * lignes exportées (0 = rien à compléter, aucun fichier téléchargé). */
 export async function downloadPopulationTemplateContrat(contratId: string, police?: string | null): Promise<number> {
-  const population = (await getAssuresSante()).filter((a) => a.contratId === contratId);
+  const population = await getAssuresSante(contratId);
   const incomplets = population.filter((a) => !a.photo || (!a.familleId && !a.telephone));
   if (incomplets.length === 0) return 0;
   const lignes = incomplets.map((a) => [

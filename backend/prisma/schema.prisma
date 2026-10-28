@@ -2169,8 +2169,10 @@ model AssureSante {
   @@unique([contratId, matricule])
 
   @@index([societeId])
-
   @@index([identiteId])
+  @@index([contratId, statut])
+  @@index([nom])
+  @@index([prenom])
 }
 
 // Demande de mouvement de population initiée depuis le portail client
@@ -2950,6 +2952,10 @@ model PriseEnCharge {
   @@index([remboursementId])
   @@index([medecinId])
   @@index([codeAffection])
+  @@index([assureId])
+  @@index([date])
+  @@index([statut])
+  @@index([prestataireId])
 
   @@index([societeId])
 }
@@ -3018,6 +3024,11 @@ model Facture {
 
   @@index([prestataireId])
   @@index([contratId])
+  @@index([statut])
+  @@index([dateReception])
+  @@index([gestionnaireId])
+  @@index([releveId])
+  @@index([createdAt])
 
   @@index([societeId])
 }
@@ -3086,6 +3097,9 @@ model Remboursement {
 
   @@index([contratId])
   @@index([assurePrincipalId])
+  @@index([statut])
+  @@index([gestionnaireId])
+  @@index([createdAt])
 
   @@index([societeId])
 }

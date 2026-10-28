@@ -1435,7 +1435,7 @@ export class SanteService {
   // uniquement par PrescriptionsService.traiter, qui hérite déjà le code
   // affection de la Prescription d'origine sans jamais le faire ressaisir
   // par le prestataire traitant.
-  async creerLigneFacture(factureId: string, dto: CreateFactureLigneDto, opts?: { ignorerDoublonMemeJour?: boolean; exigerAffection?: boolean; baseRemboursementImpose?: number }) {
+  async creerLigneFacture(factureId: string, dto: CreateFactureLigneDto, opts?: { ignorerDoublonMemeJour?: boolean; exigerAffection?: boolean; baseRemboursementImpose?: number; ignorerRetrait?: boolean }) {
     const facture = await this.prisma.facture.findUnique({ where: { id: factureId }, include: { prestataire: true } });
     if (!facture) throw new NotFoundException(`Facture ${factureId} introuvable`);
     const ligne = await this.creerLigneCommune(
@@ -1506,7 +1506,7 @@ export class SanteService {
   private async creerLigneCommune(
     ctx: { contratId: string; prestataireId: string | null; prestataireNom: string; factureId?: string; remboursementId?: string; modePaiement: "TiersPayant" | "Remboursement"; appliquerTps: boolean },
     dto: CreateFactureLigneDto,
-    opts?: { ignorerDoublonMemeJour?: boolean; exigerAffection?: boolean; baseRemboursementImpose?: number },
+    opts?: { ignorerDoublonMemeJour?: boolean; exigerAffection?: boolean; baseRemboursementImpose?: number; ignorerRetrait?: boolean },
   ) {
     dto.montant = arrondirMontantFcfa(dto.montant);
     if (dto.montantRejete !== undefined) dto.montantRejete = arrondirMontantFcfa(dto.montantRejete);
@@ -1521,7 +1521,7 @@ export class SanteService {
       select: { statut: true, dateFin: true, saisieApresResiliationAutorisee: true },
     });
     verifierSaisieAutorisee(contratRef, dto.datePrestation);
-    await verifierAssureNonRetire(this.prisma, ctx.contratId, dto.assureId, dto.datePrestation);
+    if (!opts?.ignorerRetrait) await verifierAssureNonRetire(this.prisma, ctx.contratId, dto.assureId, dto.datePrestation);
     await verifierContratDeAssureALaDate(this.prisma, ctx.contratId, dto.assureId, dto.datePrestation);
     // Rubrique forcée par le TYPE de prestataire (2026-09) — voir demande
     // utilisateur : "chaque prestation des prestataires de type opticien

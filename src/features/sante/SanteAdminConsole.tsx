@@ -1,60 +1,62 @@
-import { useRef, useState } from "react";
+import { lazy, Suspense, useRef, useState } from "react";
 import { viewLabels, type View } from "@/layout/navConfig";
 import { ShellNavigationProvider } from "@/layout/ShellNavigationContext";
 import { AdminShell } from "@/features/sante/admin/AdminShell";
-import RoleDashboard from "@/features/dashboard/RoleDashboard";
-import CrmView from "@/features/crm";
-import ClientsView from "@/features/clients";
-import CompagniesView from "@/features/compagnies";
-import AutoGestionView from "@/features/autogestion";
-import AppelOffresView from "@/features/appel-offres";
-import CotationView from "@/features/cotation";
-import ContratsView from "@/features/contrats";
-import RenouvellementsView from "@/features/renouvellements";
-import AvenantsView from "@/features/avenants";
-import ResiliationsView from "@/features/resiliations";
-import ParticipantsView from "@/features/participants";
-import SinistresView from "@/features/sinistres";
-import PrisesEnChargeView from "@/features/prises-en-charge";
-import AccordPrealableView from "@/features/accord-prealable";
-import FraudeView from "@/features/fraude";
-import PrestatairesView from "@/features/prestataires";
-import ReglementPrestataireView from "@/features/reglement-prestataire";
-import EtatTpsView from "@/features/etat-tps";
-import ReglementComptableView from "@/features/reglement-comptable";
-import ComptabiliteView from "@/features/comptabilite";
-import CommissionsView from "@/features/commissions";
-import RecouvrementView from "@/features/recouvrement";
-import TresorerieView from "@/features/tresorerie";
-import FondsDeRoulementView from "@/features/fonds-de-roulement";
-import HonorairesView from "@/features/honoraires";
-import GedView from "@/features/ged";
-import IAView from "@/features/ia";
-import RapportsView from "@/features/rapports";
-import AdminView from "@/features/admin";
-import GarantiesCatalogueView from "@/features/garanties-catalogue";
-import CartesAssuranceView from "@/features/cartes-assurance";
-import ActesMedicauxView from "@/features/actes-medicaux";
-import LettresClesView from "@/features/lettres-cles";
-import JournalOperationsView from "@/features/journal-operations";
-import SuiviAgentsView from "@/features/suivi-agents";
-import FactureProductionView from "@/features/facture-production";
-import CourrierMaladieView from "@/features/courrier-maladie";
-import ModelesCourrierView from "@/features/modeles-courrier";
-import StatistiquesView from "@/features/statistiques";
-import ParametresEntrepriseView from "@/features/parametres-entreprise";
-import ReglesConsignesView from "@/features/regles-consignes";
-import BanquesView from "@/features/banques";
-import AgencesView from "@/features/agences";
-import BordereauSinistresView from "@/features/bordereau-sinistres";
-import BordereauProductionView from "@/features/bordereau-production";
-import BordereauEncaissementView from "@/features/bordereau-encaissement";
-import DemandesClientView from "@/features/demandes-client";
-import MessagerieView from "@/features/messagerie/Messagerie";
-import CommunicationsView from "@/features/communications";
-import ImportDonneesView from "@/features/import-donnees";
-import ProfessionnelsSanteView from "@/features/medecins";
-import EbillingView from "@/features/ebilling";
+import { ViewFallback } from "@/components/shared/ViewFallback";
+
+const RoleDashboard = lazy(() => import("@/features/dashboard/RoleDashboard"));
+const CrmView = lazy(() => import("@/features/crm"));
+const ClientsView = lazy(() => import("@/features/clients"));
+const CompagniesView = lazy(() => import("@/features/compagnies"));
+const AutoGestionView = lazy(() => import("@/features/autogestion"));
+const AppelOffresView = lazy(() => import("@/features/appel-offres"));
+const CotationView = lazy(() => import("@/features/cotation"));
+const ContratsView = lazy(() => import("@/features/contrats"));
+const RenouvellementsView = lazy(() => import("@/features/renouvellements"));
+const AvenantsView = lazy(() => import("@/features/avenants"));
+const ResiliationsView = lazy(() => import("@/features/resiliations"));
+const ParticipantsView = lazy(() => import("@/features/participants"));
+const SinistresView = lazy(() => import("@/features/sinistres"));
+const PrisesEnChargeView = lazy(() => import("@/features/prises-en-charge"));
+const AccordPrealableView = lazy(() => import("@/features/accord-prealable"));
+const FraudeView = lazy(() => import("@/features/fraude"));
+const PrestatairesView = lazy(() => import("@/features/prestataires"));
+const ReglementPrestataireView = lazy(() => import("@/features/reglement-prestataire"));
+const EtatTpsView = lazy(() => import("@/features/etat-tps"));
+const ReglementComptableView = lazy(() => import("@/features/reglement-comptable"));
+const ComptabiliteView = lazy(() => import("@/features/comptabilite"));
+const CommissionsView = lazy(() => import("@/features/commissions"));
+const RecouvrementView = lazy(() => import("@/features/recouvrement"));
+const TresorerieView = lazy(() => import("@/features/tresorerie"));
+const FondsDeRoulementView = lazy(() => import("@/features/fonds-de-roulement"));
+const HonorairesView = lazy(() => import("@/features/honoraires"));
+const GedView = lazy(() => import("@/features/ged"));
+const IAView = lazy(() => import("@/features/ia"));
+const RapportsView = lazy(() => import("@/features/rapports"));
+const AdminView = lazy(() => import("@/features/admin"));
+const GarantiesCatalogueView = lazy(() => import("@/features/garanties-catalogue"));
+const CartesAssuranceView = lazy(() => import("@/features/cartes-assurance"));
+const ActesMedicauxView = lazy(() => import("@/features/actes-medicaux"));
+const LettresClesView = lazy(() => import("@/features/lettres-cles"));
+const JournalOperationsView = lazy(() => import("@/features/journal-operations"));
+const SuiviAgentsView = lazy(() => import("@/features/suivi-agents"));
+const FactureProductionView = lazy(() => import("@/features/facture-production"));
+const CourrierMaladieView = lazy(() => import("@/features/courrier-maladie"));
+const ModelesCourrierView = lazy(() => import("@/features/modeles-courrier"));
+const StatistiquesView = lazy(() => import("@/features/statistiques"));
+const ParametresEntrepriseView = lazy(() => import("@/features/parametres-entreprise"));
+const ReglesConsignesView = lazy(() => import("@/features/regles-consignes"));
+const BanquesView = lazy(() => import("@/features/banques"));
+const AgencesView = lazy(() => import("@/features/agences"));
+const BordereauSinistresView = lazy(() => import("@/features/bordereau-sinistres"));
+const BordereauProductionView = lazy(() => import("@/features/bordereau-production"));
+const BordereauEncaissementView = lazy(() => import("@/features/bordereau-encaissement"));
+const DemandesClientView = lazy(() => import("@/features/demandes-client"));
+const MessagerieView = lazy(() => import("@/features/messagerie/Messagerie"));
+const CommunicationsView = lazy(() => import("@/features/communications"));
+const ImportDonneesView = lazy(() => import("@/features/import-donnees"));
+const ProfessionnelsSanteView = lazy(() => import("@/features/medecins"));
+const EbillingView = lazy(() => import("@/features/ebilling"));
 
 /**
  * The console renders inside the single application shell (AdminShell):
@@ -62,7 +64,8 @@ import EbillingView from "@/features/ebilling";
  * state (`localView`), and breadcrumb — every entry below is a REAL,
  * API-backed page (no mock `SanteAdminXxxPage` placeholders).
  */
-const consoleRegistry: Partial<Record<View, React.ComponentType>> = {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const consoleRegistry: Partial<Record<View, React.ComponentType<any>>> = {
   dashboard: RoleDashboard,
   crm: CrmView,
   clients: ClientsView,
@@ -135,7 +138,9 @@ export default function SanteAdminConsole() {
   return (
     <ShellNavigationProvider value={{ current: localView, setView: setLocalView, shellActionRequest, triggerShellAction, scrollToTop: () => contentRef.current?.scrollTo({ top: 0 }) }}>
       <AdminShell breadcrumb={[viewLabels[localView]]} contentRef={contentRef}>
-        <ActivePage />
+        <Suspense fallback={<ViewFallback />}>
+          <ActivePage />
+        </Suspense>
       </AdminShell>
     </ShellNavigationProvider>
   );

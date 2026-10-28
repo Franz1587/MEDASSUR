@@ -224,7 +224,7 @@ export class FacturesService {
     return this.prisma.facture.update({ where: { id }, data: { statut: "Annulée", motifAnnulation: motif }, select: SELECT_FACTURE });
   }
 
-  async ajouterLigne(factureId: string, dto: CreateFactureLigneDto, opts?: { ignorerDoublonMemeJour?: boolean; exigerAffection?: boolean; baseRemboursementImpose?: number }) {
+  async ajouterLigne(factureId: string, dto: CreateFactureLigneDto, opts?: { ignorerDoublonMemeJour?: boolean; exigerAffection?: boolean; baseRemboursementImpose?: number; ignorerRetrait?: boolean }) {
     const facture = await this.findOne(factureId);
     if (facture.statut === "Annulée") throw new BadRequestException("Facture annulée — impossible d'ajouter une ligne.");
     return this.sante.creerLigneFacture(factureId, dto, opts);

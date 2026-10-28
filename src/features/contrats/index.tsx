@@ -2069,7 +2069,7 @@ export default function ContratsView() {
           onClose={() => setBasculePopulationContrat(null)}
           onDone={() => {
             refresh();
-            if (editing) getAssuresSante().then((all) => setExistingPopulation(all.filter((a) => a.contratId === editing.id)));
+            if (editing) getAssuresSante(editing.id).then(setExistingPopulation);
           }}
         />
       )}

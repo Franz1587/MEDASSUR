@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import { LogOut, Sun, Moon, Shield, Bell, CheckCheck, BookOpen, Presentation, Menu, X, WifiOff, RefreshCw } from "lucide-react";
 import { onFileAttenteChangee, synchroniser } from "@/lib/syncManager";
@@ -12,6 +12,7 @@ import { viewLabels, moduleIcons, type View } from "@/layout/navConfig";
 import { viewRegistry } from "@/layout/viewRegistry";
 import { ShellNavigationProvider } from "@/layout/ShellNavigationContext";
 import { Badge } from "@/components/shared/Badge";
+import { ViewFallback } from "@/components/shared/ViewFallback";
 import { getNotifications, marquerNotificationLue, marquerToutesNotificationsLues } from "@/services/notifications.service";
 import { getNonLus as getMessagerieNonLus } from "@/services/messagerie.service";
 import type { AppNotification } from "@/types/notifications";
@@ -439,7 +440,9 @@ function PortalShellCore({ meta }: { meta: PortalMeta }) {
               changer de vue lui-même, comme les zones internes. */}
           <ShellNavigationProvider value={{ current: view, setView, shellActionRequest: null, triggerShellAction: () => undefined, scrollToTop: () => contentRef.current?.scrollTo({ top: 0 }) }}>
             <div className={showPresentation || (showGuide && !!guideProfil) ? "hidden" : ""}>
-              <ActiveView />
+              <Suspense fallback={<ViewFallback />}>
+                <ActiveView />
+              </Suspense>
             </div>
             {showPresentation ? (
               <PresentationView onBack={() => setShowPresentation(false)} />

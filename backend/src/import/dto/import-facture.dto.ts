@@ -63,6 +63,15 @@ export class ImportFactureRowDto {
   @IsString()
   montant: string;
 
+  // Reprise d'antériorité détaillée — montant que l'assurance a effectivement
+  // remboursé (Part financeur du logiciel source). Quand renseigné, `montant`
+  // représente les frais réels (Total ligne) et `partAssurance` le net pris en
+  // charge ; le reste à charge = montant - partAssurance.  Absent → l'import
+  // se comporte comme avant (montant = frais réels = base remboursement).
+  @IsOptional()
+  @IsString()
+  partAssurance?: string;
+
   @IsOptional()
   @IsString()
   quantite?: string;

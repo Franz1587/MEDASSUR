@@ -120,8 +120,8 @@ export default function PopulationPanel({ contrat, onUpdated }: Props) {
     // Tout le monde est affiché (y compris Suspendu/Radié) — un contrat
     // repris des années plus tard peut avoir une population historique
     // qu'il faut pouvoir consulter/exporter sans la masquer.
-    getAssuresSante()
-      .then((all) => setPopulation(all.filter((a) => a.contratId === contrat.id)))
+    getAssuresSante(contrat.id)
+      .then(setPopulation)
       .finally(() => setLoading(false));
   };
 
