@@ -39,6 +39,13 @@ interface ApiAccordPrealable {
   assure: { nom: string };
   lignes?: ApiAccordPrealableLigne[];
   assigneAId?: string | null;
+  medicamentsLus?: string;
+  codeAccesPharmacie?: string;
+  medecinTraitant?: string;
+  texteCachetMedecin?: string;
+  signaturePresente?: boolean;
+  casesCoches?: string;
+  documentNumerise?: string;
 }
 
 function mapLigne(l: ApiAccordPrealableLigne): AccordPrealableLigne {
@@ -81,6 +88,13 @@ function mapAccord(a: ApiAccordPrealable): AccordPrealable {
     montantFacture: a.montantFacture !== undefined && a.montantFacture !== null ? toNumber(a.montantFacture) : undefined,
     lignes: (a.lignes ?? []).map(mapLigne),
     assigneAId: a.assigneAId ?? null,
+    medicamentsLus: a.medicamentsLus ?? undefined,
+    codeAccesPharmacie: a.codeAccesPharmacie ?? undefined,
+    medecinTraitant: a.medecinTraitant ?? undefined,
+    texteCachetMedecin: a.texteCachetMedecin ?? undefined,
+    signaturePresente: a.signaturePresente ?? undefined,
+    casesCoches: a.casesCoches ?? undefined,
+    documentNumerise: a.documentNumerise ?? undefined,
   };
 }
 

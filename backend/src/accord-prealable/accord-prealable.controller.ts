@@ -1,4 +1,8 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UploadedFile, UploadedFiles, UseGuards, UseInterceptors } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, Res, UploadedFile, UploadedFiles, UseGuards, UseInterceptors } from "@nestjs/common";
+import type { Response } from "express";
+import * as path from "path";
+import * as fs from "fs";
+import { UPLOADS_ROOT } from "../uploads-dir.util";
 import type { Request } from "express";
 import { FileFieldsInterceptor, FileInterceptor } from "@nestjs/platform-express";
 import { CHAMPS_PIECES, TAILLE_MAX_PIECE, piecesRecues, reunirEnUnFichier, type PiecesRecues } from "../lib/pieces-jointes.util";
@@ -88,5 +92,18 @@ export class AccordPrealableController {
   async uploadDevis(@Param("id") id: string, @UploadedFiles() recues: PiecesRecues) {
     const file = (await reunirEnUnFichier(piecesRecues(recues))) as Express.Multer.File;
     return this.service.uploadDocument(id, "devis", file);
+  }
+
+  // Téléchargement du PDF réplique généré par Ariana (numérisation de formulaire médical scanné).
+  @Get(":id/document-numerise")
+  async downloadDocumentNumerise(@Param("id") id: string, @Res() res: Response) {
+    const accord = await this.service.findOne(id);
+    const fichier = (accord as { documentNumerise?: string | null }).documentNumerise;
+    if (!fichier) return res.status(404).json({ message: "Document numérisé non disponible pour ce dossier." });
+    const filePath = path.join(UPLOADS_ROOT, "accords-prealables", fichier);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ message: "Fichier introuvable sur le serveur." });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${fichier}"`);
+    fs.createReadStream(filePath).pipe(res);
   }
 }

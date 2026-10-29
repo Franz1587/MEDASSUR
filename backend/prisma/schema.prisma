@@ -2692,6 +2692,19 @@ model AccordPrealable {
   medicamentsLus     String?
   codeAccesPharmacie String? @unique
 
+  // Numérisation intelligente (2026-10) — champs extraits par Ariana (vision
+  // Claude) depuis le scan d'une Feuille de Soins ou Feuille d'Examens LA
+  // RUCHE. texteCachetMedecin = texte EXACT de chaque ligne du cachet (CNOM,
+  // téléphone, adresse…) copié mot pour mot ; signaturePresente = signature
+  // du praticien visible sur le scan ; casesCoches = JSON des cases cochées
+  // (secteur, spécialité, tarif jour/nuit) ; documentNumerise = chemin du
+  // PDF de réplication généré reproduisant le format officiel LA RUCHE.
+  medecinTraitant    String?
+  texteCachetMedecin String?
+  signaturePresente  Boolean?
+  casesCoches        String?
+  documentNumerise   String?
+
   // Toute entente préalable se rapporte à un prestataire précis (clinique,
   // hôpital, cabinet médical, dentiste, ophtalmologue, laboratoire,
   // opticien…) — même principe que PriseEnCharge.prestataire/prestataireId :

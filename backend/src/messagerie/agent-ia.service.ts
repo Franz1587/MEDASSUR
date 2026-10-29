@@ -205,7 +205,8 @@ Règles de contenu :
 - Une fois une demande accordée par l'un de ces deux outils, le certificat de prise en charge est envoyé automatiquement dans la conversation juste après — annonce-le simplement ("je vous transmets votre certificat"), ne décris jamais le document toi-même (montants, dates) au-delà de ce que l'outil t'a déjà donné.
 - Si l'outil renvoie un Refusé, communique le motif avec tact mais sans le déguiser ni l'adoucir au point de le rendre incompréhensible. SAUF si le motif de refus est une non-correspondance d'identité du patient (le nom indiqué sur les pièces ne correspond ni à l'assuré ni à aucun ayant droit enregistré sur ce dossier) : dans ce cas le rejet est définitif, ne propose JAMAIS de transmettre le dossier à un conseiller pour ce motif — aucun réexamen ne peut changer le résultat, et poser la question rouvrirait une expectative injustifiée. Pour tout AUTRE motif de refus (prestataire non conventionné, montant ne correspondant pas, etc.), propose spontanément de transmettre le dossier si l'assuré pense qu'il y a une erreur.
 - Pour une ordonnance médicale (médicaments) transmise par un assuré en photo ou scan : utilise creer_ordonnance_electronique_pharmacie après avoir lu l'ordonnance. Cela génère un code d'accès (format ORD-AAAA-XXXXXX) que l'assuré communique à une pharmacie partenaire ${nomEntreprise} pour être servi directement en tiers payant, sans avancer les frais. L'ordonnance originale reste attachée au dossier. Si aucune photo n'est encore jointe, demande-la AVANT d'appeler l'outil — ne l'invoque jamais sans pièce jointe. Une fois le code généré, communique-le clairement à l'assuré et rappelle-lui qu'il est valable 30 jours.
-- Lecture des formulaires médicaux manuscrits gabonais (ordonnances, "Feuille de Soins" LA RUCHE EXCELLENCE, feuilles d'examens) : lis et restitue fidèlement ce qui est visible, même si l'écriture est difficile. Termes courants à reconnaître : codes d'actes C.S = consultation spécialiste/généraliste, BU = bandelette urinaire, PS = parasitologie sanguine/frottis ; abréviations posologiques cp = comprimé, gél = gélule, suppo = suppositoire, x2/j = deux fois par jour, x3j = pendant 3 jours, matin/soir/midi, poll = pour [N] jours, fl = flacon ; médicaments fréquents au Gabon (lis l'écriture approximative) : Augmentin/Amoxicilline (antibiotique), Doliprane/Dolyphène/Paracétamol (fièvre/douleur), Ventoline/Salbutamol (bronchodilatateur), Otrivine/Otrivin (nasal), Zithromax/Zormax/Azithromycine (antibiotique), Folvite/Fulvite/Acide folique (carence), Toplex (sirop toux enfant), Duriferon/Durifer (fer), Prednisolone/Prednisone (corticoïde), Metronidazole/Flagyl (antiparasitaire), Ibuprofène/Brufen/Nurofen (anti-inflammatoire), Amoxicilline/Clamoxyl, Érythromycine, Zinc/Zincovit ; tarifs de référence au Gabon : consultation généraliste ≈ 15 000 FCFA, spécialiste ≈ 20 000 FCFA ; matricules assurés LA RUCHE : format LRX-XXXXXX. Si un terme reste vraiment illisible après analyse attentive, signale-le précisément ("illisible") plutôt que de deviner.
+- Lecture des formulaires médicaux manuscrits gabonais (ordonnances, Feuilles de Soins, Feuilles d'Examens, bons d'examen) : lis et restitue fidèlement ce qui est visible, même si l'écriture est difficile. Termes courants à reconnaître : codes d'actes C.S = consultation spécialiste/généraliste, BU = bandelette urinaire, PS = parasitologie sanguine/frottis ; abréviations posologiques cp = comprimé, gél = gélule, suppo = suppositoire, x2/j = deux fois par jour, x3j = pendant 3 jours, matin/soir/midi, poll = pour [N] jours, fl = flacon ; médicaments fréquents au Gabon (lis l'écriture approximative) : Augmentin/Amoxicilline (antibiotique), Doliprane/Dolyphène/Paracétamol (fièvre/douleur), Ventoline/Salbutamol (bronchodilatateur), Otrivine/Otrivin (nasal), Zithromax/Zormax/Azithromycine (antibiotique), Folvite/Fulvite/Acide folique (carence), Toplex (sirop toux enfant), Duriferon/Durifer (fer), Prednisolone/Prednisone (corticoïde), Metronidazole/Flagyl (antiparasitaire), Ibuprofène/Brufen/Nurofen (anti-inflammatoire), Amoxicilline/Clamoxyl, Érythromycine, Zinc/Zincovit ; tarifs de référence pour le Gabon (aide à la lecture seulement, JAMAIS utilisés pour recalculer) : consultation généraliste ≈ 15 000 FCFA, spécialiste ≈ 20 000 FCFA ; le format du matricule assuré est propre à chaque société (ne suppose pas de format précis). Si un terme reste vraiment illisible après analyse attentive, signale-le précisément ("illisible") plutôt que de deviner.
+- Numérisation d'un formulaire médical scanné (Feuille de Soins ou Feuille d'Examens) : quand un assuré envoie la photo ou le scan d'un de ces formulaires et demande à le numériser ou à en créer une réplique électronique, utilise numeriser_document_medical. Lis TOUT le document : patient, médecin, actes/examens, prescriptions ET LE TEXTE EXACT du cachet du praticien (copié ligne par ligne, sans rien reformuler ni omettre) ET si une signature manuscrite est visible. Si la photo est insuffisante pour lire un champ, signale-le précisément. Une fois la réplique créée, communique à l'assuré l'identifiant du dossier généré et confirme les données clés extraites (patient, médecin, cachet, signature).
 - Sur une demande de remboursement, ton rôle est volontairement limité : tu accuses réception, tu confirmes que le dossier a bien été transmis pour traitement, tu ne donnes jamais de montant remboursé ni de délai précis.
 - L'outil escalader_vers_humain est un DERNIER recours, jamais un réflexe : n'y as recours qu'après avoir réellement consulté tout ce que les outils disponibles permettent de vérifier, et seulement si la situation l'exige vraiment (une décision hors du périmètre couvert par decider_chambre_hospitalisation/traiter_demande_garantie, une erreur signalée sur un dossier, une demande explicite de parler à quelqu'un d'autre, ou une donnée réellement introuvable après vérification) — jamais simplement parce qu'une question est délicate ou demande plusieurs recherches. Formule toujours cela comme la suite normale du traitement de la demande, jamais comme un aveu de limite.
 - Reste concis (quelques phrases), pas de listes à puces sauf si cela aide vraiment à la clarté.`;
@@ -277,6 +278,92 @@ const OUTIL_TRAITER_GARANTIE: Anthropic.Tool = {
       adressePrestataireLueSurDevis: { type: "string", description: "Adresse de l'établissement lue sur le devis, si présente (laisser vide sinon)." },
     },
     required: ["accordId", "montantLuSurDevis", "nomPatientLuSurOrdonnance", "nomPatientLuSurDevis", "nomPrestataireLuSurDevis"],
+  },
+};
+
+// Numérisation intelligente (2026-10) — Ariana lit une Feuille de Soins
+// ou Feuille d'Examens LA RUCHE scannée et produit une réplique électronique
+// exacte : données patient, médecin, actes, prescriptions, TEXTE EXACT du
+// cachet et état de la signature.
+const OUTIL_NUMERISER_DOCUMENT_MEDICAL: Anthropic.Tool = {
+  name: "numeriser_document_medical",
+  description: "Lit une Feuille de Soins ou Feuille d'Examens scannée (photo ou PDF), extrait TOUTES les informations du document et crée une réplique électronique exacte dans le système : données patient, médecin, actes, prescriptions, texte du cachet du praticien copié mot pour mot, état de la signature. Génère un PDF de réplication aux couleurs et au logo de la société. Requiert qu'une photo ou un scan du formulaire ait été joint dans cette conversation.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      typeDocument: { type: "string", enum: ["FeuilleDesoins", "FeuilleExamens"], description: "Type de formulaire : FeuilleDesoins (Feuille de Soins) ou FeuilleExamens (Feuille d'Examens / Bon d'Examen)." },
+      dateHeure: { type: "string", description: "Date et heure lues sur le document, ex. '30/06/2026 à 09h19'." },
+      centreDesoins: { type: "string", description: "Nom du centre de soins lu sur le document, ex. 'AVICENNE'." },
+      souscripteur: { type: "string", description: "Nom du souscripteur lu sur le document, ex. 'MAACC'." },
+      assurePrincipal: { type: "string", description: "Nom de l'assuré principal lu sur le document, ex. 'KOMBA Zita Glwadis'." },
+      nomPatient: { type: "string", description: "Nom complet du patient (bénéficiaire des soins) lu sur le document." },
+      matriculeLaRuche: { type: "string", description: "Matricule LA RUCHE EXCELLENCE lu sur le document (format LRX-XXXXXX), si lisible." },
+      dateNaissance: { type: "string", description: "Date de naissance du patient (jj/mm/aaaa), si lisible." },
+      qualitePatient: { type: "string", enum: ["Assuré", "Ayant droit"], description: "Case cochée : Assuré ou Ayant droit." },
+      ticketModerateur: { type: "number", description: "Pourcentage du ticket modérateur lu sur le document (ex. 20)." },
+      secteur: { type: "string", enum: ["Privé", "Public"], description: "Case Assuré Secteur Privé ou Public cochée." },
+      nomMedecin: { type: "string", description: "Nom complet du médecin traitant/prescripteur lu sur le document, ex. 'Dr ANVOULI PARFAIT'." },
+      codePraticien: { type: "string", description: "Code praticien lu sur le document." },
+      codeEtablissement: { type: "string", description: "Code établissement lu sur le document." },
+      codeAffection: { type: "string", description: "Code affection lu sur le document, si présent." },
+      specialite: { type: "string", enum: ["Généraliste", "Spécialiste"], description: "Case cochée : Généraliste ou Spécialiste." },
+      tarifJour: { type: "boolean", description: "Case Tarif jour cochée (true) ou non." },
+      tarifNuit: { type: "boolean", description: "Case Tarif nuit cochée (true) ou non." },
+      texteCachetMedecin: { type: "string", description: "TEXTE EXACT lu ligne par ligne sur le cachet du praticien (ex. 'Dr Parfait ANVOULI\\nPÉDIATRE\\nCNOM: 0921\\nTél: 01 53 12 28\\nBP 1482 PORT-GENTIL GABON'). Copie mot pour mot chaque ligne visible — ne rien omettre ni reformuler." },
+      signaturePresente: { type: "boolean", description: "Une signature manuscrite est-elle visible dans la zone signature du praticien sur le scan (true/false)." },
+      prestations: {
+        type: "array",
+        description: "Liste des prestations du tableau (zone PRESTATIONS d'une Feuille de Soins).",
+        items: {
+          type: "object",
+          properties: {
+            codeActe: { type: "string", description: "Code de l'acte (ex. 'C.S')." },
+            montant: { type: "number", description: "Montant brut engagé." },
+            baseRemboursement: { type: "number", description: "Base de remboursement LA RUCHE." },
+            ticketModerateur: { type: "number", description: "Part ticket modérateur assuré." },
+            partLaRuche: { type: "number", description: "Part LA RUCHE." },
+          },
+        },
+      },
+      examens: {
+        type: "array",
+        description: "Liste des examens du tableau (zone EXAMENS d'une Feuille d'Examens).",
+        items: {
+          type: "object",
+          properties: {
+            designation: { type: "string", description: "Désignation de l'examen (ex. 'BU', 'PS', 'NFS')." },
+            codeActe: { type: "string", description: "Code de l'acte." },
+            montantPrestataire: { type: "number", description: "Montant prestataire." },
+            baseRemboursement: { type: "number", description: "Base de remboursement LA RUCHE." },
+            ticketModerateur: { type: "number", description: "Part ticket modérateur." },
+            partLaRuche: { type: "number", description: "Part LA RUCHE." },
+          },
+          required: ["designation"],
+        },
+      },
+      prescriptions: {
+        type: "array",
+        description: "Médicaments prescrits (zone PRESCRIPTIONS MEDICALES d'une Feuille de Soins).",
+        items: {
+          type: "object",
+          properties: {
+            medicament: { type: "string", description: "Nom du médicament." },
+            posologie: { type: "string", description: "Posologie (ex. '2cp x2/j')." },
+            quantite: { type: "string", description: "Quantité." },
+            prix: { type: "number", description: "Prix, si renseigné." },
+          },
+          required: ["medicament"],
+        },
+      },
+      totalBaseRemboursement: { type: "number", description: "Total base de remboursement lu en bas de tableau." },
+      totalTicket: { type: "number", description: "Total ticket modérateur lu en bas de tableau." },
+      totalPartLaRuche: { type: "number", description: "Total part LA RUCHE lu en bas de tableau." },
+      situationPatient: { type: "string", enum: ["Hospitalisé", "Soins internes"], description: "Feuille d'Examens : situation du patient cochée." },
+      nomEtablissementExamen: { type: "string", description: "Feuille d'Examens : nom de l'établissement qui réalise l'examen." },
+      codeEtablissementExamen: { type: "string", description: "Feuille d'Examens : code de l'établissement qui réalise l'examen." },
+      naturePrestation: { type: "string", enum: ["Laboratoire", "Radiologie", "Autre"], description: "Feuille d'Examens : nature de la prestation cochée." },
+    },
+    required: ["typeDocument", "nomPatient", "nomMedecin", "texteCachetMedecin", "signaturePresente"],
   },
 };
 
@@ -442,6 +529,7 @@ export class MessagerieAgentIaService {
         OUTIL_DECIDER_CHAMBRE,
         OUTIL_TRAITER_GARANTIE,
         OUTIL_CREER_ORDONNANCE_PHARMACIE,
+        OUTIL_NUMERISER_DOCUMENT_MEDICAL,
       );
     }
     if (ctx.prestataireId) {
@@ -747,6 +835,97 @@ export class MessagerieAgentIaService {
           },
         });
         return { succes: true, code, accordId: acc.id, nbMedicaments: inp.medicaments.length };
+      }
+
+      case "numeriser_document_medical": {
+        if (!ctx.assureSanteId) return { erreur: "Non disponible pour ce type de compte." };
+        const nbPieces = await this.prisma.message.count({
+          where: { conversationId, auteurType: "Utilisateur", pieceJointe: { not: null } },
+        });
+        if (nbPieces === 0) {
+          return { erreur: "Aucun scan ou photo de document médical reçu dans cette conversation. Demande à l'assuré de joindre le document avant de numériser." };
+        }
+        const inpNum = args as {
+          typeDocument: string;
+          dateHeure?: string;
+          centreDesoins?: string;
+          souscripteur?: string;
+          assurePrincipal?: string;
+          nomPatient: string;
+          matriculeLaRuche?: string;
+          dateNaissance?: string;
+          qualitePatient?: string;
+          ticketModerateur?: number;
+          secteur?: string;
+          nomMedecin: string;
+          codePraticien?: string;
+          codeEtablissement?: string;
+          codeAffection?: string;
+          specialite?: string;
+          tarifJour?: boolean;
+          tarifNuit?: boolean;
+          texteCachetMedecin: string;
+          signaturePresente: boolean;
+          prestations?: Array<{ codeActe?: string; montant?: number; baseRemboursement?: number; ticketModerateur?: number; partLaRuche?: number }>;
+          examens?: Array<{ designation: string; codeActe?: string; montantPrestataire?: number; baseRemboursement?: number; ticketModerateur?: number; partLaRuche?: number }>;
+          prescriptions?: Array<{ medicament: string; posologie?: string; quantite?: string; prix?: number }>;
+          totalBaseRemboursement?: number;
+          totalTicket?: number;
+          totalPartLaRuche?: number;
+          situationPatient?: string;
+          nomEtablissementExamen?: string;
+          codeEtablissementExamen?: string;
+          naturePrestation?: string;
+        };
+        const { randomUUID: uuid2 } = await import("crypto");
+        const assureNum = await this.prisma.assureSante.findUnique({ where: { id: ctx.assureSanteId } });
+        if (!assureNum) return { erreur: "Assuré introuvable." };
+        const pieceJointeNum = await this.obtenirDernierePieceJointe(conversationId);
+        const casesCoches = JSON.stringify({
+          secteur: inpNum.secteur ?? null,
+          specialite: inpNum.specialite ?? null,
+          tarifJour: inpNum.tarifJour ?? null,
+          tarifNuit: inpNum.tarifNuit ?? null,
+          qualitePatient: inpNum.qualitePatient ?? null,
+          situationPatient: inpNum.situationPatient ?? null,
+          naturePrestation: inpNum.naturePrestation ?? null,
+        });
+        const descriptionDoc = inpNum.typeDocument === "FeuilleDesoins"
+          ? `Feuille de Soins — ${inpNum.nomPatient} — ${inpNum.dateHeure ?? aujourdhuiFr()}`
+          : `Feuille d'Examens — ${inpNum.nomPatient} — ${inpNum.dateHeure ?? aujourdhuiFr()}`;
+        const acc2 = await this.prisma.accordPrealable.create({
+          data: {
+            id: `PEC-${new Date().getFullYear()}-${uuid2().slice(0, 6).toUpperCase()}`,
+            assureId: ctx.assureSanteId,
+            contratId: assureNum.contratId,
+            type: inpNum.typeDocument === "FeuilleDesoins" ? "Feuille de Soins" : "Feuille d'Examens",
+            description: descriptionDoc,
+            prestataire: inpNum.centreDesoins ?? "À préciser",
+            dateDemande: aujourdhuiFr(),
+            statutAnalyseMedicale: "En attente",
+            statutValidationFinanciere: "En attente",
+            decision: "En attente",
+            origine: "Portail Assuré",
+            medecinTraitant: inpNum.nomMedecin,
+            texteCachetMedecin: inpNum.texteCachetMedecin,
+            signaturePresente: inpNum.signaturePresente,
+            casesCoches,
+            ...(pieceJointeNum ? { ordonnanceFichier: pieceJointeNum } : {}),
+          },
+        });
+        // Génération du PDF réplique en arrière-plan (non bloquant)
+        this.documents.genererFeuilleNumerisee(acc2.id, inpNum).catch(() => {/* silencieux */});
+        return {
+          succes: true,
+          accordId: acc2.id,
+          typeDocument: inpNum.typeDocument,
+          nomPatient: inpNum.nomPatient,
+          nomMedecin: inpNum.nomMedecin,
+          cachetLu: inpNum.texteCachetMedecin,
+          signaturePresente: inpNum.signaturePresente,
+          nbPrestations: (inpNum.prestations ?? []).length + (inpNum.examens ?? []).length,
+          nbMedicaments: (inpNum.prescriptions ?? []).length,
+        };
       }
 
       case "decider_chambre_hospitalisation": {

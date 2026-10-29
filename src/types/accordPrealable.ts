@@ -74,4 +74,13 @@ export interface AccordPrealable {
   // sinistre et gestionnaires production". null = encore dans la file
   // partagée, réclamable par tout gestionnaire habilité au module.
   assigneAId?: string | null;
+  // Ordonnance électronique pharmacie (2026-10)
+  medicamentsLus?: string;
+  codeAccesPharmacie?: string;
+  // Numérisation de formulaire médical scanné (2026-10) — données extraites par Ariana
+  medecinTraitant?: string;
+  texteCachetMedecin?: string;
+  signaturePresente?: boolean;
+  casesCoches?: string;
+  documentNumerise?: string;
 }

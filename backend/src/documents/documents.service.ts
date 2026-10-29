@@ -5917,6 +5917,240 @@ export class DocumentsService {
     const pecId = await this.peclaPlusRecente(assureId, "examen");
     return this.renderFeuilleExamenLigne(pecId, res, utilisateur);
   }
+
+  // Réplique électronique d'un formulaire scanné (2026-10) — Ariana lit le
+  // scan, extrait toutes les données et appelle cette méthode pour générer
+  // un PDF structuré aux couleurs de la société, avec le texte exact du
+  // cachet copié ligne par ligne et l'état de la signature.
+  async genererFeuilleNumerisee(accordId: string, inp: {
+    typeDocument: string;
+    dateHeure?: string;
+    centreDesoins?: string;
+    nomPatient: string;
+    matriculeLaRuche?: string;
+    dateNaissance?: string;
+    qualitePatient?: string;
+    ticketModerateur?: number;
+    secteur?: string;
+    nomMedecin: string;
+    codePraticien?: string;
+    codeEtablissement?: string;
+    specialite?: string;
+    tarifJour?: boolean;
+    tarifNuit?: boolean;
+    texteCachetMedecin: string;
+    signaturePresente: boolean;
+    prestations?: Array<{ codeActe?: string; montant?: number; baseRemboursement?: number; ticketModerateur?: number; partLaRuche?: number }>;
+    examens?: Array<{ designation: string; codeActe?: string; montantPrestataire?: number; baseRemboursement?: number; ticketModerateur?: number; partLaRuche?: number }>;
+    prescriptions?: Array<{ medicament: string; posologie?: string; quantite?: string; prix?: number }>;
+    totalBaseRemboursement?: number;
+    totalTicket?: number;
+    totalPartLaRuche?: number;
+    situationPatient?: string;
+    nomEtablissementExamen?: string;
+    naturePrestation?: string;
+  }): Promise<string | null> {
+    try {
+      const p = await this.parametresEntreprise.findOne();
+      const logoImage = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
+      const couleur = p.couleurPrimaire ?? "#1a5276";
+
+      const doc = new PDFDocument({ size: "A4", margins: { top: 40, bottom: 40, left: 40, right: 40 }, autoFirstPage: true });
+      const chunks: Buffer[] = [];
+      doc.on("data", (c: Buffer) => chunks.push(c));
+      const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
+        doc.on("end", () => resolve(Buffer.concat(chunks)));
+        doc.on("error", reject);
+
+        const left = doc.page.margins.left;
+        const right = doc.page.width - doc.page.margins.right;
+        const width = right - left;
+        const estExamen = inp.typeDocument === "FeuilleExamens";
+        const titrePrincipal = estExamen ? "FEUILLE D'EXAMENS" : "FEUILLE DE SOINS";
+
+        // En-tête société
+        this.dessinerIdentiteEntete(doc, logoImage, left, 20, 180, 52, () => {
+          doc.fontSize(12).font("Helvetica-Bold").fillColor(couleur).text(p.nom, left, 38);
+          return 0;
+        });
+
+        // Titre + badge "Réplique électronique"
+        doc.fontSize(16).font("Helvetica-Bold").fillColor(couleur)
+          .text(titrePrincipal, left + 190, 26, { width: width - 190, align: "center" });
+        doc.fontSize(8).font("Helvetica").fillColor("#888")
+          .text("RÉPLIQUE ÉLECTRONIQUE — document numérisé par Ariana", left + 190, 46, { width: width - 190, align: "center" });
+        doc.fontSize(7.5).font("Helvetica").fillColor("#aaa")
+          .text(`Dossier : ${accordId}`, left + 190, 58, { width: width - 190, align: "center" });
+
+        doc.moveTo(left, 78).lineTo(right, 78).strokeColor(couleur).lineWidth(1.5).stroke();
+
+        let y = 90;
+        const col2 = left + width / 2;
+
+        const champ = (label: string, val: string | null | undefined, x: number, yPos: number, w = 220) => {
+          if (!val) return;
+          doc.fontSize(7.5).font("Helvetica-Bold").fillColor("#555").text(label, x, yPos, { width: w, continued: false });
+          doc.fontSize(8.5).font("Helvetica").fillColor("#000").text(val, x, yPos + 10, { width: w });
+        };
+
+        // Bloc assuré
+        doc.fontSize(9).font("Helvetica-Bold").fillColor(couleur).text("ASSURÉ / PATIENT", left, y);
+        y += 14;
+        champ("Nom du patient", inp.nomPatient, left, y);
+        champ("Matricule", inp.matriculeLaRuche, col2, y);
+        y += 24;
+        champ("Date de naissance", inp.dateNaissance, left, y);
+        champ("Qualité", inp.qualitePatient, col2, y);
+        y += 24;
+        champ("Secteur", inp.secteur, left, y);
+        champ("Ticket modérateur", inp.ticketModerateur != null ? `${inp.ticketModerateur}%` : undefined, col2, y);
+        y += 28;
+
+        doc.moveTo(left, y).lineTo(right, y).strokeColor("#ddd").lineWidth(0.5).stroke();
+        y += 8;
+
+        // Bloc médecin
+        doc.fontSize(9).font("Helvetica-Bold").fillColor(couleur).text("MÉDECIN / PRATICIEN", left, y);
+        y += 14;
+        champ("Nom du médecin", inp.nomMedecin, left, y);
+        champ("Spécialité", inp.specialite, col2, y);
+        y += 24;
+        champ("Code praticien", inp.codePraticien, left, y);
+        champ("Centre de soins", inp.centreDesoins, col2, y);
+        y += 24;
+        champ("Date / Heure", inp.dateHeure, left, y);
+        const tarifType = inp.tarifJour ? "Jour" : inp.tarifNuit ? "Nuit" : undefined;
+        champ("Tarif", tarifType, col2, y);
+        y += 28;
+
+        if (estExamen) {
+          doc.moveTo(left, y).lineTo(right, y).strokeColor("#ddd").lineWidth(0.5).stroke();
+          y += 8;
+          doc.fontSize(9).font("Helvetica-Bold").fillColor(couleur).text("EXAMENS", left, y);
+          y += 14;
+          if (inp.examens && inp.examens.length > 0) {
+            const cols = [left, left + 180, left + 290, left + 360, left + 430];
+            const hdrs = ["Désignation", "Montant", "Base remb.", "Ticket", "Part société"];
+            hdrs.forEach((h, i) => doc.fontSize(7).font("Helvetica-Bold").fillColor("#555").text(h, cols[i], y, { width: 110 }));
+            y += 12;
+            for (const ex of inp.examens) {
+              doc.fontSize(8).font("Helvetica").fillColor("#000")
+                .text(ex.designation, cols[0], y, { width: 170 })
+                .text(ex.montantPrestataire != null ? String(ex.montantPrestataire) : "—", cols[1], y, { width: 100 })
+                .text(ex.baseRemboursement != null ? String(ex.baseRemboursement) : "—", cols[2], y, { width: 60 })
+                .text(ex.ticketModerateur != null ? String(ex.ticketModerateur) : "—", cols[3], y, { width: 60 })
+                .text(ex.partLaRuche != null ? String(ex.partLaRuche) : "—", cols[4], y, { width: 80 });
+              y += 14;
+            }
+          } else {
+            doc.fontSize(8).font("Helvetica").fillColor("#999").text("(aucun examen lisible)", left, y); y += 14;
+          }
+        } else {
+          // Tableau prestations
+          doc.moveTo(left, y).lineTo(right, y).strokeColor("#ddd").lineWidth(0.5).stroke();
+          y += 8;
+          doc.fontSize(9).font("Helvetica-Bold").fillColor(couleur).text("PRESTATIONS", left, y);
+          y += 14;
+          if (inp.prestations && inp.prestations.length > 0) {
+            const cols = [left, left + 100, left + 210, left + 310, left + 400];
+            const hdrs = ["Code acte", "Montant", "Base remb.", "Ticket", "Part société"];
+            hdrs.forEach((h, i) => doc.fontSize(7).font("Helvetica-Bold").fillColor("#555").text(h, cols[i], y, { width: 100 }));
+            y += 12;
+            for (const pr of inp.prestations) {
+              doc.fontSize(8).font("Helvetica").fillColor("#000")
+                .text(pr.codeActe ?? "—", cols[0], y, { width: 100 })
+                .text(pr.montant != null ? String(pr.montant) : "—", cols[1], y, { width: 100 })
+                .text(pr.baseRemboursement != null ? String(pr.baseRemboursement) : "—", cols[2], y, { width: 90 })
+                .text(pr.ticketModerateur != null ? String(pr.ticketModerateur) : "—", cols[3], y, { width: 80 })
+                .text(pr.partLaRuche != null ? String(pr.partLaRuche) : "—", cols[4], y, { width: 80 });
+              y += 14;
+            }
+          } else {
+            doc.fontSize(8).font("Helvetica").fillColor("#999").text("(aucune prestation lisible)", left, y); y += 14;
+          }
+          // Prescriptions médicaments
+          if (inp.prescriptions && inp.prescriptions.length > 0) {
+            y += 6;
+            doc.moveTo(left, y).lineTo(right, y).strokeColor("#ddd").lineWidth(0.5).stroke();
+            y += 8;
+            doc.fontSize(9).font("Helvetica-Bold").fillColor(couleur).text("PRESCRIPTIONS MÉDICALES", left, y);
+            y += 14;
+            const colsP = [left, left + 220, left + 330, left + 430];
+            const hdrsP = ["Médicament", "Posologie", "Quantité", "Prix"];
+            hdrsP.forEach((h, i) => doc.fontSize(7).font("Helvetica-Bold").fillColor("#555").text(h, colsP[i], y, { width: 105 }));
+            y += 12;
+            for (const rx of inp.prescriptions) {
+              doc.fontSize(8).font("Helvetica").fillColor("#000")
+                .text(rx.medicament, colsP[0], y, { width: 215 })
+                .text(rx.posologie ?? "—", colsP[1], y, { width: 100 })
+                .text(rx.quantite ?? "—", colsP[2], y, { width: 95 })
+                .text(rx.prix != null ? `${rx.prix} FCFA` : "—", colsP[3], y, { width: 90 });
+              y += 14;
+            }
+          }
+        }
+
+        // Totaux si présents
+        if (inp.totalBaseRemboursement != null || inp.totalPartLaRuche != null) {
+          y += 4;
+          doc.moveTo(left, y).lineTo(right, y).strokeColor(couleur).lineWidth(0.8).stroke();
+          y += 6;
+          const totLine = [
+            inp.totalBaseRemboursement != null ? `Base remb. : ${inp.totalBaseRemboursement} FCFA` : null,
+            inp.totalTicket != null ? `Ticket : ${inp.totalTicket} FCFA` : null,
+            inp.totalPartLaRuche != null ? `Part société : ${inp.totalPartLaRuche} FCFA` : null,
+          ].filter(Boolean).join("     ");
+          doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#000").text(totLine, left, y, { align: "right" });
+          y += 18;
+        }
+
+        // Zone cachet + signature — élément central de la réplique
+        y += 6;
+        doc.moveTo(left, y).lineTo(right, y).strokeColor("#ddd").lineWidth(0.5).stroke();
+        y += 8;
+        const halfW = (width - 20) / 2;
+
+        // Cachet du praticien
+        doc.rect(left, y, halfW, 110).strokeColor(couleur).lineWidth(0.8).stroke();
+        doc.fontSize(7.5).font("Helvetica-Bold").fillColor(couleur)
+          .text("CACHET DU PRATICIEN (texte exact lu sur le document)", left + 6, y + 6, { width: halfW - 12 });
+        const lignesCachet = (inp.texteCachetMedecin ?? "").split("\n").filter(Boolean);
+        let yC = y + 20;
+        for (const ligne of lignesCachet) {
+          doc.fontSize(8.5).font("Helvetica").fillColor("#000").text(ligne, left + 8, yC, { width: halfW - 16 });
+          yC += 12;
+        }
+
+        // Signature
+        const sigX = left + halfW + 20;
+        doc.rect(sigX, y, halfW, 110).strokeColor(couleur).lineWidth(0.8).stroke();
+        doc.fontSize(7.5).font("Helvetica-Bold").fillColor(couleur)
+          .text("SIGNATURE DU PRATICIEN", sigX + 6, y + 6, { width: halfW - 12 });
+        const sigMention = inp.signaturePresente
+          ? "✓ Signature manuscrite présente sur le document original scanné"
+          : "✗ Aucune signature détectée sur le document original scanné";
+        doc.fontSize(9).font("Helvetica").fillColor(inp.signaturePresente ? "#27ae60" : "#c0392b")
+          .text(sigMention, sigX + 8, y + 30, { width: halfW - 16 });
+
+        // Pied de page
+        const pyBottom = doc.page.height - doc.page.margins.bottom - 20;
+        doc.fontSize(7).font("Helvetica").fillColor("#bbb")
+          .text(`Réplique électronique générée automatiquement par ${p.nom} · ${new Date().toLocaleDateString("fr-FR")} · ${accordId}`, left, pyBottom, { width, align: "center" });
+
+        doc.end();
+      });
+
+      const filename = `${accordId}-numerise.pdf`;
+      const destDir = path.join(UPLOADS_ROOT, "accords-prealables");
+      await fs.promises.mkdir(destDir, { recursive: true });
+      await fs.promises.writeFile(path.join(destDir, filename), pdfBuffer);
+
+      await this.prisma.accordPrealable.update({ where: { id: accordId }, data: { documentNumerise: filename } });
+      return filename;
+    } catch {
+      return null;
+    }
+  }
 }
 
 // Rang au sein d'une famille : assuré principal, puis conjoint(e), puis

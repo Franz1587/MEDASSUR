@@ -16,7 +16,7 @@ import {
   uploadOrdonnanceAccordPrealable, uploadDevisAccordPrealable, urlDocumentAccordPrealable, prendreAccordPrealable,
   type AccordPrealableUpsertInput, type DoublonEnCoursDossier,
 } from "@/services/accordPrealable.service";
-import { messageErreur, QueuedOfflineError } from "@/lib/http";
+import { messageErreur, QueuedOfflineError, API_URL } from "@/lib/http";
 import { useAuth } from "@/auth/AuthContext";
 import { UserPlus } from "lucide-react";
 import { getAssuresSante } from "@/services/sante.service";
@@ -1390,6 +1390,44 @@ export default function AccordPrealableView() {
                   </label>
                 </div>
               </div>
+
+              {/* Document numérisé par Ariana — affiché uniquement si Ariana a effectué la numérisation */}
+              {(editingAccord.texteCachetMedecin || editingAccord.documentNumerise) && (
+                <div className="bg-secondary/20 border border-border rounded-xl p-4">
+                  <div className={sectionHeaderCls}><FileText className="w-3.5 h-3.5" />Document numérisé (Ariana)</div>
+                  <div className="space-y-3">
+                    {editingAccord.medecinTraitant && (
+                      <div>
+                        <div className={labelCls}>Médecin traitant (lu sur le scan)</div>
+                        <div className="text-[13px] font-semibold text-foreground">{editingAccord.medecinTraitant}</div>
+                      </div>
+                    )}
+                    {editingAccord.texteCachetMedecin && (
+                      <div>
+                        <div className={labelCls}>Cachet du praticien (texte exact)</div>
+                        <pre className="text-[12px] font-mono text-foreground bg-background border border-border rounded-lg px-3 py-2 whitespace-pre-wrap">{editingAccord.texteCachetMedecin}</pre>
+                      </div>
+                    )}
+                    <div>
+                      <div className={labelCls}>Signature sur le document original</div>
+                      <div className={`text-[13px] font-semibold ${editingAccord.signaturePresente ? "text-green-600" : "text-amber-600"}`}>
+                        {editingAccord.signaturePresente ? "✓ Signature présente" : "✗ Aucune signature détectée"}
+                      </div>
+                    </div>
+                    {editingAccord.documentNumerise && (
+                      <a
+                        href={`${API_URL}/accord-prealable/${editingAccord.id}/document-numerise`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-[12px] hover:opacity-90"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        Télécharger la réplique PDF
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="px-5 py-4 border-t border-border flex items-center justify-between">
               <div className="text-[12px] text-destructive">{editError ?? ""}</div>
