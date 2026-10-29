@@ -9,9 +9,10 @@ import { AccordPrealableModule } from "../accord-prealable/accord-prealable.modu
 import { SanteModule } from "../sante/sante.module";
 import { DocumentsModule } from "../documents/documents.module";
 import { RemboursementsModule } from "../remboursements/remboursements.module";
+import { GedModule } from "../ged/ged.module";
 
 @Module({
-  imports: [NotificationsModule, AccordPrealableModule, SanteModule, DocumentsModule, RemboursementsModule],
+  imports: [NotificationsModule, AccordPrealableModule, SanteModule, DocumentsModule, RemboursementsModule, GedModule],
   controllers: [MessagerieController, RapportsIaController],
   providers: [MessagerieService, MessagerieAgentIaService, RapportsIaService],
   // MessagerieAgentIaService exporté (2026-08) — voir demande utilisateur :

@@ -16,6 +16,8 @@ import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
 import { resoudreCategorieConsommation } from "../portail-membre/portail-membre.util";
 import { PushNotificationsService } from "../notifications/push-notifications.service";
+import { GedService } from "../ged/ged.service";
+import { GedAnalyseService } from "../ged/ged-analyse.service";
 
 const UPLOADS_MESSAGERIE_DIR = path.join(UPLOADS_ROOT, "messagerie");
 // Même dossier que AccordPrealableService.uploadDocument (voir ce fichier,
@@ -207,6 +209,7 @@ Règles de contenu :
 - Pour une ordonnance médicale (médicaments) transmise par un assuré en photo ou scan : utilise creer_ordonnance_electronique_pharmacie après avoir lu l'ordonnance. Cela génère un code d'accès (format ORD-AAAA-XXXXXX) que l'assuré communique à une pharmacie partenaire ${nomEntreprise} pour être servi directement en tiers payant, sans avancer les frais. L'ordonnance originale reste attachée au dossier. Si aucune photo n'est encore jointe, demande-la AVANT d'appeler l'outil — ne l'invoque jamais sans pièce jointe. Une fois le code généré, communique-le clairement à l'assuré et rappelle-lui qu'il est valable 30 jours.
 - Lecture des formulaires médicaux manuscrits gabonais (ordonnances, Feuilles de Soins, Feuilles d'Examens, bons d'examen) : lis et restitue fidèlement ce qui est visible, même si l'écriture est difficile. Termes courants à reconnaître : codes d'actes C.S = consultation spécialiste/généraliste, BU = bandelette urinaire, PS = parasitologie sanguine/frottis ; abréviations posologiques cp = comprimé, gél = gélule, suppo = suppositoire, x2/j = deux fois par jour, x3j = pendant 3 jours, matin/soir/midi, poll = pour [N] jours, fl = flacon ; médicaments fréquents au Gabon (lis l'écriture approximative) : Augmentin/Amoxicilline (antibiotique), Doliprane/Dolyphène/Paracétamol (fièvre/douleur), Ventoline/Salbutamol (bronchodilatateur), Otrivine/Otrivin (nasal), Zithromax/Zormax/Azithromycine (antibiotique), Folvite/Fulvite/Acide folique (carence), Toplex (sirop toux enfant), Duriferon/Durifer (fer), Prednisolone/Prednisone (corticoïde), Metronidazole/Flagyl (antiparasitaire), Ibuprofène/Brufen/Nurofen (anti-inflammatoire), Amoxicilline/Clamoxyl, Érythromycine, Zinc/Zincovit ; tarifs de référence pour le Gabon (aide à la lecture seulement, JAMAIS utilisés pour recalculer) : consultation généraliste ≈ 15 000 FCFA, spécialiste ≈ 20 000 FCFA ; le format du matricule assuré est propre à chaque société (ne suppose pas de format précis). Si un terme reste vraiment illisible après analyse attentive, signale-le précisément ("illisible") plutôt que de deviner.
 - Numérisation d'un formulaire médical scanné (Feuille de Soins ou Feuille d'Examens) : quand un assuré envoie la photo ou le scan d'un de ces formulaires et demande à le numériser ou à en créer une réplique électronique, utilise numeriser_document_medical. Lis TOUT le document : patient, médecin, actes/examens, prescriptions ET LE TEXTE EXACT du cachet du praticien (copié ligne par ligne, sans rien reformuler ni omettre) ET si une signature manuscrite est visible. Si la photo est insuffisante pour lire un champ, signale-le précisément. Une fois la réplique créée, communique à l'assuré l'identifiant du dossier généré et confirme les données clés extraites (patient, médecin, cachet, signature).
+- GED intelligente universelle (Gestion Électronique de Documents) : utilise analyser_document_ged pour TOUT document joint dans la conversation qui n'est pas une feuille de soins/examens ni une ordonnance de pharmacie — une facture prestataire, un courrier, un relevé, un contrat, un avenant, une pièce d'identité, n'importe quel autre document. L'outil analyse le contenu réel du fichier, l'enregistre dans le système GED, tente un rapprochement automatique avec les factures saisies, et retourne un rapport de liaison complet. Après enregistrement, communique le résultat : référence du document enregistré, type identifié, statut de traitement (totalement traité, partiellement traité, non traité), et si une facture est liée : la référence du bordereau de règlement maladie, la référence comptable et le numéro de chèque correspondants. Si aucune pièce jointe n'est encore présente, demande-la AVANT d'appeler l'outil.
 - Sur une demande de remboursement, ton rôle est volontairement limité : tu accuses réception, tu confirmes que le dossier a bien été transmis pour traitement, tu ne donnes jamais de montant remboursé ni de délai précis.
 - L'outil escalader_vers_humain est un DERNIER recours, jamais un réflexe : n'y as recours qu'après avoir réellement consulté tout ce que les outils disponibles permettent de vérifier, et seulement si la situation l'exige vraiment (une décision hors du périmètre couvert par decider_chambre_hospitalisation/traiter_demande_garantie, une erreur signalée sur un dossier, une demande explicite de parler à quelqu'un d'autre, ou une donnée réellement introuvable après vérification) — jamais simplement parce qu'une question est délicate ou demande plusieurs recherches. Formule toujours cela comme la suite normale du traitement de la demande, jamais comme un aveu de limite.
 - Reste concis (quelques phrases), pas de listes à puces sauf si cela aide vraiment à la clarté.`;
@@ -282,7 +285,7 @@ const OUTIL_TRAITER_GARANTIE: Anthropic.Tool = {
 };
 
 // Numérisation intelligente (2026-10) — Ariana lit une Feuille de Soins
-// ou Feuille d'Examens LA RUCHE scannée et produit une réplique électronique
+// ou Feuille d'Examens scannée et produit une réplique électronique
 // exacte : données patient, médecin, actes, prescriptions, TEXTE EXACT du
 // cachet et état de la signature.
 const OUTIL_NUMERISER_DOCUMENT_MEDICAL: Anthropic.Tool = {
@@ -297,7 +300,7 @@ const OUTIL_NUMERISER_DOCUMENT_MEDICAL: Anthropic.Tool = {
       souscripteur: { type: "string", description: "Nom du souscripteur lu sur le document, ex. 'MAACC'." },
       assurePrincipal: { type: "string", description: "Nom de l'assuré principal lu sur le document, ex. 'KOMBA Zita Glwadis'." },
       nomPatient: { type: "string", description: "Nom complet du patient (bénéficiaire des soins) lu sur le document." },
-      matriculeLaRuche: { type: "string", description: "Matricule LA RUCHE EXCELLENCE lu sur le document (format LRX-XXXXXX), si lisible." },
+      matriculeAssure: { type: "string", description: "Matricule assuré lu sur le document (format propre à chaque société), si lisible." },
       dateNaissance: { type: "string", description: "Date de naissance du patient (jj/mm/aaaa), si lisible." },
       qualitePatient: { type: "string", enum: ["Assuré", "Ayant droit"], description: "Case cochée : Assuré ou Ayant droit." },
       ticketModerateur: { type: "number", description: "Pourcentage du ticket modérateur lu sur le document (ex. 20)." },
@@ -319,9 +322,9 @@ const OUTIL_NUMERISER_DOCUMENT_MEDICAL: Anthropic.Tool = {
           properties: {
             codeActe: { type: "string", description: "Code de l'acte (ex. 'C.S')." },
             montant: { type: "number", description: "Montant brut engagé." },
-            baseRemboursement: { type: "number", description: "Base de remboursement LA RUCHE." },
+            baseRemboursement: { type: "number", description: "Base de remboursement de la société assureur." },
             ticketModerateur: { type: "number", description: "Part ticket modérateur assuré." },
-            partLaRuche: { type: "number", description: "Part LA RUCHE." },
+            partAssureur: { type: "number", description: "Part prise en charge par l'assureur." },
           },
         },
       },
@@ -334,9 +337,9 @@ const OUTIL_NUMERISER_DOCUMENT_MEDICAL: Anthropic.Tool = {
             designation: { type: "string", description: "Désignation de l'examen (ex. 'BU', 'PS', 'NFS')." },
             codeActe: { type: "string", description: "Code de l'acte." },
             montantPrestataire: { type: "number", description: "Montant prestataire." },
-            baseRemboursement: { type: "number", description: "Base de remboursement LA RUCHE." },
+            baseRemboursement: { type: "number", description: "Base de remboursement de la société assureur." },
             ticketModerateur: { type: "number", description: "Part ticket modérateur." },
-            partLaRuche: { type: "number", description: "Part LA RUCHE." },
+            partAssureur: { type: "number", description: "Part prise en charge par l'assureur." },
           },
           required: ["designation"],
         },
@@ -357,7 +360,7 @@ const OUTIL_NUMERISER_DOCUMENT_MEDICAL: Anthropic.Tool = {
       },
       totalBaseRemboursement: { type: "number", description: "Total base de remboursement lu en bas de tableau." },
       totalTicket: { type: "number", description: "Total ticket modérateur lu en bas de tableau." },
-      totalPartLaRuche: { type: "number", description: "Total part LA RUCHE lu en bas de tableau." },
+      totalPartAssureur: { type: "number", description: "Total part prise en charge par l'assureur lu en bas de tableau." },
       situationPatient: { type: "string", enum: ["Hospitalisé", "Soins internes"], description: "Feuille d'Examens : situation du patient cochée." },
       nomEtablissementExamen: { type: "string", description: "Feuille d'Examens : nom de l'établissement qui réalise l'examen." },
       codeEtablissementExamen: { type: "string", description: "Feuille d'Examens : code de l'établissement qui réalise l'examen." },
@@ -401,6 +404,43 @@ const OUTIL_CREER_ORDONNANCE_PHARMACIE: Anthropic.Tool = {
   },
 };
 
+// GED intelligente universelle (2026-10) — voir demande utilisateur : "Ariana
+// doit exactement pouvoir décrypter chaque document peu importe le type et le
+// format... enregistrer comme si c'était un agent humain mais avec plus
+// d'excellence et de précision... lier l'enregistrement avec toutes les saisies
+// de facture correspondantes... faire des rapports (facture traitée totalement
+// ou partiellement et donner la ou les référence de règlement maladie,
+// comptable et le chèque correspondant)."
+const OUTIL_ANALYSER_DOCUMENT_GED: Anthropic.Tool = {
+  name: "analyser_document_ged",
+  description:
+    "Analyse et enregistre dans la GED (gestion électronique de documents) N'IMPORTE QUEL document joint dans cette conversation : facture, courrier, contrat, ordonnance, feuille de soins, relevé, avenant — peu importe le type et le format (photo, scan, PDF mono ou multi-pages). " +
+    "L'outil lit le contenu RÉEL du document, identifie automatiquement son type, extrait toutes les données structurées (références, montants, dates, parties, signatures...), l'enregistre dans le système GED, " +
+    "puis tente automatiquement un rapprochement avec les factures saisies dans l'application. " +
+    "Après enregistrement, retourne un rapport de liaison : statut de traitement (totalement / partiellement / non traité), références du bordereau de règlement maladie, référence comptable et numéro de chèque correspondant si disponibles. " +
+    "N'ENREGISTRE RIEN si aucune pièce jointe n'a été envoyée dans cette conversation — demande d'abord le document.",
+  input_schema: {
+    type: "object",
+    properties: {
+      sens: {
+        type: "string",
+        enum: ["Entrant", "Sortant"],
+        description: "Sens du document : 'Entrant' si reçu de l'extérieur (facture prestataire, courrier reçu), 'Sortant' si émis par l'entreprise.",
+      },
+      entiteLiee: {
+        type: "string",
+        description: "Entité liée au document (nom du prestataire, du souscripteur, du bénéficiaire…), extraite du document si lisible. Facultatif.",
+      },
+      tags: {
+        type: "array",
+        items: { type: "string" },
+        description: "Mots-clés pour faciliter la recherche ultérieure, déduits du contenu du document. Facultatif.",
+      },
+    },
+    required: ["sens"],
+  },
+};
+
 interface OutilContexte {
   demandeurId: string;
   demandeurRole: string;
@@ -434,6 +474,8 @@ export class MessagerieAgentIaService {
     private documents: DocumentsService,
     private storage: StorageService,
     private pushNotifications: PushNotificationsService,
+    private ged: GedService,
+    private gedAnalyse: GedAnalyseService,
   ) {}
 
   private getClient(): Anthropic | null {
@@ -530,6 +572,7 @@ export class MessagerieAgentIaService {
         OUTIL_TRAITER_GARANTIE,
         OUTIL_CREER_ORDONNANCE_PHARMACIE,
         OUTIL_NUMERISER_DOCUMENT_MEDICAL,
+        OUTIL_ANALYSER_DOCUMENT_GED,
       );
     }
     if (ctx.prestataireId) {
@@ -548,6 +591,7 @@ export class MessagerieAgentIaService {
         // (2026-08, voir demande utilisateur) — même outil, même règles de
         // recoupement, que côté assuré ci-dessus.
         OUTIL_DECIDER_CHAMBRE,
+        OUTIL_ANALYSER_DOCUMENT_GED,
       );
     }
     return outils;
@@ -852,7 +896,7 @@ export class MessagerieAgentIaService {
           souscripteur?: string;
           assurePrincipal?: string;
           nomPatient: string;
-          matriculeLaRuche?: string;
+          matriculeAssure?: string;
           dateNaissance?: string;
           qualitePatient?: string;
           ticketModerateur?: number;
@@ -866,12 +910,12 @@ export class MessagerieAgentIaService {
           tarifNuit?: boolean;
           texteCachetMedecin: string;
           signaturePresente: boolean;
-          prestations?: Array<{ codeActe?: string; montant?: number; baseRemboursement?: number; ticketModerateur?: number; partLaRuche?: number }>;
-          examens?: Array<{ designation: string; codeActe?: string; montantPrestataire?: number; baseRemboursement?: number; ticketModerateur?: number; partLaRuche?: number }>;
+          prestations?: Array<{ codeActe?: string; montant?: number; baseRemboursement?: number; ticketModerateur?: number; partAssureur?: number }>;
+          examens?: Array<{ designation: string; codeActe?: string; montantPrestataire?: number; baseRemboursement?: number; ticketModerateur?: number; partAssureur?: number }>;
           prescriptions?: Array<{ medicament: string; posologie?: string; quantite?: string; prix?: number }>;
           totalBaseRemboursement?: number;
           totalTicket?: number;
-          totalPartLaRuche?: number;
+          totalPartAssureur?: number;
           situationPatient?: string;
           nomEtablissementExamen?: string;
           codeEtablissementExamen?: string;
@@ -1211,6 +1255,56 @@ export class MessagerieAgentIaService {
           message: `Votre demande a été accordée pour un montant de ${montantAutorise} FCFA, calculé selon le plafond de votre garantie et le tarif de référence de l'acte. Je vous transmets votre certificat de prise en charge.`,
         };
       }
+      case "analyser_document_ged": {
+        // GED intelligente universelle (2026-10) — voir demande utilisateur et
+        // règle du prompt. Lis le fichier joint depuis la conversation, crée
+        // le GedDocument via GedService (qui appelle GedAnalyseService +
+        // rapprochement auto), puis retourne le rapport de liaison complet.
+        const nbPiecesGed = await this.prisma.message.count({
+          where: { conversationId, auteurType: "Utilisateur", pieceJointe: { not: null } },
+        });
+        if (nbPiecesGed === 0) {
+          return { erreur: "Aucun document joint dans cette conversation. Demande à l'interlocuteur de joindre le document à analyser avant d'appeler cet outil." };
+        }
+        const nomFichierGed = await this.obtenirDernierePieceJointe(conversationId);
+        if (!nomFichierGed) return { erreur: "Aucun fichier récupérable dans cette conversation." };
+
+        // Lecture du buffer depuis le disque local ou Storage
+        let bufferGed: Buffer | null = null;
+        if (this.storage.actif) {
+          bufferGed = await this.storage.download("messagerie", nomFichierGed).catch(() => null);
+        } else {
+          const chemin = path.join(UPLOADS_MESSAGERIE_DIR, nomFichierGed);
+          bufferGed = fs.existsSync(chemin) ? fs.readFileSync(chemin) : null;
+        }
+        if (!bufferGed) return { erreur: "Le fichier joint n'est plus accessible sur le serveur." };
+
+        const inpGed = args as { sens?: string; entiteLiee?: string; tags?: string[] };
+        const doc = await this.ged.upload(
+          { originalname: nomFichierGed, buffer: bufferGed, mimetype: "application/octet-stream" } as Express.Multer.File,
+          {
+            sens: inpGed.sens === "Sortant" ? "Sortant" : "Entrant",
+            entiteLiee: inpGed.entiteLiee,
+            tags: inpGed.tags,
+          },
+          ctx.demandeurId,
+        );
+
+        // Rapport de liaison immédiat (facture + bordereau + chèque)
+        const rapport = await this.ged.genererRapportLiaison(doc.id).catch(() => null);
+        return {
+          succes: true,
+          documentId: doc.id,
+          type: doc.type,
+          statutOcr: doc.statutOcr,
+          objet: doc.objet,
+          resume: doc.resume,
+          referenceExtraite: doc.referenceExtraite,
+          montantExtrait: doc.montantExtrait != null ? Number(doc.montantExtrait) : null,
+          rapportLiaison: rapport ?? null,
+        };
+      }
+
       case "escalader_vers_humain": {
         await this.escalader(conversationId, String(args.motif ?? `Escaladé par ${NOM_AGENT}.`));
         return { ok: true };

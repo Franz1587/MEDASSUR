@@ -8,5 +8,6 @@ import { FacturesModule } from "../factures/factures.module";
   imports: [FacturesModule],
   providers: [GedService, GedAnalyseService],
   controllers: [GedController],
+  exports: [GedService, GedAnalyseService],
 })
 export class GedModule {}

@@ -44,6 +44,40 @@ export async function deleteDocument(id: string): Promise<{ id: string }> {
   return http.delete<{ id: string }>(`/ged/documents/${id}`);
 }
 
+export interface RapportLiaisonGed {
+  documentId: string;
+  nom: string;
+  type: string;
+  statutTraitement: string;
+  prestataire: string | null;
+  facture: {
+    id: string;
+    referenceFacture: string;
+    statut: string;
+    dateReception: string;
+    montantSaisi: number;
+    montantExtrait: number | null;
+  } | null;
+  bordereaux: Array<{
+    id: string;
+    numero: string;
+    statut: string;
+    montantTotal: number;
+    datePaiement: string | null;
+  }>;
+  lettresCheque: Array<{
+    id: string;
+    numero: string;
+    numeroCheque: number;
+    montantTotal: number;
+    dateEmission: string;
+  }>;
+}
+
+export async function getRapportLiaison(id: string): Promise<RapportLiaisonGed> {
+  return http.get<RapportLiaisonGed>(`/ged/documents/${id}/rapport-liaison`);
+}
+
 // URL directe vers le fichier archivé — même principe que
 // urlDocumentAccordPrealable (route générique /uploads/:categorie/:fichier,
 // voir main.ts).

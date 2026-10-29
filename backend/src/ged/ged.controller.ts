@@ -41,6 +41,11 @@ export class GedController {
     return this.service.rapprocher(id);
   }
 
+  @Get(":id/rapport-liaison")
+  rapportLiaison(@Param("id") id: string) {
+    return this.service.genererRapportLiaison(id);
+  }
+
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.service.remove(id);

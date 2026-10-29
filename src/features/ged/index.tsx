@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Archive, FileSignature, Brain, CheckCircle, Trash2, ExternalLink, RefreshCw } from "lucide-react";
+import { Archive, FileSignature, Brain, CheckCircle, Trash2, ExternalLink, RefreshCw, BarChart2, X, CheckCheck, AlertTriangle, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { Badge, type BadgeVariant } from "@/components/shared/Badge";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
@@ -8,7 +8,7 @@ import { Combobox } from "@/components/shared/Combobox";
 import { useSimulatedProcessing } from "@/components/shared/useSimulatedProcessing";
 import { Pagination } from "@/components/shared/Pagination";
 import { usePagination } from "@/hooks/usePagination";
-import { getDocuments, uploadDocument, deleteDocument, rapprocherDocument, urlDocumentGed } from "@/services/ged.service";
+import { getDocuments, uploadDocument, deleteDocument, rapprocherDocument, getRapportLiaison, urlDocumentGed, type RapportLiaisonGed } from "@/services/ged.service";
 import { getPrestataires } from "@/services/prestataires.service";
 import { fmt } from "@/lib/format";
 import { messageErreur } from "@/lib/http";
@@ -27,9 +27,112 @@ const statutTraitementVariant: Record<string, BadgeVariant> = {
   "Sans objet": "neutral", "Non traité": "warning", "Traité partiellement": "info", "Traité totalement": "success",
 };
 
+function RapportLiaisonModal({ docId, onClose }: { docId: string; onClose: () => void }) {
+  const [rapport, setRapport] = useState<RapportLiaisonGed | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [erreur, setErreur] = useState<string | null>(null);
+
+  useEffect(() => {
+    getRapportLiaison(docId)
+      .then(setRapport)
+      .catch((e) => setErreur(messageErreur(e, "Impossible de charger le rapport.")))
+      .finally(() => setLoading(false));
+  }, [docId]);
+
+  const iconeStatut = (s: string) => {
+    if (s === "Traité totalement") return <CheckCheck className="w-4 h-4 text-green-600" />;
+    if (s === "Traité partiellement") return <AlertTriangle className="w-4 h-4 text-amber-500" />;
+    if (s === "Non traité") return <Clock className="w-4 h-4 text-muted-foreground" />;
+    return null;
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg space-y-4 p-6 relative max-h-[90vh] overflow-y-auto">
+        <button type="button" onClick={onClose} className="absolute top-4 right-4 h-7 w-7 flex items-center justify-center rounded-full hover:bg-secondary/40 text-muted-foreground">
+          <X className="w-4 h-4" />
+        </button>
+        <div className="flex items-center gap-2">
+          <BarChart2 className="w-5 h-5 text-primary" />
+          <h2 className="font-bold text-foreground text-base">Rapport de liaison GED</h2>
+        </div>
+
+        {loading && <p className="text-sm text-muted-foreground">Chargement…</p>}
+        {erreur && <p className="text-sm text-destructive">{erreur}</p>}
+        {rapport && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 flex-wrap">
+              {iconeStatut(rapport.statutTraitement)}
+              <Badge variant={statutTraitementVariant[rapport.statutTraitement] ?? "neutral"}>{rapport.statutTraitement}</Badge>
+              <span className="text-xs text-muted-foreground">{rapport.type}</span>
+            </div>
+
+            {rapport.facture ? (
+              <div className="bg-secondary/30 rounded-xl p-3 space-y-1">
+                <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Facture liée</p>
+                <p className="text-sm text-foreground font-mono">{rapport.facture.referenceFacture}</p>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span>Reçue le {rapport.facture.dateReception}</span>
+                  <Badge variant={rapport.facture.statut === "Soumise" ? "success" : "neutral"}>{rapport.facture.statut}</Badge>
+                </div>
+                <div className="flex items-center gap-4 text-xs text-muted-foreground med-num">
+                  <span>Montant saisi : <strong className="text-foreground">{fmt(rapport.facture.montantSaisi)}</strong></span>
+                  {rapport.facture.montantExtrait != null && (
+                    <span>Montant lu sur doc. : <strong className="text-foreground">{fmt(rapport.facture.montantExtrait)}</strong></span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Aucune facture liée dans le système.</p>
+            )}
+
+            {rapport.bordereaux.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Règlement maladie (bordereaux)</p>
+                {rapport.bordereaux.map((b) => (
+                  <div key={b.id} className="bg-secondary/30 rounded-xl p-3 flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-mono text-foreground">{b.numero}</p>
+                      {b.datePaiement && <p className="text-xs text-muted-foreground">Payé le {b.datePaiement}</p>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm med-num text-foreground">{fmt(b.montantTotal)}</span>
+                      <Badge variant={b.statut === "Payé" ? "success" : b.statut === "Validé" ? "info" : "warning"}>{b.statut}</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {rapport.lettresCheque.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Règlement comptable (chèques)</p>
+                {rapport.lettresCheque.map((lc) => (
+                  <div key={lc.id} className="bg-green-500/8 border border-green-500/20 rounded-xl p-3 flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-mono text-foreground">{lc.numero}</p>
+                      <p className="text-xs text-muted-foreground">Chèque n°{lc.numeroCheque} · émis le {lc.dateEmission}</p>
+                    </div>
+                    <span className="text-sm med-num text-foreground">{fmt(lc.montantTotal)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {rapport.bordereaux.length === 0 && rapport.facture && (
+              <p className="text-xs text-muted-foreground">Aucun bordereau de règlement trouvé pour cette facture.</p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function GedView() {
   const [documents, setDocuments] = useState<GedDocument[]>([]);
   const [prestataires, setPrestataires] = useState<Prestataire[]>([]);
+  const [rapportDocId, setRapportDocId] = useState<string | null>(null);
   const { status, result, run, reset } = useSimulatedProcessing<GedDocument>();
   const [fichierChoisi, setFichierChoisi] = useState<File | null>(null);
   const [sens, setSens] = useState<"Entrant" | "Sortant">("Entrant");
@@ -215,7 +318,14 @@ export default function GedView() {
                 </td>
                 <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap med-num">{d.date}</td>
                 <td className="px-4 py-3 whitespace-nowrap">
-                  <button type="button" onClick={() => handleDelete(d)} className="h-7 w-7 flex items-center justify-center rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10"><Trash2 className="w-3.5 h-3.5" /></button>
+                  <div className="flex items-center gap-1">
+                    {d.factureId && (
+                      <button type="button" onClick={() => setRapportDocId(d.id)} title="Rapport de liaison" className="h-7 w-7 flex items-center justify-center rounded-lg border border-primary/30 text-primary hover:bg-primary/10">
+                        <BarChart2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button type="button" onClick={() => handleDelete(d)} className="h-7 w-7 flex items-center justify-center rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -227,6 +337,8 @@ export default function GedView() {
           onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
         />
       </div>
+
+      {rapportDocId && <RapportLiaisonModal docId={rapportDocId} onClose={() => setRapportDocId(null)} />}
     </div>
   );
 }

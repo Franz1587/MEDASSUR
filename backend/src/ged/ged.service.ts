@@ -137,6 +137,77 @@ export class GedService {
     });
   }
 
+  // Rapport de liaison GED (2026-10) — voir demande utilisateur : "faire des
+  // rapport (facture traité totalement ou partiellement et donner la ou les
+  // référence de règlement maladie, comptable et le chèque correspondant)".
+  // Remonte toute la chaîne GedDocument → Facture → PriseEnCharge →
+  // BordereauReglement → LettreCheque pour fournir un rapport exhaustif.
+  async genererRapportLiaison(id: string) {
+    const doc = await this.prisma.gedDocument.findUnique({
+      where: { id },
+      include: {
+        prestataire: { select: { nom: true } },
+        facture: {
+          include: {
+            lignes: {
+              where: { statut: { not: "Annulé" } },
+              include: { bordereau: { include: { lettreCheque: true } } },
+            },
+          },
+        },
+      },
+    });
+    if (!doc) throw new NotFoundException(`Document ${id} introuvable`);
+
+    if (!doc.factureId || !doc.facture) {
+      return {
+        documentId: doc.id, nom: doc.nom, type: doc.type,
+        statutTraitement: doc.statutTraitement,
+        prestataire: doc.prestataire?.nom ?? null,
+        facture: null, bordereaux: [], lettresCheque: [],
+      };
+    }
+
+    const facture = doc.facture;
+
+    type BordLigne = NonNullable<typeof facture.lignes[0]["bordereau"]>;
+    type LcBord = NonNullable<BordLigne["lettreCheque"]>;
+
+    const bordereauMap = new Map<string, BordLigne>();
+    for (const ligne of facture.lignes) {
+      if (ligne.bordereau) bordereauMap.set(ligne.bordereau.id, ligne.bordereau);
+    }
+    const bordereaux = [...bordereauMap.values()];
+
+    const lettresChequeMap = new Map<string, LcBord>();
+    for (const b of bordereaux) {
+      if (b.lettreCheque) lettresChequeMap.set(b.lettreCheque.id, b.lettreCheque);
+    }
+
+    return {
+      documentId: doc.id, nom: doc.nom, type: doc.type,
+      statutTraitement: doc.statutTraitement,
+      prestataire: doc.prestataire?.nom ?? null,
+      facture: {
+        id: facture.id,
+        referenceFacture: facture.referenceFacture,
+        statut: facture.statut,
+        dateReception: facture.dateReception,
+        montantSaisi: facture.lignes.reduce((s, l) => s + Number(l.montant), 0),
+        montantExtrait: doc.montantExtrait != null ? Number(doc.montantExtrait) : null,
+      },
+      bordereaux: bordereaux.map((b) => ({
+        id: b.id, numero: b.numero, statut: b.statut,
+        montantTotal: Number(b.montantTotal),
+        datePaiement: b.datePaiement ?? null,
+      })),
+      lettresCheque: [...lettresChequeMap.values()].map((lc) => ({
+        id: lc.id, numero: lc.numero, numeroCheque: lc.numeroCheque,
+        montantTotal: Number(lc.montantTotal), dateEmission: lc.dateEmission,
+      })),
+    };
+  }
+
   async remove(id: string) {
     const doc = await this.prisma.gedDocument.findUnique({ where: { id } });
     if (!doc) throw new NotFoundException(`Document ${id} introuvable`);
