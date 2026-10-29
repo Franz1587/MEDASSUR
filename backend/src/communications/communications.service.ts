@@ -4,6 +4,7 @@ import * as path from "path";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { MessagingService } from "../messaging/messaging.service";
 import { EnvoyerCommunicationDto } from "./dto/envoyer-communication.dto";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
@@ -11,17 +12,12 @@ import { telephoneAvecIndicatif } from "../lib/telephone.util";
 
 const UPLOADS_COMMUNICATIONS_DIR = path.join(UPLOADS_ROOT, "communications");
 
-// Communications externes (2026-08) — voir demande utilisateur : "l'application
-// doit pouvoir rendre possible l'envoi des mails, sms et whatsapp. et recevoir
-// des retours sous forme de notification et message interne." AUCUN
-// fournisseur SMS/Email/WhatsApp n'est branché sur ce projet (voir
-// comptes-mobile/envoi.util.ts, même situation) — chaque "envoi" ici est
-// SIMULÉ : journalisé avec statut "Simulé", jamais réellement transmis.
-// Prêt à devenir un vrai envoi le jour où un fournisseur est connecté (le
-// point d'intégration serait uniquement dans `simulerEnvoi()` ci-dessous).
+// Communications externes (2026-08/2026-10) — envoi réel via MessagingService
+// (Zavu SDK) pour SMS et WhatsApp ; si ZAVU_API_KEY absente, statut "Simulé"
+// (rétrocompat). Email non encore branché sur un fournisseur → toujours "Simulé".
 @Injectable()
 export class CommunicationsService {
-  constructor(private prisma: PrismaService, private notifications: NotificationsService, private storage: StorageService) {}
+  constructor(private prisma: PrismaService, private notifications: NotificationsService, private storage: StorageService, private messaging: MessagingService) {}
 
   findAll(filtres?: { canal?: string; destinataireType?: string; declencheur?: string }) {
     return this.prisma.communication.findMany({
@@ -37,16 +33,21 @@ export class CommunicationsService {
     return c;
   }
 
-  // Point d'intégration futur — voir en-tête du fichier. Renvoie toujours
-  // "Simulé" tant qu'aucun fournisseur n'est branché ; ne lève jamais
-  // d'erreur réseau (il n'y a pas de réseau à interroger).
-  private simulerEnvoi(): "Simulé" {
-    return "Simulé";
+  // Envoi réel (2026-10) — SMS/WhatsApp via MessagingService (Zavu) si
+  // ZAVU_API_KEY configurée ; Email toujours simulé (fournisseur email non
+  // encore branché). Statut retourné : "Envoyé" si l'appel Zavu a abouti,
+  // "Simulé" sinon (clé absente, numéro invalide, ou canal Email).
+  private async envoyerReel(canal: string, contact: string, contenu: string): Promise<"Envoyé" | "Simulé"> {
+    if (canal === "Email") return "Simulé";
+    if (!this.messaging.actif) return "Simulé";
+    const canalZavu = canal === "WhatsApp" ? "whatsapp" : canal === "SMS" ? "sms" : "auto";
+    await this.messaging.envoyer(contact, contenu, canalZavu as "auto" | "sms" | "whatsapp");
+    return "Envoyé";
   }
 
   async envoyer(dto: EnvoyerCommunicationDto, auteurId?: string) {
-    const statut = this.simulerEnvoi();
     const destinataireContact = await this.resoudreContact(dto);
+    const statut = await this.envoyerReel(dto.canal, destinataireContact, dto.contenu);
     return this.prisma.communication.create({
       data: {
         id: randomUUID(), canal: dto.canal, destinataireType: dto.destinataireType, destinataireId: dto.destinataireId,
@@ -137,13 +138,14 @@ export class CommunicationsService {
       // indicatif" — dérivé du pays du prestataire (Prestataire.pays),
       // jamais deviné si le pays n'est pas reconnu (voir telephoneAvecIndicatif).
       const telephone = telephoneAvecIndicatif(brut, p.pays) ?? brut;
+      const contenu = `Bonjour, un nouveau contrat vient d'être activé (${nomClientDeclencheur}). Veuillez trouver ci-joint la liste actualisée des clients MEDASSUR+ avec leurs taux de couverture et plafond de chambre.`;
+      const statut = await this.envoyerReel("SMS", telephone, contenu);
       await this.prisma.communication.create({
         data: {
           id: randomUUID(), canal: "SMS", destinataireType: "Prestataire", destinataireId: p.id,
           destinataireNom: p.nom, destinataireContact: telephone,
           objet: "Mise à jour du réseau — liste des clients actualisée",
-          contenu: `Bonjour, un nouveau contrat vient d'être activé (${nomClientDeclencheur}). Veuillez trouver ci-joint la liste actualisée des clients MEDASSUR+ avec leurs taux de couverture et plafond de chambre.`,
-          pieceJointe: fichier, statut: this.simulerEnvoi(), declencheur: "NouveauContrat",
+          contenu, pieceJointe: fichier, statut, declencheur: "NouveauContrat",
         },
       });
       notifies++;
