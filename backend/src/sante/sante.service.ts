@@ -935,7 +935,7 @@ export class SanteService {
       select: { id: true },
     });
     if (surCible) {
-      await this.prisma.personneEnAttenteTransfert.delete({ where: { id } });
+      await this.prisma.personneEnAttenteTransfert.deleteMany({ where: { id } });
       return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId, typeAssureCorrige: null, dejaEffectue: true };
     }
 
@@ -946,13 +946,13 @@ export class SanteService {
     });
     if (!assure) {
       // Introuvable nulle part → entrée fantôme, nettoyer silencieusement.
-      await this.prisma.personneEnAttenteTransfert.delete({ where: { id } });
+      await this.prisma.personneEnAttenteTransfert.deleteMany({ where: { id } });
       return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId, typeAssureCorrige: null, dejaEffectue: true };
     }
 
     // contratSource = contratCible → entrée incohérente, nettoyer.
     if (entree.contratSourceId === entree.contratCibleId) {
-      await this.prisma.personneEnAttenteTransfert.delete({ where: { id } });
+      await this.prisma.personneEnAttenteTransfert.deleteMany({ where: { id } });
       throw new BadRequestException(`Entrée incohérente : contrat source = contrat cible (${entree.contratSourceId})`);
     }
 
@@ -978,13 +978,13 @@ export class SanteService {
       // Unique constraint (contratId, matricule) → l'assuré existe déjà sur
       // le contrat cible (doublon non détecté par le filtre tenant) : nettoyer.
       if (msg.includes("Unique constraint") && msg.includes("contratId") && msg.includes("matricule")) {
-        await this.prisma.personneEnAttenteTransfert.delete({ where: { id } });
+        await this.prisma.personneEnAttenteTransfert.deleteMany({ where: { id } });
         return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId, typeAssureCorrige: null, dejaEffectue: true };
       }
       if (err instanceof BadRequestException || err instanceof NotFoundException) throw err;
       throw new BadRequestException(`Bascule échouée pour ${entree.matricule} : ${msg}`);
     }
-    await this.prisma.personneEnAttenteTransfert.delete({ where: { id } });
+    await this.prisma.personneEnAttenteTransfert.deleteMany({ where: { id } });
     return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId, typeAssureCorrige, dejaEffectue: false };
   }
 
