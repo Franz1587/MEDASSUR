@@ -41,4 +41,5 @@ COPY --from=backend /app/prisma ./prisma
 COPY --from=backend /app/assets ./assets
 COPY --from=frontend /app/dist ./frontend-dist
 EXPOSE 3002
-CMD ["node", "dist/src/main.js"]
+# prisma migrate deploy applique les migrations manquantes avant le démarrage
+CMD ["sh", "-c", "node node_modules/.bin/prisma migrate deploy && node dist/src/main.js"]
