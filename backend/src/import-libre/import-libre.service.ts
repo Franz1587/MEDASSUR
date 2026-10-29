@@ -355,7 +355,7 @@ Règles impératives :
       if (alias) {
         const parIdentite = await this.prisma.assureSante.findFirst({
           where: { identiteId: alias.identiteId },
-          orderBy: { createdAt: "desc" },
+          orderBy: { id: "desc" },
           select: { id: true, contratId: true },
         });
         assure = parIdentite ?? null;
