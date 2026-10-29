@@ -922,33 +922,41 @@ export class SanteService {
     return { ignorees: count };
   }
 
-  // Valide manuellement le transfert d'une personne en attente : bascule
-  // l'assuré vers le contrat cible détecté puis supprime l'entrée de la file.
-  // Corrige automatiquement un typeAssure = "EF" erroné (adulte ≥ 18 ans
-  // enregistré comme enfant par erreur de saisie) avant la bascule.
+  // Valide manuellement le transfert d'une personne en attente.
+  // Résilient : cherche l'assuré sur source → cible → n'importe quel contrat.
+  // Corrige typeAssure=EF adulte avant bascule. Nettoie l'entrée dans tous les cas.
   async validerTransfertPersonne(id: string) {
     const entree = await this.prisma.personneEnAttenteTransfert.findUnique({ where: { id } });
     if (!entree) throw new NotFoundException(`Entrée ${id} introuvable`);
-    let assure = await this.prisma.assureSante.findFirst({
-      where: { matricule: entree.matricule, contratId: entree.contratSourceId },
-      select: { id: true, typeAssure: true, dateNaissance: true },
+
+    // Cas 1 : déjà sur le contrat cible — transfert déjà effectué.
+    const surCible = await this.prisma.assureSante.findFirst({
+      where: { matricule: entree.matricule, contratId: entree.contratCibleId },
+      select: { id: true },
     });
-    if (!assure) {
-      // L'assuré n'est plus sur le contrat source — vérifier s'il est déjà
-      // sur le contrat cible (transfert déjà effectué par un autre biais).
-      const dejaTransfere = await this.prisma.assureSante.findFirst({
-        where: { matricule: entree.matricule, contratId: entree.contratCibleId },
-        select: { id: true },
-      });
+    if (surCible) {
       await this.prisma.personneEnAttenteTransfert.delete({ where: { id } });
-      if (dejaTransfere) {
-        return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId, typeAssureCorrige: null, dejaEffectue: true };
-      }
-      throw new NotFoundException(`Assuré matricule ${entree.matricule} introuvable (ni sur le contrat source ni sur le contrat cible)`);
+      return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId, typeAssureCorrige: null, dejaEffectue: true };
     }
 
-    // Auto-correction : typeAssure = "EF" mais âge adulte → corrige en "AS"
-    // (erreur de saisie fréquente : un AS ou CJ créé sous le mauvais type).
+    // Cas 2 : sur le contrat source (cas normal) OU sur un contrat tiers.
+    const assure = await this.prisma.assureSante.findFirst({
+      where: { matricule: entree.matricule },
+      select: { id: true, typeAssure: true, dateNaissance: true, contratId: true },
+    });
+    if (!assure) {
+      // Introuvable nulle part → nettoyer l'entrée fantôme.
+      await this.prisma.personneEnAttenteTransfert.delete({ where: { id } });
+      throw new NotFoundException(`Assuré matricule ${entree.matricule} introuvable dans la base`);
+    }
+
+    // contratSource = contratCible → entrée incohérente, nettoyer.
+    if (entree.contratSourceId === entree.contratCibleId) {
+      await this.prisma.personneEnAttenteTransfert.delete({ where: { id } });
+      throw new BadRequestException(`Entrée incohérente : contrat source = contrat cible (${entree.contratSourceId})`);
+    }
+
+    // Auto-correction : typeAssure = "EF" mais âge adulte → "AS".
     let typeAssureCorrige: string | null = null;
     if (assure.typeAssure === "EF") {
       const age = calculerAgeAns(assure.dateNaissance, new Date());
@@ -960,9 +968,17 @@ export class SanteService {
 
     const donneesLigne = entree.donneesLigne as { dateEffet?: string } | null;
     const dateEffet = donneesLigne?.dateEffet ?? new Date().toLocaleDateString("fr-FR");
-    await this.mouvements.basculerVersContrat(assure.id, entree.contratCibleId, true, dateEffet);
+    try {
+      await this.mouvements.basculerVersContrat(assure.id, entree.contratCibleId, true, dateEffet);
+    } catch (err) {
+      // Remonter le message applicatif (BadRequestException, etc.) tel quel ;
+      // les erreurs Prisma inattendues sont enveloppées avec détail.
+      if (err instanceof BadRequestException || err instanceof NotFoundException) throw err;
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new BadRequestException(`Bascule échouée pour ${entree.matricule} : ${detail}`);
+    }
     await this.prisma.personneEnAttenteTransfert.delete({ where: { id } });
-    return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId, typeAssureCorrige };
+    return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId, typeAssureCorrige, dejaEffectue: false };
   }
 
   // Détecte et corrige tous les assurés enregistrés avec typeAssure = "EF"
