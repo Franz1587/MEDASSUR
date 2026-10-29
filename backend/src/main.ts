@@ -17,7 +17,7 @@ const MIME_PAR_EXTENSION: Record<string, string> = {
 };
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   app.use(compression());
   // exposedHeaders : sans ça, le frontend ne peut pas lire Content-Disposition
   // sur une réponse cross-origin (fetch authentifié + blob, voir

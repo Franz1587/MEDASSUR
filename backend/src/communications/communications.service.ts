@@ -153,6 +153,34 @@ export class CommunicationsService {
     return { fichier, notifies };
   }
 
+  // Webhook entrant Zavu (2026-10) — messages reçus d'assurés/prestataires.
+  // Cherche une communication sortante récente vers l'émetteur (même numéro,
+  // dernières 72h) et y enregistre le retour automatiquement, déclenchant
+  // ainsi une notification interne au gestionnaire auteur.
+  async traiterWebhookEntrant(event: { type?: string; senderId?: string; data?: { from?: string; text?: string; channel?: string } }) {
+    if (event.type !== "message.inbound" || !event.data?.from) return;
+    const { from, text, channel } = event.data;
+    if (!text) return;
+    const limite = new Date(Date.now() - 72 * 60 * 60 * 1000);
+    const comm = await this.prisma.communication.findFirst({
+      where: { destinataireContact: from, createdAt: { gte: limite }, statut: "Envoyé" },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!comm) {
+      // Aucune communication sortante trouvée — on crée un log entrant
+      await this.prisma.communication.create({
+        data: {
+          id: randomUUID(), canal: channel ?? "SMS", destinataireType: "Prospect",
+          destinataireNom: from, destinataireContact: from,
+          objet: "Message entrant (non sollicité)", contenu: text,
+          statut: "Reçu", declencheur: "Webhook",
+        },
+      });
+      return;
+    }
+    await this.enregistrerRetour(comm.id, text);
+  }
+
   private async genererListeClientsCsv(
     contrats: { id: string; client: { nom: string }; tauxAmbulatoirePublique: string | null; tauxAmbulatoirePrivee: string | null; tauxHospitalisationPublique: string | null; tauxHospitalisationPrivee: string | null; plafondChambreJour: unknown }[],
   ): Promise<string> {
