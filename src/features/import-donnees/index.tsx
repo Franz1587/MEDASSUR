@@ -94,7 +94,18 @@ export default function ImportDonneesView() {
   const [listeTransfert, setListeTransfert] = useState<PersonneEnAttenteTransfert[] | null>(null);
 
   const rafraichirEnAttente = () => { compterFacturesEnAttente().then((r) => setEnAttente(r.nombre)).catch(() => undefined); };
-  const rafraichirEnAttenteTransfert = () => { compterPersonnesEnAttenteTransfert().then((r) => setEnAttenteTransfert(r.nombre)).catch(() => undefined); };
+  const rafraichirEnAttenteTransfert = (avecListe = false) => {
+    compterPersonnesEnAttenteTransfert().then((r) => setEnAttenteTransfert(r.nombre)).catch(() => undefined);
+    // Recharger la liste uniquement si elle était déjà ouverte (non-null),
+    // pour éviter les 404 sur des IDs périmés après analyser/corriger.
+    if (avecListe) {
+      setListeTransfert((prev) => {
+        if (prev === null) return null; // liste fermée → on ne la rouvre pas
+        getPersonnesEnAttenteTransfert().then((l) => setListeTransfert(l)).catch(() => undefined);
+        return prev; // conserve temporairement l'ancienne liste le temps du rechargement
+      });
+    }
+  };
   useEffect(() => { rafraichirEnAttente(); rafraichirEnAttenteTransfert(); }, []);
 
   const toggleListeTransfert = async () => {
@@ -135,7 +146,7 @@ export default function ImportDonneesView() {
     if (!confirm(`Ignorer les ${enAttenteTransfert} personne(s) en attente ? Cette action est irréversible.`)) return;
     try {
       const res = await ignorerToutesPersonnesEnAttenteTransfert();
-      setListeTransfert(null);
+      setListeTransfert([]);
       setEnAttenteTransfert(0);
       toast.success(`${res.ignorees} entrée(s) supprimée(s).`);
     } catch (err) {
@@ -153,7 +164,7 @@ export default function ImportDonneesView() {
     setAnalyseEnCours(true);
     try {
       const res = await analyserEcartsTauxContrat();
-      rafraichirEnAttenteTransfert();
+      rafraichirEnAttenteTransfert(true);
       if (res.detectes > 0) toast.success(`${res.detectes} écart(s) de taux détecté(s) — ajouté(s) à la file de transfert pour validation.`);
       else toast.info("Aucun écart de taux détecté.");
     } catch (err) {
@@ -170,7 +181,7 @@ export default function ImportDonneesView() {
       const res = await corrigerTypeAssureErreurs();
       if (res.corriges > 0) {
         toast.success(`${res.corriges} assuré(s) corrigé(s) : type EF (enfant) → AS (adulte).`);
-        rafraichirEnAttenteTransfert();
+        rafraichirEnAttenteTransfert(true);
       } else {
         toast.info("Aucune erreur de type assuré détectée.");
       }
