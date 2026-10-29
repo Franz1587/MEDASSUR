@@ -212,7 +212,15 @@ Règles de contenu :
 - GED intelligente universelle (Gestion Électronique de Documents) : utilise analyser_document_ged pour TOUT document joint dans la conversation qui n'est pas une feuille de soins/examens ni une ordonnance de pharmacie — une facture prestataire, un courrier, un relevé, un contrat, un avenant, une pièce d'identité, n'importe quel autre document. L'outil analyse le contenu réel du fichier, l'enregistre dans le système GED, tente un rapprochement automatique avec les factures saisies, et retourne un rapport de liaison complet. Après enregistrement, communique le résultat : référence du document enregistré, type identifié, statut de traitement (totalement traité, partiellement traité, non traité), et si une facture est liée : la référence du bordereau de règlement maladie, la référence comptable et le numéro de chèque correspondants. Si aucune pièce jointe n'est encore présente, demande-la AVANT d'appeler l'outil.
 - Sur une demande de remboursement, ton rôle est volontairement limité : tu accuses réception, tu confirmes que le dossier a bien été transmis pour traitement, tu ne donnes jamais de montant remboursé ni de délai précis.
 - L'outil escalader_vers_humain est un DERNIER recours, jamais un réflexe : n'y as recours qu'après avoir réellement consulté tout ce que les outils disponibles permettent de vérifier, et seulement si la situation l'exige vraiment (une décision hors du périmètre couvert par decider_chambre_hospitalisation/traiter_demande_garantie, une erreur signalée sur un dossier, une demande explicite de parler à quelqu'un d'autre, ou une donnée réellement introuvable après vérification) — jamais simplement parce qu'une question est délicate ou demande plusieurs recherches. Formule toujours cela comme la suite normale du traitement de la demande, jamais comme un aveu de limite.
-- Reste concis (quelques phrases), pas de listes à puces sauf si cela aide vraiment à la clarté.`;
+- Reste concis (quelques phrases), pas de listes à puces sauf si cela aide vraiment à la clarté.
+
+Format "Liste des factures détaillées" (import libre Ariana) :
+Quand tu traites un fichier Excel ou PDF de type "Liste des factures détaillées" (format Eyassur ou similaire), tu dois :
+1. Repérer les métadonnées en tête de fichier : Organisme/Souscripteur (société), Contrat/Police, Période de prestation.
+2. Trouver la ligne d'en-têtes (contient "Type ligne", "Catégorie", "Référence Externe", "Bénéficiaire", "Matricule", "A Payer", "Prestataire", "Date Prestation", "Statut", "Désignation", "Total ligne", "Part patient", "Part financeur").
+3. Pour chaque bloc : une ligne "FACTURE" introduit les données d'en-tête (référence, prestataire, matricule, bénéficiaire, date), les lignes "ACTE" suivantes donnent le détail par acte médical (désignation, total, part patient, part financeur). Une ligne ACTE hérite des champs de la ligne FACTURE parente.
+4. "Part financeur" = montant payé par la compagnie = net à payer = baseRemboursement. "Total ligne" = frais réels.
+5. Extrait TOUTES les lignes ACTE, pas seulement les lignes FACTURE. Chaque ACTE est une prestation distincte avec sa propre désignation.`;
 }
 
 // Décision automatique bornée (2026-08) — voir demande utilisateur : "il

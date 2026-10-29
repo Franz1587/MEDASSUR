@@ -72,6 +72,7 @@ import { AbonnementModule } from "./abonnement/abonnement.module";
 import { PresentationsModule } from "./presentations/presentations.module";
 import { GuideAssetsModule } from "./guide-assets/guide-assets.module";
 import { EbillingModule } from "./ebilling/ebilling.module";
+import { ImportLibreModule } from "./import-libre/import-libre.module";
 
 @Module({
   imports: [
@@ -86,6 +87,7 @@ import { EbillingModule } from "./ebilling/ebilling.module";
     CompagniesModule,
     ContratsModule,
     ImportModule,
+    ImportLibreModule,
     DashboardModule,
     RenouvellementsModule,
     AvenantsModule,

@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { jsPDF } from "jspdf";
-import { UploadCloud, Receipt, HandCoins, ClipboardCheck, Image as ImageIcon, FolderUp, FolderTree, CheckCircle2, AlertTriangle, Building2, FileText, Users, Globe2, RefreshCw, Clock } from "lucide-react";
+import { UploadCloud, Receipt, HandCoins, ClipboardCheck, Image as ImageIcon, FolderUp, FolderTree, CheckCircle2, AlertTriangle, Building2, FileText, Users, Globe2, RefreshCw, Clock, Bot } from "lucide-react";
 import { toast } from "sonner";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { Combobox } from "@/components/shared/Combobox";
 import { ImportEnMasseModal } from "@/components/shared/ImportEnMasseModal";
+import { ImportLibreModal } from "./ImportLibreModal";
 import {
   telechargerModeleImportFactures, apercuImportFactures, confirmerImportFactures, type ImportFactureRow,
   telechargerModeleImportFacturesGlobal, importerFacturesGlobal, type ResultatImportFacturesGlobal,
@@ -63,7 +64,7 @@ import { numeroPolice } from "@/lib/police";
 // gérer de façon optimum plus de 50000 lignes en une fois") — alternative
 // à l'import par contrat ci-dessus, pour une reprise en masse sans devoir
 // pré-trier le fichier par contrat.
-type Categorie = "souscripteurs" | "contrats" | "assures" | "factures" | "facturesGlobal" | "reglements" | "accordsPrealables" | "photos" | null;
+type Categorie = "souscripteurs" | "contrats" | "assures" | "factures" | "facturesGlobal" | "importLibre" | "reglements" | "accordsPrealables" | "photos" | null;
 
 const CARTES: { id: Exclude<Categorie, null>; titre: string; description: string; icon: React.ElementType }[] = [
   { id: "souscripteurs", titre: "Souscripteurs", description: "Reprise des clients (personnes morales ou physiques) déjà connus de l'ancien système.", icon: Building2 },
@@ -73,6 +74,7 @@ const CARTES: { id: Exclude<Categorie, null>; titre: string; description: string
   { id: "factures", titre: "Factures", description: "Reprise des factures déjà saisies (en-tête + lignes de prestation) auprès de l'ancien système.", icon: Receipt },
   { id: "reglements", titre: "Règlements prestataires", description: "Reprise des règlements déjà effectués auprès des prestataires (bordereaux soldés).", icon: HandCoins },
   { id: "photos", titre: "Photos des bénéficiaires", description: "Import en une fois de tout un dossier de photos — chaque fichier doit être nommé avec le matricule du bénéficiaire.", icon: ImageIcon },
+  { id: "importLibre", titre: "Import libre (Ariana)", description: "Ariana lit un fichier PDF, Excel, CSV ou TXT de n'importe quel système (Eyassur…) et importe automatiquement les prestations sur le bon assuré et le bon exercice.", icon: Bot },
 ];
 
 export default function ImportDonneesView() {
@@ -448,6 +450,8 @@ export default function ImportDonneesView() {
       )}
 
       {ouvert === "photos" && <ImportPhotosModal onClose={() => setOuvert(null)} />}
+
+      <ImportLibreModal ouvert={ouvert === "importLibre"} onFermer={() => setOuvert(null)} />
     </div>
   );
 }
