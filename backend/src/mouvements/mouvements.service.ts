@@ -266,7 +266,7 @@ export class MouvementsService implements OnModuleInit {
   // Un CJ/EF basculé seul (avecFamille=false, ou personne non racine) est
   // détaché de sa famille d'origine et devient AS de sa propre fiche dans
   // le contrat destination.
-  async basculerVersContrat(assureId: string, contratDestinationId: string, avecFamille: boolean, dateEffet: string) {
+  async basculerVersContrat(assureId: string, contratDestinationId: string, avecFamille: boolean, dateEffet: string, opts?: { ignorerAge?: boolean }) {
     const assure = await this.prisma.assureSante.findUnique({ where: { id: assureId }, include: { membres: true } });
     if (!assure) throw new NotFoundException(`Assuré ${assureId} introuvable`);
     if (assure.contratId === contratDestinationId) {
@@ -284,7 +284,7 @@ export class MouvementsService implements OnModuleInit {
     }
 
     const aBasculer = basculeFamille ? [assure, ...assure.membres] : [assure];
-    return this.basculerLot(aBasculer, contratSource, contratDestination, dateEffet, { detacherId: estRacine ? undefined : assureId });
+    return this.basculerLot(aBasculer, contratSource, contratDestination, dateEffet, { detacherId: estRacine ? undefined : assureId, ignorerAge: opts?.ignorerAge });
   }
 
   // Bascule de TOUTE une population (ou une sélection) d'un contrat vers un
@@ -320,9 +320,9 @@ export class MouvementsService implements OnModuleInit {
   // réels (Retrait sur la source, Incorporation sur la destination).
   private async basculerLot(
     personnes: AssureSante[], contratSource: Contrat, contratDestination: Contrat, dateEffet: string,
-    options: { detacherId?: string },
+    options: { detacherId?: string; ignorerAge?: boolean },
   ) {
-    const { detacherId } = options;
+    const { detacherId, ignorerAge } = options;
     const delta = { AS: 0, CJ: 0, EF: 0 };
     for (const p of personnes) {
       const t = (detacherId && p.id === detacherId ? "AS" : (p.typeAssure ?? "")).toUpperCase();
@@ -334,15 +334,17 @@ export class MouvementsService implements OnModuleInit {
     // même pour une personne déjà active depuis des années sur son contrat
     // d'origine.
     const dateReferenceBascule = parseDateFr(dateEffet);
-    const erreursAge = personnes
-      .map((p) => verifierAge(
-        contratDestination,
-        { typeAssure: detacherId && p.id === detacherId ? "AS" : p.typeAssure, dateNaissance: p.dateNaissance, scolarise: p.scolarise },
-        dateReferenceBascule,
-      ))
-      .filter((e): e is string => e !== null);
-    if (erreursAge.length > 0) {
-      throw new BadRequestException(`Bascule impossible — ${erreursAge.join(" ")}`);
+    if (!ignorerAge) {
+      const erreursAge = personnes
+        .map((p) => verifierAge(
+          contratDestination,
+          { typeAssure: detacherId && p.id === detacherId ? "AS" : p.typeAssure, dateNaissance: p.dateNaissance, scolarise: p.scolarise },
+          dateReferenceBascule,
+        ))
+        .filter((e): e is string => e !== null);
+      if (erreursAge.length > 0) {
+        throw new BadRequestException(`Bascule impossible — ${erreursAge.join(" ")}`);
+      }
     }
 
     await this.prisma.$transaction(

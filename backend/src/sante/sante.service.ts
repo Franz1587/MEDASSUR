@@ -934,7 +934,9 @@ export class SanteService {
     if (!assure) throw new NotFoundException(`Assuré matricule ${entree.matricule} introuvable sur le contrat source`);
     const donneesLigne = entree.donneesLigne as { dateEffet?: string } | null;
     const dateEffet = donneesLigne?.dateEffet ?? new Date().toLocaleDateString("fr-FR");
-    await this.mouvements.basculerVersContrat(assure.id, entree.contratCibleId, true, dateEffet);
+    // ignorerAge: true — validation admin délibérée, l'âge a déjà été
+    // vérifié par le gestionnaire avant de cliquer "Valider".
+    await this.mouvements.basculerVersContrat(assure.id, entree.contratCibleId, true, dateEffet, { ignorerAge: true });
     await this.prisma.personneEnAttenteTransfert.delete({ where: { id } });
     return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId };
   }
