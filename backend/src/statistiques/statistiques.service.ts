@@ -146,17 +146,23 @@ export class StatistiquesService {
     const garantiesContrat = contrat.garanties;
     const resoudreFamille = (p: (typeof lignes)[number]): string =>
       resoudreRubriqueContrat(garantiesContrat, { type: p.type, prestataireType: p.prestataireRef?.type }, p.acteMedicalId ? acteInfoParActeId.get(p.acteMedicalId) : null);
-    // Famille D'ACTES (2026-09) — voir demande utilisateur : "consommation
-    // par famille des actes (exemple acte ORL, actes du cardiologue,
-    // échographie...)" — ActeMedical.famille brut (le regroupement fin du
-    // catalogue), jamais categorieGarantie (déjà utilisé par
-    // resoudreFamille ci-dessus pour la rubrique du tableau de garanties).
+    // Famille D'ACTES (2026-09/2026-10) — ActeMedical.famille brut (le
+    // regroupement fin du catalogue), jamais categorieGarantie (déjà
+    // utilisé par resoudreFamille pour la rubrique du tableau de garanties).
+    // Garde "DIVERS" (2026-10, même logique que rubrique-contrat.util.ts) :
+    // l'acte générique "Prestation non détaillée" a famille="DIVERS" et est
+    // rattaché à TOUTES les lignes d'un import d'antériorité. Sa famille ne
+    // reflète pas la vraie catégorie de la prestation — ignorer cette valeur
+    // et se rabattre sur p.type (Consultations, Pharmacie, Imagerie…) qui
+    // porte la vraie information saisie ou importée. Un acte catalogue dont
+    // la famille est "DIVERS" en propre suit la même règle (p.type sera
+    // plus précis, ex. "Actes de Spécialités").
     const familleActeParActeId = new Map(actes.map((a) => [a.id, a.famille]));
     const familleActeParLibelle = new Map(actes.map((a) => [a.libelle.trim().toLowerCase(), a.famille]));
     const resoudreFamilleActe = (p: (typeof lignes)[number]): string => {
       if (p.acteMedicalId) {
         const f = familleActeParActeId.get(p.acteMedicalId);
-        if (f) return f;
+        if (f && f.trim().toUpperCase() !== "DIVERS") return f;
       }
       const f = familleActeParLibelle.get(p.type.trim().toLowerCase());
       return f ?? p.type.trim() ?? "Non précisé";
