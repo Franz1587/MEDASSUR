@@ -234,10 +234,14 @@ export class AccordPrealableService {
     // l'appelant (voir AccordPrealableController) puisse proposer un vrai
     // choix (continuer la saisie sur ce dossier / l'annuler pour en ouvrir
     // un nouveau) plutôt qu'un blocage sec.
-    const doublon = await this.prisma.accordPrealable.findFirst({
+    // Type "Pharmacie" exclu du doublon-check : plusieurs ordonnances
+    // électroniques peuvent coexister pour le même assuré (une par
+    // prescription médicale distincte — voir demande utilisateur et
+    // accorder_ordonnance_electronique_pharmacie dans agent-ia.service.ts).
+    const doublon = dto.type !== "Pharmacie" ? await this.prisma.accordPrealable.findFirst({
       where: { assureId: dto.assureId, type: dto.type, decision: "En attente" },
       orderBy: { dateDemande: "desc" },
-    });
+    }) : null;
     if (doublon) {
       throw new ConflictException({
         code: "DOUBLON_EN_COURS",
@@ -397,6 +401,39 @@ export class AccordPrealableService {
         dateDecision: aujourdhuiFr(),
       },
     });
+  }
+
+  // Ordonnance électronique pharmacie (2026-10) — voir demande utilisateur :
+  // "filmer une ordonnance → ordonnance électronique → pharmacie partenaire
+  // en tiers payant". La pharmacie entre le code que l'assuré a reçu
+  // d'Ariana pour voir le patient et les médicaments, puis confirme la
+  // délivrance. Le code est unique (codeAccesPharmacie @unique en DB) et
+  // valide 30 jours à compter de la date de demande.
+  async findByCodePharmacie(code: string) {
+    const acc = await this.prisma.accordPrealable.findFirst({
+      where: { codeAccesPharmacie: code, type: "Pharmacie" },
+      include: { assure: { select: { id: true, nom: true, prenom: true, contratId: true } } },
+    });
+    if (!acc) throw new NotFoundException(`Aucune ordonnance trouvée pour le code ${code}`);
+    if (acc.decision === "Délivrée") throw new BadRequestException("Cette ordonnance a déjà été délivrée.");
+    // Validité 30 jours si dateValidite absente
+    const dateVal = acc.dateValidite ?? (() => {
+      const d = parseDateFr(acc.dateDemande) ?? new Date();
+      d.setDate(d.getDate() + 30);
+      return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+    })();
+    const dateValObj = parseDateFr(dateVal);
+    if (dateValObj && dateValObj < new Date()) throw new BadRequestException("Cette ordonnance électronique a expiré.");
+    return { ...acc, dateValidite: dateVal, medicaments: acc.medicamentsLus ? JSON.parse(acc.medicamentsLus) as unknown[] : [] };
+  }
+
+  async delivrerParPharmacie(code: string, _prestataireId: string) {
+    const acc = await this.findByCodePharmacie(code);
+    await this.prisma.accordPrealable.update({
+      where: { id: acc.id },
+      data: { decision: "Délivrée", dateDecision: aujourdhuiFr() },
+    });
+    return { id: acc.id, message: "Ordonnance marquée comme délivrée." };
   }
 
   // Pièces jointes (2026-08) — même principe que AssureSante.photo :

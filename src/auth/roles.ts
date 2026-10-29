@@ -99,7 +99,7 @@ export const roles: Record<RoleId, RoleDefinition> = {
   // au rôle medecin_prescripteur ci-dessous.
   prestataire_sante: {
     id: "prestataire_sante", label: "Prestataire de Santé", family: "externe", shell: "provider-portal",
-    allowedModules: ["prestataireDashboard", "prestatairePatients", "prestatairePrestations", "prestataireTraiterBon", "prestataireContacts", "prestataireDevis", "prestataireFinance", "prestataireLogistique", "messagerie"],
+    allowedModules: ["prestataireDashboard", "prestatairePatients", "prestatairePrestations", "prestataireTraiterBon", "prestataireOrdonnances", "prestataireContacts", "prestataireDevis", "prestataireFinance", "prestataireLogistique", "messagerie"],
   },
   expert_sinistres: {
     id: "expert_sinistres", label: "Expert Sinistres", family: "externe", shell: "expert-portal",

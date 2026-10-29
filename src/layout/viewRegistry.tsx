@@ -81,6 +81,7 @@ const PrestataireLogistiqueView = lazy(() => import("@/features/portail-prestata
 const PrestataireDevisView = lazy(() => import("@/features/portail-prestataire/Devis"));
 const PrestataireFinanceView = lazy(() => import("@/features/portail-prestataire/Finance"));
 const TraiterBonView = lazy(() => import("@/features/portail-prestataire/TraiterBon"));
+const PrestataireOrdonnancesView = lazy(() => import("@/features/portail-prestataire/OrdonnancesPharmacie"));
 const MedecinFileAttenteView = lazy(() => import("@/features/portail-medecin/FileAttente"));
 const MedecinConsultationView = lazy(() => import("@/features/portail-medecin/Consultation"));
 const MedecinDashboardView = lazy(() => import("@/features/portail-medecin/Dashboard"));
@@ -179,6 +180,7 @@ export const viewRegistry: Record<View, React.ComponentType<any>> = {
   prestataireLogistique: PrestataireLogistiqueView,
   prestataireMedecinPrescripteur: MedecinConsultationView,
   prestataireTraiterBon: TraiterBonView,
+  prestataireOrdonnances: PrestataireOrdonnancesView,
   medecinFileAttente: MedecinFileAttenteView,
   medecinDashboard: MedecinDashboardView,
   medecinDossiersPatients: MedecinDossiersPatientsView,

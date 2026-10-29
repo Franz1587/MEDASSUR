@@ -60,7 +60,7 @@ export const ROLE_MODULES: Record<RoleId, string[]> = {
   // la clinique ou l'hôpital... c'est sensible" — cet écran est désormais
   // exclusif au rôle medecin_prescripteur ci-dessous, jamais accessible
   // depuis le compte de la structure elle-même.
-  prestataire_sante: ["prestataireDashboard", "prestatairePatients", "prestatairePrestations", "prestataireTraiterBon", "prestataireContacts", "prestataireDevis", "prestataireFinance", "prestataireLogistique", "messagerie"],
+  prestataire_sante: ["prestataireDashboard", "prestatairePatients", "prestatairePrestations", "prestataireTraiterBon", "prestataireOrdonnances", "prestataireContacts", "prestataireDevis", "prestataireFinance", "prestataireLogistique", "messagerie"],
   expert_sinistres: [...dashboard, "sinistres", "messagerie"],
   // Portail client (2026-08) — écrans dédiés et cloisonnés au Client
   // rattaché (User.clientId), distincts des vues internes "contrats"/

@@ -204,6 +204,7 @@ Règles de contenu :
 - Pour une demande de chambre d'hospitalisation (decider_chambre_hospitalisation), demande TOUJOURS d'abord la DÉCLARATION D'HOSPITALISATION (jamais "l'ordonnance" — ce n'est pas le bon document pour une hospitalisation), PUIS le devis chiffré. Pour toute autre garantie plafonnée (traiter_demande_garantie — Dentisterie, Optique, Kinésithérapie, Maternité, Transport, Autre), demande TOUJOURS d'abord l'ORDONNANCE du médecin (c'est le bon terme ici), PUIS le devis chiffré — dans cet ordre, comme deux pièces distinctes, dans les deux cas. Lis attentivement le nom du patient sur chacune, le nom de l'établissement sur le devis, et (pour traiter_demande_garantie) le montant total qui y figure, et renseigne exactement ce que tu lis dans les champs de l'outil (jamais une supposition ni ce que l'assuré t'a dit oralement) : c'est ce recoupement, fait par le serveur, qui décide d'un accord ou d'un rejet — tu ne juges jamais toi-même si "ça correspond".
 - Une fois une demande accordée par l'un de ces deux outils, le certificat de prise en charge est envoyé automatiquement dans la conversation juste après — annonce-le simplement ("je vous transmets votre certificat"), ne décris jamais le document toi-même (montants, dates) au-delà de ce que l'outil t'a déjà donné.
 - Si l'outil renvoie un Refusé, communique le motif avec tact mais sans le déguiser ni l'adoucir au point de le rendre incompréhensible. SAUF si le motif de refus est une non-correspondance d'identité du patient (le nom indiqué sur les pièces ne correspond ni à l'assuré ni à aucun ayant droit enregistré sur ce dossier) : dans ce cas le rejet est définitif, ne propose JAMAIS de transmettre le dossier à un conseiller pour ce motif — aucun réexamen ne peut changer le résultat, et poser la question rouvrirait une expectative injustifiée. Pour tout AUTRE motif de refus (prestataire non conventionné, montant ne correspondant pas, etc.), propose spontanément de transmettre le dossier si l'assuré pense qu'il y a une erreur.
+- Pour une ordonnance médicale (médicaments) transmise par un assuré en photo ou scan : utilise creer_ordonnance_electronique_pharmacie après avoir lu l'ordonnance. Cela génère un code d'accès (format ORD-AAAA-XXXXXX) que l'assuré communique à une pharmacie partenaire ${nomEntreprise} pour être servi directement en tiers payant, sans avancer les frais. L'ordonnance originale reste attachée au dossier. Si aucune photo n'est encore jointe, demande-la AVANT d'appeler l'outil — ne l'invoque jamais sans pièce jointe. Une fois le code généré, communique-le clairement à l'assuré et rappelle-lui qu'il est valable 30 jours.
 - Sur une demande de remboursement, ton rôle est volontairement limité : tu accuses réception, tu confirmes que le dossier a bien été transmis pour traitement, tu ne donnes jamais de montant remboursé ni de délai précis.
 - L'outil escalader_vers_humain est un DERNIER recours, jamais un réflexe : n'y as recours qu'après avoir réellement consulté tout ce que les outils disponibles permettent de vérifier, et seulement si la situation l'exige vraiment (une décision hors du périmètre couvert par decider_chambre_hospitalisation/traiter_demande_garantie, une erreur signalée sur un dossier, une demande explicite de parler à quelqu'un d'autre, ou une donnée réellement introuvable après vérification) — jamais simplement parce qu'une question est délicate ou demande plusieurs recherches. Formule toujours cela comme la suite normale du traitement de la demande, jamais comme un aveu de limite.
 - Reste concis (quelques phrases), pas de listes à puces sauf si cela aide vraiment à la clarté.`;
@@ -275,6 +276,40 @@ const OUTIL_TRAITER_GARANTIE: Anthropic.Tool = {
       adressePrestataireLueSurDevis: { type: "string", description: "Adresse de l'établissement lue sur le devis, si présente (laisser vide sinon)." },
     },
     required: ["accordId", "montantLuSurDevis", "nomPatientLuSurOrdonnance", "nomPatientLuSurDevis", "nomPrestataireLuSurDevis"],
+  },
+};
+
+// Ordonnance électronique pharmacie (2026-10) — voir demande utilisateur :
+// "filmer une ordonnance → ordonnance électronique → servi en pharmacie".
+// Ariana lit la photo/scan, extrait les médicaments et génère un code
+// d'accès court que l'assuré communique à la pharmacie partenaire pour
+// être servi directement en tiers payant, sans avancer les frais.
+const OUTIL_CREER_ORDONNANCE_PHARMACIE: Anthropic.Tool = {
+  name: "creer_ordonnance_electronique_pharmacie",
+  description: "Lit une ordonnance médicale jointe (photo ou scan), extrait la liste des médicaments prescrits, et crée une ordonnance électronique dans le système permettant à l'assuré d'aller se faire servir dans une pharmacie partenaire en tiers payant. Requiert qu'une photo ou un scan de l'ordonnance ait été joint dans cette conversation. N'ENREGISTRE RIEN et renvoie une erreur si aucune pièce jointe n'a été envoyée dans cette conversation — demande d'abord la photo de l'ordonnance. Retourne un code d'accès court que l'assuré communique à la pharmacie.",
+  input_schema: {
+    type: "object",
+    properties: {
+      nomPatientLuSurOrdonnance: { type: "string", description: "Nom du patient tel qu'écrit sur l'ordonnance." },
+      nomMedecinPrescripteur: { type: "string", description: "Nom du médecin prescripteur, si lisible sur l'ordonnance (facultatif)." },
+      datePrescription: { type: "string", description: "Date de prescription au format jj/mm/aaaa, si lisible (facultatif)." },
+      medicaments: {
+        type: "array",
+        description: "Liste des médicaments prescrits, extraits de l'ordonnance.",
+        items: {
+          type: "object",
+          properties: {
+            nom: { type: "string", description: "Nom du médicament." },
+            dosage: { type: "string", description: "Dosage (ex. '500mg', '1 cp/j'), si précisé." },
+            quantite: { type: "string", description: "Quantité (ex. '2 boîtes'), si précisée." },
+            duree: { type: "string", description: "Durée du traitement (ex. '7 jours'), si précisée." },
+          },
+          required: ["nom"],
+        },
+      },
+      nomPharmacie: { type: "string", description: "Pharmacie désignée si l'ordonnance en précise une (facultatif)." },
+    },
+    required: ["nomPatientLuSurOrdonnance", "medicaments"],
   },
 };
 
@@ -405,6 +440,7 @@ export class MessagerieAgentIaService {
         },
         OUTIL_DECIDER_CHAMBRE,
         OUTIL_TRAITER_GARANTIE,
+        OUTIL_CREER_ORDONNANCE_PHARMACIE,
       );
     }
     if (ctx.prestataireId) {
@@ -669,6 +705,49 @@ export class MessagerieAgentIaService {
         await this.notifierAgentsHumains(conversationId, `Nouvelle demande de remboursement (${cree.id}) déposée via ${NOM_AGENT} — pièce(s) jointe(s) envoyée(s) par l'assuré dans la conversation, montant à examiner.${descriptionPiece}`);
         return { id: cree.id, message: `Demande enregistrée avec la pièce jointe reçue, un agent ${ctx.nomEntreprise} va l'examiner.` };
       }
+      case "creer_ordonnance_electronique_pharmacie": {
+        if (!ctx.assureSanteId) return { erreur: "Non disponible pour ce type de compte." };
+        // Garde-fou : pièce jointe obligatoire (même principe qu'accuser_reception_remboursement)
+        const nbPieces = await this.prisma.message.count({
+          where: { conversationId, auteurType: "Utilisateur", pieceJointe: { not: null } },
+        });
+        if (nbPieces === 0) {
+          return { erreur: "Aucune photo ou scan d'ordonnance reçu dans cette conversation. Demande à l'assuré de joindre la photo de son ordonnance avant d'enregistrer." };
+        }
+        const inp = args as {
+          nomPatientLuSurOrdonnance: string;
+          nomMedecinPrescripteur?: string;
+          datePrescription?: string;
+          medicaments: Array<{ nom: string; dosage?: string; quantite?: string; duree?: string }>;
+          nomPharmacie?: string;
+        };
+        const { randomUUID: uuid } = await import("crypto");
+        const code = `ORD-${new Date().getFullYear()}-${uuid().slice(0, 6).toUpperCase()}`;
+        const assure = await this.prisma.assureSante.findUnique({ where: { id: ctx.assureSanteId } });
+        if (!assure) return { erreur: "Assuré introuvable." };
+        const pieceJointe = await this.obtenirDernierePieceJointe(conversationId);
+        const acc = await this.prisma.accordPrealable.create({
+          data: {
+            id: `PEC-${new Date().getFullYear()}-${uuid().slice(0, 6).toUpperCase()}`,
+            assureId: ctx.assureSanteId,
+            contratId: assure.contratId,
+            type: "Pharmacie",
+            description: `Ordonnance électronique — ${inp.medicaments.map((m) => m.nom).join(", ")}`,
+            prestataire: inp.nomPharmacie ?? "À définir",
+            dateDemande: aujourdhuiFr(),
+            statutAnalyseMedicale: "Validé",
+            statutValidationFinanciere: "Validé",
+            decision: "Accordé",
+            dateDecision: aujourdhuiFr(),
+            origine: "Portail Assuré",
+            medicamentsLus: JSON.stringify(inp.medicaments),
+            codeAccesPharmacie: code,
+            ...(pieceJointe ? { ordonnanceFichier: pieceJointe } : {}),
+          },
+        });
+        return { succes: true, code, accordId: acc.id, nbMedicaments: inp.medicaments.length };
+      }
+
       case "decider_chambre_hospitalisation": {
         if (!ctx.assureSanteId && !ctx.prestataireId) return { erreur: "Non disponible pour ce type de compte." };
         const accordId = String(args.accordId ?? "");
@@ -986,6 +1065,15 @@ export class MessagerieAgentIaService {
       default:
         return { erreur: `Outil inconnu: ${nom}` };
     }
+  }
+
+  private async obtenirDernierePieceJointe(conversationId: string): Promise<string | null> {
+    const msg = await this.prisma.message.findFirst({
+      where: { conversationId, auteurType: "Utilisateur", pieceJointe: { not: null } },
+      orderBy: { dateEnvoi: "desc" },
+      select: { pieceJointe: true },
+    });
+    return msg?.pieceJointe ?? null;
   }
 
   private async notifierAgentsHumains(conversationId: string, message: string) {

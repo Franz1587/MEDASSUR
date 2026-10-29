@@ -99,6 +99,11 @@ export type View =
   // Traitement de bons (2026-08) — écran prestataire_sante, s'auto-gère
   // selon `getMoiPrestataire().type` (voir TraiterBon.tsx).
   | "prestataireMedecinPrescripteur" | "prestataireTraiterBon"
+  // Ordonnances électroniques pharmacie (2026-10) — l'assuré envoie sa
+  // photo d'ordonnance à Ariana, Ariana génère un code d'accès ; la
+  // pharmacie entre le code ici pour voir les médicaments et confirmer la
+  // délivrance en tiers payant.
+  | "prestataireOrdonnances"
   // Portail médecin (2026-08) — voir demande utilisateur : "le médecin
   // doit avoir ses accès différents de ceux de la clinique ou l'hôpital...
   // il doit voir la liste des assurés qu'il doit recevoir (une file
@@ -218,6 +223,7 @@ export const viewIcons: Record<View, React.ElementType> = {
   prestataireLogistique: Briefcase,
   prestataireMedecinPrescripteur: Stethoscope,
   prestataireTraiterBon: ClipboardCheck,
+  prestataireOrdonnances: ClipboardList,
   medecinFileAttente: ListOrdered,
   medecinDashboard: Home,
   medecinDossiersPatients: FolderClock,
@@ -302,6 +308,7 @@ export const viewLabels: Record<View, string> = {
   prestataireLogistique: "Logistique",
   prestataireMedecinPrescripteur: "Consultation",
   prestataireTraiterBon: "Traiter un bon",
+  prestataireOrdonnances: "Ordonnances",
   medecinFileAttente: "File d'attente",
   medecinDashboard: "Tableau de bord",
   medecinDossiersPatients: "Mes Dossiers Patients",

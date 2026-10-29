@@ -28,6 +28,18 @@ export class AccordPrealableController {
     return this.service.findAll({ contratId, prestataireId, type, decision, origine, du, au, reference });
   }
 
+  // Ordonnance électronique pharmacie (2026-10) — routes déclarées AVANT
+  // :id pour éviter qu'Express matche "pharmacie" comme un id générique.
+  @Get("pharmacie/:code")
+  findByCodePharmacie(@Param("code") code: string) {
+    return this.service.findByCodePharmacie(code);
+  }
+
+  @Patch("pharmacie/:code/delivrer")
+  delivrerParPharmacie(@Param("code") code: string, @Req() req: Request & { user: { prestataireId?: string } }) {
+    return this.service.delivrerParPharmacie(code, req.user?.prestataireId ?? "");
+  }
+
   @Get(":id")
   findOne(@Param("id") id: string) {
     return this.service.findOne(id);

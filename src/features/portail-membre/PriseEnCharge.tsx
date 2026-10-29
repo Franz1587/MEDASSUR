@@ -157,6 +157,12 @@ export default function MembrePriseEnChargeView() {
                 </div>
                 <Badge variant={decisionVariant(d.decision)}>{d.decision}</Badge>
               </div>
+              {d.codeAccesPharmacie && (
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <span className="text-[11px] text-muted-foreground">Code pharmacie :</span>
+                  <span className="font-mono text-[12px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded">{d.codeAccesPharmacie}</span>
+                </div>
+              )}
               {d.montantDevis != null && (
                 <p className="text-[12px] text-muted-foreground mt-2">Devis : <span className="text-foreground font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(Number(d.montantDevis))} FCFA</span></p>
               )}

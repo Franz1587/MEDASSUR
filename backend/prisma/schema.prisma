@@ -2685,6 +2685,13 @@ model AccordPrealable {
   ordonnanceFichier String?
   devisFichier      String?
 
+  // Ordonnance électronique pharmacie (2026-10) — l'assuré filme/scanne
+  // son ordonnance, Ariana (vision Claude) extrait les médicaments et crée
+  // un AccordPrealable type "Pharmacie" accordé d'office ; la pharmacie
+  // entre le code pour servir l'assuré en tiers payant.
+  medicamentsLus     String?
+  codeAccesPharmacie String? @unique
+
   // Toute entente préalable se rapporte à un prestataire précis (clinique,
   // hôpital, cabinet médical, dentiste, ophtalmologue, laboratoire,
   // opticien…) — même principe que PriseEnCharge.prestataire/prestataireId :

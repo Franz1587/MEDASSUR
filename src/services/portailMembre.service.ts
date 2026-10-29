@@ -281,6 +281,9 @@ export interface MembreAccordPrealable {
   dateValidite: string | null;
   ordonnanceFichier: string | null;
   devisFichier: string | null;
+  // Ordonnance électronique pharmacie (2026-10) — code d'accès à communiquer
+  // à la pharmacie partenaire pour une délivrance en tiers payant.
+  codeAccesPharmacie?: string | null;
 }
 
 export async function getMesPrisesEnChargePrealables(): Promise<MembreAccordPrealable[]> {
