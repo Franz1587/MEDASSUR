@@ -18,7 +18,8 @@ import {
 import {
   compterPersonnesEnAttenteTransfert, getPersonnesEnAttenteTransfert,
   ignorerPersonneEnAttenteTransfert, ignorerToutesPersonnesEnAttenteTransfert,
-  validerTransfertPersonne, analyserEcartsTauxContrat, type PersonneEnAttenteTransfert,
+  validerTransfertPersonne, analyserEcartsTauxContrat, corrigerTypeAssureErreurs,
+  type PersonneEnAttenteTransfert,
 } from "@/services/sante.service";
 import {
   telechargerModeleImportClients, apercuImportClients, confirmerImportClients, type ImportClientRow,
@@ -120,7 +121,11 @@ export default function ImportDonneesView() {
       const res = await validerTransfertPersonne(id);
       setListeTransfert((v) => v?.filter((p) => p.id !== id) ?? null);
       rafraichirEnAttenteTransfert();
-      toast.success(`Transfert validé — ${res.matricule} basculé vers le contrat cible.`);
+      if (res.typeAssureCorrige) {
+        toast.success(`Transfert validé — ${res.matricule} basculé. Type corrigé EF → AS (adulte enregistré par erreur comme enfant).`);
+      } else {
+        toast.success(`Transfert validé — ${res.matricule} basculé vers le contrat cible.`);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Validation impossible.");
     }
@@ -155,6 +160,24 @@ export default function ImportDonneesView() {
       toast.error(err instanceof Error ? err.message : "Analyse impossible.");
     } finally {
       setAnalyseEnCours(false);
+    }
+  };
+
+  const [correctionEnCours, setCorrectionEnCours] = useState(false);
+  const handleCorrigerTypeAssure = async () => {
+    setCorrectionEnCours(true);
+    try {
+      const res = await corrigerTypeAssureErreurs();
+      if (res.corriges > 0) {
+        toast.success(`${res.corriges} assuré(s) corrigé(s) : type EF (enfant) → AS (adulte).`);
+        rafraichirEnAttenteTransfert();
+      } else {
+        toast.info("Aucune erreur de type assuré détectée.");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Correction impossible.");
+    } finally {
+      setCorrectionEnCours(false);
     }
   };
 
@@ -199,9 +222,14 @@ export default function ImportDonneesView() {
           <RefreshCw className="w-4 h-4 flex-shrink-0" />
           Analyse a posteriori : détecte, dans les prestations déjà en base, un changement de contrat jamais annoncé (taux de couverture observé correspondant à un autre contrat du même souscripteur — ex. changement de collège Agent/Cadre) — jamais de bascule automatique, seulement un signalement à confirmer ci-dessous.
         </p>
-        <Btn variant="secondary" disabled={analyseEnCours} onClick={handleAnalyserEcartsTaux}>
-          <RefreshCw className={`w-4 h-4 ${analyseEnCours ? "animate-spin" : ""}`} />Analyser les écarts de taux
-        </Btn>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Btn variant="secondary" disabled={analyseEnCours} onClick={handleAnalyserEcartsTaux}>
+            <RefreshCw className={`w-4 h-4 ${analyseEnCours ? "animate-spin" : ""}`} />Analyser les écarts de taux
+          </Btn>
+          <Btn variant="secondary" disabled={correctionEnCours} onClick={handleCorrigerTypeAssure} title="Corrige les assurés enregistrés comme 'enfant' (EF) alors qu'ils ont plus de 18 ans — erreur de saisie fréquente.">
+            <CheckCircle2 className={`w-4 h-4 ${correctionEnCours ? "animate-spin" : ""}`} />Corriger types EF adultes
+          </Btn>
+        </div>
       </div>
 
       {enAttenteTransfert > 0 && (

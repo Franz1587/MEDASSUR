@@ -63,6 +63,13 @@ export class SanteController {
     return this.service.ignorerPersonneEnAttenteTransfert(id);
   }
 
+  // Correction globale des erreurs typeAssure EF sur un adulte ≥ 18 ans.
+  // `contratId` optionnel (body) : absent = tous les contrats.
+  @Post("corriger-type-assure-erreurs")
+  corrigerTypeAssureErreurs(@Body("contratId") contratId?: string) {
+    return this.service.corrigerTypeAssureErreurs(contratId);
+  }
+
   // Analyse a posteriori des écarts de taux (2026-09) — voir
   // SanteService.analyserEcartsTauxContrat. `contratId` optionnel (body),
   // absent = tous les contrats.

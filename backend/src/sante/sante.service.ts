@@ -6,7 +6,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { PrismaService } from "../prisma/prisma.service";
 import { MouvementsService } from "../mouvements/mouvements.service";
 import { NotificationsService } from "../notifications/notifications.service";
-import { verifierAge } from "../mouvements/age-limite.util";
+import { verifierAge, calculerAgeAns } from "../mouvements/age-limite.util";
 import { CreateAssureDto } from "./dto/create-assure.dto";
 import { UpdateAssureDto } from "./dto/update-assure.dto";
 import { CreatePriseEnChargeDto } from "./dto/create-prise-en-charge.dto";
@@ -924,21 +924,61 @@ export class SanteService {
 
   // Valide manuellement le transfert d'une personne en attente : bascule
   // l'assuré vers le contrat cible détecté puis supprime l'entrée de la file.
+  // Corrige automatiquement un typeAssure = "EF" erroné (adulte ≥ 18 ans
+  // enregistré comme enfant par erreur de saisie) avant la bascule.
   async validerTransfertPersonne(id: string) {
     const entree = await this.prisma.personneEnAttenteTransfert.findUnique({ where: { id } });
     if (!entree) throw new NotFoundException(`Entrée ${id} introuvable`);
     const assure = await this.prisma.assureSante.findFirst({
       where: { matricule: entree.matricule, contratId: entree.contratSourceId },
-      select: { id: true },
+      select: { id: true, typeAssure: true, dateNaissance: true },
     });
     if (!assure) throw new NotFoundException(`Assuré matricule ${entree.matricule} introuvable sur le contrat source`);
+
+    // Auto-correction : typeAssure = "EF" mais âge adulte → corrige en "AS"
+    // (erreur de saisie fréquente : un AS ou CJ créé sous le mauvais type).
+    let typeAssureCorrige: string | null = null;
+    if (assure.typeAssure === "EF") {
+      const age = calculerAgeAns(assure.dateNaissance, new Date());
+      if (age !== null && age >= 18) {
+        typeAssureCorrige = "AS";
+        await this.prisma.assureSante.update({ where: { id: assure.id }, data: { typeAssure: "AS" } });
+      }
+    }
+
     const donneesLigne = entree.donneesLigne as { dateEffet?: string } | null;
     const dateEffet = donneesLigne?.dateEffet ?? new Date().toLocaleDateString("fr-FR");
-    // ignorerAge: true — validation admin délibérée, l'âge a déjà été
-    // vérifié par le gestionnaire avant de cliquer "Valider".
-    await this.mouvements.basculerVersContrat(assure.id, entree.contratCibleId, true, dateEffet, { ignorerAge: true });
+    await this.mouvements.basculerVersContrat(assure.id, entree.contratCibleId, true, dateEffet);
     await this.prisma.personneEnAttenteTransfert.delete({ where: { id } });
-    return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId };
+    return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId, typeAssureCorrige };
+  }
+
+  // Détecte et corrige tous les assurés enregistrés avec typeAssure = "EF"
+  // (enfant) mais dont l'âge révèle une erreur de saisie (adulte ≥ 18 ans).
+  // Corrige en "AS". Optionnel : contratId pour restreindre à un contrat.
+  async corrigerTypeAssureErreurs(contratId?: string) {
+    const candidats = await this.prisma.assureSante.findMany({
+      where: { typeAssure: "EF", ...(contratId ? { contratId } : {}) },
+      select: { id: true, nom: true, prenom: true, matricule: true, dateNaissance: true, contratId: true },
+    });
+    const aujourd = new Date();
+    const aCorriger = candidats.filter((p) => {
+      const age = calculerAgeAns(p.dateNaissance, aujourd);
+      return age !== null && age >= 18;
+    });
+    if (aCorriger.length === 0) return { corriges: 0, details: [] };
+    await this.prisma.assureSante.updateMany({
+      where: { id: { in: aCorriger.map((p) => p.id) } },
+      data: { typeAssure: "AS" },
+    });
+    return {
+      corriges: aCorriger.length,
+      details: aCorriger.map((p) => ({
+        matricule: p.matricule, nom: p.nom, prenom: p.prenom,
+        age: calculerAgeAns(p.dateNaissance, aujourd),
+        contratId: p.contratId,
+      })),
+    };
   }
 
   // `assureIds` (optionnel) permet au profil Participants de récupérer en un
