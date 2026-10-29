@@ -929,11 +929,23 @@ export class SanteService {
   async validerTransfertPersonne(id: string) {
     const entree = await this.prisma.personneEnAttenteTransfert.findUnique({ where: { id } });
     if (!entree) throw new NotFoundException(`Entrée ${id} introuvable`);
-    const assure = await this.prisma.assureSante.findFirst({
+    let assure = await this.prisma.assureSante.findFirst({
       where: { matricule: entree.matricule, contratId: entree.contratSourceId },
       select: { id: true, typeAssure: true, dateNaissance: true },
     });
-    if (!assure) throw new NotFoundException(`Assuré matricule ${entree.matricule} introuvable sur le contrat source`);
+    if (!assure) {
+      // L'assuré n'est plus sur le contrat source — vérifier s'il est déjà
+      // sur le contrat cible (transfert déjà effectué par un autre biais).
+      const dejaTransfere = await this.prisma.assureSante.findFirst({
+        where: { matricule: entree.matricule, contratId: entree.contratCibleId },
+        select: { id: true },
+      });
+      await this.prisma.personneEnAttenteTransfert.delete({ where: { id } });
+      if (dejaTransfere) {
+        return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId, typeAssureCorrige: null, dejaEffectue: true };
+      }
+      throw new NotFoundException(`Assuré matricule ${entree.matricule} introuvable (ni sur le contrat source ni sur le contrat cible)`);
+    }
 
     // Auto-correction : typeAssure = "EF" mais âge adulte → corrige en "AS"
     // (erreur de saisie fréquente : un AS ou CJ créé sous le mauvais type).

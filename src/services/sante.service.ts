@@ -357,8 +357,8 @@ export async function ignorerPersonneEnAttenteTransfert(id: string): Promise<{ i
   return http.delete<{ id: string }>(`/sante/personnes-en-attente-transfert/${id}`);
 }
 
-export async function validerTransfertPersonne(id: string): Promise<{ id: string; matricule: string; contratCibleId: string; typeAssureCorrige: string | null }> {
-  return http.patch<{ id: string; matricule: string; contratCibleId: string; typeAssureCorrige: string | null }>(`/sante/personnes-en-attente-transfert/${id}/valider`, {});
+export async function validerTransfertPersonne(id: string): Promise<{ id: string; matricule: string; contratCibleId: string; typeAssureCorrige: string | null; dejaEffectue?: boolean }> {
+  return http.patch<{ id: string; matricule: string; contratCibleId: string; typeAssureCorrige: string | null; dejaEffectue?: boolean }>(`/sante/personnes-en-attente-transfert/${id}/valider`, {});
 }
 
 export async function ignorerToutesPersonnesEnAttenteTransfert(): Promise<{ ignorees: number }> {

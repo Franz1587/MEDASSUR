@@ -132,8 +132,10 @@ export default function ImportDonneesView() {
       const res = await validerTransfertPersonne(id);
       setListeTransfert((v) => v?.filter((p) => p.id !== id) ?? null);
       rafraichirEnAttenteTransfert();
-      if (res.typeAssureCorrige) {
-        toast.success(`Transfert validé — ${res.matricule} basculé. Type corrigé EF → AS (adulte enregistré par erreur comme enfant).`);
+      if (res.dejaEffectue) {
+        toast.info(`${res.matricule} était déjà sur le contrat cible — alerte retirée.`);
+      } else if (res.typeAssureCorrige) {
+        toast.success(`Transfert validé — ${res.matricule} basculé. Type corrigé EF → AS (adulte enregistré comme enfant par erreur).`);
       } else {
         toast.success(`Transfert validé — ${res.matricule} basculé vers le contrat cible.`);
       }
