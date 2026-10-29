@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { AlertTriangle, Printer, Search, FileSpreadsheet } from "lucide-react";
+import { AlertTriangle, Printer, Search, FileSpreadsheet, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Btn } from "@/components/shared/Btn";
 import { Combobox } from "@/components/shared/Combobox";
@@ -9,7 +9,7 @@ import { fmtM } from "@/lib/format";
 import { getBordereauSinistres, getVillesPrestatairesBordereau, SANS_AGENCE, type BordereauSinistresPayload, type TypeReglementBordereauSinistres } from "@/services/bordereaux.service";
 import { getAgences } from "@/services/agences.service";
 import type { Agence } from "@/types/agences";
-import { openBordereauSinistres } from "@/services/documents.service";
+import { openBordereauSinistres, openDetailBordereau } from "@/services/documents.service";
 import { getCompagnies } from "@/services/compagnies.service";
 import type { Compagnie } from "@/types/compagnies";
 
@@ -134,6 +134,10 @@ export default function BordereauSinistresView() {
           <Btn variant="primary" onClick={handleRechercher} disabled={recherchant}><Search className="w-4 h-4" />{recherchant ? "Recherche…" : "Rechercher"}</Btn>
           <Btn variant="ghost" onClick={() => openBordereauSinistres(du || undefined, au || undefined, compagnieId || undefined, typeReglement, "pdf", filtres)} disabled={!perimetreChoisi}><Printer className="w-4 h-4" />Imprimer</Btn>
           <Btn variant="ghost" onClick={() => openBordereauSinistres(du || undefined, au || undefined, compagnieId || undefined, typeReglement, "xlsx", filtres)} disabled={!perimetreChoisi}><FileSpreadsheet className="w-4 h-4" />Excel</Btn>
+          <span className="text-border">|</span>
+          <Btn variant="ghost" onClick={() => openDetailBordereau(du || undefined, au || undefined, compagnieId || undefined, "pdf", filtres)} disabled={!perimetreChoisi}><FileText className="w-4 h-4" />Détail PDF</Btn>
+          <Btn variant="ghost" onClick={() => openDetailBordereau(du || undefined, au || undefined, compagnieId || undefined, "xlsx", filtres)} disabled={!perimetreChoisi}><FileSpreadsheet className="w-4 h-4" />Détail Excel</Btn>
+          <Btn variant="ghost" onClick={() => openDetailBordereau(du || undefined, au || undefined, compagnieId || undefined, "csv", filtres)} disabled={!perimetreChoisi}><FileText className="w-4 h-4" />Détail CSV</Btn>
         </div>
       </div>
 

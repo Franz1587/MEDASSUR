@@ -62,6 +62,32 @@ export interface FiltresBordereauSinistres {
   ville?: string;
 }
 
+// Détail du bordereau (2026-10) — état complet avec la ventilation
+// assuré principal / ayant droit qui a consommé.
+export interface LigneDetailBordereau {
+  dateSoins: string;
+  dateReglement: string;
+  numeroPolice: string;
+  souscripteur: string;
+  assurePrincipal: string;
+  ayantDroit: string | null;   // null = l'assuré lui-même est le principal
+  typeAyantDroit: string | null; // CJ | EF | null
+  prestataire: string;
+  typePrestation: string;
+  fraisReels: number;
+  partGarant: number;
+  tps: number;
+  netAPayer: number;
+}
+
+export interface DetailBordereauPayload {
+  du?: string;
+  au?: string;
+  compagnie?: string;
+  lignes: LigneDetailBordereau[];
+  total: { fraisReels: number; partGarant: number; tps: number; netAPayer: number };
+}
+
 export interface LigneBordereauProduction {
   numeroPolice: string;
   codeAssure: string;
@@ -201,6 +227,103 @@ export class BordereauxService {
     );
 
     return { du, au, compagnieId, compagnie: compagnie?.nom, typeReglement, groupes, total };
+  }
+
+  // Détail du bordereau (2026-10) — toutes les lignes d'un bordereau avec
+  // la ventilation assuré principal / ayant droit.  Utilise les mêmes filtres
+  // que sinistres() mais expose dateSoins, assurePrincipal et ayantDroit.
+  async detailSinistres(du?: string, au?: string, compagnieId?: string, filtres: FiltresBordereauSinistres = {}): Promise<DetailBordereauPayload> {
+    const villeFiltre = filtres.ville?.trim().toLowerCase() || null;
+    const dateDu = parseDateFr(du);
+    const dateAu = parseDateFr(au);
+
+    const [lignesBrutes, compagnie] = await Promise.all([
+      this.prisma.priseEnCharge.findMany({
+        where: { bordereauId: { not: null } },
+        include: {
+          assure: { select: { id: true, nom: true, prenom: true, typeAssure: true, familleId: true } },
+          prestataireRef: true, bordereau: true,
+          facture: { select: { agenceId: true } },
+          remboursement: { select: { agenceId: true } },
+        },
+      }),
+      compagnieId ? this.prisma.compagnie.findUnique({ where: { id: compagnieId } }) : Promise.resolve(null),
+    ]);
+
+    const dansPeriode = lignesBrutes.filter((l) => {
+      if (!l.bordereau) return false;
+      const d = parseDateFr(l.bordereau.dateReception);
+      if (!d) return false;
+      if (dateDu && d < dateDu) return false;
+      if (dateAu && d > dateAu) return false;
+      return true;
+    });
+
+    const contratIds = [...new Set(dansPeriode.map((l) => l.contratId))];
+    const contrats = contratIds.length > 0
+      ? await this.prisma.contrat.findMany({ where: { id: { in: contratIds } }, include: { client: true } })
+      : [];
+    const contratParId = new Map(contrats.map((c) => [c.id, c]));
+
+    // Résoudre les racines de famille (principal) pour les ayants droit.
+    const familleIds = [...new Set(dansPeriode.map((l) => l.assure.familleId).filter((id): id is string => !!id))];
+    const racineListe = familleIds.length > 0
+      ? await this.prisma.assureSante.findMany({ where: { id: { in: familleIds } }, select: { id: true, nom: true, prenom: true } })
+      : [];
+    const racineParId = new Map(racineListe.map((r) => [r.id, r]));
+
+    const lignes: LigneDetailBordereau[] = [];
+    for (const l of dansPeriode) {
+      const contrat = contratParId.get(l.contratId);
+      if (!contrat || !l.bordereau) continue;
+      if (compagnieId && contrat.compagnieId !== compagnieId) continue;
+      const agenceSaisie = l.facture?.agenceId ? l.facture : l.remboursement?.agenceId ? l.remboursement : null;
+      if (filtres.agenceId === SANS_AGENCE && agenceSaisie) continue;
+      if (filtres.agenceId && filtres.agenceId !== SANS_AGENCE && agenceSaisie?.agenceId !== filtres.agenceId) continue;
+      const villePrestataire = l.prestataireRef?.ville?.trim() ?? "";
+      if (villeFiltre && villePrestataire.toLowerCase() !== villeFiltre) continue;
+
+      const fraisReels = Number(l.montant);
+      const partGarant = l.baseRemboursement != null ? Number(l.baseRemboursement) : 0;
+      const tps = l.montantTps != null ? Number(l.montantTps) : 0;
+
+      // Distinction principal / ayant droit.
+      const estAyantDroit = !!l.assure.familleId;
+      const nomAssure = `${l.assure.nom} ${l.assure.prenom ?? ""}`.trim();
+      let assurePrincipal: string;
+      let ayantDroit: string | null = null;
+      if (estAyantDroit) {
+        const racine = racineParId.get(l.assure.familleId!);
+        assurePrincipal = racine ? `${racine.nom} ${racine.prenom ?? ""}`.trim() : "Principal inconnu";
+        ayantDroit = nomAssure;
+      } else {
+        assurePrincipal = nomAssure;
+        ayantDroit = null;
+      }
+
+      lignes.push({
+        dateSoins: l.date,
+        dateReglement: l.bordereau.dateReception,
+        numeroPolice: numeroPolice(contrat),
+        souscripteur: contrat.client.nom,
+        assurePrincipal,
+        ayantDroit,
+        typeAyantDroit: estAyantDroit ? (l.assure.typeAssure ?? null) : null,
+        prestataire: l.prestataireRef?.nom ?? l.prestataire,
+        typePrestation: l.type ?? "",
+        fraisReels, partGarant, tps,
+        netAPayer: partGarant - tps,
+      });
+    }
+
+    lignes.sort((a, b) => a.dateReglement.localeCompare(b.dateReglement) || a.souscripteur.localeCompare(b.souscripteur) || a.dateSoins.localeCompare(b.dateSoins));
+
+    const total = lignes.reduce(
+      (s, l) => ({ fraisReels: s.fraisReels + l.fraisReels, partGarant: s.partGarant + l.partGarant, tps: s.tps + l.tps, netAPayer: s.netAPayer + l.netAPayer }),
+      { fraisReels: 0, partGarant: 0, tps: 0, netAPayer: 0 },
+    );
+
+    return { du, au, compagnie: compagnie?.nom, lignes, total };
   }
 
   // Villes des prestataires (filtre du bordereau sinistres).

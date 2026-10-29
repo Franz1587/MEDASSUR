@@ -241,7 +241,7 @@ export default function ImportDonneesView() {
           <Btn variant="secondary" disabled={analyseEnCours} onClick={handleAnalyserEcartsTaux}>
             <RefreshCw className={`w-4 h-4 ${analyseEnCours ? "animate-spin" : ""}`} />Analyser les écarts de taux
           </Btn>
-          <Btn variant="secondary" disabled={correctionEnCours} onClick={handleCorrigerTypeAssure} title="Corrige les assurés enregistrés comme 'enfant' (EF) alors qu'ils ont plus de 18 ans — erreur de saisie fréquente.">
+          <Btn variant="secondary" disabled={correctionEnCours} onClick={handleCorrigerTypeAssure}>
             <CheckCircle2 className={`w-4 h-4 ${correctionEnCours ? "animate-spin" : ""}`} />Corriger types EF adultes
           </Btn>
         </div>

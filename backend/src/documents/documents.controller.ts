@@ -127,6 +127,18 @@ export class DocumentsController {
     });
   }
 
+  @Get("bordereau-sinistres/detail")
+  detailBordereauSinistres(
+    @Query("du") du: string | undefined, @Query("au") au: string | undefined, @Query("compagnieId") compagnieId: string | undefined,
+    @Query("format") format: string | undefined, @Res() res: Response,
+    @Query("agenceId") agenceId?: string, @Query("ville") ville?: string,
+  ) {
+    const fmt = format === "xlsx" ? "xlsx" : format === "csv" ? "csv" : "pdf";
+    return this.documentsService.renderDetailBordereau(du, au, compagnieId, fmt, res, {
+      agenceId: agenceId || undefined, ville: ville || undefined,
+    });
+  }
+
   @Get("bordereau-production")
   bordereauProduction(
     @Query("du") du: string | undefined, @Query("au") au: string | undefined, @Query("compagnieId") compagnieId: string | undefined,

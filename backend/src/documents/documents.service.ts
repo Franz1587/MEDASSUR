@@ -4728,7 +4728,7 @@ export class DocumentsService {
     const width = right - left;
     let y = 40;
 
-    this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 28, 200, 46, () => {
+    this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 22, 200, 58, () => {
       doc.fontSize(12).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
       return 0;
     });
@@ -4788,14 +4788,45 @@ export class DocumentsService {
     // pas changer peu importe l'agence... le fichier doit rester inchangé
     // sans ajouter d'autres champs."
     const payload = await this.bordereaux.sinistres(du, au, compagnieId, typeReglement, filtres);
-    const rows = payload.groupes.flatMap((g) => g.lignes.map((l) => [l.dateSoins, l.dateReglement, l.numeroPolice, g.souscripteur, l.assurePrincipal, l.prestataire, l.numeroReglement, l.fraisReels, l.partGarant, l.tps, l.netAPayer]));
+    // "Date soins" et "Assuré" retirés (2026-10) — bordereau réduit pour la
+    // compagnie ; ces colonnes sont disponibles dans le "Détail du bordereau".
+    const rows = payload.groupes.flatMap((g) => g.lignes.map((l) => [l.dateReglement, l.numeroPolice, g.souscripteur, l.prestataire, l.numeroReglement, l.fraisReels, l.partGarant, l.tps, l.netAPayer]));
     if (format === "xlsx") {
       return this.envoyerTableauXlsx(res, `Bordereau-Sinistres-${typeReglement}`,
-        ["Date soins", "Date règlement", "Police", "Souscripteur", "Assuré", "Prestataire", "N° règlement", "Frais réels", "Part garant", "TPS", "Net à payer"],
-        rows, ["", "", "", "", "", "", "TOTAL", payload.total.fraisReels, payload.total.partGarant, payload.total.tps, payload.total.netAPayer]);
+        ["Date règlement", "Police", "Souscripteur", "Prestataire", "N° règlement", "Frais réels", "Part garant", "TPS", "Net à payer"],
+        rows, ["", "", "", "", "TOTAL", payload.total.fraisReels, payload.total.partGarant, payload.total.tps, payload.total.netAPayer]);
     }
+    // Largeurs calées sur ~754 px (A4 paysage 842 - 2×40 marges = 762).
     return this.envoyerTableauPdf(res, `Bordereau-Sinistres-${typeReglement}`, "BORDEREAU SINISTRES", `${payload.compagnie ?? ""} · ${payload.typeReglement === "maladie" ? "Règlement Maladie" : "Règlement Comptable"} · ${du ?? "…"} au ${au ?? "…"}`,
-      [{ h: "Date soins", w: 65 }, { h: "Date règl.", w: 65 }, { h: "Police", w: 70 }, { h: "Souscripteur", w: 110 }, { h: "Assuré", w: 100 }, { h: "Prestataire", w: 110 }, { h: "N° règl.", w: 70 }, { h: "Frais réels", w: 70 }, { h: "Part garant", w: 70 }, { h: "TPS", w: 55 }, { h: "Net à payer", w: 75 }],
+      [{ h: "Date règl.", w: 74 }, { h: "Police", w: 74 }, { h: "Souscripteur", w: 152 }, { h: "Prestataire", w: 152 }, { h: "N° règl.", w: 80 }, { h: "Frais réels", w: 70 }, { h: "Part garant", w: 70 }, { h: "TPS", w: 50 }, { h: "Net à payer", w: 70 }],
+      rows, "NET TOTAL À PAYER", `${fmt(payload.total.netAPayer)} FCFA`);
+  }
+
+  // Détail du bordereau (2026-10) — état complet par ligne de prestation avec
+  // assuré principal ET ayant droit. Formats : pdf | xlsx | csv.
+  async renderDetailBordereau(
+    du: string | undefined, au: string | undefined, compagnieId: string | undefined, format: "pdf" | "xlsx" | "csv", res: Response,
+    filtres: FiltresBordereauSinistres = {},
+  ) {
+    const payload = await this.bordereaux.detailSinistres(du, au, compagnieId, filtres);
+    const headers = ["Date soins", "Date règl.", "Police", "Souscripteur", "Assuré principal", "Ayant droit", "Type", "Prestataire", "Type prestation", "Frais réels", "Part garant", "TPS", "Net à payer"];
+    const rows = payload.lignes.map((l) => [l.dateSoins, l.dateReglement, l.numeroPolice, l.souscripteur, l.assurePrincipal, l.ayantDroit ?? l.assurePrincipal, l.typeAyantDroit ?? "AS", l.prestataire, l.typePrestation, l.fraisReels, l.partGarant, l.tps, l.netAPayer]);
+    const sousTitre = `${payload.compagnie ?? "Toutes compagnies"} · ${du ?? "…"} au ${au ?? "…"} · ${payload.lignes.length} ligne(s)`;
+
+    if (format === "csv") {
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="Detail-Bordereau.csv"`);
+      const lignesCsv = [headers, ...rows.map((r) => r), ["", "", "", "", "", "", "", "", "TOTAL", payload.total.fraisReels, payload.total.partGarant, payload.total.tps, payload.total.netAPayer]];
+      res.end("﻿" + lignesCsv.map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";")).join("\r\n"));
+      return;
+    }
+    if (format === "xlsx") {
+      return this.envoyerTableauXlsx(res, "Detail-Bordereau", headers, rows,
+        ["", "", "", "", "", "", "", "", "TOTAL", payload.total.fraisReels, payload.total.partGarant, payload.total.tps, payload.total.netAPayer]);
+    }
+    // PDF — 13 colonnes, orientation paysage.
+    return this.envoyerTableauPdf(res, "Detail-Bordereau", "DÉTAIL DU BORDEREAU", sousTitre,
+      [{ h: "Date soins", w: 58 }, { h: "Date règl.", w: 58 }, { h: "Police", w: 62 }, { h: "Souscripteur", w: 95 }, { h: "Assuré principal", w: 95 }, { h: "Ayant droit", w: 95 }, { h: "Type", w: 28 }, { h: "Prestataire", w: 95 }, { h: "Type prestation", w: 70 }, { h: "Frais réels", w: 55 }, { h: "Part garant", w: 55 }, { h: "TPS", w: 38 }, { h: "Net à payer", w: 58 }],
       rows, "NET TOTAL À PAYER", `${fmt(payload.total.netAPayer)} FCFA`);
   }
 

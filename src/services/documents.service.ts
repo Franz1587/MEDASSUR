@@ -262,6 +262,19 @@ export function openBordereauSinistres(
   return openDocument(`/documents/bordereau-sinistres?${params.toString()}`);
 }
 
+export function openDetailBordereau(
+  du: string | undefined, au: string | undefined, compagnieId: string | undefined, format: "pdf" | "xlsx" | "csv" = "pdf",
+  filtres: { agenceId?: string; ville?: string } = {},
+): Promise<void> {
+  const params = new URLSearchParams({ format });
+  if (du) params.set("du", du);
+  if (au) params.set("au", au);
+  if (compagnieId) params.set("compagnieId", compagnieId);
+  if (filtres.agenceId) params.set("agenceId", filtres.agenceId);
+  if (filtres.ville) params.set("ville", filtres.ville);
+  return openDocument(`/documents/bordereau-sinistres/detail?${params.toString()}`);
+}
+
 export function openBordereauProduction(du: string | undefined, au: string | undefined, compagnieId: string | undefined, format: "pdf" | "xlsx" = "pdf"): Promise<void> {
   const params = new URLSearchParams({ format });
   if (du) params.set("du", du);
