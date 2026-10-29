@@ -167,6 +167,8 @@ export class DocumentSignatureService {
         statut = "Payé";
         const references = [...new Set(bordereaux.map((b) => b.lettreCheque!.numero))];
         details.push({ label: "Référence(s) du règlement", valeur: references.join(", ") });
+        const modes = [...new Set(bordereaux.map((b) => b.lettreCheque!.modePaiement).filter((m): m is string => !!m))];
+        if (modes.length > 0) details.push({ label: "Mode de paiement", valeur: modes.join(", ") });
       } else if (bordereaux.length > 0) {
         statut = "En cours de traitement";
       }

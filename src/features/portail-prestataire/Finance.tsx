@@ -511,7 +511,16 @@ export default function PrestataireFinanceView() {
                     <td className="px-4 py-2.5 text-muted-foreground">{r.periode}</td>
                     <td className="px-4 py-2.5 text-right text-foreground">{r.nbFactures}</td>
                     <td className="px-4 py-2.5 text-right text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(r.montantTotal)} FCFA</td>
-                    <td className="px-4 py-2.5">{r.statutReel && <Badge variant={statutReelVariant(r.statutReel.statut)}>{r.statutReel.statut}</Badge>}</td>
+                    <td className="px-4 py-2.5">
+                      {r.statutReel && (
+                        <div className="space-y-0.5">
+                          <Badge variant={statutReelVariant(r.statutReel.statut)}>{r.statutReel.statut}</Badge>
+                          {r.statutReel.details.map((d) => (
+                            <p key={d.label} className="text-[11px] text-muted-foreground">{d.label} : <span className="text-foreground">{d.valeur}</span></p>
+                          ))}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="inline-flex items-center gap-1.5">
                         <button type="button" onClick={() => ouvrirDetail(r.id)} className="h-8 px-3 rounded-lg border border-border text-[12px] text-foreground hover:bg-secondary/40 inline-flex items-center gap-1.5">
@@ -576,7 +585,16 @@ export default function PrestataireFinanceView() {
                     <td className="px-4 py-2.5 text-muted-foreground">{[...new Set(f.lignes.map((l) => l.assureNom))].join(", ") || "—"}</td>
                     <td className="px-4 py-2.5 text-muted-foreground">{f.dateReception}</td>
                     <td className="px-4 py-2.5 text-right text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(f.lignes.reduce((s, l) => s + l.montant, 0))} FCFA</td>
-                    <td className="px-4 py-2.5">{f.statutReel && <Badge variant={statutReelVariant(f.statutReel.statut)}>{f.statutReel.statut}</Badge>}</td>
+                    <td className="px-4 py-2.5">
+                      {f.statutReel && (
+                        <div className="space-y-0.5">
+                          <Badge variant={statutReelVariant(f.statutReel.statut)}>{f.statutReel.statut}</Badge>
+                          {f.statutReel.details.map((d) => (
+                            <p key={d.label} className="text-[11px] text-muted-foreground">{d.label} : <span className="text-foreground">{d.valeur}</span></p>
+                          ))}
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {factures && facturesFiltrees.length === 0 && (
