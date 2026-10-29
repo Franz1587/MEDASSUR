@@ -3,6 +3,14 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateBanqueDto } from "./dto/create-banque.dto";
 import { CreateLotChequesDto } from "./dto/create-lot-cheques.dto";
+import { CreateCompteReglementDto } from "./dto/create-compte-reglement.dto";
+
+const INCLUDE_COMPTES = {
+  compteReglements: {
+    orderBy: { libelle: "asc" as const },
+    include: { lots: { orderBy: { createdAt: "desc" as const } } },
+  },
+};
 
 const INCLUDE_LOTS = { lots: { orderBy: { createdAt: "desc" as const } } };
 
@@ -11,48 +19,75 @@ export class BanquesService {
   constructor(private prisma: PrismaService) {}
 
   findAll() {
-    return this.prisma.banque.findMany({ include: INCLUDE_LOTS, orderBy: { nom: "asc" } });
+    return this.prisma.banque.findMany({ include: { ...INCLUDE_LOTS, ...INCLUDE_COMPTES }, orderBy: { nom: "asc" } });
   }
 
   async findOne(id: string) {
-    const banque = await this.prisma.banque.findUnique({ where: { id }, include: INCLUDE_LOTS });
+    const banque = await this.prisma.banque.findUnique({ where: { id }, include: { ...INCLUDE_LOTS, ...INCLUDE_COMPTES } });
     if (!banque) throw new NotFoundException(`Banque ${id} introuvable`);
     return banque;
   }
 
   create(dto: CreateBanqueDto) {
-    return this.prisma.banque.create({ data: { id: randomUUID(), ...dto }, include: INCLUDE_LOTS });
+    return this.prisma.banque.create({ data: { id: randomUUID(), ...dto }, include: { ...INCLUDE_LOTS, ...INCLUDE_COMPTES } });
   }
 
   async update(id: string, dto: Partial<CreateBanqueDto> & { statut?: string }) {
     await this.findOne(id);
-    return this.prisma.banque.update({ where: { id }, data: dto, include: INCLUDE_LOTS });
+    return this.prisma.banque.update({ where: { id }, data: dto, include: { ...INCLUDE_LOTS, ...INCLUDE_COMPTES } });
   }
 
-  // Un nouveau lot de numéros de chèque pré-paramétré pour cette banque —
-  // toujours créé "Actif" ; `numeroProchain` démarre à `numeroDebut`. Voir
-  // ReglementComptableService.genererLettreCheque, qui consomme ce lot un
-  // numéro à la fois et le passe "Épuisé" une fois `numeroFin` dépassé.
-  async ajouterLot(banqueId: string, dto: CreateLotChequesDto) {
+  // ── Comptes de règlement ──────────────────────────────────────────────
+
+  async ajouterCompte(dto: CreateCompteReglementDto) {
+    await this.findOne(dto.banqueId);
+    return this.prisma.compteReglement.create({
+      data: { id: randomUUID(), banqueId: dto.banqueId, libelle: dto.libelle, compteNumero: dto.compteNumero, statut: "Actif" },
+      include: { lots: { orderBy: { createdAt: "desc" as const } } },
+    });
+  }
+
+  async updateCompte(id: string, dto: Partial<CreateCompteReglementDto> & { statut?: string }) {
+    const compte = await this.prisma.compteReglement.findUnique({ where: { id } });
+    if (!compte) throw new NotFoundException(`Compte ${id} introuvable`);
+    return this.prisma.compteReglement.update({
+      where: { id }, data: dto,
+      include: { lots: { orderBy: { createdAt: "desc" as const } } },
+    });
+  }
+
+  // ── Lots de chèques ───────────────────────────────────────────────────
+
+  // Un nouveau lot de numéros de chèque pré-paramétré pour cette banque (ou
+  // ce compte de règlement) — toujours créé "Actif" ; `numeroProchain`
+  // démarre à `numeroDebut`. Voir ReglementComptableService.genererLettreCheque,
+  // qui consomme ce lot un numéro à la fois et le passe "Épuisé" une fois
+  // `numeroFin` dépassé.
+  async ajouterLot(banqueId: string, dto: CreateLotChequesDto & { compteReglementId?: string }) {
     await this.findOne(banqueId);
     if (dto.numeroFin < dto.numeroDebut) {
       throw new BadRequestException("Le numéro de chèque de fin doit être supérieur ou égal au numéro de départ.");
     }
+    if (dto.compteReglementId) {
+      const compte = await this.prisma.compteReglement.findUnique({ where: { id: dto.compteReglementId } });
+      if (!compte || compte.banqueId !== banqueId) throw new BadRequestException("Compte de règlement introuvable sur cette banque.");
+    }
     return this.prisma.lotCheques.create({
       data: {
         id: randomUUID(), banqueId,
+        compteReglementId: dto.compteReglementId ?? null,
         numeroDebut: dto.numeroDebut, numeroFin: dto.numeroFin, numeroProchain: dto.numeroDebut,
         statut: "Actif",
       },
     });
   }
 
-  // Lot actif utilisable pour la prochaine lettre chèque de cette banque —
-  // le plus ancien lot Actif avec de la capacité restante (numeroProchain
-  // <= numeroFin), pour épuiser les lots dans leur ordre de création.
-  async lotActif(banqueId: string) {
+  // Lot actif utilisable pour la prochaine lettre chèque — filtre par
+  // compteReglementId quand fourni, sinon remonte le plus ancien lot Actif
+  // de la banque sans compte (pour la rétrocompatibilité).
+  async lotActif(banqueId: string, compteReglementId?: string) {
     return this.prisma.lotCheques.findFirst({
-      where: { banqueId, statut: "Actif" },
+      where: { banqueId, compteReglementId: compteReglementId ?? null, statut: "Actif" },
       orderBy: { createdAt: "asc" },
     });
   }
@@ -71,6 +106,7 @@ export class BanquesService {
       include: {
         prestataire: { select: { nom: true } },
         compagnie: { select: { nom: true } },
+        compteReglement: { select: { libelle: true } },
       },
       orderBy: { createdAt: "desc" },
     });

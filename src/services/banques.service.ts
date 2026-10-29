@@ -1,6 +1,6 @@
 import { http } from "@/lib/http";
 import { toNumber } from "@/lib/decimal";
-import type { Banque, BanqueUpsertInput, LotCheques, MouvementBanque, StatistiqueBanque } from "@/types/banques";
+import type { Banque, BanqueUpsertInput, CompteReglement, CompteReglementUpsertInput, LotCheques, MouvementBanque, StatistiqueBanque } from "@/types/banques";
 
 interface ApiMouvement {
   id: string;
@@ -11,6 +11,7 @@ interface ApiMouvement {
   dateEmission: string;
   prestataire: { nom: string };
   compagnie?: { nom: string } | null;
+  compteReglement?: { libelle: string } | null;
 }
 
 interface ApiStatistiqueBanque {
@@ -40,8 +41,21 @@ export async function updateBanque(id: string, payload: Partial<BanqueUpsertInpu
 // Nouveau lot de numéros de chèque pré-paramétré (ex. 50 à la fois) —
 // voir ReglementComptableService.genererLettreCheque côté backend, qui
 // consomme ce lot un numéro à la fois jusqu'à épuisement.
-export async function ajouterLotCheques(banqueId: string, payload: { numeroDebut: number; numeroFin: number }): Promise<LotCheques> {
+export async function ajouterLotCheques(
+  banqueId: string,
+  payload: { numeroDebut: number; numeroFin: number; compteReglementId?: string },
+): Promise<LotCheques> {
   return http.post<LotCheques>(`/banques/${banqueId}/lots`, payload);
+}
+
+// Comptes de règlement — sous-comptes d'une banque pour les règlements
+// prestataires (2026-10, demande utilisateur : "Orabank Sanlam, Orabank NSIA").
+export async function ajouterCompteReglement(payload: CompteReglementUpsertInput): Promise<CompteReglement> {
+  return http.post<CompteReglement>("/banques/comptes", payload);
+}
+
+export async function updateCompteReglement(id: string, payload: Partial<CompteReglementUpsertInput>): Promise<CompteReglement> {
+  return http.patch<CompteReglement>(`/banques/comptes/${id}`, payload);
 }
 
 // Historique des mouvements d'une banque — voir BanquesService.mouvements.
@@ -56,6 +70,7 @@ export async function getMouvementsBanque(banqueId: string): Promise<MouvementBa
     dateEmission: m.dateEmission,
     prestataireNom: m.prestataire.nom,
     compagnieNom: m.compagnie?.nom,
+    compteReglementLibelle: m.compteReglement?.libelle,
   }));
 }
 

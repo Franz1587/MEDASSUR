@@ -86,7 +86,7 @@ export async function getLettreCheque(id: string): Promise<LettreChequeDetail> {
 }
 
 export async function genererLettreCheque(payload: {
-  banqueId: string; prestataireId: string; compagnieId?: string; bordereauIds: string[];
+  banqueId: string; prestataireId: string; compagnieId?: string; compteReglementId?: string; bordereauIds: string[];
 }): Promise<LettreChequeDetail> {
   const data = await http.post<ApiLettreChequeDetail>("/reglement-comptable/generer", payload);
   return { ...mapLettreCheque(data), bordereaux: data.bordereaux.map(mapLettreChequeBordereau) };

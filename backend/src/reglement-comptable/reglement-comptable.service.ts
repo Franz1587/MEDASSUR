@@ -6,6 +6,7 @@ import { montantNetPrisesEnCharge as montantNetBordereau } from "../lib/montant-
 
 const INCLUDE_LETTRE = {
   banque: true, prestataire: true, compagnie: true,
+  compteReglement: true,
   bordereaux: true,
 } as const;
 
@@ -137,9 +138,15 @@ export class ReglementComptableService {
     const lettreCheque = await this.prisma.$transaction(async (tx) => {
       // Lot actif re-vérifié ICI, dans la transaction, pour ne jamais
       // distribuer deux fois le même numéro sous accès concurrents (voir
-      // schema.prisma LotCheques.numeroProchain).
+      // schema.prisma LotCheques.numeroProchain). Si compteReglementId est
+      // fourni, chercher le lot de ce compte ; sinon remonte les lots sans
+      // compte (rétrocompat lots antérieurs à 2026-10).
       const lot = await tx.lotCheques.findFirst({
-        where: { banqueId: dto.banqueId, statut: "Actif" },
+        where: {
+          banqueId: dto.banqueId,
+          compteReglementId: dto.compteReglementId ?? null,
+          statut: "Actif",
+        },
         orderBy: { createdAt: "asc" },
       });
       if (!lot) throw new BadRequestException("Veuillez utiliser une nouvelle série de chèques.");
@@ -157,6 +164,7 @@ export class ReglementComptableService {
       const lc = await tx.lettreCheque.create({
         data: {
           id: randomUUID(), numero, banqueId: dto.banqueId, lotChequesId: lot.id, numeroCheque,
+          compteReglementId: dto.compteReglementId ?? null,
           compagnieId: dto.compagnieId, prestataireId: dto.prestataireId, montantTotal, statut: "Émise", dateEmission,
         },
       });

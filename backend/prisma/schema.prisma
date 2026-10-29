@@ -337,6 +337,7 @@ model SocieteAssurance {
   agences Agence[]
   portailAccesPrestataires PortailSocieteAcces[]
   transactions             Transaction[]
+  compteReglements         CompteReglement[]
 
   @@index([planAbonnementId])
 }
@@ -3349,10 +3350,35 @@ model Banque {
   statut       String   @default("Actif") // Actif | Inactif
   createdAt    DateTime @default(now())
 
+  lots             LotCheques[]
+  lettresCheque    LettreCheque[]
+  encaissements    EncaissementPrime[]
+  compteReglements CompteReglement[]
+
+  @@index([societeId])
+}
+
+// Compte de règlement — sous-compte d'une banque pour les règlements
+// prestataires (2026-10, demande utilisateur : "Orabank Sanlam, Orabank NSIA").
+// Permet de paramétrer plusieurs comptes sur une même banque, chacun avec
+// sa propre plage de chèques. `compteReglementId` est optionnel sur
+// LotCheques et LettreCheque : les lots/lettres créés avant ce modèle
+// restent rattachés directement à la banque.
+model CompteReglement {
+  id           String   @id @default(cuid())
+  societeId    String?
+  societe      SocieteAssurance? @relation(fields: [societeId], references: [id])
+  banqueId     String
+  banque       Banque   @relation(fields: [banqueId], references: [id])
+  libelle      String
+  compteNumero String?
+  statut       String   @default("Actif")
+  createdAt    DateTime @default(now())
+
   lots          LotCheques[]
   lettresCheque LettreCheque[]
-  encaissements EncaissementPrime[]
 
+  @@index([banqueId])
   @@index([societeId])
 }
 
@@ -3423,17 +3449,20 @@ model LotCheques {
   // lecture. Voir Conversation ci-dessus pour le détail du mécanisme.
   societeId String?
   societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
-  banqueId       String
-  numeroDebut    Int
-  numeroFin      Int
-  numeroProchain Int
-  statut         String   @default("Actif") // Actif | Épuisé
-  createdAt      DateTime @default(now())
+  banqueId            String
+  compteReglementId   String?
+  numeroDebut         Int
+  numeroFin           Int
+  numeroProchain      Int
+  statut              String   @default("Actif") // Actif | Épuisé
+  createdAt           DateTime @default(now())
 
-  banque        Banque         @relation(fields: [banqueId], references: [id])
-  lettresCheque LettreCheque[]
+  banque          Banque           @relation(fields: [banqueId], references: [id])
+  compteReglement CompteReglement? @relation(fields: [compteReglementId], references: [id])
+  lettresCheque   LettreCheque[]
 
   @@index([banqueId])
+  @@index([compteReglementId])
   @@index([societeId])
 }
 
@@ -3453,24 +3482,27 @@ model LettreCheque {
   // a la main dans les services metier.
   societeId String?
   societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
-  numero        String   @unique
-  banqueId      String
-  lotChequesId  String
-  numeroCheque  Int
-  compagnieId   String?
-  prestataireId String
-  montantTotal  Decimal  @db.Decimal(18, 2)
-  statut        String   @default("Émise") // Émise | Annulée
-  dateEmission  String
-  createdAt     DateTime @default(now())
+  numero              String   @unique
+  banqueId            String
+  compteReglementId   String?
+  lotChequesId        String
+  numeroCheque        Int
+  compagnieId         String?
+  prestataireId       String
+  montantTotal        Decimal  @db.Decimal(18, 2)
+  statut              String   @default("Émise") // Émise | Annulée
+  dateEmission        String
+  createdAt           DateTime @default(now())
 
-  banque      Banque               @relation(fields: [banqueId], references: [id])
-  lot         LotCheques           @relation(fields: [lotChequesId], references: [id])
-  compagnie   Compagnie?           @relation(fields: [compagnieId], references: [id])
-  prestataire Prestataire          @relation(fields: [prestataireId], references: [id])
-  bordereaux  BordereauReglement[]
+  banque          Banque               @relation(fields: [banqueId], references: [id])
+  compteReglement CompteReglement?     @relation(fields: [compteReglementId], references: [id])
+  lot             LotCheques           @relation(fields: [lotChequesId], references: [id])
+  compagnie       Compagnie?           @relation(fields: [compagnieId], references: [id])
+  prestataire     Prestataire          @relation(fields: [prestataireId], references: [id])
+  bordereaux      BordereauReglement[]
 
   @@index([banqueId])
+  @@index([compteReglementId])
   @@index([prestataireId])
   @@index([compagnieId])
 

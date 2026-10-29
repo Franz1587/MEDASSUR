@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/co
 import { BanquesService } from "./banques.service";
 import { CreateBanqueDto } from "./dto/create-banque.dto";
 import { CreateLotChequesDto } from "./dto/create-lot-cheques.dto";
+import { CreateCompteReglementDto } from "./dto/create-compte-reglement.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 
 @Controller("banques")
@@ -42,7 +43,19 @@ export class BanquesController {
   }
 
   @Post(":id/lots")
-  ajouterLot(@Param("id") id: string, @Body() dto: CreateLotChequesDto) {
+  ajouterLot(@Param("id") id: string, @Body() dto: CreateLotChequesDto & { compteReglementId?: string }) {
     return this.service.ajouterLot(id, dto);
+  }
+
+  // Comptes de règlement — sous-comptes d'une banque pour les règlements
+  // prestataires (2026-10, demande utilisateur : "Orabank Sanlam, Orabank NSIA").
+  @Post("comptes")
+  ajouterCompte(@Body() dto: CreateCompteReglementDto) {
+    return this.service.ajouterCompte(dto);
+  }
+
+  @Patch("comptes/:compteId")
+  updateCompte(@Param("compteId") id: string, @Body() dto: Partial<CreateCompteReglementDto> & { statut?: string }) {
+    return this.service.updateCompte(id, dto);
   }
 }

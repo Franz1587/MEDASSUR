@@ -1,14 +1,34 @@
 // Paramétrage des banques et de leurs lots de numéros de chèque — voir
-// backend/prisma/schema.prisma Banque/LotCheques, utilisé par le
-// règlement comptable (lettre chèque) de l'écran "Règlement".
+// backend/prisma/schema.prisma Banque/LotCheques/CompteReglement, utilisé
+// par le règlement comptable (lettre chèque) de l'écran "Règlement".
 export interface LotCheques {
   id: string;
   banqueId: string;
+  compteReglementId?: string | null;
   numeroDebut: number;
   numeroFin: number;
   numeroProchain: number;
   statut: string; // Actif | Épuisé
   createdAt: string;
+}
+
+// Compte de règlement — sous-compte d'une banque pour les règlements
+// prestataires (2026-10, demande utilisateur : "Orabank Sanlam, Orabank NSIA").
+export interface CompteReglement {
+  id: string;
+  banqueId: string;
+  libelle: string;
+  compteNumero?: string | null;
+  statut: string; // Actif | Inactif
+  createdAt: string;
+  lots: LotCheques[];
+}
+
+export interface CompteReglementUpsertInput {
+  banqueId: string;
+  libelle: string;
+  compteNumero?: string;
+  statut?: string;
 }
 
 export interface Banque {
@@ -23,6 +43,7 @@ export interface Banque {
   telephone?: string;
   statut: string; // Actif | Inactif
   lots: LotCheques[];
+  compteReglements: CompteReglement[];
 }
 
 export interface BanqueUpsertInput {
@@ -48,6 +69,7 @@ export interface MouvementBanque {
   dateEmission: string;
   prestataireNom: string;
   compagnieNom?: string;
+  compteReglementLibelle?: string | null;
 }
 
 // Classement d'usage par banque (2026-08) — voir demande utilisateur :

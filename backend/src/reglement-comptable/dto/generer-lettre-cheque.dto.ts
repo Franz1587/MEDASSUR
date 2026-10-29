@@ -14,6 +14,10 @@ export class GenererLettreChequeDto {
   @IsString()
   compagnieId?: string;
 
+  @IsOptional()
+  @IsString()
+  compteReglementId?: string;
+
   @IsArray()
   @ArrayMinSize(1)
   @IsString({ each: true })

@@ -31,6 +31,7 @@ export default function GenererLettreChequeModal({ onClose, onGenerated, onGerer
   const [compagnies, setCompagnies] = useState<Compagnie[]>([]);
 
   const [banqueId, setBanqueId] = useState("");
+  const [compteReglementId, setCompteReglementId] = useState("");
   const [prestataireId, setPrestataireId] = useState("");
   const [compagnieId, setCompagnieId] = useState("");
 
@@ -49,15 +50,22 @@ export default function GenererLettreChequeModal({ onClose, onGenerated, onGerer
   // principe que GenererReglementModal / l'historique de règlement, pour
   // ne jamais générer sur une sélection qui ne correspond plus au filtre
   // courant.
-  useEffect(() => { setResultats(null); setSelected([]); }, [banqueId, prestataireId, compagnieId]);
+  useEffect(() => { setResultats(null); setSelected([]); }, [banqueId, compteReglementId, prestataireId, compagnieId]);
+  // Réinitialiser le compte quand la banque change
+  useEffect(() => { setCompteReglementId(""); }, [banqueId]);
 
   const banque = banques.find((b) => b.id === banqueId);
-  const lotActif = banque?.lots.find((l) => l.statut === "Actif");
+  const comptesActifs = banque?.compteReglements.filter((c) => c.statut === "Actif") ?? [];
+  // Lot actif : cherche d'abord dans le compte sélectionné, ou dans les lots sans compte si pas de compte
+  const lotActif = compteReglementId
+    ? banque?.compteReglements.find((c) => c.id === compteReglementId)?.lots.find((l) => l.statut === "Actif")
+    : banque?.lots.filter((l) => !l.compteReglementId).find((l) => l.statut === "Actif");
 
   const handleRechercher = async () => {
     if (!banqueId) { toast.error("Choisissez une banque."); return; }
+    if (comptesActifs.length > 0 && !compteReglementId) { toast.error("Cette banque a plusieurs comptes — choisissez un compte de règlement."); return; }
     if (!prestataireId) { toast.error("Choisissez un prestataire."); return; }
-    if (!lotActif) { toast.error("Cette banque n'a plus de série de chèques active. Ajoutez-en une nouvelle."); return; }
+    if (!lotActif) { toast.error("Ce compte n'a plus de série de chèques active. Ajoutez-en une nouvelle."); return; }
     setSearching(true);
     try {
       const data = await getBordereauxEligiblesLettreCheque({ prestataireId, compagnieId: compagnieId || undefined });
@@ -83,7 +91,7 @@ export default function GenererLettreChequeModal({ onClose, onGenerated, onGerer
     if (selected.length === 0) return;
     setGenerating(true);
     try {
-      await genererLettreCheque({ banqueId, prestataireId, compagnieId: compagnieId || undefined, bordereauIds: selected });
+      await genererLettreCheque({ banqueId, prestataireId, compagnieId: compagnieId || undefined, compteReglementId: compteReglementId || undefined, bordereauIds: selected });
       toast.success("Lettre chèque générée.");
       onGenerated();
       onClose();
@@ -104,15 +112,28 @@ export default function GenererLettreChequeModal({ onClose, onGenerated, onGerer
 
         <div className="p-5 overflow-y-auto flex-1 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <label className="block">
-              <div className={labelCls}>Banque *</div>
-              <Combobox
-                options={banques}
-                value={banques.find((b) => b.id === banqueId) ?? null}
-                onChange={(b) => setBanqueId(b?.id ?? "")}
-                getLabel={(b) => b.nom} getId={(b) => b.id}
-                placeholder="Rechercher…"
-              />
+            <div>
+              <label className="block">
+                <div className={labelCls}>Banque *</div>
+                <Combobox
+                  options={banques}
+                  value={banques.find((b) => b.id === banqueId) ?? null}
+                  onChange={(b) => setBanqueId(b?.id ?? "")}
+                  getLabel={(b) => b.nom} getId={(b) => b.id}
+                  placeholder="Rechercher…"
+                />
+              </label>
+              {comptesActifs.length > 0 && (
+                <label className="block mt-2">
+                  <div className={labelCls}>Compte de règlement *</div>
+                  <select value={compteReglementId} onChange={(e) => setCompteReglementId(e.target.value)} className={fieldCls}>
+                    <option value="">— Choisir un compte —</option>
+                    {comptesActifs.map((c) => (
+                      <option key={c.id} value={c.id}>{c.libelle}{c.compteNumero ? ` · ${c.compteNumero}` : ""}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
               {banque && !lotActif && (
                 <p className="text-[11px] text-destructive mt-1">Aucune série de chèques active — <button type="button" onClick={onGererBanques} className="underline">en ajouter une</button>.</p>
               )}
@@ -125,7 +146,7 @@ export default function GenererLettreChequeModal({ onClose, onGenerated, onGerer
                   </p>
                 );
               })()}
-            </label>
+            </div>
             <label className="block">
               <div className={labelCls}>Prestataire *</div>
               <Combobox
