@@ -16,8 +16,9 @@ import {
   importerPhotosEnMasse,
 } from "@/services/import.service";
 import {
-  compterPersonnesEnAttenteTransfert, getPersonnesEnAttenteTransfert, ignorerPersonneEnAttenteTransfert,
-  analyserEcartsTauxContrat, type PersonneEnAttenteTransfert,
+  compterPersonnesEnAttenteTransfert, getPersonnesEnAttenteTransfert,
+  ignorerPersonneEnAttenteTransfert, ignorerToutesPersonnesEnAttenteTransfert,
+  validerTransfertPersonne, analyserEcartsTauxContrat, type PersonneEnAttenteTransfert,
 } from "@/services/sante.service";
 import {
   telechargerModeleImportClients, apercuImportClients, confirmerImportClients, type ImportClientRow,
@@ -114,6 +115,29 @@ export default function ImportDonneesView() {
     }
   };
 
+  const handleValiderTransfert = async (id: string) => {
+    try {
+      const res = await validerTransfertPersonne(id);
+      setListeTransfert((v) => v?.filter((p) => p.id !== id) ?? null);
+      rafraichirEnAttenteTransfert();
+      toast.success(`Transfert validé — ${res.matricule} basculé vers le contrat cible.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Validation impossible.");
+    }
+  };
+
+  const handleIgnorerTout = async () => {
+    if (!confirm(`Ignorer les ${enAttenteTransfert} personne(s) en attente ? Cette action est irréversible.`)) return;
+    try {
+      const res = await ignorerToutesPersonnesEnAttenteTransfert();
+      setListeTransfert(null);
+      setEnAttenteTransfert(0);
+      toast.success(`${res.ignorees} entrée(s) supprimée(s).`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Impossible.");
+    }
+  };
+
   // Analyse a posteriori des écarts de taux (2026-09) — voir
   // SanteService.analyserEcartsTauxContrat : détecte, dans les
   // prestations déjà en base, un changement de contrat jamais annoncé
@@ -187,14 +211,20 @@ export default function ImportDonneesView() {
               <Clock className="w-4 h-4 flex-shrink-0" />
               <span><span className="font-semibold">{enAttenteTransfert}</span> personne(s) en attente de transfert (matricule déjà présent sur un autre contrat, ou écart de taux détecté) — résolu automatiquement au prochain import qui confirmera leur statut, ou à valider manuellement ci-dessous.</span>
             </p>
-            <Btn variant="secondary" onClick={toggleListeTransfert}>{listeTransfert ? "Masquer" : "Voir le détail"}</Btn>
+            <div className="flex items-center gap-2">
+              <Btn variant="secondary" onClick={toggleListeTransfert}>{listeTransfert ? "Masquer" : "Voir le détail"}</Btn>
+              <button type="button" onClick={handleIgnorerTout} className="text-[11.5px] text-red-600 dark:text-red-400 underline">Ignorer tout</button>
+            </div>
           </div>
           {listeTransfert && (
             <div className="space-y-1 max-h-56 overflow-y-auto">
               {listeTransfert.map((p) => (
                 <div key={p.id} className="text-[11.5px] text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/25 rounded-lg px-2.5 py-1.5 flex items-start justify-between gap-2">
                   <span className="flex-1"><span className="font-semibold">{p.nom} {p.prenom ?? ""}</span> (matricule {p.matricule}) — {p.motif}</span>
-                  <button type="button" onClick={() => handleIgnorerTransfert(p.id)} className="text-[11px] underline flex-shrink-0">Ignorer</button>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button type="button" onClick={() => handleValiderTransfert(p.id)} className="text-[11px] text-green-600 dark:text-green-400 font-medium underline">Valider</button>
+                    <button type="button" onClick={() => handleIgnorerTransfert(p.id)} className="text-[11px] underline">Ignorer</button>
+                  </div>
                 </div>
               ))}
             </div>

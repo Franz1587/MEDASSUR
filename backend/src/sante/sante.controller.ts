@@ -48,6 +48,16 @@ export class SanteController {
     return this.service.compterPersonnesEnAttenteTransfert();
   }
 
+  @Patch("personnes-en-attente-transfert/:id/valider")
+  validerTransfertPersonne(@Param("id") id: string) {
+    return this.service.validerTransfertPersonne(id);
+  }
+
+  @Delete("personnes-en-attente-transfert")
+  ignorerToutesPersonnesEnAttenteTransfert() {
+    return this.service.ignorerToutesPersonnesEnAttenteTransfert();
+  }
+
   @Delete("personnes-en-attente-transfert/:id")
   ignorerPersonneEnAttenteTransfert(@Param("id") id: string) {
     return this.service.ignorerPersonneEnAttenteTransfert(id);

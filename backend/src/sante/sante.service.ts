@@ -917,6 +917,28 @@ export class SanteService {
     return { id };
   }
 
+  async ignorerToutesPersonnesEnAttenteTransfert() {
+    const { count } = await this.prisma.personneEnAttenteTransfert.deleteMany({});
+    return { ignorees: count };
+  }
+
+  // Valide manuellement le transfert d'une personne en attente : bascule
+  // l'assuré vers le contrat cible détecté puis supprime l'entrée de la file.
+  async validerTransfertPersonne(id: string) {
+    const entree = await this.prisma.personneEnAttenteTransfert.findUnique({ where: { id } });
+    if (!entree) throw new NotFoundException(`Entrée ${id} introuvable`);
+    const assure = await this.prisma.assureSante.findFirst({
+      where: { matricule: entree.matricule, contratId: entree.contratSourceId },
+      select: { id: true },
+    });
+    if (!assure) throw new NotFoundException(`Assuré matricule ${entree.matricule} introuvable sur le contrat source`);
+    const donneesLigne = entree.donneesLigne as { dateEffet?: string } | null;
+    const dateEffet = donneesLigne?.dateEffet ?? new Date().toLocaleDateString("fr-FR");
+    await this.mouvements.basculerVersContrat(assure.id, entree.contratCibleId, true, dateEffet);
+    await this.prisma.personneEnAttenteTransfert.delete({ where: { id } });
+    return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId };
+  }
+
   // `assureIds` (optionnel) permet au profil Participants de récupérer en un
   // seul appel les PEC de toute une famille (assuré principal + ayants
   // droit) plutôt que de tout charger puis filtrer côté client. `contratId`
@@ -1124,10 +1146,11 @@ export class SanteService {
   // correspondance approximative/devinée).
   private async resoudreContratParTauxObserve(
     contratActuelId: string, clientId: string, estHospitalisation: boolean, secteur: string | null | undefined, estAyantDroit: boolean, tauxEffectif: number,
+    datePrestation?: string,
   ): Promise<string | null> {
     if (!secteur) return null;
     const SELECT_TAUX = {
-      id: true,
+      id: true, dateDebut: true, dateFin: true,
       tauxAmbulatoirePublique: true, tauxAmbulatoirePrivee: true, tauxHospitalisationPublique: true, tauxHospitalisationPrivee: true,
       tauxAmbulatoirePubliqueAyantDroit: true, tauxAmbulatoirePriveeAyantDroit: true, tauxHospitalisationPubliqueAyantDroit: true, tauxHospitalisationPriveeAyantDroit: true,
     } satisfies Prisma.ContratSelect;
@@ -1138,9 +1161,19 @@ export class SanteService {
     if (tauxActuel !== null && Math.abs(tauxActuel - tauxEffectif) <= SanteService.TOLERANCE_TAUX) return null;
 
     const freres = await this.prisma.contrat.findMany({ where: { clientId, id: { not: contratActuelId } }, select: SELECT_TAUX });
+    const dateP = datePrestation ? parseDateFr(datePrestation) : null;
     const frereCorrespondant = freres.find((f) => {
       const t = this.tauxParSecteur(estHospitalisation, secteur, estAyantDroit, f);
-      return t !== null && Math.abs(t - tauxEffectif) <= SanteService.TOLERANCE_TAUX;
+      if (t === null || Math.abs(t - tauxEffectif) > SanteService.TOLERANCE_TAUX) return false;
+      // Filtre temporel : la prestation doit tomber dans la période du contrat frère
+      // pour éviter les faux positifs entre contrats aux taux proches (ex. 260143 vs 260144).
+      if (dateP) {
+        const debut = parseDateFr(f.dateDebut);
+        const fin = parseDateFr(f.dateFin);
+        if (debut && dateP < debut) return false;
+        if (fin && dateP > fin) return false;
+      }
+      return true;
     });
     return frereCorrespondant?.id ?? null;
   }
@@ -1177,7 +1210,7 @@ export class SanteService {
       const tauxEffectif = (Number(ligne.baseRemboursement) / Number(ligne.montant)) * 100;
       const secteur = ligne.prestataireId ? secteurParPrestataire.get(ligne.prestataireId) : undefined;
       const contratTrouve = await this.resoudreContratParTauxObserve(
-        contratActuelId, clientId, ligne.type === "Hospitalisation", secteur, estAyantDroit, tauxEffectif,
+        contratActuelId, clientId, ligne.type === "Hospitalisation", secteur, estAyantDroit, tauxEffectif, ligne.date,
       );
       if (contratTrouve) return { contratTrouve, dateEffet: ligne.date };
     }

@@ -357,6 +357,14 @@ export async function ignorerPersonneEnAttenteTransfert(id: string): Promise<{ i
   return http.delete<{ id: string }>(`/sante/personnes-en-attente-transfert/${id}`);
 }
 
+export async function validerTransfertPersonne(id: string): Promise<{ id: string; matricule: string; contratCibleId: string }> {
+  return http.patch<{ id: string; matricule: string; contratCibleId: string }>(`/sante/personnes-en-attente-transfert/${id}/valider`, {});
+}
+
+export async function ignorerToutesPersonnesEnAttenteTransfert(): Promise<{ ignorees: number }> {
+  return http.delete<{ ignorees: number }>("/sante/personnes-en-attente-transfert");
+}
+
 // Analyse a posteriori des écarts de taux de couverture (2026-09) — voir
 // SanteService.analyserEcartsTauxContrat : détecte, dans les prestations
 // déjà en base, un changement de contrat jamais annoncé (taux observé
