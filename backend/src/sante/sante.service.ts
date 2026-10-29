@@ -945,9 +945,9 @@ export class SanteService {
       select: { id: true, typeAssure: true, dateNaissance: true, contratId: true },
     });
     if (!assure) {
-      // Introuvable nulle part → nettoyer l'entrée fantôme.
+      // Introuvable nulle part → entrée fantôme, nettoyer silencieusement.
       await this.prisma.personneEnAttenteTransfert.delete({ where: { id } });
-      throw new NotFoundException(`Assuré matricule ${entree.matricule} introuvable dans la base`);
+      return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId, typeAssureCorrige: null, dejaEffectue: true };
     }
 
     // contratSource = contratCible → entrée incohérente, nettoyer.
@@ -969,13 +969,20 @@ export class SanteService {
     const donneesLigne = entree.donneesLigne as { dateEffet?: string } | null;
     const dateEffet = donneesLigne?.dateEffet ?? new Date().toLocaleDateString("fr-FR");
     try {
-      await this.mouvements.basculerVersContrat(assure.id, entree.contratCibleId, true, dateEffet);
+      // ignorerAge: true — action admin délibérée ; l'âge hors-limite indique
+      // souvent un AS/CJ enregistré comme EF (corrigé ci-dessus) ou un retraité
+      // maintenu par avenant. Le gestionnaire voit le cas avant de valider.
+      await this.mouvements.basculerVersContrat(assure.id, entree.contratCibleId, true, dateEffet, { ignorerAge: true });
     } catch (err) {
-      // Remonter le message applicatif (BadRequestException, etc.) tel quel ;
-      // les erreurs Prisma inattendues sont enveloppées avec détail.
+      const msg = err instanceof Error ? err.message : String(err);
+      // Unique constraint (contratId, matricule) → l'assuré existe déjà sur
+      // le contrat cible (doublon non détecté par le filtre tenant) : nettoyer.
+      if (msg.includes("Unique constraint") && msg.includes("contratId") && msg.includes("matricule")) {
+        await this.prisma.personneEnAttenteTransfert.delete({ where: { id } });
+        return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId, typeAssureCorrige: null, dejaEffectue: true };
+      }
       if (err instanceof BadRequestException || err instanceof NotFoundException) throw err;
-      const detail = err instanceof Error ? err.message : String(err);
-      throw new BadRequestException(`Bascule échouée pour ${entree.matricule} : ${detail}`);
+      throw new BadRequestException(`Bascule échouée pour ${entree.matricule} : ${msg}`);
     }
     await this.prisma.personneEnAttenteTransfert.delete({ where: { id } });
     return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId, typeAssureCorrige, dejaEffectue: false };
