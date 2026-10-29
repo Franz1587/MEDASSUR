@@ -121,8 +121,28 @@ const consoleRegistry: Partial<Record<View, React.ComponentType<any>>> = {
   ebilling: EbillingView,
 };
 
+// Persistance de la vue courante (2026-10) — voir demande utilisateur :
+// "lorsqu'on fait hard refresh (F5/Ctrl+F5/Ctrl+Shift+R), cela ne doit plus
+// aller à la page d'accueil mais rester sur la même page". sessionStorage
+// survit au hard refresh (contrairement à localStorage, elle est scopée à
+// l'onglet et vidée à sa fermeture — ce qui correspond exactement à
+// "rafraîchir sans perdre la page, mais réinitialiser quand on ouvre un
+// nouvel onglet").
+const SESSION_VIEW_KEY_ERP = "medassur-view-erp";
+
 export default function SanteAdminConsole() {
-  const [localView, setLocalView] = useState<View>("dashboard");
+  const [localView, setLocalViewRaw] = useState<View>(() => {
+    try {
+      const stored = sessionStorage.getItem(SESSION_VIEW_KEY_ERP) as View | null;
+      if (stored && stored in consoleRegistry) return stored;
+    } catch { /* ignore */ }
+    return "dashboard";
+  });
+  const setLocalView = (v: View) => {
+    setLocalViewRaw(v);
+    try { sessionStorage.setItem(SESSION_VIEW_KEY_ERP, v); } catch { /* ignore */ }
+  };
+
   const [shellActionRequest, setShellActionRequest] = useState<{ view: View; label: string; scope: "top" | "nested"; nonce: number } | null>(null);
   const ActivePage = consoleRegistry[localView] ?? RoleDashboard;
 

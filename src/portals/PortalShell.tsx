@@ -121,7 +121,24 @@ function PortalShellCore({ meta }: { meta: PortalMeta }) {
     const avantDernier = Math.max(0, sansMessagerie.length - 1);
     return [...sansMessagerie.slice(0, avantDernier), "messagerie" as View, ...sansMessagerie.slice(avantDernier)];
   }, [modulesBruts]);
-  const [view, setView] = useState<View>(modules[0] ?? "dashboard");
+  // Persistance de la vue (2026-10) — même principe que SanteAdminConsole :
+  // sessionStorage survit au hard refresh et est scopée à l'onglet.
+  // La clé est dérivée du path du portail (ex. "medassur-view--portal-client")
+  // pour que deux portails ouverts dans des onglets séparés ne s'interfèrent
+  // pas. La vue restaurée est validée contre la liste des modules réels de
+  // l'utilisateur au cas où ses droits auraient changé entre deux connexions.
+  const sessionKey = `medassur-view${meta.path.replace(/\//g, "-")}`;
+  const [view, setViewRaw] = useState<View>(() => {
+    try {
+      const stored = sessionStorage.getItem(sessionKey) as View | null;
+      if (stored && modules.includes(stored)) return stored;
+    } catch { /* ignore */ }
+    return modules[0] ?? "dashboard";
+  });
+  const setView = (v: View) => {
+    setViewRaw(v);
+    try { sessionStorage.setItem(sessionKey, v); } catch { /* ignore */ }
+  };
 
   const ActiveView = viewRegistry[view] ?? viewRegistry.dashboard;
   const isDark = resolvedTheme === "dark";
