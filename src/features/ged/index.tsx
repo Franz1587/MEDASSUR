@@ -256,6 +256,7 @@ export default function GedView() {
   const [sens, setSens] = useState<"Entrant" | "Sortant">("Entrant");
   const [prestataireChoisi, setPrestataireChoisi] = useState<Prestataire | null>(null);
   const [entiteLiee, setEntiteLiee] = useState("");
+  const [dateCachetManuelle, setDateCachetManuelle] = useState("");
 
   // Filtres
   const [recherche, setRecherche] = useState("");
@@ -297,8 +298,11 @@ export default function GedView() {
 
   const handleAnalyser = () => {
     if (!fichierChoisi) return;
+    // "2026-10-30" → "30/10/2026" pour cohérence avec le format extrait par l'IA
+    const cachet = dateCachetManuelle ? dateCachetManuelle.split("-").reverse().join("/") : undefined;
     run(() => uploadDocument({
       fichier: fichierChoisi, sens, prestataireId: prestataireChoisi?.id, entiteLiee: entiteLiee.trim() || undefined,
+      dateCachetManuelle: cachet,
     }).then((doc) => { refresh(); return doc; }));
   };
 
@@ -307,6 +311,7 @@ export default function GedView() {
     setFichierChoisi(null);
     setPrestataireChoisi(null);
     setEntiteLiee("");
+    setDateCachetManuelle("");
     setSens("Entrant");
   };
 
@@ -377,6 +382,17 @@ export default function GedView() {
                 className="w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground"
               />
             </label>
+            {sens === "Entrant" && (
+              <label className="block">
+                <div className="text-xs text-muted-foreground mb-1">Date de réception / cachet (facultatif)</div>
+                <input
+                  type="date"
+                  value={dateCachetManuelle}
+                  onChange={(e) => setDateCachetManuelle(e.target.value)}
+                  className="w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground"
+                />
+              </label>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button type="button" disabled={status === "processing"} onClick={handleAnalyser} className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-[13px] hover:opacity-90 disabled:opacity-60">

@@ -27,11 +27,12 @@ export class GedController {
     @Query("prestataireId") prestataireId: string | undefined,
     @Query("entiteLiee") entiteLiee: string | undefined,
     @Query("tags") tags: string | undefined,
+    @Query("dateCachetManuelle") dateCachetManuelle: string | undefined,
     @Req() req: Request & { user: { userId: string } },
   ) {
     return this.service.upload(
       file,
-      { sens: sens === "Sortant" ? "Sortant" : "Entrant", prestataireId, entiteLiee, tags: tags ? tags.split(",").map((t) => t.trim()).filter(Boolean) : [] },
+      { sens: sens === "Sortant" ? "Sortant" : "Entrant", prestataireId, entiteLiee, tags: tags ? tags.split(",").map((t) => t.trim()).filter(Boolean) : [], dateCachetManuelle: dateCachetManuelle || undefined },
       req.user.userId,
     );
   }

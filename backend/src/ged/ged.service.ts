@@ -22,6 +22,7 @@ export interface UploadGedDocumentParams {
   entiteLiee?: string;
   prestataireId?: string;
   tags?: string[];
+  dateCachetManuelle?: string;
 }
 
 @Injectable()
@@ -80,7 +81,7 @@ export class GedService {
         prestataireId: params.prestataireId,
         referenceExtraite: resultat.referenceExtraite,
         montantExtrait: resultat.montantExtrait,
-        dateCachet: resultat.dateCachet,
+        dateCachet: params.dateCachetManuelle || resultat.dateCachet,
         nomEmetteurExtrait: resultat.nomEmetteurExtrait,
         demandeurId,
       },

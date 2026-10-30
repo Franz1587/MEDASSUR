@@ -11,6 +11,7 @@ export interface UploadGedDocumentInput {
   entiteLiee?: string;
   prestataireId?: string;
   tags?: string[];
+  dateCachetManuelle?: string;
 }
 
 // Import réel (2026-09, reprise du chantier GED) — dépose le fichier et
@@ -25,6 +26,7 @@ export async function uploadDocument(payload: UploadGedDocumentInput): Promise<G
   if (payload.prestataireId) params.set("prestataireId", payload.prestataireId);
   if (payload.entiteLiee) params.set("entiteLiee", payload.entiteLiee);
   if (payload.tags && payload.tags.length > 0) params.set("tags", payload.tags.join(","));
+  if (payload.dateCachetManuelle) params.set("dateCachetManuelle", payload.dateCachetManuelle);
   const form = new FormData();
   form.append("fichier", payload.fichier);
   const res = await fetch(`${API_URL}/ged/documents/upload?${params.toString()}`, {
