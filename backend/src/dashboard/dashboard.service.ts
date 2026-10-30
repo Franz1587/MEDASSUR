@@ -50,13 +50,13 @@ export class DashboardService {
   constructor(private prisma: PrismaService, private parametresEntreprise: ParametresEntrepriseService) {}
 
   async pilotage(anneeParam?: string) {
-    // Toutes les requêtes en parallèle (2026-10) — les deux findMany Contrat
-    // séquentiels qui bloquaient le démarrage (contratsPourAnnees, contratsNonTest)
-    // sont fusionnés dans le Promise.all : contrats inclut déjà dateDebut et id,
-    // priseEnCharge filtre estTest via relation au lieu d'un tableau d'ids.
+    // 7 requêtes en parallèle (2026-10) — les deux findMany Contrat séquentiels
+    // qui bloquaient le démarrage (contratsPourAnnees, contratsNonTest) sont
+    // fusionnés ici : contrats inclut déjà id et dateDebut. prisesEnCharge est
+    // lancé juste après, sequentiellement, car il a besoin des ids de contrats.
     const [
       contrats, clients, sinistres, impayesEnCours, assuresSanteToutesAffiliations, prisesEnChargeEnAttente,
-      comptesBancaires, prisesEnCharge,
+      comptesBancaires,
     ] = await Promise.all([
       this.prisma.contrat.findMany({ where: { estTest: false }, select: { id: true, statut: true, dateDebut: true, dateFin: true, prime: true, montantCommission: true, clientId: true, client: { select: { ville: true } } } }),
       this.prisma.client.findMany({ select: { statut: true, type: true } }),
@@ -65,15 +65,13 @@ export class DashboardService {
       this.prisma.assureSante.findMany({ select: { identiteId: true, matricule: true, statut: true, contrat: { select: { statut: true } } } }),
       this.prisma.accordPrealable.count({ where: { decision: "En attente" } }),
       this.prisma.compteBancaire.findMany({ select: { solde: true } }),
-      // Rejeté ET Annulé exclus (2026-09) — même métrique/mêmes exclusions
-      // que StatistiquesService.calculer (voir commentaire de
-      // consommationLignes plus bas, "même métrique") ; excluait jusqu'ici
-      // seulement Annulé, laissant passer Rejeté.
-      this.prisma.priseEnCharge.findMany({
-        where: { statut: { notIn: ["Rejeté", "Annulé"] }, contrat: { estTest: false } },
-        select: { type: true, date: true, statut: true, montant: true, baseRemboursement: true, bordereau: { select: { statut: true } } },
-      }),
     ]);
+    // Rejeté ET Annulé exclus — même métrique que StatistiquesService.calculer ;
+    // contrats est déjà filtré estTest:false, ses ids sont donc tous non-test.
+    const prisesEnCharge = await this.prisma.priseEnCharge.findMany({
+      where: { statut: { notIn: ["Rejeté", "Annulé"] }, contratId: { in: contrats.map((c) => c.id) } },
+      select: { type: true, date: true, statut: true, montant: true, baseRemboursement: true, bordereau: { select: { statut: true } } },
+    });
 
     // Années disponibles dérivées du résultat contrats (2026-08/2026-10) —
     // jamais une liste figée, jamais une requête séquentielle séparée.
