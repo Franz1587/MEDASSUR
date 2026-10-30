@@ -5,7 +5,6 @@ import { Badge, type BadgeVariant } from "@/components/shared/Badge";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { UploadDropzone } from "@/components/shared/UploadDropzone";
 import { Combobox } from "@/components/shared/Combobox";
-import { useSimulatedProcessing } from "@/components/shared/useSimulatedProcessing";
 import { Pagination } from "@/components/shared/Pagination";
 import { usePagination } from "@/hooks/usePagination";
 import { getDocuments, uploadDocument, deleteDocument, rapprocherDocument, updateDocument, ouvrirDocumentGed, getRapportLiaison, type RapportLiaisonGed } from "@/services/ged.service";
@@ -351,17 +350,118 @@ function DetailDocumentModal({ doc: docInitial, onClose, onRapport, onRapprocher
   );
 }
 
+interface QueueItem {
+  id: string;
+  file: File;
+  sens: "Entrant" | "Sortant";
+  prestataire: Prestataire | null;
+  entiteLiee: string;
+  dateCachetManuelle: string;
+  status: "waiting" | "processing" | "done" | "error";
+  result?: GedDocument;
+  erreur?: string;
+}
+
+function QueueItemRow({ item, prestataires, onChange, onArchiver, onRetirer }: {
+  item: QueueItem;
+  prestataires: Prestataire[];
+  onChange: (patch: Partial<QueueItem>) => void;
+  onArchiver: () => void;
+  onRetirer: () => void;
+}) {
+  const inCls = "border border-border rounded-lg px-2.5 py-1.5 bg-background text-[12px] text-foreground w-full";
+
+  if (item.status === "processing") return (
+    <div className="px-4 py-3 flex items-center gap-3">
+      <div className="w-4 h-4 rounded-full border-2 border-primary/20 border-t-primary animate-spin flex-shrink-0" />
+      <FileText className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+      <span className="text-sm text-muted-foreground truncate flex-1">{item.file.name}</span>
+      <span className="text-xs text-muted-foreground">Analyse en cours…</span>
+    </div>
+  );
+
+  if (item.status === "done" && item.result) return (
+    <div className="px-4 py-3 flex items-start gap-2">
+      <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+          <span className="text-sm text-foreground font-medium truncate">{item.file.name}</span>
+          <Badge variant="gold">{item.result.type}</Badge>
+          <Badge variant={statutOcrVariant[item.result.statutOcr] ?? "neutral"}>{item.result.statutOcr}</Badge>
+        </div>
+        {(item.result.objet || item.result.referenceExtraite || item.result.montantExtrait != null) && (
+          <p className="text-xs text-muted-foreground med-num">
+            {[item.result.objet, item.result.referenceExtraite && `Réf. ${item.result.referenceExtraite}`, item.result.montantExtrait != null && `${fmtM(Number(item.result.montantExtrait))} FCFA`].filter(Boolean).join(" · ")}
+          </p>
+        )}
+      </div>
+      <button type="button" onClick={onRetirer} className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-secondary/40 text-muted-foreground flex-shrink-0">
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+
+  if (item.status === "error") return (
+    <div className="px-4 py-3 flex items-start gap-2">
+      <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <span className="text-sm text-foreground font-medium truncate block">{item.file.name}</span>
+        <p className="text-xs text-destructive">{item.erreur}</p>
+      </div>
+      <button type="button" onClick={onArchiver}
+        className="h-7 px-2 rounded-lg border border-border text-xs text-muted-foreground hover:bg-secondary/40 flex-shrink-0 whitespace-nowrap">
+        Réessayer
+      </button>
+      <button type="button" onClick={onRetirer} className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-secondary/40 text-muted-foreground flex-shrink-0">
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+
+  // waiting
+  return (
+    <div className="px-4 py-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <FileText className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+        <span className="text-sm text-foreground font-medium truncate flex-1">{item.file.name}</span>
+        <button type="button" onClick={onRetirer} className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-secondary/40 text-muted-foreground flex-shrink-0">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pl-5">
+        <select value={item.sens} onChange={(e) => onChange({ sens: e.target.value as "Entrant" | "Sortant" })} className={inCls}>
+          <option value="Entrant">Entrant (reçu)</option>
+          <option value="Sortant">Sortant (envoyé)</option>
+        </select>
+        <Combobox
+          options={prestataires} value={item.prestataire}
+          onChange={(p) => onChange({ prestataire: p })}
+          getLabel={(p) => p.nom} getSubLabel={(p) => p.ville} getId={(p) => p.id}
+          placeholder="Prestataire…" allowClear clearLabel="Aucun"
+        />
+        <input value={item.entiteLiee} onChange={(e) => onChange({ entiteLiee: e.target.value })}
+          placeholder="Entité liée…" className={inCls} />
+        {item.sens === "Entrant" && (
+          <input type="date" value={item.dateCachetManuelle} onChange={(e) => onChange({ dateCachetManuelle: e.target.value })}
+            className={inCls} title="Date de réception / cachet" />
+        )}
+      </div>
+      <div className="pl-5">
+        <button type="button" onClick={onArchiver}
+          className="h-8 px-3 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-semibold hover:bg-primary/20 inline-flex items-center gap-1.5">
+          <Brain className="w-3 h-3" />Analyser et archiver
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function GedView() {
   const [documents, setDocuments] = useState<GedDocument[]>([]);
   const [prestataires, setPrestataires] = useState<Prestataire[]>([]);
   const [rapportDocId, setRapportDocId] = useState<string | null>(null);
   const [detailDoc, setDetailDoc] = useState<GedDocument | null>(null);
-  const { status, result, run, reset } = useSimulatedProcessing<GedDocument>();
-  const [fichierChoisi, setFichierChoisi] = useState<File | null>(null);
-  const [sens, setSens] = useState<"Entrant" | "Sortant">("Entrant");
-  const [prestataireChoisi, setPrestataireChoisi] = useState<Prestataire | null>(null);
-  const [entiteLiee, setEntiteLiee] = useState("");
-  const [dateCachetManuelle, setDateCachetManuelle] = useState("");
+  const [queue, setQueue] = useState<QueueItem[]>([]);
 
   // Filtres
   const [recherche, setRecherche] = useState("");
@@ -395,29 +495,37 @@ export default function GedView() {
   const pagination = usePagination(documentsFiltres);
 
   const handleFiles = (files: File[]) => {
-    const f = files[0];
-    if (!f) return;
-    setFichierChoisi(f);
-    reset();
+    setQueue((prev) => [
+      ...prev,
+      ...files.map((file) => ({
+        id: crypto.randomUUID(),
+        file,
+        sens: "Entrant" as const,
+        prestataire: null,
+        entiteLiee: "",
+        dateCachetManuelle: "",
+        status: "waiting" as const,
+      })),
+    ]);
   };
 
-  const handleAnalyser = () => {
-    if (!fichierChoisi) return;
-    // "2026-10-30" → "30/10/2026" pour cohérence avec le format extrait par l'IA
-    const cachet = dateCachetManuelle ? dateCachetManuelle.split("-").reverse().join("/") : undefined;
-    run(() => uploadDocument({
-      fichier: fichierChoisi, sens, prestataireId: prestataireChoisi?.id, entiteLiee: entiteLiee.trim() || undefined,
-      dateCachetManuelle: cachet,
-    }).then((doc) => { refresh(); return doc; }));
+  const archiver = async (item: QueueItem) => {
+    setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: "processing" as const } : q));
+    try {
+      const cachet = item.dateCachetManuelle ? item.dateCachetManuelle.split("-").reverse().join("/") : undefined;
+      const doc = await uploadDocument({
+        fichier: item.file, sens: item.sens, prestataireId: item.prestataire?.id,
+        entiteLiee: item.entiteLiee.trim() || undefined, dateCachetManuelle: cachet,
+      });
+      setDocuments((prev) => [doc, ...prev]);
+      setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: "done" as const, result: doc } : q));
+    } catch (err) {
+      setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, status: "error" as const, erreur: messageErreur(err, "Archivage impossible.") } : q));
+    }
   };
 
-  const handleNouveauDocument = () => {
-    reset();
-    setFichierChoisi(null);
-    setPrestataireChoisi(null);
-    setEntiteLiee("");
-    setDateCachetManuelle("");
-    setSens("Entrant");
+  const handleArchiverTout = () => {
+    queue.filter((q) => q.status === "waiting").forEach(archiver);
   };
 
   const handleRapprocher = async (d: GedDocument) => {
@@ -448,99 +556,47 @@ export default function GedView() {
     <div className="p-6 space-y-5">
       <ModuleHeader title="GED & Documents" subtitle="Archivage entrant/sortant, lecture automatique par IA et rapprochement facture" icon={Archive} />
 
-      {!fichierChoisi && (
-        <UploadDropzone
-          onFiles={handleFiles}
-          label="Glissez vos documents ici"
-          hint="Factures et courriers prestataires, contrats, pièces d'identité · Lecture automatique par IA"
-          accept="image/*,.pdf"
-        />
-      )}
+      <UploadDropzone
+        onFiles={handleFiles}
+        label="Glissez vos documents ici"
+        hint="Sélectionnez plusieurs fichiers à la fois · Factures, courriers, contrats · Lecture automatique par IA"
+        accept="image/*,.pdf"
+        multiple
+      />
 
-      {fichierChoisi && status !== "done" && (
-        <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-          <p className="text-sm text-foreground font-semibold">{fichierChoisi.name}</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <label className="block">
-              <div className="text-xs text-muted-foreground mb-1">Sens du document</div>
-              <select value={sens} onChange={(e) => setSens(e.target.value as "Entrant" | "Sortant")} className="w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground">
-                <option value="Entrant">Entrant (reçu)</option>
-                <option value="Sortant">Sortant (envoyé)</option>
-              </select>
-            </label>
-            <label className="block">
-              <div className="text-xs text-muted-foreground mb-1">Prestataire (facture/courrier lié)</div>
-              <Combobox
-                options={prestataires}
-                value={prestataireChoisi}
-                onChange={setPrestataireChoisi}
-                getLabel={(pr) => pr.nom} getSubLabel={(pr) => pr.ville} getId={(pr) => pr.id}
-                placeholder="Rechercher…"
-              />
-            </label>
-            <label className="block">
-              <div className="text-xs text-muted-foreground mb-1">Entité liée (facultatif)</div>
-              <input
-                value={entiteLiee}
-                onChange={(e) => setEntiteLiee(e.target.value)}
-                placeholder="Client, contrat…"
-                className="w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground"
-              />
-            </label>
-            {sens === "Entrant" && (
-              <label className="block">
-                <div className="text-xs text-muted-foreground mb-1">Date de réception / cachet (facultatif)</div>
-                <input
-                  type="date"
-                  value={dateCachetManuelle}
-                  onChange={(e) => setDateCachetManuelle(e.target.value)}
-                  className="w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground"
-                />
-              </label>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="button" disabled={status === "processing"} onClick={handleAnalyser} className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-[13px] hover:opacity-90 disabled:opacity-60">
-              {status === "processing" ? "Analyse en cours…" : "Analyser et enregistrer"}
-            </button>
-            <button type="button" onClick={handleNouveauDocument} className="h-9 px-4 rounded-lg border border-border text-[13px] text-foreground hover:bg-secondary/40">Annuler</button>
-          </div>
-          {status === "processing" && (
-            <div className="flex items-center gap-3">
-              <div className="relative w-6 h-6 flex-shrink-0">
-                <div className="w-6 h-6 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-              </div>
-              <p className="text-sm text-muted-foreground">Lecture du contenu par l'IA (OCR, objet, résumé, rapprochement facture)…</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {status === "done" && result && (
-        <div className="bg-primary/8 border border-primary/20 rounded-xl p-4 space-y-3">
-          <div className="flex items-center gap-3">
-            <CheckCircle className="w-5 h-5 text-primary flex-shrink-0" />
-            <div className="flex items-center gap-2 flex-wrap text-sm">
-              <span className="text-foreground">Document enregistré dans la GED :</span>
-              <Badge variant="gold">{result.type}</Badge>
-              <Badge variant={statutOcrVariant[result.statutOcr] ?? "neutral"}>{result.statutOcr}</Badge>
+      {queue.length > 0 && (
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-center gap-3">
+            <Archive className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-foreground text-sm">
+              File d'attente — {queue.length} fichier{queue.length > 1 ? "s" : ""}
+            </h3>
+            <div className="ml-auto flex items-center gap-2">
+              {queue.some((q) => q.status === "waiting") && (
+                <button type="button" onClick={handleArchiverTout}
+                  className="h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 inline-flex items-center gap-1.5">
+                  <Brain className="w-3.5 h-3.5" />
+                  Archiver tout ({queue.filter((q) => q.status === "waiting").length} en attente)
+                </button>
+              )}
+              <button type="button" onClick={() => setQueue([])}
+                className="h-8 px-3 rounded-lg border border-border text-xs text-muted-foreground hover:bg-secondary/40">
+                Vider
+              </button>
             </div>
           </div>
-          {result.objet && <p className="text-sm text-foreground"><span className="font-semibold">Objet :</span> {result.objet}</p>}
-          {result.referenceExtraite && (
-            <p className="text-sm text-muted-foreground"><span className="font-semibold text-foreground">Référence :</span> {result.referenceExtraite}</p>
-          )}
-          {result.montantExtrait != null && (
-            <p className="text-sm text-muted-foreground"><span className="font-semibold text-foreground">Montant lu :</span> <span className="med-num">{fmtM(Number(result.montantExtrait))} FCFA</span></p>
-          )}
-          {result.dateCachet && (
-            <p className="text-sm text-muted-foreground"><span className="font-semibold text-foreground">Date cachet :</span> <span className="med-num">{result.dateCachet}</span></p>
-          )}
-          {result.resume && <p className="text-sm text-muted-foreground">{result.resume}</p>}
-          {result.statutOcr === "Échec" && (
-            <p className="text-sm text-amber-600 dark:text-amber-400">Contenu non lisible par l'IA — format non supporté ou fichier illisible. Le document reste archivé, sans objet/résumé automatique.</p>
-          )}
-          <button type="button" onClick={handleNouveauDocument} className="h-9 px-4 rounded-lg border border-border text-[13px] text-foreground hover:bg-secondary/40">Importer un autre document</button>
+          <div className="divide-y divide-border">
+            {queue.map((item) => (
+              <QueueItemRow
+                key={item.id}
+                item={item}
+                prestataires={prestataires}
+                onChange={(patch) => setQueue((prev) => prev.map((q) => q.id === item.id ? { ...q, ...patch } : q))}
+                onArchiver={() => archiver(item)}
+                onRetirer={() => setQueue((prev) => prev.filter((q) => q.id !== item.id))}
+              />
+            ))}
+          </div>
         </div>
       )}
 

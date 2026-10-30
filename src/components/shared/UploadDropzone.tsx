@@ -2,8 +2,8 @@ import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
 
 export function UploadDropzone({
-  onFiles, label, hint, accept,
-}: { onFiles: (files: File[]) => void; label: string; hint: string; accept?: string }) {
+  onFiles, label, hint, accept, multiple,
+}: { onFiles: (files: File[]) => void; label: string; hint: string; accept?: string; multiple?: boolean }) {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -23,6 +23,7 @@ export function UploadDropzone({
         ref={inputRef}
         type="file"
         accept={accept}
+        multiple={multiple}
         className="hidden"
         onChange={(e) => {
           const files = Array.from(e.target.files ?? []);
