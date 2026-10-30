@@ -60,6 +60,17 @@ function emptyFactureHeaderForm() {
   return { prestataire: null as Prestataire | null, client: null as Client | null, contratId: "", dateReception: new Date().toLocaleDateString("fr-FR"), referenceFacture: "" };
 }
 
+// Référence lisible (2026-10) — les factures télétransmises par le système
+// externe d'un prestataire portent "MS-PRESTA-<uuid>-<horodatage>" (opaque).
+// L'UUID n'a rien à déchiffrer ; l'horodatage encode une vraie date/heure
+// qu'on affiche à la place (même logique que documents.service.ts côté backend).
+function referenceLisible(ref: string): string {
+  const m = ref.match(/^MS-PRESTA-[0-9a-f-]{36}-(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})\d*$/i);
+  if (!m) return ref;
+  const [, annee, mois, jour, heure, minute] = m;
+  return `Télétrans. ${jour}/${mois}/${annee} ${heure}h${minute}`;
+}
+
 // En-tête de déclaration de remboursement (2026-08) — voir demande
 // utilisateur : "le remboursement ne se fait pas à l'ordre d'un
 // prestataire, mais plutôt à l'ordre de l'assuré ou de son souscripteur...
@@ -142,8 +153,12 @@ export default function PrisesEnChargeView() {
   );
 
   // Net à payer au prestataire (baseRemboursement - montantTps des lignes
-  // actives), jamais les frais réels — voir feedback-montant-net-a-payer.
-  const totalFacture = (f: Facture) => f.lignes.filter((l) => l.statut !== "Rejeté").reduce((s, l) => s + (l.baseRemboursement ?? 0) - (l.montantTps ?? 0), 0);
+  // actives) — voir feedback-montant-net-a-payer. Fallback sur montant
+  // déclaré si baseRemboursement absent (facture importée pas encore validée).
+  const lignesActives = (f: Facture) => f.lignes.filter((l) => l.statut !== "Rejeté");
+  const totalFacture = (f: Facture) => lignesActives(f).reduce((s, l) => s + (l.baseRemboursement ?? l.montant) - (l.montantTps ?? 0), 0);
+  // true = toutes les lignes actives sont sans baseRemboursement → montant déclaré, pas validé.
+  const estMontantDeclare = (f: Facture) => lignesActives(f).length > 0 && lignesActives(f).every((l) => l.baseRemboursement == null);
 
   const openCreateFacture = () => {
     setFactureForm(emptyFactureHeaderForm());
@@ -424,7 +439,7 @@ export default function PrisesEnChargeView() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                {["Référence", "Prestataire", "Souscripteur", "Réception", "Lignes", "Montant à payer", "Statut", "Règlement", "Règlement comptable", ""].map((h) => (
+                {["Référence", "Prestataire", "Souscripteur", "Réception", "Lignes", "Net à payer *", "Statut", "Règlement / GED", "Règlement comptable", ""].map((h) => (
                   <th key={h} className="text-left text-xs text-muted-foreground font-semibold uppercase tracking-wide px-4 py-3 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -432,17 +447,23 @@ export default function PrisesEnChargeView() {
             <tbody>
               {factures.map((f) => (
                 <tr key={f.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer" onClick={() => setFactureOuverte(f.id)}>
-                  <td className="px-4 py-3 text-xs font-semibold text-primary whitespace-nowrap" style={{ fontFamily: "'DM Mono', monospace" }}>{f.referenceFacture}</td>
+                  <td className="px-4 py-3 text-xs font-semibold text-primary whitespace-nowrap" style={{ fontFamily: "'DM Mono', monospace" }} title={f.referenceFacture !== referenceLisible(f.referenceFacture) ? f.referenceFacture : undefined}>{referenceLisible(f.referenceFacture)}</td>
                   <td className="px-4 py-3 font-semibold text-foreground whitespace-nowrap">{f.prestataireNom}</td>
                   <td className="px-4 py-3 text-foreground whitespace-nowrap">{f.clientNom}</td>
                   <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{f.dateReception}</td>
                   <td className="px-4 py-3 text-center whitespace-nowrap">{f.lignes.length}</td>
-                  <td className="px-4 py-3 text-right whitespace-nowrap font-semibold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(totalFacture(f))} FCFA</td>
+                  <td className={`px-4 py-3 text-right whitespace-nowrap font-semibold ${estMontantDeclare(f) ? "text-muted-foreground italic" : "text-foreground"}`} style={{ fontFamily: "'DM Mono', monospace" }} title={estMontantDeclare(f) ? "Montant déclaré par le prestataire — pas encore validé en prise en charge" : undefined}>{fmtM(totalFacture(f))} FCFA{estMontantDeclare(f) ? " *" : ""}</td>
                   <td className="px-4 py-3 whitespace-nowrap"><Badge variant={f.statut === "Annulée" ? "danger" : f.statut === "Payée" ? "gold" : f.statut === "Soumise" ? "success" : "warning"}>{f.statut}</Badge></td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     {f.bordereauNumero ? (
                       <span title="Cette facture est déjà réglée — verrouillée pour tout nouveau règlement">
                         <Badge variant="info">N° {f.bordereauNumero}</Badge>
+                      </span>
+                    ) : f.gedDocument ? (
+                      <span title={`GED ARIANA : ${f.gedDocument.statutTraitement}`}>
+                        <Badge variant={f.gedDocument.statutTraitement === "Traité totalement" ? "success" : f.gedDocument.statutTraitement === "Non traité" ? "warning" : "info"}>
+                          GED · {f.gedDocument.statutTraitement}
+                        </Badge>
                       </span>
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
@@ -463,6 +484,9 @@ export default function PrisesEnChargeView() {
             </tbody>
           </table>
           {factures.length === 0 && <p className="text-xs text-center text-muted-foreground py-10">Aucune facture — cliquez sur "Nouvelle facture" pour commencer.</p>}
+          {factures.some(estMontantDeclare) && (
+            <p className="text-xs text-muted-foreground px-4 py-2 border-t border-border/50">* Montant déclaré par le prestataire — pas encore validé en prise en charge (affiché en italique).</p>
+          )}
           </div>
         </>
       ) : (

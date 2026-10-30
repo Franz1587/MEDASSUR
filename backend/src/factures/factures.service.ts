@@ -43,6 +43,9 @@ const SELECT_FACTURE = {
     },
   },
   numerosSupplementaires: { select: { id: true, numero: true } },
+  // Doc GED rapproché (2026-10) — un doc = une facture max ; take:1 évite
+  // les sous-requêtes multiples (même select ciblé que le reste du SELECT).
+  gedDocuments: { select: { id: true, statutTraitement: true }, take: 1 },
 } satisfies Prisma.FactureSelect;
 
 // "dd/mm/yyyy" — même format que partout ailleurs dans le backend (voir

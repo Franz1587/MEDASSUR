@@ -77,6 +77,9 @@ export interface Facture {
   numeroCheque?: number;
   banqueNom?: string;
   lignes: FactureLigne[];
+  // Document GED rapproché (2026-10) — présent si ARIANA a lié un doc GED
+  // à cette facture ; jamais nul côté React (absent = aucun doc GED).
+  gedDocument?: { id: string; statutTraitement: string };
 }
 
 export interface ApercuLigne {

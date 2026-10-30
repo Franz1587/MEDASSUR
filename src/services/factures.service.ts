@@ -43,6 +43,7 @@ interface ApiFacture {
   statut: string;
   motifAnnulation?: string | null;
   lignes: ApiFactureLigne[];
+  gedDocuments?: { id: string; statutTraitement: string }[];
 }
 
 interface ApiApercuLigne {
@@ -107,6 +108,7 @@ function mapFacture(f: ApiFacture): Facture {
     numeroCheque: bordereau?.lettreCheque?.numeroCheque,
     banqueNom: bordereau?.lettreCheque?.banque.nom,
     lignes: f.lignes.map(mapLigne),
+    gedDocument: f.gedDocuments?.[0] ?? undefined,
   };
 }
 
