@@ -250,10 +250,10 @@ function DetailDocumentModal({ doc: docInitial, onClose, onRapport, onRapprocher
             </div>
           )}
 
-          {/* Résumé complet de l'IA */}
+          {/* Résumé complet d'ARIANA */}
           {doc.resume && (
             <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">Contenu lu par l'IA</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">Contenu lu par ARIANA</p>
               <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{doc.resume}</p>
             </div>
           )}
@@ -264,7 +264,7 @@ function DetailDocumentModal({ doc: docInitial, onClose, onRapport, onRapprocher
               <p className="text-xs text-muted-foreground mb-0.5">
                 Prestataire / Émetteur
                 {doc.nomEmetteurExtrait && !doc.prestataire?.nom && !doc.entiteLiee && !editMode && (
-                  <span className="ml-1 text-primary text-[10px]">(lu par l'IA)</span>
+                  <span className="ml-1 text-primary text-[10px]">(ARIANA)</span>
                 )}
               </p>
               {editMode ? (
@@ -279,7 +279,7 @@ function DetailDocumentModal({ doc: docInitial, onClose, onRapport, onRapprocher
                 <>
                   <p className="text-sm text-foreground">{doc.prestataire?.nom || doc.entiteLiee || doc.nomEmetteurExtrait || "—"}</p>
                   {doc.nomEmetteurExtrait && (doc.prestataire?.nom || doc.entiteLiee) && (
-                    <p className="text-xs text-muted-foreground">IA : {doc.nomEmetteurExtrait}</p>
+                    <p className="text-xs text-muted-foreground">ARIANA : {doc.nomEmetteurExtrait}</p>
                   )}
                 </>
               )}
@@ -554,12 +554,12 @@ export default function GedView() {
 
   return (
     <div className="p-6 space-y-5">
-      <ModuleHeader title="GED & Documents" subtitle="Archivage entrant/sortant, lecture automatique par IA et rapprochement facture" icon={Archive} />
+      <ModuleHeader title="GED & Documents" subtitle="Archivage entrant/sortant, lecture automatique par ARIANA et rapprochement facture" icon={Archive} />
 
       <UploadDropzone
         onFiles={handleFiles}
         label="Glissez vos documents ici"
-        hint="Sélectionnez plusieurs fichiers à la fois · Factures, courriers, contrats · Lecture automatique par IA"
+        hint="Sélectionnez plusieurs fichiers à la fois · Factures, courriers, contrats · Lecture automatique par ARIANA"
         accept="image/*,.pdf"
         multiple
       />
@@ -675,10 +675,10 @@ export default function GedView() {
                 <td className="px-4 py-3 text-xs text-muted-foreground max-w-[220px] truncate" title={d.objet ?? undefined}>{d.objet ?? "—"}</td>
                 <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
                   {d.prestataire?.nom || d.entiteLiee || d.nomEmetteurExtrait
-                    ? <span title={d.nomEmetteurExtrait && !d.prestataire?.nom && !d.entiteLiee ? "Lu par l'IA" : undefined}>
+                    ? <span title={d.nomEmetteurExtrait && !d.prestataire?.nom && !d.entiteLiee ? "Lu par ARIANA" : undefined}>
                         {d.prestataire?.nom || d.entiteLiee || d.nomEmetteurExtrait}
                         {d.nomEmetteurExtrait && !d.prestataire?.nom && !d.entiteLiee && (
-                          <span className="ml-1 text-[10px] text-primary opacity-70">(IA)</span>
+                          <span className="ml-1 text-[10px] text-primary opacity-70">(ARIANA)</span>
                         )}
                       </span>
                     : "—"}
