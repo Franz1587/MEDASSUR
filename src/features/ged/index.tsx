@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Archive, FileSignature, Brain, CheckCircle, Trash2, ExternalLink, RefreshCw, BarChart2, X, CheckCheck, AlertTriangle, Clock } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Archive, FileSignature, Brain, CheckCircle, Trash2, ExternalLink, RefreshCw, BarChart2, X, CheckCheck, AlertTriangle, Clock, Eye, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Badge, type BadgeVariant } from "@/components/shared/Badge";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
@@ -10,7 +10,7 @@ import { Pagination } from "@/components/shared/Pagination";
 import { usePagination } from "@/hooks/usePagination";
 import { getDocuments, uploadDocument, deleteDocument, rapprocherDocument, getRapportLiaison, urlDocumentGed, type RapportLiaisonGed } from "@/services/ged.service";
 import { getPrestataires } from "@/services/prestataires.service";
-import { fmt } from "@/lib/format";
+import { fmt, fmtM } from "@/lib/format";
 import { messageErreur } from "@/lib/http";
 import type { GedDocument } from "@/types/ged";
 import type { Prestataire } from "@/types/prestataires";
@@ -18,14 +18,18 @@ import type { Prestataire } from "@/types/prestataires";
 const statutOcrVariant: Record<string, BadgeVariant> = {
   "Analysé": "success", "En attente": "warning", "Échec": "danger",
 };
-
 const statutSignatureVariant: Record<string, BadgeVariant> = {
   "Signé": "success", "En attente": "warning", "N/A": "neutral",
 };
-
 const statutTraitementVariant: Record<string, BadgeVariant> = {
   "Sans objet": "neutral", "Non traité": "warning", "Traité partiellement": "info", "Traité totalement": "success",
 };
+
+// "30/10/2026" → "2026-10-30" pour comparer avec les inputs type="date"
+function dateVersISO(d: string): string {
+  const [j, m, a] = d.split("/");
+  return `${a}-${m?.padStart(2, "0")}-${j?.padStart(2, "0")}`;
+}
 
 function RapportLiaisonModal({ docId, onClose }: { docId: string; onClose: () => void }) {
   const [rapport, setRapport] = useState<RapportLiaisonGed | null>(null);
@@ -49,14 +53,11 @@ function RapportLiaisonModal({ docId, onClose }: { docId: string; onClose: () =>
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg space-y-4 p-6 relative max-h-[90vh] overflow-y-auto">
-        <button type="button" onClick={onClose} className="absolute top-4 right-4 h-7 w-7 flex items-center justify-center rounded-full hover:bg-secondary/40 text-muted-foreground">
-          <X className="w-4 h-4" />
-        </button>
+        <button type="button" onClick={onClose} className="absolute top-4 right-4 h-7 w-7 flex items-center justify-center rounded-full hover:bg-secondary/40 text-muted-foreground"><X className="w-4 h-4" /></button>
         <div className="flex items-center gap-2">
           <BarChart2 className="w-5 h-5 text-primary" />
           <h2 className="font-bold text-foreground text-base">Rapport de liaison GED</h2>
         </div>
-
         {loading && <p className="text-sm text-muted-foreground">Chargement…</p>}
         {erreur && <p className="text-sm text-destructive">{erreur}</p>}
         {rapport && (
@@ -66,7 +67,6 @@ function RapportLiaisonModal({ docId, onClose }: { docId: string; onClose: () =>
               <Badge variant={statutTraitementVariant[rapport.statutTraitement] ?? "neutral"}>{rapport.statutTraitement}</Badge>
               <span className="text-xs text-muted-foreground">{rapport.type}</span>
             </div>
-
             {rapport.facture ? (
               <div className="bg-secondary/30 rounded-xl p-3 space-y-1">
                 <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Facture liée</p>
@@ -85,7 +85,6 @@ function RapportLiaisonModal({ docId, onClose }: { docId: string; onClose: () =>
             ) : (
               <p className="text-sm text-muted-foreground">Aucune facture liée dans le système.</p>
             )}
-
             {rapport.bordereaux.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Règlement maladie (bordereaux)</p>
@@ -103,7 +102,6 @@ function RapportLiaisonModal({ docId, onClose }: { docId: string; onClose: () =>
                 ))}
               </div>
             )}
-
             {rapport.lettresCheque.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Règlement comptable (chèques)</p>
@@ -118,7 +116,6 @@ function RapportLiaisonModal({ docId, onClose }: { docId: string; onClose: () =>
                 ))}
               </div>
             )}
-
             {rapport.bordereaux.length === 0 && rapport.facture && (
               <p className="text-xs text-muted-foreground">Aucun bordereau de règlement trouvé pour cette facture.</p>
             )}
@@ -129,16 +126,126 @@ function RapportLiaisonModal({ docId, onClose }: { docId: string; onClose: () =>
   );
 }
 
+function DetailDocumentModal({ doc, onClose, onRapport, onRapprocher }: {
+  doc: GedDocument; onClose: () => void;
+  onRapport: () => void; onRapprocher: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-card border-b border-border px-6 py-4 flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <Badge variant="gold">{doc.type}</Badge>
+              <Badge variant={doc.sens === "Entrant" ? "info" : "neutral"}>{doc.sens}</Badge>
+              <Badge variant={statutOcrVariant[doc.statutOcr] ?? "neutral"}>{doc.statutOcr}</Badge>
+            </div>
+            <p className="text-sm font-semibold text-foreground truncate">{doc.nom}</p>
+            <p className="text-xs text-muted-foreground med-num">ID : {doc.id} · Archivé le {doc.date}</p>
+          </div>
+          <button type="button" onClick={onClose} className="h-7 w-7 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-secondary/40 text-muted-foreground"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="p-6 space-y-5">
+          {/* Référence et montant */}
+          {(doc.referenceExtraite || doc.montantExtrait != null) && (
+            <div className="bg-secondary/20 rounded-xl p-4 grid grid-cols-2 gap-3">
+              {doc.referenceExtraite && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Référence extraite</p>
+                  <p className="text-sm font-semibold text-foreground med-num">{doc.referenceExtraite}</p>
+                </div>
+              )}
+              {doc.montantExtrait != null && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Montant lu sur document</p>
+                  <p className="text-sm font-semibold text-foreground med-num">{fmtM(Number(doc.montantExtrait))} FCFA</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Objet */}
+          {doc.objet && (
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">Objet</p>
+              <p className="text-sm text-foreground">{doc.objet}</p>
+            </div>
+          )}
+
+          {/* Résumé complet de l'IA */}
+          {doc.resume && (
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">Contenu lu par l'IA</p>
+              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{doc.resume}</p>
+            </div>
+          )}
+
+          {/* Prestataire + Traitement */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-xs text-muted-foreground mb-0.5">Prestataire</p>
+              <p className="text-sm text-foreground">{doc.prestataire?.nom || doc.entiteLiee || "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-0.5">Statut traitement</p>
+              <Badge variant={statutTraitementVariant[doc.statutTraitement] ?? "neutral"}>{doc.statutTraitement}</Badge>
+            </div>
+            {doc.facture && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-0.5">Facture liée</p>
+                <p className="text-sm text-foreground med-num">{doc.facture.referenceFacture}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-xs text-muted-foreground mb-0.5">Signature</p>
+              <Badge variant={statutSignatureVariant[doc.statutSignature] ?? "neutral"}>{doc.statutSignature}</Badge>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border">
+            {doc.fichier && (
+              <a href={urlDocumentGed(doc.fichier)} target="_blank" rel="noreferrer"
+                className="h-9 px-4 rounded-lg border border-border text-[13px] text-foreground hover:bg-secondary/40 inline-flex items-center gap-1.5">
+                <ExternalLink className="w-3.5 h-3.5" />Ouvrir le document
+              </a>
+            )}
+            {doc.factureId && (
+              <button type="button" onClick={onRapport}
+                className="h-9 px-4 rounded-lg border border-primary/30 text-primary text-[13px] hover:bg-primary/10 inline-flex items-center gap-1.5">
+                <BarChart2 className="w-3.5 h-3.5" />Rapport de liaison
+              </button>
+            )}
+            {doc.type === "Facture prestataire" && (
+              <button type="button" onClick={onRapprocher}
+                className="h-9 px-4 rounded-lg border border-border text-[13px] text-foreground hover:bg-secondary/40 inline-flex items-center gap-1.5">
+                <RefreshCw className="w-3.5 h-3.5" />Relancer le rapprochement
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function GedView() {
   const [documents, setDocuments] = useState<GedDocument[]>([]);
   const [prestataires, setPrestataires] = useState<Prestataire[]>([]);
   const [rapportDocId, setRapportDocId] = useState<string | null>(null);
+  const [detailDoc, setDetailDoc] = useState<GedDocument | null>(null);
   const { status, result, run, reset } = useSimulatedProcessing<GedDocument>();
   const [fichierChoisi, setFichierChoisi] = useState<File | null>(null);
   const [sens, setSens] = useState<"Entrant" | "Sortant">("Entrant");
   const [prestataireChoisi, setPrestataireChoisi] = useState<Prestataire | null>(null);
   const [entiteLiee, setEntiteLiee] = useState("");
-  const pagination = usePagination(documents);
+
+  // Filtres
+  const [recherche, setRecherche] = useState("");
+  const [prestataireFiltre, setPrestataireFiltre] = useState<Prestataire | null>(null);
+  const [du, setDu] = useState("");
+  const [au, setAu] = useState("");
 
   const refresh = () => getDocuments().then(setDocuments);
 
@@ -146,6 +253,24 @@ export default function GedView() {
     refresh();
     getPrestataires().then(setPrestataires);
   }, []);
+
+  const documentsFiltres = useMemo(() => {
+    const q = recherche.trim().toLowerCase();
+    return documents.filter((d) => {
+      if (prestataireFiltre && d.prestataireId !== prestataireFiltre.id) return false;
+      if (du || au) {
+        const iso = dateVersISO(d.date);
+        if (du && iso < du) return false;
+        if (au && iso > au) return false;
+      }
+      if (q && ![d.nom, d.objet, d.resume, d.referenceExtraite, d.entiteLiee, d.prestataire?.nom].some(
+        (v) => v?.toLowerCase().includes(q),
+      )) return false;
+      return true;
+    });
+  }, [documents, recherche, prestataireFiltre, du, au]);
+
+  const pagination = usePagination(documentsFiltres);
 
   const handleFiles = (files: File[]) => {
     const f = files[0];
@@ -190,6 +315,8 @@ export default function GedView() {
       toast.error(messageErreur(err, "Suppression impossible."));
     }
   };
+
+  const filtresActifs = recherche || prestataireFiltre || du || au;
 
   return (
     <div className="p-6 space-y-5">
@@ -263,6 +390,12 @@ export default function GedView() {
             </div>
           </div>
           {result.objet && <p className="text-sm text-foreground"><span className="font-semibold">Objet :</span> {result.objet}</p>}
+          {result.referenceExtraite && (
+            <p className="text-sm text-muted-foreground"><span className="font-semibold text-foreground">Référence :</span> {result.referenceExtraite}</p>
+          )}
+          {result.montantExtrait != null && (
+            <p className="text-sm text-muted-foreground"><span className="font-semibold text-foreground">Montant lu :</span> <span className="med-num">{fmtM(Number(result.montantExtrait))} FCFA</span></p>
+          )}
           {result.resume && <p className="text-sm text-muted-foreground">{result.resume}</p>}
           {result.statutOcr === "Échec" && (
             <p className="text-sm text-amber-600 dark:text-amber-400">Contenu non lisible par l'IA — format non supporté ou fichier illisible. Le document reste archivé, sans objet/résumé automatique.</p>
@@ -272,14 +405,53 @@ export default function GedView() {
       )}
 
       <div className="bg-card border border-border rounded-xl overflow-x-auto">
-        <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-          <Brain className="w-4 h-4 text-primary" />
-          <h3 className="font-semibold text-foreground text-sm">Documents archivés ({documents.length})</h3>
+        <div className="px-4 py-3 border-b border-border space-y-3">
+          <div className="flex items-center gap-2">
+            <Brain className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-foreground text-sm">
+              Documents archivés ({filtresActifs ? `${documentsFiltres.length} sur ${documents.length}` : documents.length})
+            </h3>
+            {filtresActifs && (
+              <button type="button" onClick={() => { setRecherche(""); setPrestataireFiltre(null); setDu(""); setAu(""); }}
+                className="ml-auto text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
+                Réinitialiser les filtres
+              </button>
+            )}
+          </div>
+
+          {/* Filtres de recherche */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <div className="relative md:col-span-2">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+              <input
+                value={recherche}
+                onChange={(e) => setRecherche(e.target.value)}
+                placeholder="Rechercher par nom, réf., patient, objet, résumé…"
+                className="w-full border border-border rounded-lg pl-8 pr-3 py-1.5 bg-background text-[13px] text-foreground"
+              />
+            </div>
+            <Combobox
+              options={prestataires}
+              value={prestataireFiltre}
+              onChange={setPrestataireFiltre}
+              getLabel={(pr) => pr.nom} getSubLabel={(pr) => pr.ville} getId={(pr) => pr.id}
+              placeholder="Prestataire…"
+              allowClear clearLabel="Tous"
+            />
+            <div className="flex items-center gap-1">
+              <input type="date" value={du} onChange={(e) => setDu(e.target.value)}
+                className="flex-1 border border-border rounded-lg px-2 py-1.5 bg-background text-[12px] text-foreground" title="Date de début" />
+              <span className="text-muted-foreground text-xs">→</span>
+              <input type="date" value={au} onChange={(e) => setAu(e.target.value)}
+                className="flex-1 border border-border rounded-lg px-2 py-1.5 bg-background text-[12px] text-foreground" title="Date de fin" />
+            </div>
+          </div>
         </div>
+
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border">
-              {["Document", "Sens", "Type", "Objet", "Entité liée", "OCR", "Facture", "Signature", "Date", ""].map((h) => (
+              {["Document / Réf.", "Sens", "Type", "Objet", "Prestataire", "OCR", "Facture", "Signature", "Archivé le", ""].map((h) => (
                 <th key={h} className="text-left text-xs text-muted-foreground font-semibold uppercase tracking-wide px-4 py-3 whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -287,17 +459,25 @@ export default function GedView() {
           <tbody>
             {pagination.pageItems.map((d) => (
               <tr key={d.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
-                <td className="px-4 py-3 text-xs font-semibold text-foreground whitespace-nowrap med-num">
-                  {d.fichier ? (
-                    <a href={urlDocumentGed(d.fichier)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-primary">
-                      {d.nom}<ExternalLink className="w-3 h-3" />
-                    </a>
-                  ) : d.nom}
+                <td className="px-4 py-3 min-w-[160px]">
+                  <div className="flex flex-col gap-0.5">
+                    {d.fichier ? (
+                      <a href={urlDocumentGed(d.fichier)} target="_blank" rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-foreground hover:text-primary med-num">
+                        {d.nom}<ExternalLink className="w-3 h-3 flex-shrink-0" />
+                      </a>
+                    ) : (
+                      <span className="text-xs font-semibold text-foreground med-num">{d.nom}</span>
+                    )}
+                    {d.referenceExtraite && (
+                      <span className="text-[11px] text-primary med-num">Réf. {d.referenceExtraite}</span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap"><Badge variant={d.sens === "Entrant" ? "info" : "neutral"}>{d.sens}</Badge></td>
-                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{d.type}</td>
-                <td className="px-4 py-3 text-muted-foreground max-w-[260px] truncate" title={d.objet ?? undefined}>{d.objet ?? "—"}</td>
-                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{d.entiteLiee || d.prestataire?.nom || "—"}</td>
+                <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{d.type}</td>
+                <td className="px-4 py-3 text-xs text-muted-foreground max-w-[220px] truncate" title={d.objet ?? undefined}>{d.objet ?? "—"}</td>
+                <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{d.prestataire?.nom || d.entiteLiee || "—"}</td>
                 <td className="px-4 py-3 whitespace-nowrap"><Badge variant={statutOcrVariant[d.statutOcr] ?? "neutral"}>{d.statutOcr}</Badge></td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <div className="flex items-center gap-1">
@@ -319,16 +499,31 @@ export default function GedView() {
                 <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap med-num">{d.date}</td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <div className="flex items-center gap-1">
+                    <button type="button" onClick={() => setDetailDoc(d)} title="Voir le détail"
+                      className="h-7 w-7 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-primary/10">
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
                     {d.factureId && (
-                      <button type="button" onClick={() => setRapportDocId(d.id)} title="Rapport de liaison" className="h-7 w-7 flex items-center justify-center rounded-lg border border-primary/30 text-primary hover:bg-primary/10">
+                      <button type="button" onClick={() => setRapportDocId(d.id)} title="Rapport de liaison"
+                        className="h-7 w-7 flex items-center justify-center rounded-lg border border-primary/30 text-primary hover:bg-primary/10">
                         <BarChart2 className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    <button type="button" onClick={() => handleDelete(d)} className="h-7 w-7 flex items-center justify-center rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button type="button" onClick={() => handleDelete(d)}
+                      className="h-7 w-7 flex items-center justify-center rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </td>
               </tr>
             ))}
+            {pagination.pageItems.length === 0 && (
+              <tr>
+                <td colSpan={10} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  {filtresActifs ? "Aucun document ne correspond aux filtres." : "Aucun document archivé."}
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
         <Pagination
@@ -339,6 +534,14 @@ export default function GedView() {
       </div>
 
       {rapportDocId && <RapportLiaisonModal docId={rapportDocId} onClose={() => setRapportDocId(null)} />}
+      {detailDoc && (
+        <DetailDocumentModal
+          doc={detailDoc}
+          onClose={() => setDetailDoc(null)}
+          onRapport={() => { setDetailDoc(null); setRapportDocId(detailDoc.id); }}
+          onRapprocher={async () => { setDetailDoc(null); await handleRapprocher(detailDoc); }}
+        />
+      )}
     </div>
   );
 }
