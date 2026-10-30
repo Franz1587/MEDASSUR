@@ -81,6 +81,7 @@ export class GedService {
         referenceExtraite: resultat.referenceExtraite,
         montantExtrait: resultat.montantExtrait,
         dateCachet: resultat.dateCachet,
+        nomEmetteurExtrait: resultat.nomEmetteurExtrait,
         demandeurId,
       },
       include: { prestataire: { select: { nom: true } }, facture: { select: { id: true, referenceFacture: true, statut: true } } },

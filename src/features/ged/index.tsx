@@ -190,8 +190,18 @@ function DetailDocumentModal({ doc, onClose, onRapport, onRapprocher }: {
           {/* Prestataire + Traitement */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className="text-xs text-muted-foreground mb-0.5">Prestataire</p>
-              <p className="text-sm text-foreground">{doc.prestataire?.nom || doc.entiteLiee || "—"}</p>
+              <p className="text-xs text-muted-foreground mb-0.5">
+                Prestataire / Émetteur
+                {doc.nomEmetteurExtrait && !doc.prestataire?.nom && !doc.entiteLiee && (
+                  <span className="ml-1 text-primary text-[10px]">(lu par l'IA)</span>
+                )}
+              </p>
+              <p className="text-sm text-foreground">
+                {doc.prestataire?.nom || doc.entiteLiee || doc.nomEmetteurExtrait || "—"}
+              </p>
+              {doc.nomEmetteurExtrait && (doc.prestataire?.nom || doc.entiteLiee) && (
+                <p className="text-xs text-muted-foreground">IA : {doc.nomEmetteurExtrait}</p>
+              )}
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-0.5">Statut traitement</p>
@@ -486,7 +496,16 @@ export default function GedView() {
                 <td className="px-4 py-3 whitespace-nowrap"><Badge variant={d.sens === "Entrant" ? "info" : "neutral"}>{d.sens}</Badge></td>
                 <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{d.type}</td>
                 <td className="px-4 py-3 text-xs text-muted-foreground max-w-[220px] truncate" title={d.objet ?? undefined}>{d.objet ?? "—"}</td>
-                <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{d.prestataire?.nom || d.entiteLiee || "—"}</td>
+                <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                  {d.prestataire?.nom || d.entiteLiee || d.nomEmetteurExtrait
+                    ? <span title={d.nomEmetteurExtrait && !d.prestataire?.nom && !d.entiteLiee ? "Lu par l'IA" : undefined}>
+                        {d.prestataire?.nom || d.entiteLiee || d.nomEmetteurExtrait}
+                        {d.nomEmetteurExtrait && !d.prestataire?.nom && !d.entiteLiee && (
+                          <span className="ml-1 text-[10px] text-primary opacity-70">(IA)</span>
+                        )}
+                      </span>
+                    : "—"}
+                </td>
                 <td className="px-4 py-3 whitespace-nowrap"><Badge variant={statutOcrVariant[d.statutOcr] ?? "neutral"}>{d.statutOcr}</Badge></td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <div className="flex items-center gap-1">

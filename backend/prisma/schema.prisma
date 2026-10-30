@@ -3883,11 +3883,15 @@ model GedDocument {
   // renseigné qu'une fois un rapprochement (auto ou manuel) confirmé.
   prestataireId     String?
   prestataire       Prestataire? @relation(fields: [prestataireId], references: [id])
-  referenceExtraite String?
-  montantExtrait    Decimal?     @db.Decimal(18, 2)
+  referenceExtraite   String?
+  montantExtrait      Decimal?  @db.Decimal(18, 2)
   // Date lue sur le cachet/tampon "courrier arrivé" du document (2026-10) —
   // extraite par l'IA lors de l'import ; null si aucun cachet visible.
-  dateCachet        String?
+  dateCachet          String?
+  // Nom de l'émetteur lu sur le document (2026-10) — clinique, fournisseur,
+  // cabinet… ; null si non identifiable. Complète prestataireId/entiteLiee
+  // quand l'émetteur n'est pas encore enregistré comme Prestataire en base.
+  nomEmetteurExtrait  String?
   factureId         String?
   facture           Facture?     @relation(fields: [factureId], references: [id])
   // "Sans objet" (document qui n'est pas une facture prestataire — un
