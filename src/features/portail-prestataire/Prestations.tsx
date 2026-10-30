@@ -61,6 +61,7 @@ function typeFormulaire(type: string | undefined, famille: string | undefined): 
 }
 
 function statutVariant(s: string): BadgeVariant {
+  if (s === "Payée") return "gold";
   if (s === "Soumise") return "success";
   if (s === "Annulée") return "danger";
   return "warning";

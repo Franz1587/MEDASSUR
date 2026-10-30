@@ -3004,7 +3004,7 @@ model Facture {
   contratId        String
   dateReception    String
   referenceFacture String
-  statut           String   @default("En saisie") // En saisie | Soumise | Annulée
+  statut           String   @default("En saisie") // En saisie | Soumise | Payée | Annulée
   // Une facture annulée n'est jamais supprimée (traçabilité) et reste dans
   // la liste du prestataire, mais ne peut plus être ni complétée ni liée à
   // un nouveau règlement (voir FacturesService.annuler).

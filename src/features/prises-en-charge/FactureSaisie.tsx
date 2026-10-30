@@ -434,7 +434,7 @@ export default function FactureSaisie({ factureId, onClose, onChanged }: { factu
           <div>
             <h3 className="text-[15px] font-semibold text-foreground">{facture.referenceFacture} — {facture.prestataireNom}</h3>
             <p className="text-[12px] text-muted-foreground">
-              {facture.clientNom} · Réception {facture.dateReception} · <Badge variant={estAnnulee ? "danger" : facture.statut === "Soumise" ? "success" : "warning"}>{facture.statut}</Badge>
+              {facture.clientNom} · Réception {facture.dateReception} · <Badge variant={estAnnulee ? "danger" : facture.statut === "Payée" ? "gold" : facture.statut === "Soumise" ? "success" : "warning"}>{facture.statut}</Badge>
               {facture.bordereauNumero && <> · <Badge variant="info">Réglée — N° {facture.bordereauNumero}</Badge></>}
             </p>
             <div className="mt-0.5"><DerniereModification entite="factures" entiteId={facture.id} /></div>
@@ -785,7 +785,7 @@ export default function FactureSaisie({ factureId, onClose, onChanged }: { factu
             {!estAnnulee && (
               <>
                 <Btn variant="ghost" onClick={() => setShowAnnuler(true)}><XCircle className="w-4 h-4" />Annuler la facture</Btn>
-                {facture.statut !== "Soumise" && <Btn variant="primary" onClick={handleTerminer}><CheckCircle2 className="w-4 h-4" />Terminer la facture</Btn>}
+                {facture.statut !== "Soumise" && facture.statut !== "Payée" && <Btn variant="primary" onClick={handleTerminer}><CheckCircle2 className="w-4 h-4" />Terminer la facture</Btn>}
               </>
             )}
           </div>

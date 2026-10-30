@@ -41,15 +41,14 @@ export class GedService {
     });
   }
 
-  // Import réel (2026-09, reprise du chantier "en pause") — voir demande
-  // utilisateur d'origine : "importer les factures et les courriers des
-  // prestataires... enregistrement automatique du document avec un résumé
-  // et en créant l'objet en lisant le contenu". Un seul appel : dépôt du
-  // fichier (disque ou Supabase Storage selon StorageService.actif, même
-  // principe que AccordPrealableService.uploadDocument) + lecture IA +
-  // tentative de rapprochement facture, en une seule ligne dans la liste —
-  // jamais un classement "à confirmer" en deux temps comme l'ancienne
-  // maquette (voir git history src/features/ged).
+  // Import réel (2026-09/2026-10) — lecture ARIANA 360° : avant l'OCR, la
+  // liste des prestataires connus est chargée et passée à l'IA pour une
+  // résolution de nom plus fiable ; après l'OCR, le rapprochement facture
+  // est tenté même si l'utilisateur n'a pas sélectionné de prestataire
+  // (auto-résolution par nom extrait). Le rapprochement est enrichi d'une
+  // détection du paiement réel (chaîne BordereauReglement → LettreCheque)
+  // qui clôture automatiquement les factures déjà payées (cas récupération
+  // de données — factures scannées après le fait).
   async upload(file: Express.Multer.File, params: UploadGedDocumentParams, demandeurId: string) {
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
 
@@ -62,7 +61,22 @@ export class GedService {
       await fs.promises.writeFile(path.join(UPLOADS_GED_DIR, filename), file.buffer);
     }
 
-    const resultat = await this.analyse.analyser(file.buffer, file.originalname);
+    // Contexte 360° — liste des prestataires pour l'OCR ARIANA
+    const prestatairesConnus = await this.prisma.prestataire.findMany({
+      select: { id: true, nom: true },
+      orderBy: { nom: "asc" },
+      take: 300,
+    });
+
+    const resultat = await this.analyse.analyser(file.buffer, file.originalname, { prestatairesConnus });
+
+    // Auto-résolution prestataire : si l'utilisateur n'en a pas sélectionné
+    // mais qu'ARIANA a lu un nom d'émetteur, tenter un appariement en base.
+    let prestataireIdEffectif = params.prestataireId;
+    if (!prestataireIdEffectif && resultat.nomEmetteurExtrait) {
+      const trouve = await this.trouverPrestataireParNom(resultat.nomEmetteurExtrait, prestatairesConnus);
+      if (trouve) prestataireIdEffectif = trouve.id;
+    }
 
     const doc = await this.prisma.gedDocument.create({
       data: {
@@ -78,7 +92,7 @@ export class GedService {
         sens: params.sens,
         objet: resultat.objet,
         resume: resultat.resume,
-        prestataireId: params.prestataireId,
+        prestataireId: prestataireIdEffectif,
         referenceExtraite: resultat.referenceExtraite,
         montantExtrait: resultat.montantExtrait,
         dateCachet: params.dateCachetManuelle || resultat.dateCachet,
@@ -88,10 +102,47 @@ export class GedService {
       include: { prestataire: { select: { nom: true } }, facture: { select: { id: true, referenceFacture: true, statut: true } } },
     });
 
-    if (resultat.type === "Facture prestataire" && params.prestataireId) {
+    if (resultat.type === "Facture prestataire" && prestataireIdEffectif) {
       return this.rapprocher(doc.id);
     }
     return doc;
+  }
+
+  // Auto-résolution prestataire par nom (ARIANA 360°, 2026-10) — cherche
+  // d'abord une correspondance exacte (insensible à la casse), puis une
+  // correspondance partielle sur les 25 premiers caractères ; ne renvoie
+  // un résultat que s'il est non-ambigu (0 ou 1 résultat partiel).
+  private async trouverPrestataireParNom(
+    nom: string,
+    cache?: { id: string; nom: string }[],
+  ): Promise<{ id: string } | null> {
+    const terme = nom.trim().toLowerCase();
+    if (!terme) return null;
+
+    // Cherche dans le cache chargé pour éviter une requête supplémentaire
+    if (cache?.length) {
+      const exact = cache.find((p) => p.nom.toLowerCase() === terme);
+      if (exact) return { id: exact.id };
+      const partials = cache.filter((p) => p.nom.toLowerCase().includes(terme.slice(0, Math.min(25, terme.length))));
+      if (partials.length === 1) return { id: partials[0].id };
+      // Essai inverse : le terme contient le nom du prestataire
+      const inv = cache.filter((p) => terme.includes(p.nom.toLowerCase().slice(0, Math.min(25, p.nom.length))));
+      if (inv.length === 1) return { id: inv[0].id };
+      return null;
+    }
+
+    // Fallback DB si pas de cache
+    const exact = await this.prisma.prestataire.findFirst({
+      where: { nom: { equals: terme, mode: "insensitive" } },
+      select: { id: true },
+    });
+    if (exact) return exact;
+    const partials = await this.prisma.prestataire.findMany({
+      where: { nom: { contains: terme.slice(0, Math.min(25, terme.length)), mode: "insensitive" } },
+      select: { id: true },
+      take: 2,
+    });
+    return partials.length === 1 ? partials[0] : null;
   }
 
   async streamFichier(id: string, res: import("express").Response) {
@@ -148,11 +199,50 @@ export class GedService {
     }
 
     const facture = factures[0];
-    const total = facture.lignes
-      .filter((l) => l.statut !== "Annulé")
-      .reduce((s, l) => s + Number(l.montant), 0);
+    const lignesActives = facture.lignes.filter((l) => l.statut !== "Annulé");
+    const total = lignesActives.reduce((s, l) => s + Number(l.montant), 0);
     const montantOk = doc.montantExtrait == null || Math.abs(total - Number(doc.montantExtrait)) <= TOLERANCE_MONTANT;
-    const statutTraitement = facture.statut === "Soumise" && montantOk ? "Traité totalement" : "Traité partiellement";
+
+    // Détection paiement 360° (ARIANA, 2026-10) — lit la chaîne complète
+    // BordereauReglement → LettreCheque pour savoir si la facture a déjà
+    // été payée comptablement, même si son statut est encore "Soumise"
+    // (cas typique de la récupération de données).
+    let statutTraitement: string;
+
+    if (facture.statut === "Payée") {
+      // Déjà clôturée lors d'un traitement précédent
+      statutTraitement = "Traité totalement";
+    } else {
+      const lignesPaiement = await this.prisma.priseEnCharge.findMany({
+        where: { factureId: facture.id, statut: { not: "Annulé" } },
+        select: {
+          bordereau: {
+            select: {
+              statut: true,
+              lettreCheque: {
+                select: { numero: true, numeroCheque: true, montantTotal: true, dateEmission: true },
+              },
+            },
+          },
+        },
+      });
+
+      const avecBordereau = lignesPaiement.filter((l) => l.bordereau != null);
+      const toutesPayees = avecBordereau.length > 0
+        && avecBordereau.every((l) => l.bordereau?.statut === "Payé");
+
+      if (toutesPayees) {
+        // ARIANA clôture la facture : toutes les lignes sont dans un
+        // bordereau "Payé" → statut "Payée", traitement = totalement.
+        await this.prisma.facture.update({
+          where: { id: facture.id },
+          data: { statut: "Payée" },
+        });
+        statutTraitement = "Traité totalement";
+      } else {
+        statutTraitement = facture.statut === "Soumise" && montantOk ? "Traité totalement" : "Traité partiellement";
+      }
+    }
 
     return this.prisma.gedDocument.update({
       where: { id }, data: { statutTraitement, factureId: facture.id },

@@ -72,7 +72,7 @@ function RapportLiaisonModal({ docId, onClose }: { docId: string; onClose: () =>
                 <p className="text-sm text-foreground font-mono">{rapport.facture.referenceFacture}</p>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
                   <span>Reçue le {rapport.facture.dateReception}</span>
-                  <Badge variant={rapport.facture.statut === "Soumise" ? "success" : "neutral"}>{rapport.facture.statut}</Badge>
+                  <Badge variant={rapport.facture.statut === "Payée" ? "gold" : rapport.facture.statut === "Soumise" ? "success" : "neutral"}>{rapport.facture.statut}</Badge>
                 </div>
                 <div className="flex items-center gap-4 text-xs text-muted-foreground med-num">
                   <span>Montant saisi : <strong className="text-foreground">{fmt(rapport.facture.montantSaisi)}</strong></span>

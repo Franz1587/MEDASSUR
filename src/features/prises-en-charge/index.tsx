@@ -438,7 +438,7 @@ export default function PrisesEnChargeView() {
                   <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{f.dateReception}</td>
                   <td className="px-4 py-3 text-center whitespace-nowrap">{f.lignes.length}</td>
                   <td className="px-4 py-3 text-right whitespace-nowrap font-semibold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(totalFacture(f))} FCFA</td>
-                  <td className="px-4 py-3 whitespace-nowrap"><Badge variant={f.statut === "Annulée" ? "danger" : f.statut === "Soumise" ? "success" : "warning"}>{f.statut}</Badge></td>
+                  <td className="px-4 py-3 whitespace-nowrap"><Badge variant={f.statut === "Annulée" ? "danger" : f.statut === "Payée" ? "gold" : f.statut === "Soumise" ? "success" : "warning"}>{f.statut}</Badge></td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     {f.bordereauNumero ? (
                       <span title="Cette facture est déjà réglée — verrouillée pour tout nouveau règlement">
@@ -558,7 +558,7 @@ export default function PrisesEnChargeView() {
                     <td className="px-4 py-3 text-right whitespace-nowrap font-semibold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>
                       {fmtM(r.lignes.filter((l) => l.statut !== "Rejeté").reduce((s, l) => s + (l.baseRemboursement ?? 0), 0))} FCFA
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap"><Badge variant={r.statut === "Annulée" ? "danger" : r.statut === "Soumise" ? "success" : "warning"}>{r.statut}</Badge></td>
+                    <td className="px-4 py-3 whitespace-nowrap"><Badge variant={r.statut === "Annulée" ? "danger" : r.statut === "Payée" ? "gold" : r.statut === "Soumise" ? "success" : "warning"}>{r.statut}</Badge></td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {r.bordereauNumero ? (
                         <span title="Cette déclaration est déjà réglée — verrouillée pour tout nouveau règlement">

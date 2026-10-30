@@ -63,26 +63,38 @@ export class GedAnalyseService {
   // n'a pas pu lire le fichier (voir demande utilisateur, schema.prisma
   // GedDocument.objet/resume) : `statutOcr: "Échec"` avec tous les champs
   // extraits à `null` dans ce cas, jamais un résultat fabriqué.
-  async analyser(buffer: Buffer, nomFichier: string): Promise<AnalyseGedResultat> {
+  // `contexte.prestatairesConnus` : liste des prestataires déjà en base —
+  // ARIANA s'en sert pour résoudre le nom exact quand l'OCR est approximatif.
+  async analyser(
+    buffer: Buffer,
+    nomFichier: string,
+    contexte?: { prestatairesConnus?: { id: string; nom: string }[] },
+  ): Promise<AnalyseGedResultat> {
     const bloc = this.blocVision(buffer, nomFichier);
     if (!bloc) return RESULTAT_ECHEC;
 
     const client = this.getClient();
     if (!client) return RESULTAT_ECHEC;
 
+    const listePrestataires = contexte?.prestatairesConnus?.length
+      ? `\nPrestataires médicaux enregistrés dans la base : ${contexte.prestatairesConnus.map((p) => p.nom).join(" | ")}. ` +
+        "Si le nom de l'émetteur sur le document correspond (même approximativement) à l'un de ces noms, " +
+        "renvoie EXACTEMENT le nom tel qu'il apparaît dans cette liste."
+      : "";
+
     try {
       const reponse = await client.messages.create({
         model: "claude-sonnet-5",
-        max_tokens: 600,
+        max_tokens: 1200,
         thinking: { type: "disabled" },
         system:
-          "Tu lis un document archivé dans la GED (gestion électronique documentaire) d'un assureur santé " +
-          "gabonais. Lis VRAIMENT le contenu du fichier joint et réponds UNIQUEMENT avec un objet JSON strict, " +
-          "sans texte autour, sans balise markdown, au format exact suivant :\n" +
+          "Tu es ARIANA, l'agent d'analyse documentaire IA de MEDASSUR+, un assureur santé gabonais. " +
+          "Lis VRAIMENT le contenu du fichier joint (facture, courrier, contrat…) et réponds UNIQUEMENT " +
+          "avec un objet JSON strict, sans texte autour, sans balise markdown, au format exact suivant :\n" +
           `{"type": "<une valeur EXACTE parmi ${TYPES_GED.map((t) => `\\"${t}\\"`).join(", ")}>", ` +
           "\"objet\": \"<objet court du document, une ligne>\", " +
-          "\"resume\": \"<résumé factuel en 2-3 phrases maximum>\", " +
-          "\"referenceFacture\": <le numéro de facture/référence écrit sur le document si le type est " +
+          "\"resume\": \"<résumé factuel en 2-4 phrases : nature du document, montants clés, parties impliquées>\", " +
+          "\"referenceFacture\": <le numéro de facture/référence EXACT écrit sur le document si le type est " +
           "\"Facture prestataire\", sinon null>, " +
           "\"montant\": <le montant total TTC écrit sur le document si le type est \"Facture prestataire\", " +
           "en chiffres uniquement sans devise ni séparateur, sinon null>, " +
@@ -91,7 +103,8 @@ export class GedAnalyseService {
           "\"nomEmetteur\": <le nom complet de la structure, entreprise ou personne qui a émis ou envoyé ce " +
           "document (clinique, hôpital, cabinet médical, fournisseur, prestataire…) tel qu'il apparaît sur " +
           "l'en-tête ou le pied de page, sinon null>}\n" +
-          "Si le document est flou, coupé ou réellement illisible, réponds quand même le JSON avec objet/resume " +
+          listePrestataires +
+          "\nSi le document est flou, coupé ou réellement illisible, réponds quand même le JSON avec objet/resume " +
           "expliquant que le contenu n'est pas lisible, jamais d'invention de contenu absent.",
         messages: [{ role: "user", content: [bloc, { type: "text", text: "Lis ce document et renvoie le JSON demandé." }] }],
       });

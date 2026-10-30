@@ -215,6 +215,7 @@ export class FacturesService {
     const facture = await this.prisma.facture.findUnique({ where: { id }, include: { lignes: { include: { bordereau: true } } } });
     if (!facture) throw new NotFoundException(`Facture ${id} introuvable`);
     if (facture.statut === "Annulée") throw new BadRequestException("Cette facture est déjà annulée.");
+    if (facture.statut === "Payée") throw new BadRequestException("Impossible d'annuler une facture déjà clôturée comme payée par ARIANA.");
     const lignePayee = facture.lignes.find((l) => l.bordereau?.statut === "Payé");
     if (lignePayee) throw new BadRequestException("Impossible d'annuler : cette facture a au moins une ligne déjà réglée (bordereau payé).");
 
