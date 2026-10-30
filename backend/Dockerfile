@@ -41,5 +41,26 @@ COPY --from=backend /app/prisma ./prisma
 COPY --from=backend /app/assets ./assets
 COPY --from=frontend /app/dist ./frontend-dist
 EXPOSE 3002
-# prisma migrate deploy applique les migrations manquantes avant le démarrage
-CMD ["sh", "-c", "node node_modules/.bin/prisma migrate deploy && node dist/src/main.js"]
+# /app/uploads est monté comme volume persistant dans Coolify
+# (/data/medassur/uploads → /app/uploads). Le mkdir garantit que tous les
+# sous-dossiers existent même sur un volume vierge (premier démarrage ou
+# volume recréé), évitant des erreurs 500 sur les premiers uploads.
+VOLUME /app/uploads
+CMD ["sh", "-c", "\
+  mkdir -p /app/uploads/photos \
+            /app/uploads/photos-users \
+            /app/uploads/logos \
+            /app/uploads/logos-entreprises \
+            /app/uploads/logos-clients \
+            /app/uploads/logos-cotations \
+            /app/uploads/logos-prospects \
+            /app/uploads/pages-garde-statistiques \
+            /app/uploads/signatures \
+            /app/uploads/modeles-carte \
+            /app/uploads/accords-prealables \
+            /app/uploads/regles-consignes \
+            /app/uploads/documents \
+            /app/uploads/ged \
+            /app/uploads/communications && \
+  node node_modules/.bin/prisma migrate deploy && \
+  node dist/src/main.js"]
