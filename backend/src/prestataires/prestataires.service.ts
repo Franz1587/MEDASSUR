@@ -98,20 +98,23 @@ export class PrestatairesService {
 
     await this.prisma.$transaction(async (tx) => {
       // 1. Enregistrer le nom du doublon comme alias du survivant
-      await tx.prestataireAlias.upsert({
-        where: { nomOrigine_prestataireId: { nomOrigine: doublon.nom, prestataireId: id } },
-        create: { nomOrigine: doublon.nom, prestataireId: id },
-        update: {},
+      //    (clé unique = societeId + nomOrigine, pas prestataireId)
+      const dejaAlias = await tx.prestataireAlias.findFirst({
+        where: { nomOrigine: doublon.nom, prestataireId: id },
       });
+      if (!dejaAlias) {
+        await tx.prestataireAlias.create({ data: { nomOrigine: doublon.nom, prestataireId: id } });
+      }
 
       // 2. Récupérer et migrer les aliases du doublon vers le survivant
       const aliases = await tx.prestataireAlias.findMany({ where: { prestataireId: doublonId } });
       for (const a of aliases) {
-        await tx.prestataireAlias.upsert({
-          where: { nomOrigine_prestataireId: { nomOrigine: a.nomOrigine, prestataireId: id } },
-          create: { nomOrigine: a.nomOrigine, prestataireId: id },
-          update: {},
+        const existe = await tx.prestataireAlias.findFirst({
+          where: { nomOrigine: a.nomOrigine, prestataireId: id },
         });
+        if (!existe) {
+          await tx.prestataireAlias.create({ data: { nomOrigine: a.nomOrigine, prestataireId: id, societeId: a.societeId } });
+        }
       }
       await tx.prestataireAlias.deleteMany({ where: { prestataireId: doublonId } });
 
