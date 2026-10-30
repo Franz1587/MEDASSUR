@@ -216,6 +216,32 @@ function DetailDocumentModal({ doc: docInitial, onClose, onRapport, onRapprocher
         </div>
 
         <div className="p-6 space-y-5">
+          {/* Signature ARIANA */}
+          {doc.statutOcr !== "En attente" && (
+            <div className={`rounded-xl p-3 border ${doc.statutOcr === "Analysé" ? "bg-primary/5 border-primary/25" : "bg-destructive/5 border-destructive/20"}`}>
+              <div className="flex items-center gap-2.5">
+                <div className={`h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0 ${doc.statutOcr === "Analysé" ? "bg-primary/20" : "bg-destructive/15"}`}>
+                  <Brain className={`w-4 h-4 ${doc.statutOcr === "Analysé" ? "text-primary" : "text-destructive"}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-black text-primary uppercase tracking-[0.15em] leading-none">ARIANA</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Agent d'Analyse IA · {doc.statutOcr === "Analysé" ? `Analysé le ${doc.date}` : `Échec · ${doc.date}`}</p>
+                </div>
+                <span className={`text-[10px] font-bold px-2 py-1 rounded-md ${doc.statutOcr === "Analysé" ? "bg-primary/15 text-primary" : "bg-destructive/15 text-destructive"}`}>
+                  {doc.statutOcr === "Analysé" ? "✓ Signé" : "✗ Échec"}
+                </span>
+              </div>
+              {doc.statutOcr === "Analysé" && (doc.type || doc.referenceExtraite || doc.montantExtrait != null || doc.nomEmetteurExtrait) && (
+                <div className="mt-2 pt-2 border-t border-primary/15 grid grid-cols-2 gap-x-4 gap-y-0.5">
+                  {doc.type && <p className="text-[11px] text-muted-foreground">Type : <strong className="text-foreground">{doc.type}</strong></p>}
+                  {doc.referenceExtraite && <p className="text-[11px] text-muted-foreground med-num">Réf. : <strong className="text-foreground">{doc.referenceExtraite}</strong></p>}
+                  {doc.montantExtrait != null && <p className="text-[11px] text-muted-foreground med-num">Montant : <strong className="text-foreground">{fmtM(Number(doc.montantExtrait))} FCFA</strong></p>}
+                  {doc.nomEmetteurExtrait && <p className="text-[11px] text-muted-foreground">Émetteur : <span className="text-foreground">{doc.nomEmetteurExtrait}</span></p>}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Référence, montant et date cachet */}
           <div className="bg-secondary/20 rounded-xl p-4 grid grid-cols-2 gap-3">
             {doc.referenceExtraite && (
@@ -350,6 +376,54 @@ function DetailDocumentModal({ doc: docInitial, onClose, onRapport, onRapprocher
   );
 }
 
+function JournalAriana({ documents }: { documents: GedDocument[] }) {
+  if (documents.length === 0) return (
+    <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+      ARIANA n'a effectué aucune action pour le moment.
+    </div>
+  );
+  return (
+    <div className="divide-y divide-border">
+      {documents.map((doc, i) => (
+        <div key={doc.id} className="px-4 py-4 flex gap-3">
+          <div className="flex flex-col items-center">
+            <div className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${doc.statutOcr === "Analysé" ? "bg-primary/15" : doc.statutOcr === "Échec" ? "bg-destructive/10" : "bg-secondary/40"}`}>
+              <Brain className={`w-4 h-4 ${doc.statutOcr === "Analysé" ? "text-primary" : doc.statutOcr === "Échec" ? "text-destructive" : "text-muted-foreground"}`} />
+            </div>
+            {i < documents.length - 1 && <div className="w-px flex-1 bg-border mt-2" />}
+          </div>
+          <div className="flex-1 min-w-0 pb-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <span className="text-[11px] font-black text-primary uppercase tracking-[0.15em]">ARIANA</span>
+              <span className="text-[10px] text-muted-foreground med-num">{doc.date}</span>
+              <Badge variant={statutOcrVariant[doc.statutOcr] ?? "neutral"}>{doc.statutOcr}</Badge>
+              {doc.statutTraitement !== "Sans objet" && doc.statutTraitement !== "Non traité" && (
+                <Badge variant={statutTraitementVariant[doc.statutTraitement] ?? "neutral"}>{doc.statutTraitement}</Badge>
+              )}
+            </div>
+            <p className="text-sm text-foreground font-medium truncate mb-1">{doc.nom}</p>
+            <div className="space-y-0.5 text-xs text-muted-foreground">
+              {doc.type && <p>→ <strong className="text-foreground">{doc.type}</strong></p>}
+              {doc.objet && <p className="truncate">→ {doc.objet}</p>}
+              {(doc.referenceExtraite || doc.montantExtrait != null) && (
+                <p className="med-num">
+                  → {[doc.referenceExtraite && `Réf. ${doc.referenceExtraite}`, doc.montantExtrait != null && `${fmtM(Number(doc.montantExtrait))} FCFA`].filter(Boolean).join(" · ")}
+                </p>
+              )}
+              {(doc.prestataire?.nom || doc.nomEmetteurExtrait) && (
+                <p>→ {doc.prestataire?.nom ?? doc.nomEmetteurExtrait}</p>
+              )}
+              {doc.facture && (
+                <p className="med-num">→ Rapprochement : Facture <strong className="text-foreground">{doc.facture.referenceFacture}</strong></p>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 interface QueueItem {
   id: string;
   file: File;
@@ -462,6 +536,7 @@ export default function GedView() {
   const [rapportDocId, setRapportDocId] = useState<string | null>(null);
   const [detailDoc, setDetailDoc] = useState<GedDocument | null>(null);
   const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [vue, setVue] = useState<"documents" | "journal">("documents");
 
   // Filtres
   const [recherche, setRecherche] = useState("");
@@ -602,21 +677,31 @@ export default function GedView() {
 
       <div className="bg-card border border-border rounded-xl overflow-x-auto">
         <div className="px-4 py-3 border-b border-border space-y-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Brain className="w-4 h-4 text-primary" />
             <h3 className="font-semibold text-foreground text-sm">
-              Documents archivés ({filtresActifs ? `${documentsFiltres.length} sur ${documents.length}` : documents.length})
+              {vue === "documents"
+                ? `Documents archivés (${filtresActifs ? `${documentsFiltres.length} sur ${documents.length}` : documents.length})`
+                : `Journal ARIANA (${documents.length} action${documents.length !== 1 ? "s" : ""})`}
             </h3>
-            {filtresActifs && (
+            {filtresActifs && vue === "documents" && (
               <button type="button" onClick={() => { setRecherche(""); setPrestataireFiltre(null); setDu(""); setAu(""); }}
-                className="ml-auto text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
+                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
                 Réinitialiser les filtres
               </button>
             )}
+            <div className="ml-auto flex items-center gap-1 bg-secondary/50 rounded-lg p-0.5">
+              {(["documents", "journal"] as const).map((v) => (
+                <button key={v} type="button" onClick={() => setVue(v)}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${vue === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                  {v === "documents" ? "Archives" : "Journal ARIANA"}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Filtres de recherche */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+          <div className={`grid grid-cols-1 md:grid-cols-4 gap-2${vue !== "documents" ? " hidden" : ""}`}>
             <div className="relative md:col-span-2">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
               <input
@@ -644,7 +729,7 @@ export default function GedView() {
           </div>
         </div>
 
-        <table className="w-full text-sm">
+        <table className={`w-full text-sm${vue !== "documents" ? " hidden" : ""}`}>
           <thead>
             <tr className="border-b border-border">
               {["Document / Réf.", "Sens", "Type", "Objet", "Prestataire", "OCR", "Facture", "Signature", "Archivé le", ""].map((h) => (
@@ -736,11 +821,14 @@ export default function GedView() {
             )}
           </tbody>
         </table>
-        <Pagination
-          page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
-          pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
-          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
-        />
+        {vue === "documents" && (
+          <Pagination
+            page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
+            pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
+            onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
+          />
+        )}
+        {vue === "journal" && <JournalAriana documents={documents} />}
       </div>
 
       {rapportDocId && <RapportLiaisonModal docId={rapportDocId} onClose={() => setRapportDocId(null)} />}
