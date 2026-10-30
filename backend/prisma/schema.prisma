@@ -3309,6 +3309,8 @@ model BordereauReglement {
   lettreCheque        LettreCheque?   @relation(fields: [lettreChequeId], references: [id])
   transactionEbilling Transaction?    @relation(fields: [transactionEbillingId], references: [id])
 
+  @@index([prestataireId])
+  @@index([statut])
   @@index([societeId])
   @@index([creeParId])
   @@index([transactionEbillingId])

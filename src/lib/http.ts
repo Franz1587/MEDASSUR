@@ -3,6 +3,24 @@ import { lireCache, ecrireCache, ajouterActionEnAttente, genererCleIdempotence }
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001/api";
 const TOKEN_KEY = "medassur-access-token";
 
+// Cache mémoire court terme (2026-10) — 45 s par entrée. Évite de
+// refaire le même appel réseau quand l'utilisateur navigue d'un écran
+// à l'autre en quelques secondes. Invalidé à chaque écriture sur le
+// même préfixe de route ("/prestataires", "/sante", etc.).
+const CACHE_TTL_MS = 45_000;
+const cacheMemoire = new Map<string, { data: unknown; expiry: number }>();
+
+function invaliderCache(path: string) {
+  const prefixe = "/" + path.split("/")[1];
+  for (const cle of cacheMemoire.keys()) {
+    if (cle.startsWith(prefixe)) cacheMemoire.delete(cle);
+  }
+}
+
+export function viderCacheMemoire() {
+  cacheMemoire.clear();
+}
+
 // Mode hors-ligne (2026-09) — voir demande utilisateur : "je veux que
 // l'application puisse... travailler en off-line". Étendu à la CRÉATION de
 // prise en charge/entente préalable côté agent interne (compagnie, courtier,
@@ -73,6 +91,14 @@ export function runSilently<T>(fn: () => Promise<T>): Promise<T> {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getAccessToken();
   const lecture = !init?.method || init.method === "GET";
+
+  if (lecture) {
+    const entree = cacheMemoire.get(path);
+    if (entree && entree.expiry > Date.now()) return entree.data as T;
+  } else {
+    invaliderCache(path);
+  }
+
   const compteRequete = lecture && profondeurSilencieuse === 0;
   if (compteRequete) { requetesEnVol++; notifierRequetes(); }
   try {
@@ -128,7 +154,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     if (res.status === 204) return undefined as T;
     const donnees = (await res.json()) as T;
-    if (lecture) ecrireCache(path, donnees);
+    if (lecture) {
+      ecrireCache(path, donnees);
+      cacheMemoire.set(path, { data: donnees, expiry: Date.now() + CACHE_TTL_MS });
+    }
     return donnees;
   } finally {
     if (compteRequete) { requetesEnVol--; notifierRequetes(); }

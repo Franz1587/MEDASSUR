@@ -50,25 +50,10 @@ export class DashboardService {
   constructor(private prisma: PrismaService, private parametresEntreprise: ParametresEntrepriseService) {}
 
   async pilotage(anneeParam?: string) {
-    // Années réellement disponibles (2026-08) — dérivées des VRAIS contrats
-    // en base, jamais une liste figée ("2024", "2025"...) qui désynchronise
-    // dès que l'exploitation avance dans le temps.
-    const contratsPourAnnees = await this.prisma.contrat.findMany({ select: { dateDebut: true } });
-    const anneesDisponibles = [...new Set(contratsPourAnnees.map((c) => anneeDe(c.dateDebut)).filter((y): y is number => y !== null))].sort((a, b) => b - a);
-    const anneeCourante = new Date().getFullYear();
-    const annee = anneeParam ? Number(anneeParam) : (anneesDisponibles.includes(anneeCourante) ? anneeCourante : anneesDisponibles[0] ?? anneeCourante);
-    const anneePrecedente = annee - 1;
-
-    // Contrats de test exclus AVANT tout (2026-09) — voir demande
-    // utilisateur : "le cumul de la police n'est pas harmonisé" +
-    // ContratsService.findAll, qui exclut déjà `estTest` de toute liste
-    // interne ; cette requête globale ne joignait jusqu'ici jamais Contrat
-    // et pouvait donc laisser des données de test fuiter dans les cumuls
-    // (voir mémoire "project-famille-test-isolation" : "pas exhaustif sur
-    // tous les rapports").
-    const contratsNonTest = await this.prisma.contrat.findMany({ where: { estTest: false }, select: { id: true } });
-    const contratsNonTestIds = contratsNonTest.map((c) => c.id);
-
+    // Toutes les requêtes en parallèle (2026-10) — les deux findMany Contrat
+    // séquentiels qui bloquaient le démarrage (contratsPourAnnees, contratsNonTest)
+    // sont fusionnés dans le Promise.all : contrats inclut déjà dateDebut et id,
+    // priseEnCharge filtre estTest via relation au lieu d'un tableau d'ids.
     const [
       contrats, clients, sinistres, impayesEnCours, assuresSanteToutesAffiliations, prisesEnChargeEnAttente,
       comptesBancaires, prisesEnCharge,
@@ -85,10 +70,17 @@ export class DashboardService {
       // consommationLignes plus bas, "même métrique") ; excluait jusqu'ici
       // seulement Annulé, laissant passer Rejeté.
       this.prisma.priseEnCharge.findMany({
-        where: { statut: { notIn: ["Rejeté", "Annulé"] }, contratId: { in: contratsNonTestIds } },
+        where: { statut: { notIn: ["Rejeté", "Annulé"] }, contrat: { estTest: false } },
         select: { type: true, date: true, statut: true, montant: true, baseRemboursement: true, bordereau: { select: { statut: true } } },
       }),
     ]);
+
+    // Années disponibles dérivées du résultat contrats (2026-08/2026-10) —
+    // jamais une liste figée, jamais une requête séquentielle séparée.
+    const anneesDisponibles = [...new Set(contrats.map((c) => anneeDe(c.dateDebut)).filter((y): y is number => y !== null))].sort((a, b) => b - a);
+    const anneeCourante = new Date().getFullYear();
+    const annee = anneeParam ? Number(anneeParam) : (anneesDisponibles.includes(anneeCourante) ? anneeCourante : anneesDisponibles[0] ?? anneeCourante);
+    const anneePrecedente = annee - 1;
 
     // Actifs/inactifs — assurés et contrats (2026-09) — voir demande
     // utilisateur : "de la même manière qu'on remonte le nombre total des

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { roles, type RoleDefinition, type RoleId } from "@/auth/roles";
-import { http, setAccessToken, getAccessToken, messageErreur } from "@/lib/http";
+import { http, setAccessToken, getAccessToken, messageErreur, viderCacheMemoire } from "@/lib/http";
 import { demarrerAssistance } from "@/services/societes.service";
 import { demarrerSynchronisationAutomatique } from "@/lib/syncManager";
 import { viderCacheApi } from "@/lib/offlineStore";
@@ -189,6 +189,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem(USER_STORAGE_KEY);
     setAccessToken(null);
     setUser(null);
+    viderCacheMemoire();
   };
 
   // Voir demande utilisateur : "le Super Admin doit pouvoir accéder dans
@@ -208,6 +209,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     stockerUtilisateur(resultat.user as AuthUser);
     setUser(resultat.user as AuthUser);
     setAssistanceSocieteNom(resultat.societeNom);
+    viderCacheMemoire();
   };
 
   const endAssistance = () => {
@@ -218,6 +220,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAccessToken(retour.superAdmin.accessToken);
     stockerUtilisateur(retour.superAdmin.user);
     setUser(retour.superAdmin.user);
+    viderCacheMemoire();
   };
 
   // Le token JWT expire au bout de 8h (voir backend/src/auth/auth.module.ts)
