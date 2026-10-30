@@ -3885,6 +3885,9 @@ model GedDocument {
   prestataire       Prestataire? @relation(fields: [prestataireId], references: [id])
   referenceExtraite String?
   montantExtrait    Decimal?     @db.Decimal(18, 2)
+  // Date lue sur le cachet/tampon "courrier arrivé" du document (2026-10) —
+  // extraite par l'IA lors de l'import ; null si aucun cachet visible.
+  dateCachet        String?
   factureId         String?
   facture           Facture?     @relation(fields: [factureId], references: [id])
   // "Sans objet" (document qui n'est pas une facture prestataire — un

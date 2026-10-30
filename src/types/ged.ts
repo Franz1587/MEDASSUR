@@ -15,6 +15,7 @@ export interface GedDocument {
   prestataire?: { nom: string } | null;
   referenceExtraite?: string | null;
   montantExtrait?: number | string | null;
+  dateCachet?: string | null;
   factureId?: string | null;
   facture?: { id: string; referenceFacture: string; statut: string } | null;
   statutTraitement: "Sans objet" | "Non traité" | "Traité partiellement" | "Traité totalement";

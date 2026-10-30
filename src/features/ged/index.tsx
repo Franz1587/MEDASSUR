@@ -147,8 +147,8 @@ function DetailDocumentModal({ doc, onClose, onRapport, onRapprocher }: {
         </div>
 
         <div className="p-6 space-y-5">
-          {/* Référence et montant */}
-          {(doc.referenceExtraite || doc.montantExtrait != null) && (
+          {/* Référence, montant et date cachet */}
+          {(doc.referenceExtraite || doc.montantExtrait != null || doc.dateCachet) && (
             <div className="bg-secondary/20 rounded-xl p-4 grid grid-cols-2 gap-3">
               {doc.referenceExtraite && (
                 <div>
@@ -160,6 +160,12 @@ function DetailDocumentModal({ doc, onClose, onRapport, onRapprocher }: {
                 <div>
                   <p className="text-xs text-muted-foreground mb-0.5">Montant lu sur document</p>
                   <p className="text-sm font-semibold text-foreground med-num">{fmtM(Number(doc.montantExtrait))} FCFA</p>
+                </div>
+              )}
+              {doc.dateCachet && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Date cachet / réception</p>
+                  <p className="text-sm font-semibold text-primary med-num">{doc.dateCachet}</p>
                 </div>
               )}
             </div>
@@ -396,6 +402,9 @@ export default function GedView() {
           {result.montantExtrait != null && (
             <p className="text-sm text-muted-foreground"><span className="font-semibold text-foreground">Montant lu :</span> <span className="med-num">{fmtM(Number(result.montantExtrait))} FCFA</span></p>
           )}
+          {result.dateCachet && (
+            <p className="text-sm text-muted-foreground"><span className="font-semibold text-foreground">Date cachet :</span> <span className="med-num">{result.dateCachet}</span></p>
+          )}
           {result.resume && <p className="text-sm text-muted-foreground">{result.resume}</p>}
           {result.statutOcr === "Échec" && (
             <p className="text-sm text-amber-600 dark:text-amber-400">Contenu non lisible par l'IA — format non supporté ou fichier illisible. Le document reste archivé, sans objet/résumé automatique.</p>
@@ -496,7 +505,12 @@ export default function GedView() {
                     <Badge variant={statutSignatureVariant[d.statutSignature] ?? "neutral"}>{d.statutSignature}</Badge>
                   </span>
                 </td>
-                <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap med-num">{d.date}</td>
+                <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap med-num">
+                  <div className="flex flex-col gap-0.5">
+                    <span>{d.date}</span>
+                    {d.dateCachet && <span className="text-[11px] text-primary">↩ {d.dateCachet}</span>}
+                  </div>
+                </td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <div className="flex items-center gap-1">
                     <button type="button" onClick={() => setDetailDoc(d)} title="Voir le détail"

@@ -26,10 +26,11 @@ export interface AnalyseGedResultat {
   resume: string | null;
   referenceExtraite: string | null;
   montantExtrait: number | null;
+  dateCachet: string | null;
 }
 
 const RESULTAT_ECHEC: AnalyseGedResultat = {
-  statutOcr: "Échec", type: null, objet: null, resume: null, referenceExtraite: null, montantExtrait: null,
+  statutOcr: "Échec", type: null, objet: null, resume: null, referenceExtraite: null, montantExtrait: null, dateCachet: null,
 };
 
 @Injectable()
@@ -82,7 +83,9 @@ export class GedAnalyseService {
           "\"referenceFacture\": <le numéro de facture/référence écrit sur le document si le type est " +
           "\"Facture prestataire\", sinon null>, " +
           "\"montant\": <le montant total TTC écrit sur le document si le type est \"Facture prestataire\", " +
-          "en chiffres uniquement sans devise ni séparateur, sinon null>}\n" +
+          "en chiffres uniquement sans devise ni séparateur, sinon null>, " +
+          "\"dateCachet\": <la date lue sur le cachet, tampon ou mention \"Courrier arrivé\" / \"Reçu le\" / " +
+          "\"Arrivée le\" visible sur le document, au format JJ/MM/AAAA, sinon null>}\n" +
           "Si le document est flou, coupé ou réellement illisible, réponds quand même le JSON avec objet/resume " +
           "expliquant que le contenu n'est pas lisible, jamais d'invention de contenu absent.",
         messages: [{ role: "user", content: [bloc, { type: "text", text: "Lis ce document et renvoie le JSON demandé." }] }],
@@ -91,7 +94,8 @@ export class GedAnalyseService {
       const texte = blocTexte && blocTexte.type === "text" ? blocTexte.text.trim() : "";
       const json = texte.replace(/^```(json)?/i, "").replace(/```$/, "").trim();
       const parsed = JSON.parse(json) as {
-        type?: string; objet?: string; resume?: string; referenceFacture?: string | null; montant?: number | string | null;
+        type?: string; objet?: string; resume?: string;
+        referenceFacture?: string | null; montant?: number | string | null; dateCachet?: string | null;
       };
       const montant = parsed.montant != null && parsed.montant !== "" ? Number(parsed.montant) : null;
       return {
@@ -101,6 +105,7 @@ export class GedAnalyseService {
         resume: parsed.resume?.trim() || null,
         referenceExtraite: parsed.referenceFacture?.trim() || null,
         montantExtrait: montant != null && !Number.isNaN(montant) ? montant : null,
+        dateCachet: parsed.dateCachet?.trim() || null,
       };
     } catch (err) {
       this.logger.warn(`Lecture GED de "${nomFichier}" échouée : ${err instanceof Error ? err.message : err}`);
