@@ -113,12 +113,15 @@ export function PdfViewerHost() {
         const ctx = canvas.getContext("2d");
         if (!ctx) continue;
         await page.render({ canvasContext: ctx, viewport }).promise;
+        // Rendu progressif : masquer le spinner dès que la page 1 est visible,
+        // les pages suivantes s'ajoutent en arrière-plan pendant que l'utilisateur lit.
+        if (n === 1) setChargement(false);
       }
     };
 
     rendreTout()
       .catch((e) => { if (!annule) { console.error("Rendu PDF échoué", e); setErreur(true); } })
-      .finally(() => { if (!annule) setChargement(false); });
+      .finally(() => { if (!annule) setChargement(false); }); // no-op après page 1, gère doc vide
 
     return () => {
       annule = true;

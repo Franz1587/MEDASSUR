@@ -14,16 +14,34 @@ const LARGEUR_BARRES = 900;
 const HAUTEUR_BARRES = 480;
 const TAILLE_CAMEMBERT = 720;
 
-function creerCanvas(largeur: number, hauteur: number): ChartJSNodeCanvas {
-  return new ChartJSNodeCanvas({
-    width: largeur,
-    height: hauteur,
+// Singletons — ChartJSNodeCanvas ne porte aucun état entre renderToBuffer
+// (chaque appel crée son propre Canvas + Chart.js), mais son instanciation
+// alloue un contexte canvas et réenregistre les plugins, ce qui coûte
+// ~30–80 ms à chaque fois. Un singleton par taille élimine ce surcoût sur
+// les appels suivants et est sans risque sous Promise.all.
+let _canvasBarres: ChartJSNodeCanvas | null = null;
+let _canvasCamembert: ChartJSNodeCanvas | null = null;
+
+function getCanvasBarres(): ChartJSNodeCanvas {
+  return (_canvasBarres ??= new ChartJSNodeCanvas({
+    width: LARGEUR_BARRES, height: HAUTEUR_BARRES,
     backgroundColour: "white",
     chartCallback: (ChartJS) => {
       ChartJS.defaults.font.family = "Helvetica, Arial, sans-serif";
       ChartJS.defaults.font.size = 16;
     },
-  });
+  }));
+}
+
+function getCanvasCamembert(): ChartJSNodeCanvas {
+  return (_canvasCamembert ??= new ChartJSNodeCanvas({
+    width: TAILLE_CAMEMBERT, height: TAILLE_CAMEMBERT,
+    backgroundColour: "white",
+    chartCallback: (ChartJS) => {
+      ChartJS.defaults.font.family = "Helvetica, Arial, sans-serif";
+      ChartJS.defaults.font.size = 16;
+    },
+  }));
 }
 
 // Palette cyclique pour les camemberts à nombreux segments (Consommation
@@ -38,7 +56,7 @@ const PALETTE = [
 export async function genererGraphiqueBarres(
   labels: string[], data: number[], titre: string, couleurBarre: string, labelDataset = "Montants",
 ): Promise<Buffer> {
-  const chart = creerCanvas(LARGEUR_BARRES, HAUTEUR_BARRES);
+  const chart = getCanvasBarres();
   const buffer = await chart.renderToBuffer({
     type: "bar",
     data: { labels, datasets: [{ label: labelDataset, data, backgroundColor: couleurBarre }] },
@@ -67,7 +85,7 @@ export async function genererGraphiqueBarres(
 export async function genererGraphiqueBarresEtiquetees(
   labels: string[], data: number[], titre: string, couleurs: string[], formatValeur: (v: number) => string,
 ): Promise<Buffer> {
-  const chart = creerCanvas(LARGEUR_BARRES, HAUTEUR_BARRES);
+  const chart = getCanvasBarres();
   const maxVal = Math.max(...data, 0);
   const plugin = {
     id: "valeursBarres",
@@ -106,7 +124,7 @@ function labelValeurs(_titre: string) { return "Valeurs"; }
 export async function genererGraphiqueCamembert(
   labels: string[], data: number[], titre: string, donut = false,
 ): Promise<Buffer> {
-  const chart = creerCanvas(TAILLE_CAMEMBERT, TAILLE_CAMEMBERT);
+  const chart = getCanvasCamembert();
   const couleurs = labels.map((_l, i) => PALETTE[i % PALETTE.length]);
   const legendeCompacte = labels.length > 12;
   const buffer = await chart.renderToBuffer({
