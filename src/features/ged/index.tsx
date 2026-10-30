@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Archive, FileSignature, Brain, CheckCircle, Trash2, ExternalLink, RefreshCw, BarChart2, X, CheckCheck, AlertTriangle, Clock, Eye, Search } from "lucide-react";
+import { Archive, FileSignature, Brain, CheckCircle, Trash2, RefreshCw, BarChart2, X, CheckCheck, AlertTriangle, Clock, Eye, Search, Pencil, Save, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Badge, type BadgeVariant } from "@/components/shared/Badge";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
@@ -8,7 +8,7 @@ import { Combobox } from "@/components/shared/Combobox";
 import { useSimulatedProcessing } from "@/components/shared/useSimulatedProcessing";
 import { Pagination } from "@/components/shared/Pagination";
 import { usePagination } from "@/hooks/usePagination";
-import { getDocuments, uploadDocument, deleteDocument, rapprocherDocument, getRapportLiaison, urlDocumentGed, type RapportLiaisonGed } from "@/services/ged.service";
+import { getDocuments, uploadDocument, deleteDocument, rapprocherDocument, updateDocument, ouvrirDocumentGed, getRapportLiaison, type RapportLiaisonGed } from "@/services/ged.service";
 import { getPrestataires } from "@/services/prestataires.service";
 import { fmt, fmtM } from "@/lib/format";
 import { messageErreur } from "@/lib/http";
@@ -126,10 +126,70 @@ function RapportLiaisonModal({ docId, onClose }: { docId: string; onClose: () =>
   );
 }
 
-function DetailDocumentModal({ doc, onClose, onRapport, onRapprocher }: {
+// "DD/MM/YYYY" → "YYYY-MM-DD" pour un input type="date"
+function dateFRversISO(d: string | null | undefined): string {
+  if (!d) return "";
+  const [j, m, a] = d.split("/");
+  return a && m && j ? `${a}-${m.padStart(2, "0")}-${j.padStart(2, "0")}` : "";
+}
+
+function DetailDocumentModal({ doc: docInitial, onClose, onRapport, onRapprocher, prestataires, onUpdated }: {
   doc: GedDocument; onClose: () => void;
   onRapport: () => void; onRapprocher: () => void;
+  prestataires: Prestataire[];
+  onUpdated: (doc: GedDocument) => void;
 }) {
+  const [doc, setDoc] = useState(docInitial);
+  const [editMode, setEditMode] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const [prestataireEdit, setPrestataireEdit] = useState<Prestataire | null>(
+    () => prestataires.find((p) => p.id === docInitial.prestataireId) ?? null
+  );
+  const [entiteLieeEdit, setEntiteLieeEdit] = useState(docInitial.entiteLiee || "");
+  const [dateCachetEdit, setDateCachetEdit] = useState(() => dateFRversISO(docInitial.dateCachet));
+
+  const handleOuvrir = async () => {
+    if (!doc.fichier) return;
+    setOpening(true);
+    try {
+      await ouvrirDocumentGed(doc.id, doc.nom);
+    } catch {
+      toast.error("Impossible d'ouvrir le document — vérifiez que le fichier est disponible.");
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const cachet = dateCachetEdit ? dateCachetEdit.split("-").reverse().join("/") : null;
+      const updated = await updateDocument(doc.id, {
+        prestataireId: prestataireEdit?.id ?? null,
+        entiteLiee: entiteLieeEdit.trim(),
+        dateCachet: cachet,
+      });
+      setDoc(updated);
+      onUpdated(updated);
+      setEditMode(false);
+      toast.success("Document mis à jour.");
+    } catch (err) {
+      toast.error(messageErreur(err, "Mise à jour impossible."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setPrestataireEdit(prestataires.find((p) => p.id === doc.prestataireId) ?? null);
+    setEntiteLieeEdit(doc.entiteLiee || "");
+    setDateCachetEdit(dateFRversISO(doc.dateCachet));
+    setEditMode(false);
+  };
+
+  const inputCls = "w-full border border-border rounded-lg px-3 py-1.5 bg-background text-[13px] text-foreground";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -143,33 +203,45 @@ function DetailDocumentModal({ doc, onClose, onRapport, onRapprocher }: {
             <p className="text-sm font-semibold text-foreground truncate">{doc.nom}</p>
             <p className="text-xs text-muted-foreground med-num">ID : {doc.id} · Archivé le {doc.date}</p>
           </div>
-          <button type="button" onClick={onClose} className="h-7 w-7 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-secondary/40 text-muted-foreground"><X className="w-4 h-4" /></button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {!editMode && (
+              <button type="button" onClick={() => setEditMode(true)} title="Modifier"
+                className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-secondary/40 text-muted-foreground hover:text-primary">
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button type="button" onClick={onClose} className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-secondary/40 text-muted-foreground">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <div className="p-6 space-y-5">
           {/* Référence, montant et date cachet */}
-          {(doc.referenceExtraite || doc.montantExtrait != null || doc.dateCachet) && (
-            <div className="bg-secondary/20 rounded-xl p-4 grid grid-cols-2 gap-3">
-              {doc.referenceExtraite && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Référence extraite</p>
-                  <p className="text-sm font-semibold text-foreground med-num">{doc.referenceExtraite}</p>
-                </div>
-              )}
-              {doc.montantExtrait != null && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Montant lu sur document</p>
-                  <p className="text-sm font-semibold text-foreground med-num">{fmtM(Number(doc.montantExtrait))} FCFA</p>
-                </div>
-              )}
-              {doc.dateCachet && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Date cachet / réception</p>
-                  <p className="text-sm font-semibold text-primary med-num">{doc.dateCachet}</p>
-                </div>
+          <div className="bg-secondary/20 rounded-xl p-4 grid grid-cols-2 gap-3">
+            {doc.referenceExtraite && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-0.5">Référence extraite</p>
+                <p className="text-sm font-semibold text-foreground med-num">{doc.referenceExtraite}</p>
+              </div>
+            )}
+            {doc.montantExtrait != null && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-0.5">Montant lu sur document</p>
+                <p className="text-sm font-semibold text-foreground med-num">{fmtM(Number(doc.montantExtrait))} FCFA</p>
+              </div>
+            )}
+            <div>
+              <p className="text-xs text-muted-foreground mb-0.5">Date de réception / cachet</p>
+              {editMode ? (
+                <input type="date" value={dateCachetEdit} onChange={(e) => setDateCachetEdit(e.target.value)} className={inputCls} />
+              ) : (
+                <p className={`text-sm font-semibold med-num ${doc.dateCachet ? "text-primary" : "text-muted-foreground"}`}>
+                  {doc.dateCachet || "—"}
+                </p>
               )}
             </div>
-          )}
+          </div>
 
           {/* Objet */}
           {doc.objet && (
@@ -192,15 +264,33 @@ function DetailDocumentModal({ doc, onClose, onRapport, onRapprocher }: {
             <div>
               <p className="text-xs text-muted-foreground mb-0.5">
                 Prestataire / Émetteur
-                {doc.nomEmetteurExtrait && !doc.prestataire?.nom && !doc.entiteLiee && (
+                {doc.nomEmetteurExtrait && !doc.prestataire?.nom && !doc.entiteLiee && !editMode && (
                   <span className="ml-1 text-primary text-[10px]">(lu par l'IA)</span>
                 )}
               </p>
-              <p className="text-sm text-foreground">
-                {doc.prestataire?.nom || doc.entiteLiee || doc.nomEmetteurExtrait || "—"}
-              </p>
-              {doc.nomEmetteurExtrait && (doc.prestataire?.nom || doc.entiteLiee) && (
-                <p className="text-xs text-muted-foreground">IA : {doc.nomEmetteurExtrait}</p>
+              {editMode ? (
+                <Combobox
+                  options={prestataires}
+                  value={prestataireEdit}
+                  onChange={setPrestataireEdit}
+                  getLabel={(p) => p.nom} getSubLabel={(p) => p.ville} getId={(p) => p.id}
+                  placeholder="Rechercher un prestataire…"
+                />
+              ) : (
+                <>
+                  <p className="text-sm text-foreground">{doc.prestataire?.nom || doc.entiteLiee || doc.nomEmetteurExtrait || "—"}</p>
+                  {doc.nomEmetteurExtrait && (doc.prestataire?.nom || doc.entiteLiee) && (
+                    <p className="text-xs text-muted-foreground">IA : {doc.nomEmetteurExtrait}</p>
+                  )}
+                </>
+              )}
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-0.5">Entité liée</p>
+              {editMode ? (
+                <input value={entiteLieeEdit} onChange={(e) => setEntiteLieeEdit(e.target.value)} placeholder="Client, contrat…" className={inputCls} />
+              ) : (
+                <p className="text-sm text-foreground">{doc.entiteLiee || "—"}</p>
               )}
             </div>
             <div>
@@ -221,23 +311,38 @@ function DetailDocumentModal({ doc, onClose, onRapport, onRapprocher }: {
 
           {/* Actions */}
           <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border">
-            {doc.fichier && (
-              <a href={urlDocumentGed(doc.fichier)} target="_blank" rel="noreferrer"
-                className="h-9 px-4 rounded-lg border border-border text-[13px] text-foreground hover:bg-secondary/40 inline-flex items-center gap-1.5">
-                <ExternalLink className="w-3.5 h-3.5" />Ouvrir le document
-              </a>
-            )}
-            {doc.factureId && (
-              <button type="button" onClick={onRapport}
-                className="h-9 px-4 rounded-lg border border-primary/30 text-primary text-[13px] hover:bg-primary/10 inline-flex items-center gap-1.5">
-                <BarChart2 className="w-3.5 h-3.5" />Rapport de liaison
-              </button>
-            )}
-            {doc.type === "Facture prestataire" && (
-              <button type="button" onClick={onRapprocher}
-                className="h-9 px-4 rounded-lg border border-border text-[13px] text-foreground hover:bg-secondary/40 inline-flex items-center gap-1.5">
-                <RefreshCw className="w-3.5 h-3.5" />Relancer le rapprochement
-              </button>
+            {editMode ? (
+              <>
+                <button type="button" onClick={handleSave} disabled={saving}
+                  className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-[13px] hover:opacity-90 disabled:opacity-60 inline-flex items-center gap-1.5">
+                  <Save className="w-3.5 h-3.5" />{saving ? "Enregistrement…" : "Enregistrer"}
+                </button>
+                <button type="button" onClick={handleCancelEdit}
+                  className="h-9 px-4 rounded-lg border border-border text-[13px] text-foreground hover:bg-secondary/40 inline-flex items-center gap-1.5">
+                  <X className="w-3.5 h-3.5" />Annuler
+                </button>
+              </>
+            ) : (
+              <>
+                {doc.fichier && (
+                  <button type="button" onClick={handleOuvrir} disabled={opening}
+                    className="h-9 px-4 rounded-lg border border-border text-[13px] text-foreground hover:bg-secondary/40 inline-flex items-center gap-1.5 disabled:opacity-60">
+                    <FileText className="w-3.5 h-3.5" />{opening ? "Chargement…" : "Ouvrir le document"}
+                  </button>
+                )}
+                {doc.factureId && (
+                  <button type="button" onClick={onRapport}
+                    className="h-9 px-4 rounded-lg border border-primary/30 text-primary text-[13px] hover:bg-primary/10 inline-flex items-center gap-1.5">
+                    <BarChart2 className="w-3.5 h-3.5" />Rapport de liaison
+                  </button>
+                )}
+                {doc.type === "Facture prestataire" && (
+                  <button type="button" onClick={onRapprocher}
+                    className="h-9 px-4 rounded-lg border border-border text-[13px] text-foreground hover:bg-secondary/40 inline-flex items-center gap-1.5">
+                    <RefreshCw className="w-3.5 h-3.5" />Relancer le rapprochement
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -589,6 +694,11 @@ export default function GedView() {
           onClose={() => setDetailDoc(null)}
           onRapport={() => { setDetailDoc(null); setRapportDocId(detailDoc.id); }}
           onRapprocher={async () => { setDetailDoc(null); await handleRapprocher(detailDoc); }}
+          prestataires={prestataires}
+          onUpdated={(updated) => {
+            setDocuments((prev) => prev.map((d) => d.id === updated.id ? updated : d));
+            setDetailDoc(updated);
+          }}
         />
       )}
     </div>

@@ -1,4 +1,5 @@
 import { http, API_URL, getAccessToken } from "@/lib/http";
+import { afficherPdf } from "@/lib/pdfViewerBridge";
 import type { GedDocument } from "@/types/ged";
 
 export async function getDocuments(): Promise<GedDocument[]> {
@@ -44,6 +45,20 @@ export async function rapprocherDocument(id: string): Promise<GedDocument> {
 
 export async function deleteDocument(id: string): Promise<{ id: string }> {
   return http.delete<{ id: string }>(`/ged/documents/${id}`);
+}
+
+export async function updateDocument(id: string, data: { prestataireId?: string | null; entiteLiee?: string; dateCachet?: string | null }): Promise<GedDocument> {
+  return http.patch<GedDocument>(`/ged/documents/${id}`, data);
+}
+
+export async function ouvrirDocumentGed(id: string, nom: string): Promise<void> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_URL}/ged/documents/${id}/fichier`, {
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+  if (!res.ok) throw new Error(`Impossible d'ouvrir le document (${res.status})`);
+  const blob = await res.blob();
+  afficherPdf({ blob, nomFichier: nom });
 }
 
 export interface RapportLiaisonGed {

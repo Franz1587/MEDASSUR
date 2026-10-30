@@ -94,6 +94,26 @@ export class GedService {
     return doc;
   }
 
+  async streamFichier(id: string, res: import("express").Response) {
+    const doc = await this.prisma.gedDocument.findUnique({ where: { id } });
+    if (!doc || !doc.fichier) throw new NotFoundException(`Document ${id} introuvable`);
+    const filePath = path.join(UPLOADS_GED_DIR, doc.fichier);
+    res.setHeader("Content-Disposition", `inline; filename="${doc.nom}"`);
+    res.sendFile(filePath);
+  }
+
+  async update(id: string, data: { prestataireId?: string | null; entiteLiee?: string; dateCachet?: string | null }) {
+    return this.prisma.gedDocument.update({
+      where: { id },
+      data: {
+        ...(data.prestataireId !== undefined ? { prestataireId: data.prestataireId || null } : {}),
+        ...(data.entiteLiee !== undefined ? { entiteLiee: data.entiteLiee } : {}),
+        ...(data.dateCachet !== undefined ? { dateCachet: data.dateCachet || null } : {}),
+      },
+      include: { prestataire: { select: { nom: true } }, facture: { select: { id: true, referenceFacture: true, statut: true } } },
+    });
+  }
+
   // Rapprochement facture GED ↔ facture réellement saisie (2026-09) — voir
   // demande utilisateur d'origine : "suivi et comparaison des factures
   // enregistrées par la GED et celles traitées et saisies afin de dire

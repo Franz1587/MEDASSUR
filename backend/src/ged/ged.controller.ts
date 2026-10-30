@@ -1,5 +1,5 @@
-import { Controller, Delete, Get, Param, Post, Query, Req, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
-import type { Request } from "express";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, Res, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import type { Request, Response } from "express";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import { GedService } from "./ged.service";
@@ -35,6 +35,16 @@ export class GedController {
       { sens: sens === "Sortant" ? "Sortant" : "Entrant", prestataireId, entiteLiee, tags: tags ? tags.split(",").map((t) => t.trim()).filter(Boolean) : [], dateCachetManuelle: dateCachetManuelle || undefined },
       req.user.userId,
     );
+  }
+
+  @Get(":id/fichier")
+  fichier(@Param("id") id: string, @Res() res: Response) {
+    return this.service.streamFichier(id, res);
+  }
+
+  @Patch(":id")
+  update(@Param("id") id: string, @Body() body: { prestataireId?: string | null; entiteLiee?: string; dateCachet?: string | null }) {
+    return this.service.update(id, body);
   }
 
   @Post(":id/rapprocher")
