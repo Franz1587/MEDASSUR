@@ -602,10 +602,10 @@ export default function GedView() {
                 <td className="px-4 py-3 min-w-[160px]">
                   <div className="flex flex-col gap-0.5">
                     {d.fichier ? (
-                      <a href={urlDocumentGed(d.fichier)} target="_blank" rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-foreground hover:text-primary med-num">
-                        {d.nom}<ExternalLink className="w-3 h-3 flex-shrink-0" />
-                      </a>
+                      <button type="button" onClick={() => ouvrirDocumentGed(d.id, d.nom).catch(() => toast.error("Impossible d'ouvrir le document."))}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-foreground hover:text-primary med-num text-left">
+                        {d.nom}<FileText className="w-3 h-3 flex-shrink-0" />
+                      </button>
                     ) : (
                       <span className="text-xs font-semibold text-foreground med-num">{d.nom}</span>
                     )}
