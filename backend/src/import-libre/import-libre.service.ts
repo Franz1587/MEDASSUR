@@ -33,6 +33,9 @@ export interface LigneApercu {
   prestataireId: string | null;
   erreur: string | null;
   doublon: boolean;
+  // Mode correction (2026-10) — ligne existante à mettre à jour (baseRemboursement 0)
+  miseAJour?: boolean;
+  priseEnChargeId?: string;
 }
 
 export interface ResultatApercu {
@@ -44,6 +47,8 @@ export interface ResultatApercu {
   totalResolues: number;
   totalDoublons: number;
   totalErreurs: number;
+  // Mode correction : lignes existantes avec baseRemboursement 0 à corriger
+  totalMisesAJour: number;
 }
 
 // Mapping désignation Eyassur → type de prestation MedAssur+
@@ -96,7 +101,7 @@ function deviverTypePrestataire(nom: string): string {
   if (n.includes("LABORATOIRE") || n.includes("LABO ")) return "Laboratoire";
   if (n.includes("DENTAIRE") || n.includes("DENTAL")) return "Cabinet Dentaire";
   if (n.includes("IMAGERIE") || n.includes("SCANNER") || n.includes("RADIOLOGIE") || n.includes("IRM")) return "Centre d'Imagerie";
-  if (n.includes("KINE") || n.includes("KINE") || n.includes("PHYSIO")) return "Centre de Kinésithérapie";
+  if (n.includes("KINE") || n.includes("PHYSIO")) return "Centre de Kinésithérapie";
   if (n.includes("OPTIC") || n.includes("OPTIQUE") || n.includes("VISION")) return "Opticien";
   if (n.includes("HOPITAL") || n.includes("CENTRE HOSPITALIER") || n.includes("CHU") || n.includes("CHL")) return "Hôpital";
   if (n.includes("CLINIQUE")) return "Clinique";
@@ -109,10 +114,21 @@ function deviverSecteurPrestataire(nom: string): string {
   return "Privé";
 }
 
+// toNombre robuste (2026-10) — gère : espaces séparateurs de milliers,
+// points multiples ("1.500.000" → 1500000), suffixes textuels ("FCFA",
+// "F CFA"), virgule décimale, valeurs purement textuelles → 0.
 function toNombre(v: unknown): number {
   if (typeof v === "number") return v;
   if (v === null || v === undefined) return 0;
-  const s = String(v).replace(/\s/g, "").replace(",", ".");
+  // Extraire la partie numérique (chiffres + séparateurs potentiels)
+  const s0 = String(v).trim().replace(/ /g, " "); // NBSP → espace
+  const match = s0.match(/[\d\s.,]+/);
+  if (!match) return 0;
+  let s = match[0].replace(/\s/g, "");
+  // Si plusieurs points (ex: "1.500.000") → séparateurs de milliers → enlever
+  if ((s.match(/\./g) ?? []).length > 1) s = s.replace(/\./g, "");
+  // Virgule décimale (ex: "15000,50") → point
+  s = s.replace(",", ".");
   const n = parseFloat(s);
   return isNaN(n) ? 0 : n;
 }
@@ -139,6 +155,39 @@ function celluleEnDate(v: unknown): string {
   return celluleEnTexte(v);
 }
 
+const PROMPT_LIGNES = `Structure JSON attendue (un seul objet racine) :
+{
+  "contratRef": "numéro de contrat/police",
+  "organisme": "nom de la société/souscripteur",
+  "periode": "période ex: 01/01/2025-31/12/2025",
+  "lignes": [
+    {
+      "referenceFacture": "ex: LRX-91044H",
+      "designation": "ex: ANALYSES MÉDICALES",
+      "categorie": "ex: MALADIE",
+      "matricule": "ex: LRX-00234 ou 0493-01232",
+      "beneficiaire": "NOM PRÉNOM",
+      "prestataireNom": "nom du prestataire",
+      "datePrestation": "JJ/MM/AAAA",
+      "montantTotal": 15000,
+      "partPatient": 3000,
+      "partFinanceur": 12000,
+      "statut": "ex: Payé"
+    }
+  ]
+}
+
+Règles impératives :
+- Une facture peut avoir plusieurs actes → une ligne JSON par ACTE (jamais par facture)
+- partFinanceur = Part financeur = montant payé par l'assurance = net à payer
+- montantTotal = Total de la ligne (frais réels)
+- TOUS les montants sont des NOMBRES ENTIERS en FCFA — si le document exprime
+  un montant en toutes lettres ("quinze mille", "15 000 F", "15.000 FCFA" etc.),
+  convertis-le en entier numérique (15000). Ne laisse jamais un montant à 0 si
+  un montant lisible est présent dans le document.
+- datePrestation au format JJ/MM/AAAA
+- Retourne UNIQUEMENT le JSON, sans markdown ni commentaire`;
+
 @Injectable()
 export class ImportLibreService {
   private anthropic: Anthropic | null = null;
@@ -159,9 +208,7 @@ export class ImportLibreService {
   }
 
   // ── Parsing Excel (format Eyassur "Liste des factures détaillées") ──────
-  // Format : lignes 1-6 = métadonnées, ligne 7 (ou proche) = en-têtes,
-  // puis alternance FACTURE (header) / ACTE (détail) / ligne vide.
-  private async parserExcelEyassur(buffer: Buffer): Promise<{ contratRef: string; organisme: string; periode: string; lignesRaw: Omit<LigneApercu, "assureId" | "contratId" | "prestataireId" | "erreur" | "doublon">[] }> {
+  private async parserExcelEyassur(buffer: Buffer): Promise<{ contratRef: string; organisme: string; periode: string; lignesRaw: Omit<LigneApercu, "assureId" | "contratId" | "prestataireId" | "erreur" | "doublon" | "miseAJour" | "priseEnChargeId">[] }> {
     const classeur = new ExcelJS.Workbook();
     await classeur.xlsx.load(buffer as unknown as ExcelJS.Buffer);
     const feuille = classeur.worksheets[0];
@@ -206,7 +253,7 @@ export class ImportLibreService {
       else if (h.includes("part financeur") || h.includes("financeur")) col.partFinanceur = colNum;
     });
 
-    const lignesRaw: Omit<LigneApercu, "assureId" | "contratId" | "prestataireId" | "erreur" | "doublon">[] = [];
+    const lignesRaw: Omit<LigneApercu, "assureId" | "contratId" | "prestataireId" | "erreur" | "doublon" | "miseAJour" | "priseEnChargeId">[] = [];
     let header: Partial<typeof lignesRaw[0]> | null = null;
 
     for (let r = headerRow + 1; r <= feuille.rowCount; r++) {
@@ -242,7 +289,6 @@ export class ImportLibreService {
           designation,
           montantTotal: totalLigne,
           partPatient,
-          // Part financeur de la ligne d'acte si disponible, sinon montant "A Payer" du header
           partFinanceur: partFinanceurLigne > 0 ? partFinanceurLigne : (header.partFinanceur ?? 0),
         });
       }
@@ -252,7 +298,7 @@ export class ImportLibreService {
   }
 
   // ── Parsing PDF via Claude Vision ─────────────────────────────────────
-  private async parserPdfViaClaude(buffer: Buffer): Promise<{ contratRef: string; organisme: string; periode: string; lignesRaw: Omit<LigneApercu, "assureId" | "contratId" | "prestataireId" | "erreur" | "doublon">[] }> {
+  private async parserPdfViaClaude(buffer: Buffer): Promise<{ contratRef: string; organisme: string; periode: string; lignesRaw: Omit<LigneApercu, "assureId" | "contratId" | "prestataireId" | "erreur" | "doublon" | "miseAJour" | "priseEnChargeId">[] }> {
     const client = this.getAnthropicClient();
     const data = buffer.toString("base64");
 
@@ -263,56 +309,24 @@ export class ImportLibreService {
         role: "user",
         content: [
           { type: "document", source: { type: "base64", media_type: "application/pdf", data } },
-          {
-            type: "text",
-            text: `Ce PDF est une "Liste des factures détaillées" d'un organisme d'assurance santé gabonais.
-
-Extrais TOUTES les factures et leurs actes médicaux. Pour chaque acte, crée une ligne JSON.
-
-Structure JSON attendue (un seul objet racine) :
-{
-  "contratRef": "numéro de contrat/police",
-  "organisme": "nom de la société/souscripteur",
-  "periode": "période de prestation ex: 01/01/2025-31/12/2025",
-  "lignes": [
-    {
-      "referenceFacture": "ex: LRX-91044H",
-      "designation": "ex: ANALYSES MÉDICALES",
-      "categorie": "ex: MALADIE",
-      "matricule": "ex: LRX-00234 ou 0493-01232",
-      "beneficiaire": "NOM PRÉNOM",
-      "prestataireNom": "nom du prestataire",
-      "datePrestation": "JJ/MM/AAAA",
-      "montantTotal": 15000,
-      "partPatient": 3000,
-      "partFinanceur": 12000,
-      "statut": "ex: Payé"
-    }
-  ]
-}
-
-Règles impératives :
-- Une facture peut avoir plusieurs actes → une ligne JSON par ACTE (jamais par facture)
-- partFinanceur = Part financeur = montant payé par la compagnie d'assurance = net à payer
-- montantTotal = Total de la ligne (frais réels)
-- Les montants sont des nombres entiers en FCFA
-- datePrestation au format JJ/MM/AAAA
-- Retourne UNIQUEMENT le JSON, sans markdown ni commentaire`,
-          },
+          { type: "text", text: `Ce PDF est une "Liste des factures détaillées" d'un organisme d'assurance santé gabonais.\n\nExtrais TOUTES les factures et leurs actes médicaux. Pour chaque acte, crée une ligne JSON.\n\n${PROMPT_LIGNES}` },
         ],
       }],
     });
 
     const texte = reponse.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
+    return this.parseLignesJson(texte, "PDF");
+  }
+
+  private parseLignesJson(texte: string, source: string) {
     let parsed: { contratRef?: string; organisme?: string; periode?: string; lignes?: unknown[] };
     try {
       const match = texte.match(/\{[\s\S]*\}/);
       if (!match) throw new Error("Pas de JSON");
       parsed = JSON.parse(match[0]);
     } catch {
-      throw new BadRequestException("Impossible d'extraire les données de ce PDF — vérifiez que c'est un fichier 'Liste des factures détaillées'.");
+      throw new BadRequestException(`Impossible d'extraire les données de ce ${source} — vérifiez que c'est un fichier 'Liste des factures détaillées'.`);
     }
-
     const lignesRaw = (parsed.lignes ?? []).map((l: unknown) => {
       const ligne = l as Record<string, unknown>;
       return {
@@ -329,12 +343,14 @@ Règles impératives :
         statut: String(ligne.statut ?? "").trim(),
       };
     });
-
     return { contratRef: parsed.contratRef ?? "", organisme: parsed.organisme ?? "", periode: parsed.periode ?? "", lignesRaw };
   }
 
   // ── Résolution d'une ligne (lecture seule) ──────────────────────────
-  private async resoudreLigne(l: Omit<LigneApercu, "assureId" | "contratId" | "prestataireId" | "erreur" | "doublon">): Promise<LigneApercu> {
+  private async resoudreLigne(
+    l: Omit<LigneApercu, "assureId" | "contratId" | "prestataireId" | "erreur" | "doublon" | "miseAJour" | "priseEnChargeId">,
+    modeCorrection: boolean,
+  ): Promise<LigneApercu> {
     if (!l.matricule) {
       return { ...l, assureId: null, contratId: null, prestataireId: null, erreur: "Matricule absent", doublon: false };
     }
@@ -347,18 +363,16 @@ Règles impératives :
     });
 
     if (!assure) {
-      // Repli sur historique MatriculeAssuree
       const alias = await this.prisma.matriculeAssuree.findFirst({
         where: { matricule: { equals: mat, mode: "insensitive" } },
         select: { identiteId: true },
       });
       if (alias) {
-        const parIdentite = await this.prisma.assureSante.findFirst({
+        assure = await this.prisma.assureSante.findFirst({
           where: { identiteId: alias.identiteId },
           orderBy: { id: "desc" },
           select: { id: true, contratId: true },
-        });
-        assure = parIdentite ?? null;
+        }) ?? null;
       }
     }
 
@@ -366,7 +380,7 @@ Règles impératives :
       return { ...l, assureId: null, contratId: null, prestataireId: null, erreur: `Assuré introuvable pour le matricule "${mat}"`, doublon: false };
     }
 
-    // 2. Prestataire (lecture seule — pas de création à l'aperçu)
+    // 2. Prestataire (lecture seule à l'aperçu)
     let prestataireId: string | null = null;
     if (l.prestataireNom) {
       const aliasP = await this.prisma.prestataireAlias.findFirst({
@@ -378,81 +392,66 @@ Règles impératives :
       )?.id ?? null;
     }
 
-    // 3. Doublon
+    // 3. Détection doublon / ligne à corriger
     const typePrestation = mapperDesignation(l.designation);
-    let doublon = false;
     if (prestataireId) {
       const existant = await this.prisma.priseEnCharge.findFirst({
         where: { assureId: assure.id, date: l.datePrestation, type: typePrestation, facture: { prestataireId, referenceFacture: l.referenceFacture } },
-        select: { id: true },
-      }) as { id: string } | null;
-      doublon = existant !== null;
+        select: { id: true, baseRemboursement: true },
+      });
+      if (existant) {
+        if (modeCorrection) {
+          // Mode correction : inclure la ligne si baseRemboursement est 0/null ET que le fichier a un montant
+          const baseActuelle = existant.baseRemboursement ? Number(existant.baseRemboursement) : 0;
+          if (baseActuelle === 0 && l.partFinanceur > 0) {
+            return { ...l, assureId: assure.id, contratId: assure.contratId, prestataireId, erreur: null, doublon: false, miseAJour: true, priseEnChargeId: existant.id };
+          }
+        }
+        return { ...l, assureId: assure.id, contratId: assure.contratId, prestataireId, erreur: null, doublon: true };
+      }
     }
 
-    return { ...l, assureId: assure.id, contratId: assure.contratId, prestataireId, erreur: null, doublon };
+    return { ...l, assureId: assure.id, contratId: assure.contratId, prestataireId, erreur: null, doublon: false };
   }
 
-  // ── Aperçu (lecture seule) ────────────────────────────────────────────
-  async apercu(file: Express.Multer.File): Promise<ResultatApercu> {
+  // ── Aperçu (lecture seule) — résolution parallèle par batch ──────────
+  async apercu(file: Express.Multer.File, modeCorrection = false): Promise<ResultatApercu> {
     const ext = path.extname(file.originalname).toLowerCase();
-    let parsed: { contratRef: string; organisme: string; periode: string; lignesRaw: Omit<LigneApercu, "assureId" | "contratId" | "prestataireId" | "erreur" | "doublon">[] };
+    let parsed: { contratRef: string; organisme: string; periode: string; lignesRaw: Omit<LigneApercu, "assureId" | "contratId" | "prestataireId" | "erreur" | "doublon" | "miseAJour" | "priseEnChargeId">[] };
 
     if (ext === ".xlsx" || ext === ".xls") {
       parsed = await this.parserExcelEyassur(file.buffer);
     } else if (ext === ".pdf") {
       parsed = await this.parserPdfViaClaude(file.buffer);
     } else if (ext === ".csv" || ext === ".txt") {
-      // Pour CSV/TXT : déléguer à Claude Vision (traite le contenu comme texte)
       const client = this.getAnthropicClient();
       const texteContenu = file.buffer.toString("utf-8");
       const reponse = await client.messages.create({
         model: "claude-sonnet-5",
         max_tokens: 8192,
-        messages: [{
-          role: "user",
-          content: `Ce fichier ${ext} contient des données de factures médicales. Extrait TOUTES les lignes de prestation et retourne un JSON avec la structure : {"contratRef":"...","organisme":"...","periode":"...","lignes":[{"referenceFacture":"...","designation":"...","categorie":"...","matricule":"...","beneficiaire":"...","prestataireNom":"...","datePrestation":"JJ/MM/AAAA","montantTotal":0,"partPatient":0,"partFinanceur":0,"statut":"..."}]}. Retourne UNIQUEMENT le JSON.\n\n${texteContenu.slice(0, 100000)}`,
-        }],
+        messages: [{ role: "user", content: `Ce fichier ${ext} contient des données de factures médicales.\n\n${PROMPT_LIGNES}\n\n${texteContenu.slice(0, 100000)}` }],
       });
       const texteR = reponse.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
-      try {
-        const match = texteR.match(/\{[\s\S]*\}/);
-        if (!match) throw new Error("Pas de JSON");
-        const p = JSON.parse(match[0]) as { contratRef?: string; organisme?: string; periode?: string; lignes?: unknown[] };
-        parsed = {
-          contratRef: p.contratRef ?? "", organisme: p.organisme ?? "", periode: p.periode ?? "",
-          lignesRaw: (p.lignes ?? []).map((ligne: unknown) => {
-            const l = ligne as Record<string, unknown>;
-            return {
-              referenceFacture: String(l.referenceFacture ?? "").trim(),
-              designation: String(l.designation ?? "").trim(),
-              categorie: String(l.categorie ?? "").trim(),
-              matricule: String(l.matricule ?? "").trim(),
-              beneficiaire: String(l.beneficiaire ?? "").trim(),
-              prestataireNom: String(l.prestataireNom ?? "").trim(),
-              datePrestation: String(l.datePrestation ?? "").trim(),
-              montantTotal: toNombre(l.montantTotal),
-              partPatient: toNombre(l.partPatient),
-              partFinanceur: toNombre(l.partFinanceur),
-              statut: String(l.statut ?? "").trim(),
-            };
-          }),
-        };
-      } catch {
-        throw new BadRequestException("Impossible d'extraire les données de ce fichier — format non reconnu.");
-      }
+      parsed = this.parseLignesJson(texteR, "fichier");
     } else {
       throw new BadRequestException("Format non supporté. Utilisez un fichier PDF, Excel (.xlsx/.xls), CSV ou TXT.");
     }
 
+    // Résolution parallèle (2026-10) — batch de 20 pour éviter la surcharge
+    // des connexions Prisma (ancienne boucle séquentielle trop lente sur gros fichiers).
+    const lignesRaw = parsed.lignesRaw.filter((l) => l.referenceFacture || l.matricule);
+    const BATCH = 20;
     const lignesResolues: LigneApercu[] = [];
-    for (const l of parsed.lignesRaw) {
-      if (!l.referenceFacture && !l.matricule) continue;
-      lignesResolues.push(await this.resoudreLigne(l));
+    for (let i = 0; i < lignesRaw.length; i += BATCH) {
+      const batch = lignesRaw.slice(i, i + BATCH);
+      const resolus = await Promise.all(batch.map((l) => this.resoudreLigne(l, modeCorrection)));
+      lignesResolues.push(...resolus);
     }
 
     const totalResolues = lignesResolues.filter((l) => l.assureId && !l.doublon && !l.erreur).length;
     const totalDoublons = lignesResolues.filter((l) => l.doublon).length;
     const totalErreurs = lignesResolues.filter((l) => !!l.erreur).length;
+    const totalMisesAJour = lignesResolues.filter((l) => l.miseAJour).length;
 
     return {
       contratRef: parsed.contratRef,
@@ -463,16 +462,34 @@ Règles impératives :
       totalResolues,
       totalDoublons,
       totalErreurs,
+      totalMisesAJour,
     };
   }
 
   // ── Confirmer l'import ───────────────────────────────────────────────
-  async confirmer(lignes: LigneApercu[]): Promise<{ importees: number; ignorees: number }> {
+  async confirmer(lignes: LigneApercu[], modeCorrection = false): Promise<{ importees: number; corrigees: number; ignorees: number }> {
     const lignesValides = lignes.filter((l) => l.assureId && l.contratId && !l.doublon && !l.erreur);
     let importees = 0;
+    let corrigees = 0;
     let ignorees = lignes.length - lignesValides.length;
 
-    // Acte générique (reprise d'antériorité — voir ImportService)
+    // Mode correction : mettre à jour baseRemboursement sur les PEC existantes
+    if (modeCorrection) {
+      const lignesMaj = lignes.filter((l) => l.miseAJour && l.priseEnChargeId && l.partFinanceur > 0);
+      for (const l of lignesMaj) {
+        try {
+          await this.prisma.priseEnCharge.update({
+            where: { id: l.priseEnChargeId! },
+            data: { baseRemboursement: l.partFinanceur },
+          });
+          corrigees++;
+        } catch {
+          ignorees++;
+        }
+      }
+    }
+
+    // Acte générique (reprise d'antériorité)
     const acteGenerique = await this.prisma.acteMedical.findFirst({
       where: { libelle: { contains: "non détaillée" } },
       select: { id: true },
@@ -481,10 +498,7 @@ Règles impératives :
     // Résoudre prestataires (créer si absent)
     const prestataireCache = new Map<string, string>();
     for (const l of lignesValides) {
-      if (l.prestataireId) {
-        prestataireCache.set(l.prestataireNom, l.prestataireId);
-        continue;
-      }
+      if (l.prestataireId) { prestataireCache.set(l.prestataireNom, l.prestataireId); continue; }
       if (prestataireCache.has(l.prestataireNom)) continue;
       const nomTrim = l.prestataireNom.trim();
       if (!nomTrim) continue;
@@ -498,14 +512,11 @@ Règles impératives :
       try {
         const cree = await this.prestataires.create({ nom: nomTrim, type: deviverTypePrestataire(nomTrim), secteur: deviverSecteurPrestataire(nomTrim), pays: "Gabon", ville: "Libreville", statutConvention: "En négociation" });
         prestataireCache.set(l.prestataireNom, cree.id);
-      } catch {
-        // Prestataire non créé — lignes concernées seront ignorées
-      }
+      } catch { /* non créé — lignes ignorées */ }
     }
 
     // Grouper et créer Factures + PriseEnCharge
     const facturesParGroupe = new Map<string, string>();
-
     for (const l of lignesValides) {
       const prestataireId = prestataireCache.get(l.prestataireNom);
       if (!prestataireId || !l.assureId || !l.contratId) { ignorees++; continue; }
@@ -520,16 +531,9 @@ Règles impératives :
           facturesParGroupe.set(cleGroupe, existante.id);
         } else {
           try {
-            const nouvelleFacture = await this.factures.create({
-              prestataireId, contratId: l.contratId,
-              dateReception: l.datePrestation,
-              referenceFacture: l.referenceFacture,
-            });
+            const nouvelleFacture = await this.factures.create({ prestataireId, contratId: l.contratId, dateReception: l.datePrestation, referenceFacture: l.referenceFacture });
             facturesParGroupe.set(cleGroupe, nouvelleFacture.id);
-          } catch {
-            ignorees++;
-            continue;
-          }
+          } catch { ignorees++; continue; }
         }
       }
 
@@ -537,28 +541,17 @@ Règles impératives :
       if (!factureId) { ignorees++; continue; }
 
       try {
-        const typePrestation = mapperDesignation(l.designation);
         await this.factures.ajouterLigne(factureId, {
           assureId: l.assureId,
-          typePrestation,
+          typePrestation: mapperDesignation(l.designation),
           datePrestation: l.datePrestation,
           acteMedicalId: acteGenerique?.id,
           montant: l.montantTotal,
-        }, {
-          ignorerDoublonMemeJour: true,
-          exigerAffection: false,
-          // Reprise d'antériorité (2026-10) — partFinanceur = net à payer =
-          // baseRemboursement, jamais recalculé depuis les taux du contrat
-          // (voir ImportService.creerFacturesDepuisLignesResolues).
-          baseRemboursementImpose: l.partFinanceur,
-          ignorerRetrait: true,
-        });
+        }, { ignorerDoublonMemeJour: true, exigerAffection: false, baseRemboursementImpose: l.partFinanceur, ignorerRetrait: true });
         importees++;
-      } catch {
-        ignorees++;
-      }
+      } catch { ignorees++; }
     }
 
-    return { importees, ignorees };
+    return { importees, corrigees, ignorees };
   }
 }

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Loader2, Upload, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { Btn } from "@/components/shared/Btn";
 import { apercuImportLibre, confirmerImportLibre, type LigneApercu, type ResultatApercu } from "@/services/import-libre.service";
@@ -15,43 +15,67 @@ interface Props {
 }
 
 function BadgeLigne({ l }: { l: LigneApercu }) {
+  if (l.miseAJour) return <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700">à corriger</span>;
   if (l.doublon) return <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700">doublon</span>;
   if (l.erreur) return <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-600 truncate max-w-[140px]" title={l.erreur}>{l.erreur}</span>;
   return <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700">ok</span>;
 }
 
+interface EtatFichier {
+  nom: string;
+  apercu: ResultatApercu;
+}
+
 export function ImportLibreModal({ ouvert, onFermer }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [etape, setEtape] = useState<"upload" | "analyse" | "apercu" | "confirmation">("upload");
-  const [apercu, setApercu] = useState<ResultatApercu | null>(null);
-  const [fichierNom, setFichierNom] = useState("");
+  const [fichiers, setFichiers] = useState<EtatFichier[]>([]);
+  const [fichierEnCours, setFichierEnCours] = useState("");
+  const [modeCorrection, setModeCorrection] = useState(false);
 
   if (!ouvert) return null;
 
-  const reset = () => { setEtape("upload"); setApercu(null); setFichierNom(""); };
+  const reset = () => { setEtape("upload"); setFichiers([]); setFichierEnCours(""); };
   const fermer = () => { reset(); onFermer(); };
 
-  const handleFichier = async (fichier: File) => {
-    setFichierNom(fichier.name);
+  // Résumé cumulé de tous les fichiers analysés
+  const toutesLignes = fichiers.flatMap((f) => f.apercu.lignes);
+  const totalResolues = fichiers.reduce((s, f) => s + f.apercu.totalResolues, 0);
+  const totalMisesAJour = fichiers.reduce((s, f) => s + f.apercu.totalMisesAJour, 0);
+  const totalDoublons = fichiers.reduce((s, f) => s + f.apercu.totalDoublons, 0);
+  const totalErreurs = fichiers.reduce((s, f) => s + f.apercu.totalErreurs, 0);
+
+  const handleFichiers = async (liste: FileList) => {
     setEtape("analyse");
-    try {
-      const res = await apercuImportLibre(fichier);
-      setApercu(res);
-      setEtape("apercu");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Analyse impossible.");
-      setEtape("upload");
+    const resultats: EtatFichier[] = [...fichiers];
+    for (const fichier of Array.from(liste)) {
+      setFichierEnCours(fichier.name);
+      try {
+        const res = await apercuImportLibre(fichier, modeCorrection);
+        resultats.push({ nom: fichier.name, apercu: res });
+      } catch (err) {
+        toast.error(`${fichier.name} : ${err instanceof Error ? err.message : "Analyse impossible."}`);
+      }
     }
+    setFichiers(resultats);
+    setEtape(resultats.length > 0 ? "apercu" : "upload");
+    setFichierEnCours("");
   };
 
   const handleConfirmer = async () => {
-    if (!apercu) return;
-    const lignesAImporter = apercu.lignes.filter((l) => l.assureId && !l.doublon && !l.erreur);
-    if (lignesAImporter.length === 0) { toast.warning("Aucune ligne éligible à l'import."); return; }
+    const lignesAImporter = toutesLignes.filter((l) => l.assureId && !l.doublon && !l.erreur);
+    const lignesMaj = modeCorrection ? toutesLignes.filter((l) => l.miseAJour) : [];
+    if (lignesAImporter.length === 0 && lignesMaj.length === 0) {
+      toast.warning("Aucune ligne éligible à l'import."); return;
+    }
     setEtape("confirmation");
     try {
-      const res = await confirmerImportLibre(lignesAImporter);
-      toast.success(`${res.importees} ligne(s) importée(s)${res.ignorees > 0 ? `, ${res.ignorees} ignorée(s)` : ""}.`);
+      const res = await confirmerImportLibre([...lignesAImporter, ...lignesMaj], modeCorrection);
+      const msgs = [];
+      if (res.importees > 0) msgs.push(`${res.importees} ligne(s) importée(s)`);
+      if (res.corrigees > 0) msgs.push(`${res.corrigees} montant(s) corrigé(s)`);
+      if (res.ignorees > 0) msgs.push(`${res.ignorees} ignorée(s)`);
+      toast.success(msgs.join(", ") + ".");
       fermer();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Import impossible.");
@@ -66,15 +90,14 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
         {/* En-tête */}
         <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
           <div>
-            <h3 className="text-[15px] font-semibold text-foreground">Import libre de factures — Ariana</h3>
-            {apercu && (
+            <h3 className="text-[15px] font-semibold text-foreground">Import libre de factures — ARIANA</h3>
+            {fichiers.length > 0 && etape === "apercu" && (
               <p className="text-[12px] text-muted-foreground mt-0.5">
-                <span className="font-medium">{apercu.organisme || apercu.contratRef}</span>
-                {apercu.periode && <> · {apercu.periode}</>}
-                {" — "}
-                <span className="text-emerald-600">{apercu.totalResolues} à importer</span>
-                {apercu.totalDoublons > 0 && <> · <span className="text-amber-600">{apercu.totalDoublons} doublons</span></>}
-                {apercu.totalErreurs > 0 && <> · <span className="text-red-600">{apercu.totalErreurs} erreurs</span></>}
+                <span className="font-medium">{fichiers.length} fichier(s)</span>{" — "}
+                <span className="text-emerald-600">{totalResolues} à importer</span>
+                {totalMisesAJour > 0 && <> · <span className="text-blue-600">{totalMisesAJour} à corriger</span></>}
+                {totalDoublons > 0 && <> · <span className="text-amber-600">{totalDoublons} doublons</span></>}
+                {totalErreurs > 0 && <> · <span className="text-red-600">{totalErreurs} erreurs</span></>}
               </p>
             )}
           </div>
@@ -88,17 +111,45 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
 
           {/* Zone upload */}
           {etape === "upload" && (
-            <div
-              className="border-2 border-dashed border-muted-foreground/25 rounded-xl p-12 text-center cursor-pointer hover:border-primary/50 transition-colors"
-              onClick={() => inputRef.current?.click()}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFichier(f); }}
-            >
-              <Upload className="w-10 h-10 text-muted-foreground/50 mx-auto mb-3" />
-              <p className="font-medium text-foreground">Glisser-déposer un fichier ou cliquer pour choisir</p>
-              <p className="text-[13px] text-muted-foreground mt-1">PDF, Excel (.xlsx / .xls), CSV, TXT — max 50 Mo</p>
-              <p className="text-[11px] text-muted-foreground/70 mt-2">Format Eyassur "Liste des factures détaillées" recommandé</p>
-              <input ref={inputRef} type="file" accept=".pdf,.xlsx,.xls,.csv,.txt" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFichier(f); }} />
+            <div className="space-y-4">
+              {/* Mode correction */}
+              <label className="flex items-start gap-3 p-3 rounded-lg border border-border bg-secondary/30 cursor-pointer hover:bg-secondary/50 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={modeCorrection}
+                  onChange={(e) => setModeCorrection(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
+                />
+                <div>
+                  <p className="text-[13px] font-medium text-foreground flex items-center gap-1.5">
+                    <RefreshCw className="w-3.5 h-3.5 text-blue-500" />
+                    Mode correction
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Corrige les montants à 0 sur les lignes déjà importées — sans créer de doublons. Utilise les valeurs du fichier pour mettre à jour les montants manquants.
+                  </p>
+                </div>
+              </label>
+
+              <div
+                className="border-2 border-dashed border-muted-foreground/25 rounded-xl p-12 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                onClick={() => inputRef.current?.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files.length > 0) handleFichiers(e.dataTransfer.files); }}
+              >
+                <Upload className="w-10 h-10 text-muted-foreground/50 mx-auto mb-3" />
+                <p className="font-medium text-foreground">Glisser-déposer un ou plusieurs fichiers, ou cliquer pour choisir</p>
+                <p className="text-[13px] text-muted-foreground mt-1">PDF, Excel (.xlsx / .xls), CSV, TXT — max 50 Mo par fichier</p>
+                <p className="text-[11px] text-muted-foreground/70 mt-2">Plusieurs fichiers acceptés — traitement séquentiel</p>
+                <input
+                  ref={inputRef}
+                  type="file"
+                  multiple
+                  accept=".pdf,.xlsx,.xls,.csv,.txt"
+                  className="hidden"
+                  onChange={(e) => { if (e.target.files && e.target.files.length > 0) handleFichiers(e.target.files); }}
+                />
+              </div>
             </div>
           )}
 
@@ -106,7 +157,10 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
           {etape === "analyse" && (
             <div className="flex flex-col items-center gap-4 py-16">
               <Loader2 className="w-10 h-10 animate-spin text-primary" />
-              <p className="font-medium text-foreground">Ariana analyse <span className="text-primary">{fichierNom}</span>…</p>
+              <p className="font-medium text-foreground">ARIANA analyse <span className="text-primary">{fichierEnCours}</span>…</p>
+              {fichiers.length > 0 && (
+                <p className="text-[13px] text-muted-foreground">{fichiers.length} fichier(s) déjà analysé(s)</p>
+              )}
               <p className="text-[13px] text-muted-foreground">Résolution des assurés, prestataires et doublons en cours</p>
             </div>
           )}
@@ -120,16 +174,35 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
           )}
 
           {/* Aperçu */}
-          {etape === "apercu" && apercu && (
+          {etape === "apercu" && fichiers.length > 0 && (
             <div className="space-y-3">
-              <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-                <span className="font-mono text-[11px] bg-secondary/50 px-1.5 py-0.5 rounded">{fichierNom}</span>
-                <button type="button" onClick={reset} className="text-[11px] underline hover:text-foreground">Changer de fichier</button>
+              <div className="flex items-center gap-2 text-[12px] text-muted-foreground flex-wrap">
+                {fichiers.map((f) => (
+                  <span key={f.nom} className="font-mono text-[11px] bg-secondary/50 px-1.5 py-0.5 rounded">{f.nom}</span>
+                ))}
+                <button type="button" onClick={reset} className="text-[11px] underline hover:text-foreground ml-1">Changer les fichiers</button>
+                {/* Ajouter d'autres fichiers */}
+                <button
+                  type="button"
+                  onClick={() => inputRef.current?.click()}
+                  className="text-[11px] underline hover:text-foreground text-primary"
+                >
+                  + Ajouter d'autres fichiers
+                </button>
+                <input
+                  ref={inputRef}
+                  type="file"
+                  multiple
+                  accept=".pdf,.xlsx,.xls,.csv,.txt"
+                  className="hidden"
+                  onChange={(e) => { if (e.target.files && e.target.files.length > 0) handleFichiers(e.target.files); setEtape("apercu"); }}
+                />
               </div>
-              {apercu.lignes.length === 0 ? (
+
+              {toutesLignes.length === 0 ? (
                 <div className="flex items-center gap-2 text-amber-600 bg-amber-50 rounded-lg p-4">
                   <AlertTriangle className="w-5 h-5 shrink-0" />
-                  <span className="text-[13px]">Aucune ligne extraite. Vérifiez que le fichier est au bon format.</span>
+                  <span className="text-[13px]">Aucune ligne extraite. Vérifiez que les fichiers sont au bon format.</span>
                 </div>
               ) : (
                 <div className="border border-border rounded-lg overflow-x-auto max-h-64">
@@ -146,8 +219,8 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/50">
-                      {apercu.lignes.map((l, i) => (
-                        <tr key={i} className={l.doublon ? "bg-amber-50/50" : l.erreur ? "bg-red-50/50" : "hover:bg-muted/30"}>
+                      {toutesLignes.map((l, i) => (
+                        <tr key={i} className={l.miseAJour ? "bg-blue-50/50" : l.doublon ? "bg-amber-50/50" : l.erreur ? "bg-red-50/50" : "hover:bg-muted/30"}>
                           <td className="px-2.5 py-1.5 font-mono text-[10px] text-muted-foreground whitespace-nowrap">{l.referenceFacture || "—"}</td>
                           <td className="px-2.5 py-1.5">
                             <p className="font-medium truncate max-w-[110px] text-foreground">{l.beneficiaire || "—"}</p>
@@ -172,16 +245,30 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
 
         {/* Pied de page */}
         <div className="px-5 py-4 border-t border-border flex-shrink-0 flex items-center justify-between gap-3">
-          {etape === "apercu" && apercu && apercu.totalResolues > 0 ? (
+          {etape === "apercu" && (totalResolues > 0 || (modeCorrection && totalMisesAJour > 0)) ? (
             <>
-              <div className="flex items-center gap-1.5 text-[13px] text-emerald-600">
-                <CheckCircle2 className="w-4 h-4" />
-                <span>{apercu.totalResolues} ligne(s) prête(s) à importer</span>
+              <div className="flex items-center gap-3 text-[13px]">
+                {totalResolues > 0 && (
+                  <span className="flex items-center gap-1.5 text-emerald-600">
+                    <CheckCircle2 className="w-4 h-4" />
+                    {totalResolues} ligne(s) prête(s)
+                  </span>
+                )}
+                {modeCorrection && totalMisesAJour > 0 && (
+                  <span className="flex items-center gap-1.5 text-blue-600">
+                    <RefreshCw className="w-4 h-4" />
+                    {totalMisesAJour} montant(s) à corriger
+                  </span>
+                )}
               </div>
               <div className="flex gap-2">
                 <Btn variant="secondary" onClick={fermer}>Annuler</Btn>
                 <Btn variant="primary" onClick={handleConfirmer}>
-                  Importer {apercu.totalResolues} ligne(s)
+                  {totalResolues > 0 && totalMisesAJour > 0
+                    ? `Importer ${totalResolues} + corriger ${totalMisesAJour}`
+                    : totalMisesAJour > 0
+                    ? `Corriger ${totalMisesAJour} montant(s)`
+                    : `Importer ${totalResolues} ligne(s)`}
                 </Btn>
               </div>
             </>

@@ -13,14 +13,14 @@ export class ImportLibreController {
 
   @Post("apercu")
   @UseInterceptors(FileInterceptor("fichier", { storage: memoryStorage(), limits: { fileSize: LIMITE_FICHIER } }))
-  apercu(@UploadedFile() file: Express.Multer.File) {
+  apercu(@UploadedFile() file: Express.Multer.File, @Body("modeCorrection") modeCorrection?: string) {
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
-    return this.service.apercu(file);
+    return this.service.apercu(file, modeCorrection === "true");
   }
 
   @Post("confirmer")
-  confirmer(@Body("lignes") lignes: LigneApercu[]) {
+  confirmer(@Body("lignes") lignes: LigneApercu[], @Body("modeCorrection") modeCorrection?: boolean) {
     if (!Array.isArray(lignes) || lignes.length === 0) throw new BadRequestException("Aucune ligne à importer.");
-    return this.service.confirmer(lignes);
+    return this.service.confirmer(lignes, modeCorrection === true);
   }
 }

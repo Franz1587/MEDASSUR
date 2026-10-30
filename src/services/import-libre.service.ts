@@ -1,4 +1,3 @@
-import { uploadFile } from "../lib/http";
 import { http } from "../lib/http";
 
 export interface LigneApercu {
@@ -18,6 +17,9 @@ export interface LigneApercu {
   prestataireId: string | null;
   erreur: string | null;
   doublon: boolean;
+  // Mode correction (2026-10)
+  miseAJour?: boolean;
+  priseEnChargeId?: string;
 }
 
 export interface ResultatApercu {
@@ -29,17 +31,35 @@ export interface ResultatApercu {
   totalResolues: number;
   totalDoublons: number;
   totalErreurs: number;
+  totalMisesAJour: number;
 }
 
 export interface ResultatConfirmation {
   importees: number;
+  corrigees: number;
   ignorees: number;
 }
 
-export function apercuImportLibre(fichier: File): Promise<ResultatApercu> {
-  return uploadFile<ResultatApercu>("/import-libre/apercu", fichier);
+const API_URL = (import.meta as { env: Record<string, string> }).env.VITE_API_URL ?? "http://localhost:3001/api";
+
+function getToken(): string | null {
+  return localStorage.getItem("medassur-access-token");
 }
 
-export function confirmerImportLibre(lignes: LigneApercu[]): Promise<ResultatConfirmation> {
-  return http.post<ResultatConfirmation>("/import-libre/confirmer", { lignes });
+export async function apercuImportLibre(fichier: File, modeCorrection = false): Promise<ResultatApercu> {
+  const form = new FormData();
+  form.append("fichier", fichier);
+  form.append("modeCorrection", String(modeCorrection));
+  const token = getToken();
+  const res = await fetch(`${API_URL}/import-libre/apercu`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<ResultatApercu>;
+}
+
+export function confirmerImportLibre(lignes: LigneApercu[], modeCorrection = false): Promise<ResultatConfirmation> {
+  return http.post<ResultatConfirmation>("/import-libre/confirmer", { lignes, modeCorrection });
 }
