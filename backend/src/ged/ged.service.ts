@@ -108,41 +108,53 @@ export class GedService {
     return doc;
   }
 
-  // Auto-résolution prestataire par nom (ARIANA 360°, 2026-10) — cherche
-  // d'abord une correspondance exacte (insensible à la casse), puis une
-  // correspondance partielle sur les 25 premiers caractères ; ne renvoie
-  // un résultat que s'il est non-ambigu (0 ou 1 résultat partiel).
+  // Auto-résolution prestataire par nom (ARIANA 360°, 2026-10).
+  // Règles strictes pour éviter les faux appariements (voir incident
+  // 2026-10-30 : correspondance inverse trop large → mauvais prestataire
+  // lié alors qu'ARIANA avait lu un nom différent dans le résumé).
+  // Stratégie : exact d'abord, puis contenance bidirectionnelle sur 20+
+  // caractères ; aucune correspondance partielle sur nom court ou ambigu.
   private async trouverPrestataireParNom(
     nom: string,
     cache?: { id: string; nom: string }[],
   ): Promise<{ id: string } | null> {
-    const terme = nom.trim().toLowerCase();
-    if (!terme) return null;
+    const normaliser = (s: string) =>
+      s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+    const terme = normaliser(nom);
+    if (terme.length < 5) return null;
 
-    // Cherche dans le cache chargé pour éviter une requête supplémentaire
     if (cache?.length) {
-      const exact = cache.find((p) => p.nom.toLowerCase() === terme);
+      // 1. Correspondance exacte (après normalisation)
+      const exact = cache.find((p) => normaliser(p.nom) === terme);
       if (exact) return { id: exact.id };
-      const partials = cache.filter((p) => p.nom.toLowerCase().includes(terme.slice(0, Math.min(25, terme.length))));
-      if (partials.length === 1) return { id: partials[0].id };
-      // Essai inverse : le terme contient le nom du prestataire
-      const inv = cache.filter((p) => terme.includes(p.nom.toLowerCase().slice(0, Math.min(25, p.nom.length))));
-      if (inv.length === 1) return { id: inv[0].id };
+
+      // 2. Contenance directe : le terme est entièrement DANS le nom enregistré
+      //    (ex. terme="pharmacie kiyine" dans "PHARMACIE LA KIYINE DE LIBREVILLE")
+      //    → seulement si le terme fait au moins 10 caractères
+      if (terme.length >= 10) {
+        const dans = cache.filter((p) => normaliser(p.nom).includes(terme));
+        if (dans.length === 1) return { id: dans[0].id };
+      }
+
+      // 3. Contenance du nom enregistré dans le terme — seulement si le nom
+      //    fait au moins 12 caractères (évite les noms courts qui matchent
+      //    n'importe quoi, comme "CDS" dans un texte long).
+      const dans2 = cache.filter((p) => {
+        const n = normaliser(p.nom);
+        return n.length >= 12 && terme.includes(n);
+      });
+      if (dans2.length === 1) return { id: dans2[0].id };
+
       return null;
     }
 
-    // Fallback DB si pas de cache
+    // Fallback DB (sans cache)
     const exact = await this.prisma.prestataire.findFirst({
       where: { nom: { equals: terme, mode: "insensitive" } },
       select: { id: true },
     });
     if (exact) return exact;
-    const partials = await this.prisma.prestataire.findMany({
-      where: { nom: { contains: terme.slice(0, Math.min(25, terme.length)), mode: "insensitive" } },
-      select: { id: true },
-      take: 2,
-    });
-    return partials.length === 1 ? partials[0] : null;
+    return null;
   }
 
   async streamFichier(id: string, res: import("express").Response) {

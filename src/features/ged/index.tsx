@@ -304,9 +304,15 @@ function DetailDocumentModal({ doc: docInitial, onClose, onRapport, onRapprocher
               ) : (
                 <>
                   <p className="text-sm text-foreground">{doc.prestataire?.nom || doc.entiteLiee || doc.nomEmetteurExtrait || "—"}</p>
-                  {doc.nomEmetteurExtrait && (doc.prestataire?.nom || doc.entiteLiee) && (
-                    <p className="text-xs text-muted-foreground">ARIANA : {doc.nomEmetteurExtrait}</p>
-                  )}
+                  {doc.nomEmetteurExtrait && (doc.prestataire?.nom || doc.entiteLiee) && (() => {
+                    const pNom = doc.prestataire?.nom ?? doc.entiteLiee ?? "";
+                    const mismatch = pNom &&
+                      !pNom.toLowerCase().includes(doc.nomEmetteurExtrait.toLowerCase().slice(0, 8)) &&
+                      !doc.nomEmetteurExtrait.toLowerCase().includes(pNom.toLowerCase().slice(0, 8));
+                    return mismatch
+                      ? <p className="text-xs text-amber-600 font-semibold mt-0.5">⚠ ARIANA a lu : « {doc.nomEmetteurExtrait} » — vérifier le prestataire sélectionné.</p>
+                      : <p className="text-xs text-muted-foreground">ARIANA : {doc.nomEmetteurExtrait}</p>;
+                  })()}
                 </>
               )}
             </div>
@@ -760,11 +766,22 @@ export default function GedView() {
                 <td className="px-4 py-3 text-xs text-muted-foreground max-w-[220px] truncate" title={d.objet ?? undefined}>{d.objet ?? "—"}</td>
                 <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
                   {d.prestataire?.nom || d.entiteLiee || d.nomEmetteurExtrait
-                    ? <span title={d.nomEmetteurExtrait && !d.prestataire?.nom && !d.entiteLiee ? "Lu par ARIANA" : undefined}>
-                        {d.prestataire?.nom || d.entiteLiee || d.nomEmetteurExtrait}
-                        {d.nomEmetteurExtrait && !d.prestataire?.nom && !d.entiteLiee && (
-                          <span className="ml-1 text-[10px] text-primary opacity-70">(ARIANA)</span>
-                        )}
+                    ? <span className="flex items-center gap-1">
+                        <span title={d.nomEmetteurExtrait && !d.prestataire?.nom && !d.entiteLiee ? "Lu par ARIANA" : undefined}>
+                          {d.prestataire?.nom || d.entiteLiee || d.nomEmetteurExtrait}
+                          {d.nomEmetteurExtrait && !d.prestataire?.nom && !d.entiteLiee && (
+                            <span className="ml-1 text-[10px] text-primary opacity-70">(ARIANA)</span>
+                          )}
+                        </span>
+                        {/* Alerte mismatch : ARIANA a lu un nom différent du prestataire enregistré */}
+                        {d.nomEmetteurExtrait && d.prestataire?.nom &&
+                          !d.prestataire.nom.toLowerCase().includes(d.nomEmetteurExtrait.toLowerCase().slice(0, 8)) &&
+                          !d.nomEmetteurExtrait.toLowerCase().includes(d.prestataire.nom.toLowerCase().slice(0, 8)) && (
+                            <span
+                              title={`⚠ ARIANA a lu : « ${d.nomEmetteurExtrait} »\nEnregistré : « ${d.prestataire.nom} »\nVérifier que le bon prestataire est sélectionné.`}
+                              className="text-amber-500 cursor-help flex-shrink-0"
+                            >⚠</span>
+                          )}
                       </span>
                     : "—"}
                 </td>
