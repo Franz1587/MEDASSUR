@@ -732,6 +732,22 @@ const gedDocuments = [
 ];
 
 async function main() {
+  // Refuse d'effacer les données si une vraie société (hors démo) existe.
+  // Évite la catastrophe "reseed accidentel en prod" — lancer avec
+  // FORCE_SEED=1 npx ts-node prisma/seed.ts pour forcer en dev.
+  if (!process.env.FORCE_SEED) {
+    const societes = await prisma.societeAssurance.findMany({ select: { id: true } });
+    const reels = societes.filter((s) => s.id !== "societe-bootstrap");
+    if (reels.length > 0) {
+      console.error(
+        `ARRÊT : ${reels.length} société(s) réelle(s) détectée(s) (${reels.map((s) => s.id).join(", ")}).`,
+        "\nLe seed efface toutes les données — réservé au démarrage initial ou à la démo.",
+        "\nPour forcer : FORCE_SEED=1 npx ts-node prisma/seed.ts",
+      );
+      process.exit(1);
+    }
+  }
+
   console.log("Seeding MedAssur database…");
 
   // Wipe in FK-safe order for idempotent re-runs.
