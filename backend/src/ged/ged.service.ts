@@ -253,7 +253,37 @@ export class GedService {
       }
     }
 
+    // Fallback 3 — Relevé de règlement (référence RLV… ou numéro de bordereau).
+    // Un "Relevé de règlement factures prestataire" porte la référence du
+    // BordereauReglement, pas d'une facture individuelle. Si les fallbacks 1 et 2
+    // n'ont pas trouvé de facture par référence, chercher un bordereau dont le
+    // numéro correspond et, si ce bordereau est payé, marquer "Traité totalement"
+    // en attachant la première facture liée (pour avoir un lien cliquable).
     if (factures.length !== 1) {
+      const bordereau = await this.prisma.bordereauReglement.findFirst({
+        where: {
+          OR: [
+            { numero: doc.referenceExtraite ?? undefined },
+            { numero: { contains: doc.referenceExtraite ?? "", mode: "insensitive" } },
+          ],
+          prestataireId: prestataireIdEffectif,
+        },
+        include: {
+          lettreCheque: { select: { numero: true, numeroCheque: true, montantTotal: true, dateEmission: true } },
+          lignes: { where: { statut: { not: "Annulé" } }, select: { factureId: true }, take: 1 },
+        },
+      });
+
+      if (bordereau) {
+        const statutTraitement = bordereau.statut === "Payé" ? "Traité totalement" : "Traité partiellement";
+        const premierFactureId = bordereau.lignes[0]?.factureId ?? null;
+        return this.prisma.gedDocument.update({
+          where: { id },
+          data: { statutTraitement, factureId: premierFactureId },
+          include: { prestataire: { select: { nom: true } }, facture: { select: { id: true, referenceFacture: true, statut: true } } },
+        });
+      }
+
       return this.prisma.gedDocument.update({
         where: { id }, data: { statutTraitement: "Non traité", factureId: null },
         include: { prestataire: { select: { nom: true } }, facture: { select: { id: true, referenceFacture: true, statut: true } } },
