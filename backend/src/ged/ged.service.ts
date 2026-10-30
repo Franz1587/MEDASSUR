@@ -205,23 +205,50 @@ export class GedService {
     let prestataireIdEffectif = doc.prestataireId;
     let factures = await this.factures.findAll({ prestataireId: prestataireIdEffectif, reference: doc.referenceExtraite });
 
-    // Fallback ARIANA : si aucune facture trouvée avec le prestataire enregistré
-    // ET que le document a un nomEmetteurExtrait, tenter de résoudre le vrai
-    // prestataire depuis ce nom et corriger le lien sur le document.
-    // Corrige les cas où le prestataire a été mal sélectionné manuellement
-    // ou mal résolu à l'upload (incident 2026-10-30).
+    // Fallback 1 — ARIANA tente de résoudre le vrai prestataire depuis
+    // nomEmetteurExtrait si le prestataireId enregistré ne donne rien
+    // (mauvaise sélection manuelle ou mauvaise auto-résolution à l'upload).
     if (factures.length !== 1 && doc.nomEmetteurExtrait) {
       const trouve = await this.trouverPrestataireParNom(doc.nomEmetteurExtrait);
       if (trouve && trouve.id !== prestataireIdEffectif) {
         const facturesViaNom = await this.factures.findAll({ prestataireId: trouve.id, reference: doc.referenceExtraite });
         if (facturesViaNom.length === 1) {
-          // ARIANA corrige le prestataire sur le document avant de continuer
           prestataireIdEffectif = trouve.id;
           factures = facturesViaNom;
-          await this.prisma.gedDocument.update({
-            where: { id },
-            data: { prestataireId: prestataireIdEffectif },
-          });
+          await this.prisma.gedDocument.update({ where: { id }, data: { prestataireId: prestataireIdEffectif } });
+        }
+      }
+    }
+
+    // Fallback 2 — scanner objet + resume pour trouver un prestataire connu
+    // (cas où nomEmetteurExtrait est le mauvais letterhead mais le corps du
+    // document mentionne explicitement le bon prestataire, ex. incident
+    // 2026-10-30 : "CDS MEDICAL" en tête, "Union Médicale" dans le texte).
+    if (factures.length !== 1 && doc.referenceExtraite) {
+      const texteDoc = [doc.objet, doc.resume].filter(Boolean).join(" ");
+      if (texteDoc.length > 10) {
+        const prestataires = await this.prisma.prestataire.findMany({
+          select: { id: true, nom: true }, orderBy: { nom: "asc" }, take: 300,
+        });
+        const normalise = (s: string) =>
+          s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+        const texteNorm = normalise(texteDoc);
+        // Cherche les prestataires dont le nom (≥ 10 chars) apparaît dans le texte
+        const candidats = prestataires.filter((p) => {
+          const n = normalise(p.nom);
+          return n.length >= 10 && texteNorm.includes(n) && p.id !== prestataireIdEffectif;
+        });
+        for (const candidat of candidats) {
+          const f = await this.factures.findAll({ prestataireId: candidat.id, reference: doc.referenceExtraite });
+          if (f.length === 1) {
+            prestataireIdEffectif = candidat.id;
+            factures = f;
+            await this.prisma.gedDocument.update({
+              where: { id },
+              data: { prestataireId: prestataireIdEffectif, nomEmetteurExtrait: candidat.nom },
+            });
+            break;
+          }
         }
       }
     }

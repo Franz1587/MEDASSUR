@@ -100,9 +100,13 @@ export class GedAnalyseService {
           "en chiffres uniquement sans devise ni séparateur, sinon null>, " +
           "\"dateCachet\": <la date lue sur le cachet, tampon ou mention \"Courrier arrivé\" / \"Reçu le\" / " +
           "\"Arrivée le\" visible sur le document, au format JJ/MM/AAAA, sinon null>, " +
-          "\"nomEmetteur\": <le nom complet de la structure, entreprise ou personne qui a émis ou envoyé ce " +
-          "document (clinique, hôpital, cabinet médical, fournisseur, prestataire…) tel qu'il apparaît sur " +
-          "l'en-tête ou le pied de page, sinon null>}\n" +
+          "\"nomEmetteur\": <le nom de l'établissement médical (clinique, hôpital, cabinet, pharmacie…) " +
+          "qui FACTURE ou SOUMET ce document — c'est-à-dire le prestataire de soins qui réclame le paiement. " +
+          "Pour un relevé de facturation ou de règlement, cherche dans le CORPS DU TEXTE (pas l'en-tête " +
+          "seule) les mentions explicites : 'Prestataire :', 'Établissement :', 'Structure :', " +
+          "'factures de [NOM]', ou la phrase décrivant l'émetteur réel des soins. " +
+          "Si l'en-tête et le corps désignent des entités différentes, PRIORITÉ au corps (la structure qui soigne). " +
+          "Null si aucune structure médicale identifiable.>}\n" +
           listePrestataires +
           "\nSi le document est flou, coupé ou réellement illisible, réponds quand même le JSON avec objet/resume " +
           "expliquant que le contenu n'est pas lisible, jamais d'invention de contenu absent.",
