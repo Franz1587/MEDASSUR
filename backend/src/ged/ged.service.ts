@@ -260,19 +260,36 @@ export class GedService {
     // numéro correspond et, si ce bordereau est payé, marquer "Traité totalement"
     // en attachant la première facture liée (pour avoir un lien cliquable).
     if (factures.length !== 1) {
-      const bordereau = await this.prisma.bordereauReglement.findFirst({
-        where: {
-          OR: [
-            { numero: doc.referenceExtraite ?? undefined },
-            { numero: { contains: doc.referenceExtraite ?? "", mode: "insensitive" } },
-          ],
-          prestataireId: prestataireIdEffectif,
-        },
+      // Essai 3a : numéro de bordereau + prestataire (le plus précis)
+      let bordereau = await this.prisma.bordereauReglement.findFirst({
+        where: { numero: doc.referenceExtraite ?? "", prestataireId: prestataireIdEffectif },
         include: {
           lettreCheque: { select: { numero: true, numeroCheque: true, montantTotal: true, dateEmission: true } },
           lignes: { where: { statut: { not: "Annulé" } }, select: { factureId: true }, take: 1 },
         },
       });
+
+      // Essai 3b : numéro seul — le prestataire du bordereau peut différer
+      // du prestataireId du document GED (doublon non encore fusionné, ou
+      // importé sous un nom légèrement différent). La donnée étant importée
+      // depuis La Ruche sur 3 exercices, la correspondance exacte du numéro
+      // est suffisamment discriminante.
+      if (!bordereau && doc.referenceExtraite) {
+        bordereau = await this.prisma.bordereauReglement.findFirst({
+          where: { numero: { equals: doc.referenceExtraite, mode: "insensitive" } },
+          include: {
+            lettreCheque: { select: { numero: true, numeroCheque: true, montantTotal: true, dateEmission: true } },
+            lignes: { where: { statut: { not: "Annulé" } }, select: { factureId: true }, take: 1 },
+          },
+        });
+        // Si le bordereau est sous un autre prestataire, mettre à jour le doc
+        if (bordereau && bordereau.prestataireId !== prestataireIdEffectif) {
+          prestataireIdEffectif = bordereau.prestataireId;
+          await this.prisma.gedDocument.update({
+            where: { id }, data: { prestataireId: prestataireIdEffectif },
+          });
+        }
+      }
 
       if (bordereau) {
         const statutTraitement = bordereau.statut === "Payé" ? "Traité totalement" : "Traité partiellement";
