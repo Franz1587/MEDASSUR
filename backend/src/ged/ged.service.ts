@@ -265,7 +265,6 @@ export class GedService {
         where: { numero: doc.referenceExtraite ?? "", prestataireId: prestataireIdEffectif },
         include: {
           lettreCheque: { select: { numero: true, numeroCheque: true, montantTotal: true, dateEmission: true } },
-          lignes: { where: { statut: { not: "Annulé" } }, select: { factureId: true }, take: 1 },
         },
       });
 
@@ -279,7 +278,6 @@ export class GedService {
           where: { numero: { equals: doc.referenceExtraite, mode: "insensitive" } },
           include: {
             lettreCheque: { select: { numero: true, numeroCheque: true, montantTotal: true, dateEmission: true } },
-            lignes: { where: { statut: { not: "Annulé" } }, select: { factureId: true }, take: 1 },
           },
         });
         // Si le bordereau est sous un autre prestataire, mettre à jour le doc
@@ -293,7 +291,11 @@ export class GedService {
 
       if (bordereau) {
         const statutTraitement = bordereau.statut === "Payé" ? "Traité totalement" : "Traité partiellement";
-        const premierFactureId = bordereau.lignes[0]?.factureId ?? null;
+        const premiereLigne = await this.prisma.priseEnCharge.findFirst({
+          where: { bordereauId: bordereau.id, statut: { not: "Annulé" } },
+          select: { factureId: true },
+        });
+        const premierFactureId = premiereLigne?.factureId ?? null;
         return this.prisma.gedDocument.update({
           where: { id },
           data: { statutTraitement, factureId: premierFactureId },
