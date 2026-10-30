@@ -202,7 +202,30 @@ export class GedService {
       });
     }
 
-    const factures = await this.factures.findAll({ prestataireId: doc.prestataireId, reference: doc.referenceExtraite });
+    let prestataireIdEffectif = doc.prestataireId;
+    let factures = await this.factures.findAll({ prestataireId: prestataireIdEffectif, reference: doc.referenceExtraite });
+
+    // Fallback ARIANA : si aucune facture trouvée avec le prestataire enregistré
+    // ET que le document a un nomEmetteurExtrait, tenter de résoudre le vrai
+    // prestataire depuis ce nom et corriger le lien sur le document.
+    // Corrige les cas où le prestataire a été mal sélectionné manuellement
+    // ou mal résolu à l'upload (incident 2026-10-30).
+    if (factures.length !== 1 && doc.nomEmetteurExtrait) {
+      const trouve = await this.trouverPrestataireParNom(doc.nomEmetteurExtrait);
+      if (trouve && trouve.id !== prestataireIdEffectif) {
+        const facturesViaNom = await this.factures.findAll({ prestataireId: trouve.id, reference: doc.referenceExtraite });
+        if (facturesViaNom.length === 1) {
+          // ARIANA corrige le prestataire sur le document avant de continuer
+          prestataireIdEffectif = trouve.id;
+          factures = facturesViaNom;
+          await this.prisma.gedDocument.update({
+            where: { id },
+            data: { prestataireId: prestataireIdEffectif },
+          });
+        }
+      }
+    }
+
     if (factures.length !== 1) {
       return this.prisma.gedDocument.update({
         where: { id }, data: { statutTraitement: "Non traité", factureId: null },
