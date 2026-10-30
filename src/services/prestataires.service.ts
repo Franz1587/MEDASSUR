@@ -79,6 +79,13 @@ export async function supprimerPrestataire(id: string): Promise<{ id: string }> 
   return http.delete<{ id: string }>(`/prestataires/${id}`);
 }
 
+export async function fusionnerPrestataire(
+  survivantId: string,
+  doublonId: string,
+): Promise<{ survivantId: string; nomSurvivant: string; doublonAbsorbe: string }> {
+  return http.post(`/prestataires/${survivantId}/fusionner`, { doublonId });
+}
+
 export async function suspendrePrestataire(id: string, motif: string): Promise<Prestataire> {
   const data = await http.patch<ApiPrestataire>(`/prestataires/${id}/suspendre`, { motif });
   return mapPrestataire(data);

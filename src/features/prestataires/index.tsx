@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Star, Clock, ShieldOff, ShieldCheck, Stethoscope, Plus, Pencil, ReceiptText, Printer, ClipboardList, FileStack, TrendingUp, Search, X, MapPin, MapPinOff, Loader2, FileDown, UserPlus } from "lucide-react";
+import { Building2, Star, Clock, ShieldOff, ShieldCheck, Stethoscope, Plus, Pencil, ReceiptText, Printer, ClipboardList, FileStack, TrendingUp, Search, X, MapPin, MapPinOff, Loader2, FileDown, UserPlus, Merge } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/shared/Badge";
 import { Btn } from "@/components/shared/Btn";
@@ -11,7 +11,7 @@ import { useShellNavigation } from "@/layout/ShellNavigationContext";
 import { fmtM } from "@/lib/format";
 import {
   getPrestataires, suspendrePrestataire, rehabiliterPrestataire, definirSecteurPrestataire,
-  getPrestataireStatistiques, geolocaliserLotPrestataires, creerComptesPortailManquants, type PrestataireStatistiques,
+  getPrestataireStatistiques, geolocaliserLotPrestataires, creerComptesPortailManquants, fusionnerPrestataire, type PrestataireStatistiques,
 } from "@/services/prestataires.service";
 import { openFichePrestataire, openReseauSoins } from "@/services/documents.service";
 import PrestataireForm from "./PrestataireForm";
@@ -168,6 +168,29 @@ export default function PrestatairesView() {
     const updated = await rehabiliterPrestataire(selected.id);
     setPrestataires((list) => list.map((p) => (p.id === updated.id ? updated : p)));
     setSelected(updated);
+  };
+
+  const [showFusion, setShowFusion] = useState(false);
+  const [doublonId, setDoublonId] = useState<string | null>(null);
+  const [fusionEnCours, setFusionEnCours] = useState(false);
+
+  const handleFusionner = async () => {
+    if (!selected || !doublonId) return;
+    const doublon = prestataires.find((p) => p.id === doublonId);
+    if (!doublon) return;
+    if (!window.confirm(`Fusionner « ${doublon.nom} » DANS « ${selected.nom} » ?\n\nToutes les factures, documents et comptes du doublon seront rattachés au survivant. Le doublon sera définitivement supprimé.\n\nCette action est irréversible.`)) return;
+    setFusionEnCours(true);
+    try {
+      const res = await fusionnerPrestataire(selected.id, doublonId);
+      setPrestataires((list) => list.filter((p) => p.id !== doublonId));
+      setDoublonId(null);
+      setShowFusion(false);
+      toast.success(`« ${res.doublonAbsorbe} » fusionné dans « ${res.nomSurvivant} »`);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Erreur lors de la fusion");
+    } finally {
+      setFusionEnCours(false);
+    }
   };
 
   const handleDefinirSecteur = async (secteur: "Public" | "Privé") => {
@@ -521,6 +544,31 @@ export default function PrestatairesView() {
                 <Btn variant="secondary" onClick={handleRehabiliter}><ShieldCheck className="w-4 h-4" />Réhabiliter le prestataire</Btn>
               ) : (
                 <Btn variant="secondary" onClick={handleSuspendre}><ShieldOff className="w-4 h-4" />Suspendre le prestataire</Btn>
+              )}
+              <Btn variant="secondary" onClick={() => setShowFusion((v) => !v)}>
+                <Merge className="w-4 h-4" />Fusionner avec un doublon
+              </Btn>
+              {showFusion && (
+                <div className="mt-1 flex gap-2 items-center">
+                  <div className="flex-1">
+                    <Combobox
+                      items={prestataires
+                        .filter((p) => p.id !== selected.id)
+                        .map((p) => ({ value: p.id, label: `${p.nom} (${p.type}, ${p.ville})` }))}
+                      value={doublonId ?? ""}
+                      onChange={(v) => setDoublonId(v || null)}
+                      placeholder="Chercher le doublon à absorber…"
+                    />
+                  </div>
+                  <Btn
+                    variant="danger"
+                    disabled={!doublonId || fusionEnCours}
+                    onClick={handleFusionner}
+                  >
+                    {fusionEnCours ? <Loader2 className="w-4 h-4 animate-spin" /> : <Merge className="w-4 h-4" />}
+                    Fusionner
+                  </Btn>
+                </div>
               )}
               </>
               )}

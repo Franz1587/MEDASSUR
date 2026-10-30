@@ -87,6 +87,75 @@ export class PrestatairesService {
     return { id };
   }
 
+  // Fusion de doublons (2026-10) — voir incident "UNION MEDICALE" /
+  // "CLINIQUE UNION MEDICALE" enregistrés deux fois pour le même
+  // établissement.  `id` = survivant (conservé), `doublonId` = entrée
+  // absorbée puis supprimée.  Toutes les clés étrangères sont redirigées
+  // dans une transaction atomique avant la suppression.
+  async fusionner(id: string, doublonId: string) {
+    if (id === doublonId) throw new BadRequestException("Impossible de fusionner un prestataire avec lui-même.");
+    const [survivant, doublon] = await Promise.all([this.findOne(id), this.findOne(doublonId)]);
+
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Enregistrer le nom du doublon comme alias du survivant
+      await tx.prestataireAlias.upsert({
+        where: { nomOrigine_prestataireId: { nomOrigine: doublon.nom, prestataireId: id } },
+        create: { nomOrigine: doublon.nom, prestataireId: id },
+        update: {},
+      });
+
+      // 2. Récupérer et migrer les aliases du doublon vers le survivant
+      const aliases = await tx.prestataireAlias.findMany({ where: { prestataireId: doublonId } });
+      for (const a of aliases) {
+        await tx.prestataireAlias.upsert({
+          where: { nomOrigine_prestataireId: { nomOrigine: a.nomOrigine, prestataireId: id } },
+          create: { nomOrigine: a.nomOrigine, prestataireId: id },
+          update: {},
+        });
+      }
+      await tx.prestataireAlias.deleteMany({ where: { prestataireId: doublonId } });
+
+      // 3. Tables avec clé étrangère simple — réattribution directe
+      await tx.facture.updateMany({ where: { prestataireId: doublonId }, data: { prestataireId: id } });
+      await tx.priseEnCharge.updateMany({ where: { prestataireId: doublonId }, data: { prestataireId: id } });
+      await tx.accordPrealable.updateMany({ where: { prestataireId: doublonId }, data: { prestataireId: id } });
+      await tx.gedDocument.updateMany({ where: { prestataireId: doublonId }, data: { prestataireId: id } });
+      await tx.user.updateMany({ where: { prestataireId: doublonId }, data: { prestataireId: id } });
+
+      // 4. PortailSocieteAcces — unique (prestataireId, societeId) : insérer
+      //    seulement si la paire n'existe pas déjà chez le survivant.
+      const acces = await tx.portailSocieteAcces.findMany({ where: { prestataireId: doublonId } });
+      for (const a of acces) {
+        await tx.portailSocieteAcces.upsert({
+          where: { prestataireId_societeId: { prestataireId: id, societeId: a.societeId } },
+          create: { prestataireId: id, societeId: a.societeId },
+          update: {},
+        });
+      }
+      await tx.portailSocieteAcces.deleteMany({ where: { prestataireId: doublonId } });
+
+      // 5. MedecinPrestataire — PK composite (medecinId, prestataireId)
+      const liens = await tx.medecinPrestataire.findMany({ where: { prestataireId: doublonId } });
+      for (const l of liens) {
+        const existe = await tx.medecinPrestataire.findUnique({
+          where: { medecinId_prestataireId: { medecinId: l.medecinId, prestataireId: id } },
+        });
+        if (!existe) await tx.medecinPrestataire.create({ data: { medecinId: l.medecinId, prestataireId: id } });
+      }
+      await tx.medecinPrestataire.deleteMany({ where: { prestataireId: doublonId } });
+
+      // 6. Tables optionnelles (nullable prestataireId)
+      // Transaction, PrescriptionLigneDelivraison si présentes dans le schéma
+      try { await (tx as any).transaction?.updateMany({ where: { prestataireId: doublonId }, data: { prestataireId: id } }); } catch { /* absent */ }
+      try { await (tx as any).prescriptionLigneDelivraison?.updateMany({ where: { prestataireId: doublonId }, data: { prestataireId: id } }); } catch { /* absent */ }
+
+      // 7. Supprimer le doublon
+      await tx.prestataire.delete({ where: { id: doublonId } });
+    });
+
+    return { survivantId: id, nomSurvivant: survivant.nom, doublonAbsorbe: doublon.nom };
+  }
+
   // Comptes portail génériques par poste (2026-09) — voir demande
   // utilisateur : "pour chaque prestataire... il faut créer des comptes
   // utilisateurs génériques pour chaque structure médicale. Sers-toi des

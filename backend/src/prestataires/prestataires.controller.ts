@@ -81,6 +81,12 @@ export class PrestatairesController {
     return this.prestatairesService.geolocaliser(id);
   }
 
+  @Post(":id/fusionner")
+  fusionner(@Param("id") id: string, @Body("doublonId") doublonId: string) {
+    if (!doublonId) throw new NotFoundException("doublonId requis");
+    return this.prestatairesService.fusionner(id, doublonId);
+  }
+
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.prestatairesService.remove(id);
