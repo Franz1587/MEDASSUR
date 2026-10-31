@@ -5012,18 +5012,24 @@ export class DocumentsService {
       ["franceville","Franceville"],["moanda","Moanda"],["mounana","Mounana"],
       ["okondja","Okondja"],["bakoumba","Bakoumba"],["akieni","Akiéni"],
       ["mouila","Mouila"],["fougamou","Fougamou"],["ndende","Ndendé"],["mbigou","Mbigou"],
-      ["oyem","Oyem"],["bitam","Bitam"],["mitzic","Mitzic"],["minvoul","Minvoul"],["medouneu","Médouneu"],
+      ["oyem","Oyem"],["afenan","Oyem"],
+      ["bitam","Bitam"],["mitzic","Mitzic"],["minvoul","Minvoul"],["medouneu","Médouneu"],
       ["tchibanga","Tchibanga"],["mayumba","Mayumba"],["tsogni","Tsogni"],
-      ["koulamoutou","Koulamoutou"],["lastoursville","Lastoursville"],
+      ["koulamoutou","Koulamoutou"],["lastoursville","Lastoursville"],["lastourville","Lastoursville"],
       ["lambarene","Lambaréné"],["ndjole","Ndjolé"],
       ["makokou","Makokou"],["booue","Booué"],["mekambo","Mékambo"],
       ["libreville","Libreville"],
     ];
     const villeEffective = (pr: typeof tous[0]): string => {
-      const adr = (pr.adresse || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
-        .toLowerCase().replace(/-/g, " ").trim();
+      const norm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/-/g, " ").trim();
+      const adr = norm(pr.adresse || "");
       for (const [k, display] of VILLES_CONNUES) {
         if (adr.startsWith(k + ",") || adr.startsWith(k + " ") || adr === k) return display;
+      }
+      // Normaliser aussi le champ ville (ex. "Afenan II" → "Oyem")
+      const vil = norm(pr.ville || "");
+      for (const [k, display] of VILLES_CONNUES) {
+        if (vil.startsWith(k + " ") || vil === k) return display;
       }
       return pr.ville || "Libreville";
     };
