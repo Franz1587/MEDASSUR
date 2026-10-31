@@ -4,7 +4,7 @@ import * as path from "path";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
-import type { ParametresOffre } from "../cotation/contenu-offre";
+import { avecInfosProspect, type ParametresOffre } from "../cotation/contenu-offre";
 import { CreateAppelOffresDto } from "./dto/create-appel-offres.dto";
 import { UpdateAppelOffresDto } from "./dto/update-appel-offres.dto";
 import { CreatePropositionDto } from "./dto/create-proposition.dto";
@@ -125,8 +125,14 @@ export class AppelOffresService {
   // dernière offre enregistrée pour ne pas les ressaisir à chaque fois.
   async parametresOffre(id: string, userId?: string): Promise<ParametresOffre> {
     const ao = await this.findOne(id);
-    if (ao.parametresOffre) return ao.parametresOffre as unknown as ParametresOffre;
-    return this.parametresParDefaut(userId, id);
+    const base = ao.parametresOffre ? (ao.parametresOffre as unknown as ParametresOffre) : await this.parametresParDefaut(userId, id);
+    return avecInfosProspect(base, ao.prospect);
+  }
+
+  // Cotation hors appel d'offres : infos de l'assuré prises sur le prospect du même nom.
+  async parametresPourClient(clientNom: string, userId?: string): Promise<ParametresOffre> {
+    const prospect = await this.prisma.prospect.findFirst({ where: { nom: { equals: clientNom.trim(), mode: "insensitive" } }, orderBy: { createdAt: "desc" } });
+    return avecInfosProspect(await this.parametresParDefaut(userId), prospect);
   }
 
   // Aussi utilisé pour une cotation sans appel d'offres (document combiné).
@@ -151,9 +157,8 @@ export class AppelOffresService {
       chargeClientele: prec?.chargeClientele ?? user?.nom ?? "",
       telephone: prec?.telephone ?? p?.telephone ?? "",
       telecopie: prec?.telecopie ?? "",
-      adresseAssure: `${p?.ville ?? "Libreville"}/ Gabon`,
-      periode: `du 01.01.${an + 1} au 31.12.${an + 1}`,
-      duree: "Un an",
+      // Propres au prospect (voir avecInfosProspect) : jamais de valeur inventée.
+      adresseAssure: "", periode: "", duree: "",
       mentionSignature: prec?.mentionSignature ?? `POUR ${nomSociete} SA`,
       lieuSignature: prec?.lieuSignature ?? p?.ville ?? "Libreville",
       pagesPresentation: prec?.pagesPresentation ?? nomSociete.includes("RUCHE"),

@@ -88,6 +88,20 @@ export interface ParametresOffre {
   cotationIdsExclues?: string[];
   pagesPresentation: boolean;
   annexeReseau: boolean;
+  // true : adresse, période et durée viennent de la fiche du prospect
+  // (seul endroit où elles se modifient).
+  infosDuProspect?: boolean;
+}
+
+// Adresse de l'assuré, période et durée : toujours celles saisies sur le
+// prospect, jamais une valeur par défaut (vides tant qu'elles manquent).
+export function avecInfosProspect(base: ParametresOffre, p: { adresse: string | null; dateEffet: string | null; dateEcheance: string | null; dureeContrat: string | null } | null): ParametresOffre {
+  if (!p) return { ...base, infosDuProspect: false };
+  const point = (d: string) => d.replace(/\//g, ".");
+  return {
+    ...base, infosDuProspect: true, adresseAssure: p.adresse ?? "", duree: p.dureeContrat ?? "",
+    periode: p.dateEffet && p.dateEcheance ? `du ${point(p.dateEffet)} au ${point(p.dateEcheance)}` : "",
+  };
 }
 
 // Garanties imprimées par LA RUCHE sur toute proposition Maladie (puces ➢).

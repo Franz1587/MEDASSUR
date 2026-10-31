@@ -40,6 +40,23 @@ export class CreateProspectDto {
   @IsString()
   zoneGeographique?: string;
 
+  // Repris sur l'offre santé (adresse de l'assuré, période, durée).
+  @IsOptional()
+  @IsString()
+  adresse?: string;
+
+  @IsOptional()
+  @IsString()
+  dateEffet?: string;
+
+  @IsOptional()
+  @IsString()
+  dateEcheance?: string;
+
+  @IsOptional()
+  @IsString()
+  dureeContrat?: string;
+
   @IsOptional()
   @IsIn(["Faible", "Moyen", "Fort"])
   scoring?: string;

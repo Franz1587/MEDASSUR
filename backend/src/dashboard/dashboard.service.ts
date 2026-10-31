@@ -2,6 +2,8 @@ import PDFDocument from "pdfkit";
 import { Injectable } from "@nestjs/common";
 import type { Response } from "express";
 import { PrismaService } from "../prisma/prisma.service";
+import { Prisma } from "@prisma/client";
+import { TenantContext } from "../tenant/tenant-context";
 import { ParametresEntrepriseService } from "../parametres-entreprise/parametres-entreprise.service";
 
 function fmt(n: number): string {
@@ -68,10 +70,19 @@ export class DashboardService {
     ]);
     // Rejeté ET Annulé exclus — même métrique que StatistiquesService.calculer ;
     // contrats est déjà filtré estTest:false, ses ids sont donc tous non-test.
-    const prisesEnCharge = await this.prisma.priseEnCharge.findMany({
-      where: { statut: { notIn: ["Rejeté", "Annulé"] }, contratId: { in: contrats.map((c) => c.id) } },
-      select: { type: true, date: true, statut: true, montant: true, baseRemboursement: true, bordereau: { select: { statut: true } } },
-    });
+    // Agrégées par PostgreSQL (une ligne par date × type × réglé) au lieu de
+    // charger ~100 000 lignes : 3,7 s → quelques dizaines de ms, mêmes
+    // chiffres. Cloisonnement société garanti par les ids de contrats, déjà
+    // filtrés par le middleware, et par le même filtre societeId que lui sur
+    // PriseEnCharge (une requête brute ne passe pas par le middleware).
+    const societeId = TenantContext.getSocieteId();
+    const filtreSociete = societeId ? Prisma.sql`AND p."societeId" = ${societeId}` : Prisma.empty;
+    const prisesEnCharge = await this.prisma.$queryRaw<{ date: string; type: string; paye: boolean; n: number; montant: number }[]>`
+      SELECT p.date, p.type, COALESCE(b.statut = 'Payé', false) AS paye, COUNT(*)::int AS n,
+             COALESCE(SUM(COALESCE(p."baseRemboursement", p.montant)), 0)::float8 AS montant
+      FROM "PriseEnCharge" p LEFT JOIN "BordereauReglement" b ON b.id = p."bordereauId"
+      WHERE p.statut NOT IN ('Rejeté', 'Annulé') AND p."contratId" = ANY(${contrats.map((c) => c.id)}::text[]) ${filtreSociete}
+      GROUP BY p.date, p.type, paye`;
 
     // Années disponibles dérivées du résultat contrats (2026-08/2026-10) —
     // jamais une liste figée, jamais une requête séquentielle séparée.
@@ -166,7 +177,7 @@ export class DashboardService {
     // TOUTE la société au lieu d'un seul contrat : c'est la différence avec
     // l'écran "Statistiques", qui reste volontairement par contrat pour une
     // analyse fine (arrêté de situation à imprimer).
-    const consommationLignes = prisesEnCharge.map((p) => ({ date: p.date, montant: Number(p.baseRemboursement ?? p.montant) }));
+    const consommationLignes = prisesEnCharge.map((p) => ({ date: p.date, montant: p.montant }));
     const consommationAnnee = consommationLignes.filter((l) => anneeDe(l.date) === annee && !(annee === new Date().getFullYear() && estDateFuture(l.date)));
     const consommationAnneePrecedenteLignes = consommationLignes.filter((l) => anneeDe(l.date) === anneePrecedente);
     const consommationMensuelle = MOIS.map((mois, i) => ({
@@ -201,8 +212,8 @@ export class DashboardService {
       if (anneeDe(p.date) === annee && estDateFuture(p.date)) continue;
       if (!parType.has(p.type)) parType.set(p.type, { declares: 0, regles: 0 });
       const t = parType.get(p.type)!;
-      t.declares++;
-      if (p.bordereau?.statut === "Payé") t.regles++;
+      t.declares += p.n;
+      if (p.paye) t.regles += p.n;
     }
     const sinistraliteParType = [...parType.entries()]
       .sort((a, b) => b[1].declares - a[1].declares)

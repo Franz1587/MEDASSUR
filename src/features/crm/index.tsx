@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Target, Plus, FileDown, FileSpreadsheet, History, TrendingUp, Award, Users2, LayoutGrid, BarChart3, Link2 } from "lucide-react";
+import { dureeEntre, echeanceUnAn } from "@/lib/dureeContrat";
 import { toast } from "sonner";
 import { Badge } from "@/components/shared/Badge";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
@@ -45,6 +46,7 @@ function emptyForm(commercial: string): ProspectUpsertInput {
     commercial, dernierContact: new Date().toLocaleDateString("fr-FR"),
     contactNom: "", contactFonction: "", contactTelephone: "", contactEmail: "",
     typeContrat: "MaladieEtAssistance",
+    adresse: "", dateEffet: "", dateEcheance: "", dureeContrat: "",
   };
 }
 
@@ -108,6 +110,7 @@ export default function CrmView() {
       contactNom: p.contactNom ?? "", contactFonction: p.contactFonction ?? "",
       contactTelephone: p.contactTelephone ?? "", contactEmail: p.contactEmail ?? "",
       typeContrat: p.typeContrat ?? "MaladieEtAssistance",
+      adresse: p.adresse ?? "", dateEffet: p.dateEffet ?? "", dateEcheance: p.dateEcheance ?? "", dureeContrat: p.dureeContrat ?? "",
     });
     setFormError(null);
     setDetail(null);
@@ -384,6 +387,16 @@ export default function CrmView() {
                   <label className="block"><div className={labelCls}>Fonction</div><input value={form.contactFonction} onChange={(e) => setForm((v) => ({ ...v, contactFonction: e.target.value }))} className={fieldCls} placeholder="DRH, gérant…" /></label>
                   <label className="block"><div className={labelCls}>Téléphone</div><input value={form.contactTelephone} onChange={(e) => setForm((v) => ({ ...v, contactTelephone: e.target.value }))} className={fieldCls} /></label>
                   <label className="block"><div className={labelCls}>Email</div><input type="email" value={form.contactEmail} onChange={(e) => setForm((v) => ({ ...v, contactEmail: e.target.value }))} className={fieldCls} /></label>
+                </div>
+              </div>
+
+              <div>
+                <div className={sectionHeaderCls}>Offre santé — informations de l'assuré</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <label className="block md:col-span-2"><div className={labelCls}>Adresse de l'assuré</div><input value={form.adresse} onChange={(e) => setForm((v) => ({ ...v, adresse: e.target.value }))} className={fieldCls} placeholder="ex. BP 7054 Libreville / Gabon" /></label>
+                  <label className="block"><div className={labelCls}>Date d'effet</div><DateInput value={form.dateEffet ?? ""} onChange={(d) => setForm((f) => { const ech = f.dateEcheance || echeanceUnAn(d); return { ...f, dateEffet: d, dateEcheance: ech, dureeContrat: dureeEntre(d, ech) || f.dureeContrat }; })} className={fieldCls} /></label>
+                  <label className="block"><div className={labelCls}>Date d'échéance</div><DateInput value={form.dateEcheance ?? ""} onChange={(d) => setForm((f) => ({ ...f, dateEcheance: d, dureeContrat: dureeEntre(f.dateEffet, d) || f.dureeContrat }))} className={fieldCls} /></label>
+                  <label className="block"><div className={labelCls}>Durée</div><input value={form.dureeContrat} onChange={(e) => setForm((v) => ({ ...v, dureeContrat: e.target.value }))} className={fieldCls} placeholder="Calculée depuis les dates" /></label>
                 </div>
               </div>
 

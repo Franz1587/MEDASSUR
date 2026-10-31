@@ -285,9 +285,20 @@ export function OffreSantePanel({ appelOffresId, cotations }: { appelOffresId: s
             <textarea rows={2} value={params.redacteur.join("\n")} onChange={(e) => set({ redacteur: lignes(e.target.value) })} className={fieldCls} /></label>
           {champ("telephone", "Téléphone")}
           {champ("telecopie", "Télécopie")}
-          {champ("adresseAssure", "Adresse de l'assuré")}
-          {champ("periode", "Période de garantie")}
-          {champ("duree", "Durée")}
+          {params.infosDuProspect ? (
+            <div className="md:col-span-2 rounded-lg border border-border bg-secondary/20 px-3 py-2 text-[12.5px] text-foreground">
+              <div className={labelCls}>Assuré (fiche du prospect, CRM)</div>
+              {[["Adresse", params.adresseAssure], ["Période", params.periode], ["Durée", params.duree]].map(([l, v]) => (
+                <div key={l}>{l} : {v ? <span className="font-medium">{v}</span> : <span className="text-red-600">à renseigner sur la fiche du prospect</span>}</div>
+              ))}
+            </div>
+          ) : (
+            <>
+              {champ("adresseAssure", "Adresse de l'assuré")}
+              {champ("periode", "Période de garantie")}
+              {champ("duree", "Durée")}
+            </>
+          )}
           {champ("mentionSignature", "Signature du récapitulatif")}
           <div className="flex flex-col gap-2 pt-6">
             <label className="flex items-center gap-2 text-[13px] text-foreground"><input type="checkbox" checked={params.pagesPresentation} onChange={(e) => set({ pagesPresentation: e.target.checked })} className="w-4 h-4 accent-primary" />Pages de présentation (outils, carte santé, applications)</label>

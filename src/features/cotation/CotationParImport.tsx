@@ -6,7 +6,9 @@ import { Badge } from "@/components/shared/Badge";
 import { Combobox } from "@/components/shared/Combobox";
 import { fmtM } from "@/lib/format";
 import { useAuth } from "@/auth/AuthContext";
-import { createProspect, getProspects, prospectLogoUrl, uploadProspectLogo, type ProspectUpsertInput } from "@/services/crm.service";
+import { createProspect, getProspects, prospectLogoUrl, updateProspect, uploadProspectLogo, type ProspectUpsertInput } from "@/services/crm.service";
+import { DateInput } from "@/components/shared/DateInput";
+import { dureeEntre, echeanceUnAn } from "@/lib/dureeContrat";
 import { analyserDocumentAppelOffres, createAppelOffres, getAppelOffres, uploaderDocumentAppelOffres } from "@/services/appelOffres.service";
 import { OffreSantePanel, RelectureCotationModal } from "@/features/appel-offres/OffreSante";
 import { archiverOffreAriana } from "@/services/documents.service";
@@ -43,7 +45,7 @@ export function CotationParImportModal({ compagnies, onClose }: { compagnies: Co
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [nouveau, setNouveau] = useState(true);
   const [prospectId, setProspectId] = useState("");
-  const [form, setForm] = useState({ nom: "", effectif: "", adresse: "", contactNom: "", contactTelephone: "", contactEmail: "", garanties: "Maladie — Gabon uniquement" });
+  const [form, setForm] = useState({ nom: "", effectif: "", adresse: "", dateEffet: "", dateEcheance: "", duree: "", contactNom: "", contactTelephone: "", contactEmail: "", garanties: "Maladie — Gabon uniquement" });
   const [logo, setLogo] = useState<File | null>(null);
   const [fichiers, setFichiers] = useState<Fichier[]>([]);
   const [style, setStyle] = useState<"auto" | "grille" | "colonnes">("auto");
@@ -54,6 +56,11 @@ export function CotationParImportModal({ compagnies, onClose }: { compagnies: Co
 
   useEffect(() => { getProspects().then(setProspects).catch(() => undefined); }, []);
   const prospect = prospects.find((p) => p.id === prospectId) ?? null;
+  // Prospect existant : adresse, période et durée reprises de sa fiche.
+  useEffect(() => {
+    if (!prospect) return;
+    setForm((f) => ({ ...f, adresse: prospect.adresse ?? "", dateEffet: prospect.dateEffet ?? "", dateEcheance: prospect.dateEcheance ?? "", duree: prospect.dureeContrat ?? "" }));
+  }, [prospect?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const logoApercu = logo ? URL.createObjectURL(logo) : prospect?.logo ? prospectLogoUrl(prospect.logo) : undefined;
   const nomClient = nouveau ? form.nom.trim() : prospect?.nom ?? "";
 
@@ -65,8 +72,21 @@ export function CotationParImportModal({ compagnies, onClose }: { compagnies: Co
   };
   const majFichier = (cle: string, p: Partial<Fichier>) => setFichiers((f) => f.map((x) => (x.cle === cle ? { ...x, ...p } : x)));
 
-  const continuer = () => {
+  // Imprimés tels quels sur l'offre (adresse, période, durée) : obligatoires.
+  const infosOffre = () => ({ adresse: form.adresse.trim(), dateEffet: form.dateEffet, dateEcheance: form.dateEcheance, dureeContrat: form.duree.trim() });
+  const continuer = async () => {
     if (!nomClient) { toast.error(nouveau ? "Renseignez le nom du prospect." : "Choisissez un prospect."); return; }
+    const infos = infosOffre();
+    if (!infos.adresse || !infos.dateEffet || !infos.dateEcheance || !infos.dureeContrat) {
+      toast.error("Renseignez l'adresse de l'assuré, les dates d'effet et d'échéance et la durée : elles figurent sur l'offre.");
+      return;
+    }
+    if (!nouveau && prospectId) {
+      try {
+        const maj = await updateProspect(prospectId, infos);
+        setProspects((l) => l.map((p) => (p.id === maj.id ? maj : p)));
+      } catch (err) { toast.error(messageLisible(err)); return; }
+    }
     setEtape("propositions");
   };
 
@@ -82,7 +102,7 @@ export function CotationParImportModal({ compagnies, onClose }: { compagnies: Co
         contactNom: form.contactNom, contactFonction: "", contactTelephone: form.contactTelephone, contactEmail: form.contactEmail,
         typeContrat: "MaladieEtAssistance",
         ...(Number(form.effectif) > 0 ? { effectifEstime: Number(form.effectif) } : {}),
-        ...(form.adresse.trim() ? { zoneGeographique: form.adresse.trim() } : {}),
+        ...infosOffre(),
       };
       const cree = await createProspect(payload);
       id = cree.id;
@@ -175,19 +195,26 @@ export function CotationParImportModal({ compagnies, onClose }: { compagnies: Co
                         <input value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} className={fieldCls} placeholder="ex. LAY PRO" /></label>
                       <label className="block"><div className={labelCls}>Effectif à assurer</div>
                         <input type="number" min={1} value={form.effectif} onChange={(e) => setForm({ ...form, effectif: e.target.value })} className={fieldCls} /></label>
-                      <label className="block"><div className={labelCls}>Adresse</div>
-                        <input value={form.adresse} onChange={(e) => setForm({ ...form, adresse: e.target.value })} className={fieldCls} placeholder="ex. BP 7054 Libreville" /></label>
                       <label className="block"><div className={labelCls}>Contact</div>
                         <input value={form.contactNom} onChange={(e) => setForm({ ...form, contactNom: e.target.value })} className={fieldCls} /></label>
                       <label className="block"><div className={labelCls}>Téléphone</div>
                         <input value={form.contactTelephone} onChange={(e) => setForm({ ...form, contactTelephone: e.target.value })} className={fieldCls} /></label>
-                      <label className="block sm:col-span-2"><div className={labelCls}>E-mail</div>
+                      <label className="block"><div className={labelCls}>E-mail</div>
                         <input type="email" value={form.contactEmail} onChange={(e) => setForm({ ...form, contactEmail: e.target.value })} className={fieldCls} /></label>
                     </>
                   ) : (
                     <label className="block sm:col-span-2"><div className={labelCls}>Prospect *</div>
                       <Combobox options={prospects} value={prospect} onChange={(p) => setProspectId(p?.id ?? "")} getLabel={(p) => p.nom} getId={(p) => p.id} placeholder="Rechercher un prospect…" /></label>
                   )}
+                  <label className="block sm:col-span-2"><div className={labelCls}>Adresse de l'assuré *</div>
+                    <input value={form.adresse} onChange={(e) => setForm({ ...form, adresse: e.target.value })} className={fieldCls} placeholder="ex. BP 7054 Libreville / Gabon" /></label>
+                  <label className="block"><div className={labelCls}>Date d'effet *</div>
+                    <DateInput value={form.dateEffet} onChange={(d) => setForm((f) => { const ech = f.dateEcheance || echeanceUnAn(d); return { ...f, dateEffet: d, dateEcheance: ech, duree: dureeEntre(d, ech) || f.duree }; })} className={fieldCls} /></label>
+                  <label className="block"><div className={labelCls}>Date d'échéance *</div>
+                    <DateInput value={form.dateEcheance} onChange={(d) => setForm((f) => ({ ...f, dateEcheance: d, duree: dureeEntre(f.dateEffet, d) || f.duree }))} className={fieldCls} /></label>
+                  <label className="block"><div className={labelCls}>Durée *</div>
+                    <input value={form.duree} onChange={(e) => setForm({ ...form, duree: e.target.value })} className={fieldCls} placeholder="Calculée depuis les dates" /></label>
+                  <p className="text-[11px] text-muted-foreground self-end pb-2">Imprimées sur chaque page de l'offre (adresse, période de garantie, durée).</p>
                   <label className="block sm:col-span-2"><div className={labelCls}>Garanties demandées (aide ARIANA à retenir les bonnes options)</div>
                     <input value={form.garanties} onChange={(e) => setForm({ ...form, garanties: e.target.value })} className={fieldCls} /></label>
                 </div>

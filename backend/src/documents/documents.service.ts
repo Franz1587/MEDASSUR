@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { PDFDocument as PdfLib } from "pdf-lib";
 import PDFDocument from "pdfkit";
 import sharp from "sharp";
@@ -11,7 +11,7 @@ import {
   Header, Footer, ImageRun, PageNumber, AlignmentType, ShadingType, BorderStyle, HeightRule, PageBreak, VerticalAlign,
 } from "docx";
 import type { Response } from "express";
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { ParametresEntrepriseService } from "../parametres-entreprise/parametres-entreprise.service";
 import { groupeDeFamille } from "../actes-medicaux/groupes-actes.util";
@@ -409,6 +409,46 @@ export class DocumentsService {
   // directement utilisables par tous les appelants sans changement de
   // signature. `null` = fichier absent, jamais une exception (comportement
   // identique à l'ancien `fs.existsSync` avant chaque `doc.image()`).
+  // Fonds de carte importés parfois en très haute définition (8 500 px, soit
+  // 1,4 Mo dans chaque PDF de carte) : une copie à 2 000 px (300 dpi sur une
+  // carte de 85 mm) est créée une fois à côté de l'original et utilisée à sa
+  // place. shortcut: copie liée au nom du fichier, un fond remplacé sous le
+  // même nom garderait l'ancienne copie (les imports génèrent un nom unique).
+  private async fondCarte(nom: string | null | undefined): Promise<Buffer | string | null> {
+    const src = await this.chargerImage("modeles-carte", nom, UPLOADS_MODELES_CARTE_DIR);
+    if (!src || typeof src !== "string") return src;
+    const reduit = path.join(UPLOADS_MODELES_CARTE_DIR, "reduits", `${path.parse(src).name}.jpg`);
+    if (fs.existsSync(reduit)) return reduit;
+    try {
+      await fs.promises.mkdir(path.dirname(reduit), { recursive: true });
+      const tmp = `${reduit}.${randomUUID()}.tmp`;
+      await sharp(src).flatten({ background: "#ffffff" }).resize({ width: 2000, withoutEnlargement: true }).jpeg({ quality: 88 }).toFile(tmp);
+      await fs.promises.rename(tmp, reduit);
+      return reduit;
+    } catch {
+      return src;
+    }
+  }
+
+  // Annexe « Réseau de soins » : identique d'une offre à l'autre tant que le
+  // réseau et l'identité de la société ne changent pas, donc gardée en mémoire
+  // (clé = empreinte des données réellement imprimées, société comprise).
+  private reseauSoinsCache = new Map<string, Buffer>();
+  private async reseauSoinsPdf(p: ParametresEntreprise, logoSociete: Buffer | string | null): Promise<Buffer> {
+    const provinces = await this.construireAnnuaire();
+    const cle = createHash("sha1").update(JSON.stringify([p, typeof logoSociete === "string" ? logoSociete : logoSociete?.length ?? null, provinces])).digest("hex");
+    const enCache = this.reseauSoinsCache.get(cle);
+    if (enCache) return enCache;
+    const doc = new PDFDocument({ size: "A4", margin: 0, bufferPages: true });
+    const fin = pdfVersBuffer(doc);
+    genererReseauSoins(doc, p, logoSociete, provinces);
+    doc.end();
+    const pdf = await fin;
+    if (this.reseauSoinsCache.size >= 20) this.reseauSoinsCache.delete(this.reseauSoinsCache.keys().next().value as string);
+    this.reseauSoinsCache.set(cle, pdf);
+    return pdf;
+  }
+
   private async chargerImage(categorie: string, nomFichier: string | null | undefined, dossierLocal: string): Promise<Buffer | string | null> {
     if (!nomFichier) return null;
     if (this.storage.actif) return this.storage.download(categorie, nomFichier);
@@ -1560,8 +1600,8 @@ export class DocumentsService {
     // identité, taux) restent superposés aux mêmes positions qu'aujourd'hui.
     const modele = p.modeleCarteId ? await this.prisma.modeleCarte.findUnique({ where: { id: p.modeleCarteId } }) : null;
     const logoImage = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
-    const fondRecto = await this.chargerImage("modeles-carte", modele?.imageRecto, UPLOADS_MODELES_CARTE_DIR);
-    const fondVerso = await this.chargerImage("modeles-carte", modele?.imageVerso, UPLOADS_MODELES_CARTE_DIR);
+    const fondRecto = await this.fondCarte(modele?.imageRecto);
+    const fondVerso = await this.fondCarte(modele?.imageVerso);
     // Style "la-ruche" (2026-09) — voir ModeleCarte.styleCode : recto
     // reconstruit EN CODE pour copier fidèlement le modèle fourni par LA
     // RUCHE EXCELLENCE. Voir demande utilisateur : "il faut les redesign
@@ -4916,32 +4956,29 @@ export class DocumentsService {
     // sinon paramètres par défaut et logo saisi sur la cotation.
     const aos = [...new Set(cotations.map((c) => c.appelOffresId))];
     const ao = aos.length === 1 && aos[0] ? cotations[0].appelOffres : null;
-    const params = ao ? await this.appelOffres.parametresOffre(ao.id, userId) : await this.appelOffres.parametresParDefaut(userId);
+    const params = ao ? await this.appelOffres.parametresOffre(ao.id, userId) : await this.appelOffres.parametresPourClient(cotations[0].clientNom, userId);
     const logoCotation = cotations.find((c) => c.logo)?.logo;
     const clientNom = ao?.clientNom ?? cotations[0].clientNom;
-    const pdf = await this.genererOffreSante(cotations, {
+    const offre = await this.genererOffreSante(cotations, {
       clientNom,
       logoClient: ao?.prospect?.logo ? ["logos-prospects", ao.prospect.logo] : logoCotation ? ["logos-cotations", logoCotation] : null,
       params: { ...params, cotationIdsExclues: [] },
       dateDoc: ao ? new Map(ao.documents.map((d) => [d.id, d.createdAt.getTime()])) : undefined,
     });
-    const archive = await this.archiverOffre(pdf, {
+    const archive = await this.archiverOffre(offre, {
       appelOffresId: ao?.id ?? null, clientNom, origine: cotations.length > 1 ? "Document combiné" : "Cotation", cotationIds: cotations.map((c) => c.id), userId,
     });
-    this.envoyerPdfOffre(res, pdf, clientNom, archive.id);
+    this.envoyerPdfOffre(res, offre.pdf, clientNom, archive.id);
   }
 
   // Réseau de soins — annuaire des prestataires conventionnés, trié par province puis ville.
   async renderReseauSoins(res: Response) {
     const p = await this.parametresEntreprise.findOne();
     const logoImage = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
-    const provinces = await this.construireAnnuaire();
-    const doc = new PDFDocument({ size: "A4", margin: 0, bufferPages: true });
+    const pdf = await this.reseauSoinsPdf(p, logoImage);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", 'inline; filename="Reseau-de-Soins.pdf"');
-    doc.pipe(res);
-    genererReseauSoins(doc, p, logoImage, provinces);
-    doc.end();
+    res.end(pdf);
   }
 
   // Carte d'assurance SPECIMEN (recto/verso) de la société, au nom du
@@ -5066,16 +5103,16 @@ export class DocumentsService {
   // de garanties / décompte, comparatif, pages de présentation et annexe
   // réseau de soins (données réelles du réseau, jamais une liste figée).
   async renderOffreSante(appelOffresId: string, userId: string | undefined, res: Response) {
-    const { pdf, ao, ids } = await this.offreDeAppelOffres(appelOffresId, userId);
-    const archive = await this.archiverOffre(pdf, { appelOffresId, clientNom: ao.clientNom, origine: "Appel d'offres", cotationIds: ids, userId });
-    this.envoyerPdfOffre(res, pdf, ao.clientNom, archive.id);
+    const { offre, ao, ids } = await this.offreDeAppelOffres(appelOffresId, userId);
+    const archive = await this.archiverOffre(offre, { appelOffresId, clientNom: ao.clientNom, origine: "Appel d'offres", cotationIds: ids, userId });
+    this.envoyerPdfOffre(res, offre.pdf, ao.clientNom, archive.id);
   }
 
   // Première offre montée par ARIANA (fin de la cotation par import) :
   // générée et archivée sans être ouverte.
   async archiverOffreAriana(appelOffresId: string, userId?: string) {
-    const { pdf, ao, ids } = await this.offreDeAppelOffres(appelOffresId, userId);
-    return this.archiverOffre(pdf, { appelOffresId, clientNom: ao.clientNom, origine: "ARIANA", cotationIds: ids, userId });
+    const { offre, ao, ids } = await this.offreDeAppelOffres(appelOffresId, userId);
+    return this.archiverOffre(offre, { appelOffresId, clientNom: ao.clientNom, origine: "ARIANA", cotationIds: ids, userId });
   }
 
   private async offreDeAppelOffres(appelOffresId: string, userId?: string) {
@@ -5088,10 +5125,10 @@ export class DocumentsService {
     const exclues = new Set(params.cotationIdsExclues ?? []);
     const dateDoc = new Map(ao.documents.map((d) => [d.id, d.createdAt.getTime()]));
     const retenues = ao.cotations.filter((c) => !exclues.has(c.id));
-    const pdf = await this.genererOffreSante(retenues, {
+    const offre = await this.genererOffreSante(retenues, {
       clientNom: ao.clientNom, logoClient: ao.prospect?.logo ? ["logos-prospects", ao.prospect.logo] : null, params, dateDoc,
     });
-    return { pdf, ao, ids: retenues.map((c) => c.id) };
+    return { offre, ao, ids: retenues.map((c) => c.id) };
   }
 
   // Offre santé au format LA RUCHE — un seul générateur pour l'offre d'un
@@ -5100,13 +5137,17 @@ export class DocumentsService {
   private async genererOffreSante(
     cotations: (Cotation & { compagnie: Compagnie | null; garanties: CotationGarantieLigne[] })[],
     ctx: { clientNom: string; logoClient: [string, string] | null; params: ParametresOffre; dateDoc?: Map<string, number> },
-  ): Promise<Buffer> {
+  ): Promise<{ pdf: Buffer; pages: number }> {
     const params = ctx.params;
     const retenues = cotations;
     if (!retenues.length) throw new BadRequestException("Aucune cotation à présenter dans l'offre.");
     const sansCompagnie = retenues.filter((c) => !c.compagnie);
     if (sansCompagnie.length) throw new BadRequestException(`Choisissez la compagnie des cotations ${sansCompagnie.map((c) => c.id).join(", ")} avant de générer l'offre.`);
     const contenuDe = (c: typeof retenues[number]) => (c.contenuOffre as unknown as ContenuOffre | null) ?? contenuDepuisCotation(c);
+    // Durée de chaque étape, journalisée : on mesure avant d'optimiser.
+    const t0 = Date.now(), etapes: string[] = [];
+    let tPrec = t0;
+    const etape = (nom: string) => { const t = Date.now(); etapes.push(`${nom} ${t - tPrec} ms`); tPrec = t; };
 
     const p = await this.parametresEntreprise.findOne();
     const logoSociete = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
@@ -5143,17 +5184,16 @@ export class DocumentsService {
     const donnees = { clientNom: ctx.clientNom, clientLogo, societeLogo, params, compagnies };
     const corps = new PDFDocument({ size: [596.52, 842.52], margin: 0, bufferPages: true });
     const pCorps = pdfVersBuffer(corps);
+    etape("logos");
     const dernier = genererCorpsOffre(corps, donnees);
     corps.end();
+    etape("corps");
     // Annexe = le PDF officiel « Réseau de Soins » de MEDASSUR+ (même moteur
     // et mêmes données en direct que le bouton Réseau de soins).
     let annexe: Buffer | null = null;
     if (params.annexeReseau) {
-      const docAnnexe = new PDFDocument({ size: "A4", margin: 0, bufferPages: true });
-      const pAnnexe = pdfVersBuffer(docAnnexe);
-      genererReseauSoins(docAnnexe, p, logoSociete, await this.construireAnnuaire());
-      docAnnexe.end();
-      annexe = await pAnnexe;
+      annexe = await this.reseauSoinsPdf(p, logoSociete);
+      etape("annexe réseau");
     }
     let presentation: { carte: Buffer | null; portails: Buffer } | null = null;
     if (params.pagesPresentation) {
@@ -5166,13 +5206,17 @@ export class DocumentsService {
         carte: await this.carteSpecimen(p, ctx.clientNom, maladie.compagnie?.nom ?? "", maladie.tauxCouvertureAmbulatoire, maladie.tauxCouvertureHospitalisation).catch(() => null),
         portails: await pPortails,
       };
+      etape("présentation");
     }
-    return assemblerOffre(await pCorps, dernier, annexe, presentation, clientLogo);
+    const offre = await assemblerOffre(await pCorps, dernier, annexe, presentation, clientLogo);
+    etape("assemblage");
+    Logger.log(`Offre ${ctx.clientNom} : ${Date.now() - t0} ms (${etapes.join(", ")}), ${offre.pages} pages, ${Math.round(offre.pdf.length / 1024)} Ko`, "OffreSante");
+    return offre;
   }
 
   // Chaque offre générée est archivée telle quelle (OffreGeneree) avant
   // d'être envoyée : on rouvre et retélécharge toujours le PDF remis.
-  private async archiverOffre(pdf: Buffer, meta: { appelOffresId: string | null; clientNom: string; origine: string; cotationIds: string[]; userId?: string }) {
+  private async archiverOffre({ pdf, pages }: { pdf: Buffer; pages: number }, meta: { appelOffresId: string | null; clientNom: string; origine: string; cotationIds: string[]; userId?: string }) {
     const fichier = `${randomUUID()}.pdf`;
     if (this.storage.actif) await this.storage.upload("offres-sante", fichier, pdf, "application/pdf");
     else {
@@ -5183,7 +5227,7 @@ export class DocumentsService {
     return this.prisma.offreGeneree.create({
       data: {
         appelOffresId: meta.appelOffresId, clientNom: meta.clientNom, origine: meta.origine, fichier, tailleOctets: pdf.length,
-        nbPages: (await PdfLib.load(pdf)).getPageCount(), cotationIds: meta.cotationIds, creeParId: meta.userId ?? null, creeParNom: user?.nom ?? null,
+        nbPages: pages, cotationIds: meta.cotationIds, creeParId: meta.userId ?? null, creeParNom: user?.nom ?? null,
       },
     });
   }

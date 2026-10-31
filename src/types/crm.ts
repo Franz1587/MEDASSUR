@@ -24,6 +24,12 @@ export interface Prospect {
   // Type de contrat envisagé (2026-08).
   typeContrat?: "MaladieEtAssistance" | "MaladieSeule";
 
+  // Repris sur l'offre santé : adresse de l'assuré, période (JJ/MM/AAAA) et durée.
+  adresse?: string;
+  dateEffet?: string;
+  dateEcheance?: string;
+  dureeContrat?: string;
+
   // Conversion en client (2026-08) — voir CrmService.lierClient.
   clientId?: string;
   clientNom?: string;

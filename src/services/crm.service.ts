@@ -19,6 +19,10 @@ interface ApiProspect {
   contactTelephone?: string | null;
   contactEmail?: string | null;
   typeContrat?: string | null;
+  adresse?: string | null;
+  dateEffet?: string | null;
+  dateEcheance?: string | null;
+  dureeContrat?: string | null;
   clientId?: string | null;
   client?: { id: string; nom: string } | null;
 }
@@ -43,6 +47,7 @@ function mapProspect(p: ApiProspect): Prospect {
     contactNom: p.contactNom ?? undefined, contactFonction: p.contactFonction ?? undefined,
     contactTelephone: p.contactTelephone ?? undefined, contactEmail: p.contactEmail ?? undefined,
     typeContrat: (p.typeContrat as Prospect["typeContrat"]) ?? undefined,
+    adresse: p.adresse ?? undefined, dateEffet: p.dateEffet ?? undefined, dateEcheance: p.dateEcheance ?? undefined, dureeContrat: p.dureeContrat ?? undefined,
     clientId: p.clientId ?? p.client?.id ?? undefined, clientNom: p.client?.nom ?? undefined,
   };
 }
@@ -79,6 +84,12 @@ export interface ProspectUpsertInput {
   contactTelephone?: string;
   contactEmail?: string;
   typeContrat?: "MaladieEtAssistance" | "MaladieSeule";
+  adresse?: string;
+  dateEffet?: string;
+  dateEcheance?: string;
+  dureeContrat?: string;
+  effectifEstime?: number;
+  zoneGeographique?: string;
 }
 
 export async function getProspects(): Promise<Prospect[]> {

@@ -53,12 +53,12 @@ export class ReglementPrestataireService {
     });
     if (!bordereau) throw new NotFoundException(`Bordereau ${id} introuvable`);
 
-    const paires = [...new Set(bordereau.prisesEnCharge.filter((l) => l.factureId).map((l) => `${l.factureId}::${l.assureId}`))];
-    const decomptes = paires.length
-      ? await this.prisma.decompte.findMany({
-          where: { OR: paires.map((pair) => { const [factureId, assureId] = pair.split("::"); return { factureId, assureId }; }) },
-        })
-      : [];
+    // Par facture puis appariement en mémoire (voir historique() : limite de paramètres PostgreSQL).
+    const factureIds = [...new Set(bordereau.prisesEnCharge.map((l) => l.factureId).filter((id): id is string => !!id))];
+    const decomptes = [];
+    for (let i = 0; i < factureIds.length; i += 5000) {
+      decomptes.push(...await this.prisma.decompte.findMany({ where: { factureId: { in: factureIds.slice(i, i + 5000) } }, select: { factureId: true, assureId: true, numero: true } }));
+    }
     const decompteParPaire = new Map(decomptes.map((d) => [`${d.factureId}::${d.assureId}`, d.numero]));
 
     return {
@@ -352,16 +352,27 @@ export class ReglementPrestataireService {
       // chèque), avec la référence de chèque ET la banque (voir demande
       // utilisateur : "voir dans l'historique les règlements qui ont un
       // règlement comptable et ceux qui n'en ont pas").
-      include: { assure: true, facture: true, bordereau: { include: { lettreCheque: { include: { banque: true } } } }, prestataireRef: true },
+      // Champs réellement imprimés seulement (l'historique complet compte
+      // ~100 000 lignes : charger factures et assurés entiers saturait la mémoire).
+      select: {
+        id: true, date: true, assureId: true, factureId: true, montant: true, baseRemboursement: true, statut: true,
+        bordereauId: true, prestataireId: true, prestataire: true,
+        assure: { select: { nom: true, prenom: true } },
+        facture: { select: { dateReception: true, referenceFacture: true } },
+        bordereau: { select: { numero: true, statut: true, lettreCheque: { select: { numero: true, numeroCheque: true, banque: { select: { nom: true } } } } } },
+        prestataireRef: { select: { nom: true } },
+      },
       orderBy: { date: "desc" },
     });
 
-    const paires = [...new Set(lignesBrutes.filter((l) => l.factureId).map((l) => `${l.factureId}::${l.assureId}`))];
-    const decomptes = paires.length
-      ? await this.prisma.decompte.findMany({
-          where: { OR: paires.map((pair) => { const [factureId, assureId] = pair.split("::"); return { factureId, assureId }; }) },
-        })
-      : [];
+    // Décomptes chargés par facture (lots de 5 000) puis appariés en mémoire :
+    // un OR (facture, assuré) par ligne dépassait la limite PostgreSQL de
+    // 32 767 paramètres sur un gros historique (erreur 500).
+    const factureIds = [...new Set(lignesBrutes.map((l) => l.factureId).filter((id): id is string => !!id))];
+    const decomptes = [];
+    for (let i = 0; i < factureIds.length; i += 5000) {
+      decomptes.push(...await this.prisma.decompte.findMany({ where: { factureId: { in: factureIds.slice(i, i + 5000) } } }));
+    }
     const decompteParPaire = new Map(decomptes.map((d) => [`${d.factureId}::${d.assureId}`, d]));
 
     const du = parseDateFr(filtres.du);

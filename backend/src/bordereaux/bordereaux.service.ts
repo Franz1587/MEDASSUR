@@ -134,41 +134,47 @@ export interface BordereauProductionPayload {
 export class BordereauxService {
   constructor(private prisma: PrismaService) {}
 
-  async sinistres(du?: string, au?: string, compagnieId?: string, typeReglement: "maladie" | "comptable" = "maladie", filtres: FiltresBordereauSinistres = {}): Promise<BordereauSinistresPayload> {
-    const villeFiltre = filtres.ville?.trim().toLowerCase() || null;
+  // Lignes réglées de la période (date de réception du bordereau) pour la
+  // compagnie : filtres poussés en base (bordereaux de la période, contrats
+  // de la compagnie) et champs réduits à ceux imprimés. Auparavant TOUTES les
+  // lignes réglées de la société étaient chargées avec leurs relations
+  // complètes puis filtrées en mémoire : 106 s puis plantage mémoire pour
+  // une compagnie sans période saisie sur les données LA RUCHE.
+  private async lignesReglees(du?: string, au?: string, compagnieId?: string) {
     const dateDu = parseDateFr(du);
     const dateAu = parseDateFr(au);
-
-    const [lignesBrutes, compagnie] = await Promise.all([
-      this.prisma.priseEnCharge.findMany({
-        where: { bordereauId: { not: null } },
-        include: {
-          assure: true, prestataireRef: true, bordereau: true,
+    const [bordereaux, contrats, compagnie] = await Promise.all([
+      this.prisma.bordereauReglement.findMany({ select: { id: true, dateReception: true, numero: true, referenceVirement: true } }),
+      // PriseEnCharge.contratId est dénormalisé (pas de relation Prisma
+      // directe, voir schema.prisma) — Contrat/Client résolus à part.
+      this.prisma.contrat.findMany({ where: compagnieId ? { compagnieId } : {}, include: { client: true } }),
+      compagnieId ? this.prisma.compagnie.findUnique({ where: { id: compagnieId } }) : Promise.resolve(null),
+    ]);
+    const bordereauParId = new Map(bordereaux.filter((b) => {
+      const d = parseDateFr(b.dateReception);
+      return !!d && !(dateDu && d < dateDu) && !(dateAu && d > dateAu);
+    }).map((b) => [b.id, b]));
+    const contratParId = new Map(contrats.map((c) => [c.id, c]));
+    const ids = [...bordereauParId.keys()], contratIds = [...contratParId.keys()];
+    const lignes = [];
+    for (let i = 0; i < ids.length && contratIds.length; i += 5000) {
+      lignes.push(...await this.prisma.priseEnCharge.findMany({
+        where: { bordereauId: { in: ids.slice(i, i + 5000) }, contratId: { in: contratIds } },
+        select: {
+          date: true, type: true, montant: true, baseRemboursement: true, montantTps: true, contratId: true, prestataire: true, bordereauId: true,
+          assure: { select: { nom: true, prenom: true, typeAssure: true, familleId: true } },
+          prestataireRef: { select: { nom: true, ville: true } },
           facture: { select: { agenceId: true } },
           remboursement: { select: { agenceId: true } },
         },
-      }),
-      compagnieId ? this.prisma.compagnie.findUnique({ where: { id: compagnieId } }) : Promise.resolve(null),
-    ]);
+      }));
+    }
+    return { compagnie, contratParId, dansPeriode: lignes.map((l) => ({ ...l, bordereau: bordereauParId.get(l.bordereauId!) ?? null })) };
+  }
 
-
-    const dansPeriode = lignesBrutes.filter((l) => {
-      if (!l.bordereau) return false;
-      const dateReglement = parseDateFr(l.bordereau.dateReception);
-      if (!dateReglement) return false;
-      if (dateDu && dateReglement < dateDu) return false;
-      if (dateAu && dateReglement > dateAu) return false;
-      return true;
-    });
-
-    // PriseEnCharge.contratId est dénormalisé (pas de relation Prisma
-    // directe, voir schema.prisma) — les Contrat/Client concernés sont
-    // résolus séparément puis fusionnés en mémoire.
-    const contratIds = [...new Set(dansPeriode.map((l) => l.contratId))];
-    const contrats = contratIds.length > 0
-      ? await this.prisma.contrat.findMany({ where: { id: { in: contratIds } }, include: { client: true } })
-      : [];
-    const contratParId = new Map(contrats.map((c) => [c.id, c]));
+  async sinistres(du?: string, au?: string, compagnieId?: string, typeReglement: "maladie" | "comptable" = "maladie", filtres: FiltresBordereauSinistres = {}): Promise<BordereauSinistresPayload> {
+    const villeFiltre = filtres.ville?.trim().toLowerCase() || null;
+    const { compagnie, contratParId, dansPeriode } = await this.lignesReglees(du, au, compagnieId);
 
     const parClient = new Map<string, GroupeBordereauSinistres>();
     for (const l of dansPeriode) {
@@ -234,36 +240,7 @@ export class BordereauxService {
   // que sinistres() mais expose dateSoins, assurePrincipal et ayantDroit.
   async detailSinistres(du?: string, au?: string, compagnieId?: string, filtres: FiltresBordereauSinistres = {}): Promise<DetailBordereauPayload> {
     const villeFiltre = filtres.ville?.trim().toLowerCase() || null;
-    const dateDu = parseDateFr(du);
-    const dateAu = parseDateFr(au);
-
-    const [lignesBrutes, compagnie] = await Promise.all([
-      this.prisma.priseEnCharge.findMany({
-        where: { bordereauId: { not: null } },
-        include: {
-          assure: { select: { id: true, nom: true, prenom: true, typeAssure: true, familleId: true } },
-          prestataireRef: true, bordereau: true,
-          facture: { select: { agenceId: true } },
-          remboursement: { select: { agenceId: true } },
-        },
-      }),
-      compagnieId ? this.prisma.compagnie.findUnique({ where: { id: compagnieId } }) : Promise.resolve(null),
-    ]);
-
-    const dansPeriode = lignesBrutes.filter((l) => {
-      if (!l.bordereau) return false;
-      const d = parseDateFr(l.bordereau.dateReception);
-      if (!d) return false;
-      if (dateDu && d < dateDu) return false;
-      if (dateAu && d > dateAu) return false;
-      return true;
-    });
-
-    const contratIds = [...new Set(dansPeriode.map((l) => l.contratId))];
-    const contrats = contratIds.length > 0
-      ? await this.prisma.contrat.findMany({ where: { id: { in: contratIds } }, include: { client: true } })
-      : [];
-    const contratParId = new Map(contrats.map((c) => [c.id, c]));
+    const { compagnie, contratParId, dansPeriode } = await this.lignesReglees(du, au, compagnieId);
 
     // Résoudre les racines de famille (principal) pour les ayants droit.
     const familleIds = [...new Set(dansPeriode.map((l) => l.assure.familleId).filter((id): id is string => !!id))];

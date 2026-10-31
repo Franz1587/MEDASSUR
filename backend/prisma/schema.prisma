@@ -921,6 +921,13 @@ model Prospect {
   // tauxCommissionAssistance) s'appliquent dans la suggestion.
   typeContrat String? // "MaladieEtAssistance" | "MaladieSeule"
 
+  // Informations reprises telles quelles sur l'offre sante (2026-10) :
+  // jamais de valeur par defaut codee en dur.
+  adresse       String?
+  dateEffet     String? // JJ/MM/AAAA
+  dateEcheance  String? // JJ/MM/AAAA
+  dureeContrat  String?
+
   // Conversion en client (2026-08) — voir demande utilisateur : "lesquels
   // sont devenus des clients". Renseigné en liant un Client existant
   // (créé via le parcours Souscripteurs habituel) une fois l'affaire

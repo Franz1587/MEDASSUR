@@ -19,6 +19,16 @@ const MIME_PAR_EXTENSION: Record<string, string> = {
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   app.use(compression());
+  // Requêtes lentes journalisées (route, statut, durée) : on optimise ce qui
+  // est réellement lent en production, mesuré, jamais deviné.
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const debut = Date.now();
+    res.on("finish", () => {
+      const ms = Date.now() - debut;
+      if (ms >= 1000) console.warn(`[Lenteur] ${req.method} ${req.originalUrl.split("?")[0]} ${res.statusCode} ${ms} ms`);
+    });
+    next();
+  });
   // exposedHeaders : sans ça, le frontend ne peut pas lire Content-Disposition
   // sur une réponse cross-origin (fetch authentifié + blob, voir
   // src/services/documents.service.ts) — nécessaire pour que les documents

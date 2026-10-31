@@ -796,7 +796,7 @@ export interface PiecesPresentation { carte: Buffer | null; portails: Buffer | n
 // Emplacements recto / verso de la carte sur la page « LA CARTE SANTE » du modèle (pt, depuis le haut).
 const CARTE_RECTO = [56.7, 99.3, 218.9, 139.1], CARTE_VERSO = [281.1, 100.1, 218.3, 138.7];
 
-export async function assemblerOffre(corps: Buffer, dernierNumero: number, annexe: Buffer | null, presentation: PiecesPresentation | null, clientLogoPng: Buffer | null): Promise<Buffer> {
+export async function assemblerOffre(corps: Buffer, dernierNumero: number, annexe: Buffer | null, presentation: PiecesPresentation | null, clientLogoPng: Buffer | null): Promise<{ pdf: Buffer; pages: number }> {
   const final = await PdfLib.load(corps);
   if (presentation) {
     const src = await PdfLib.load(fs.readFileSync(path.join(ASSETS, "presentation.pdf")));
@@ -828,5 +828,5 @@ export async function assemblerOffre(corps: Buffer, dernierNumero: number, annex
     const src = await PdfLib.load(annexe);
     for (const pg of await final.copyPages(src, src.getPageIndices())) final.addPage(pg);
   }
-  return Buffer.from(await final.save());
+  return { pdf: Buffer.from(await final.save()), pages: final.getPageCount() };
 }

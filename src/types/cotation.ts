@@ -99,6 +99,8 @@ export interface ParametresOffre {
   cotationIdsExclues?: string[];
   pagesPresentation: boolean;
   annexeReseau: boolean;
+  // Adresse, période et durée lues sur la fiche du prospect (non modifiables ici).
+  infosDuProspect?: boolean;
 }
 
 export interface CotationInput {
