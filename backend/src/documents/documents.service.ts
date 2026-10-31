@@ -5051,14 +5051,17 @@ export class DocumentsService {
 
     const pied = () => {
       const savedY = doc.y;
-      // footerY < page.maxY() (= page.height - margin.bottom = 841.89 - 40 = 801.89)
-      // pour ne jamais déclencher le saut automatique PDFKit
-      const footerY = doc.page.height - 43; // 798.89 < 801.89 → pas de saut auto
-      doc.moveTo(40, footerY - 4).lineTo(555, footerY - 4).lineWidth(0.5).strokeColor("#ccc").stroke();
+      // margins.bottom = 0 → page.maxY() = page.height → PDFKit ne déclenche aucun saut auto
+      // (PDFKit 0.19 vérifie nextY = doc.y + lineHeight > maxY ; la marge bottom doit être 0)
+      const origBottom = doc.page.margins.bottom;
+      doc.page.margins.bottom = 0;
+      const footerY = doc.page.height - 30;
+      doc.moveTo(40, footerY - 6).lineTo(555, footerY - 6).lineWidth(0.5).strokeColor("#ccc").stroke();
       doc.fontSize(7).fillColor("#999").font("Helvetica")
          .text(`${p.nom} — Réseau de Soins Conventionné`, 40, footerY, { width: 320, lineBreak: false });
       doc.text(`${total} prestataires · ${nbVilles} villes · ${nbProvs} provinces`, 40, footerY, { width: PAGE_W, align: "right", lineBreak: false });
-      doc.y = savedY; // ne pas laisser le curseur dans la zone footer
+      doc.page.margins.bottom = origBottom;
+      doc.y = savedY; // restaurer la position pour ne pas fausser la logique de pagination
     };
 
     const enteteTableau = () => {

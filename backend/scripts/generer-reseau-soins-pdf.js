@@ -363,10 +363,17 @@ async function main() {
   // ── En-tête de page (nom page) ─────────────────────────────────────────
   const ENTETE_H = 25;
   const dessinerEntetePage = () => {
+    const savedY = doc.y;
+    // margins.bottom = 0 → maxY() = page.height → PDFKit ne peut pas déclencher de saut auto
+    const origBottom = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
+    const footerY = doc.page.height - 30;
+    doc.moveTo(40, footerY - 6).lineTo(555, footerY - 6).lineWidth(0.5).strokeColor('#ccc').stroke();
     doc.fontSize(7).fillColor('#999').font('Helvetica')
-       .text('LA RUCHE EXCELLENCE — Réseau de Soins Conventionné', 40, doc.page.height - 30, { width: 320, lineBreak: false });
-    doc.text(`Page ${doc.bufferedPageRange().count}`, 40, doc.page.height - 30, { width: PAGE_W, align: 'right', lineBreak: false });
-    doc.moveTo(40, doc.page.height - 36).lineTo(555, doc.page.height - 36).lineWidth(0.5).strokeColor('#ccc').stroke();
+       .text('LA RUCHE EXCELLENCE — Réseau de Soins Conventionné', 40, footerY, { width: 320, lineBreak: false });
+    doc.text(`Page ${doc.bufferedPageRange().count}`, 40, footerY, { width: PAGE_W, align: 'right', lineBreak: false });
+    doc.page.margins.bottom = origBottom;
+    doc.y = savedY;
   };
 
   let ligneIndex = 0;
