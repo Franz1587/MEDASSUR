@@ -9,7 +9,7 @@ import {
   ScreenHeader, ListRow, Badge, statutVariant, EmptyState, LoadingView, ErrorView,
 } from "../../components/ui";
 import { colors, radius, spacing } from "../../theme/colors";
-import { getReseauSoins, type PrestataireReseau } from "../../api/reseauSoins";
+import { getReseauSoins, cheminReseauSoinsPdf, type PrestataireReseau } from "../../api/reseauSoins";
 import { messageErreur } from "../../api/http";
 import { obtenirPositionActuelle, type Position } from "../../utils/position";
 import { distanceKm, formaterDistance } from "../../utils/distance";
@@ -120,16 +120,27 @@ export function ReseauSoinsListScreen() {
         <ScreenHeader
           title="Réseau de soins"
           subtitle={position ? "Triés par proximité" : "Prestataires conventionnés"}
-          right={peutAfficherCarte ? (
-            <View style={styles.toggleRow}>
-              <Pressable onPress={() => setVueCarte(false)} style={[styles.toggleBtn, !vueCarte && styles.toggleBtnActive]}>
-                <Ionicons name="list-outline" size={16} color={!vueCarte ? "#fff" : colors.textMuted} />
+          right={
+            <View style={styles.headerActions}>
+              <Pressable
+                onPress={() => navigation.navigate("DocumentViewer", { path: cheminReseauSoinsPdf, titre: "Réseau de soins" })}
+                style={styles.pdfBtn}
+                accessibilityLabel="Télécharger le réseau de soins en PDF"
+              >
+                <Ionicons name="document-text-outline" size={16} color={colors.primary} />
               </Pressable>
-              <Pressable onPress={() => setVueCarte(true)} style={[styles.toggleBtn, vueCarte && styles.toggleBtnActive]}>
-                <Ionicons name="map-outline" size={16} color={vueCarte ? "#fff" : colors.textMuted} />
-              </Pressable>
+              {peutAfficherCarte ? (
+                <View style={styles.toggleRow}>
+                  <Pressable onPress={() => setVueCarte(false)} style={[styles.toggleBtn, !vueCarte && styles.toggleBtnActive]}>
+                    <Ionicons name="list-outline" size={16} color={!vueCarte ? "#fff" : colors.textMuted} />
+                  </Pressable>
+                  <Pressable onPress={() => setVueCarte(true)} style={[styles.toggleBtn, vueCarte && styles.toggleBtnActive]}>
+                    <Ionicons name="map-outline" size={16} color={vueCarte ? "#fff" : colors.textMuted} />
+                  </Pressable>
+                </View>
+              ) : null}
             </View>
-          ) : undefined}
+          }
         />
 
         <View style={styles.searchBox}>
@@ -207,6 +218,11 @@ export function ReseauSoinsListScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   headerWrap: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  pdfBtn: {
+    width: 38, height: 38, borderRadius: radius.pill, alignItems: "center", justifyContent: "center",
+    backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.border,
+  },
   toggleRow: { flexDirection: "row", backgroundColor: colors.surfaceMuted, borderRadius: radius.pill, padding: 3, gap: 2 },
   toggleBtn: { width: 32, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
   toggleBtnActive: { backgroundColor: colors.primary },

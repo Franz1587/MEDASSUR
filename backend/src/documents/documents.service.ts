@@ -33,6 +33,7 @@ import { montantEnLettresFcfa } from "../lib/montant-en-lettres.util";
 import { TAUX_TPS } from "../sante/sante.service";
 import { populationDuContrat } from "../mouvements/population-historique.util";
 import { ORDRE_PROVINCES, provinceDeVille, prioriteVilleDansProvince } from "../lib/gabonGeo";
+import { genererReseauSoins, type ProvinceAnnuaire } from "./reseau-soins.pdf";
 import type { Prisma, ParametresEntreprise } from "@prisma/client";
 import { numeroPolice, policePourNomFichier } from "../lib/police.util";
 
@@ -4951,13 +4952,6 @@ export class DocumentsService {
     const tous = await this.prestataires.findAllReseau({});
     const p = await this.parametresEntreprise.findOne();
     const logoImage = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
-    const coulPrim   = p.couleurPrimaire   || "#1d3557";
-    const coulSecond = p.couleurSecondaire || "#f4a261";
-
-    // Couleurs depuis la charte société
-    const COUL_PROVINCE = coulSecond; // couleur secondaire (ex. orange pour LA RUCHE)
-    const COUL_VILLE    = coulPrim;   // couleur primaire (bleu/vert société)
-    const COUL_LIGNE    = "#f1f7fb";
 
     // ── Déduplication ──────────────────────────────────────────────────────
     // Deux prestataires sont considérés identiques si :
@@ -5043,309 +5037,20 @@ export class DocumentsService {
       if (!groupes[prov][villeReel]) groupes[prov][villeReel] = [];
       groupes[prov][villeReel].push(pr);
     }
-    const total = Object.values(groupes).reduce((s, vg) => s + Object.values(vg).reduce((sv, lg) => sv + lg.length, 0), 0);
-    const nbVilles = Object.values(groupes).reduce((s, vg) => s + Object.keys(vg).length, 0);
-    const nbProvs = Object.keys(groupes).filter(k => k !== "Autres").length;
+    const provinces: ProvinceAnnuaire[] = [...ORDRE_PROVINCES, "Autres"]
+      .filter((prov) => groupes[prov])
+      .map((prov) => ({
+        nom: prov,
+        villes: Object.keys(groupes[prov])
+          .sort((a, b) => prioriteVilleDansProvince(a, prov) - prioriteVilleDansProvince(b, prov) || a.localeCompare(b, "fr"))
+          .map((v) => ({ nom: v, prestataires: groupes[prov][v] })),
+      }));
 
-    const doc = new PDFDocument({ size: "A4", margins: { top: 40, bottom: 40, left: 40, right: 40 } });
+    const doc = new PDFDocument({ size: "A4", margin: 0, bufferPages: true });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", 'inline; filename="Reseau-de-Soins.pdf"');
     doc.pipe(res);
-
-    const PAGE_W = 515;
-    const COL = { nom: 185, type: 80, adresse: 155, tel: 95 };
-
-    const pied = () => {
-      const savedY = doc.y;
-      // margins.bottom = 0 → page.maxY() = page.height → PDFKit ne déclenche aucun saut auto
-      // (PDFKit 0.19 vérifie nextY = doc.y + lineHeight > maxY ; la marge bottom doit être 0)
-      const origBottom = doc.page.margins.bottom;
-      doc.page.margins.bottom = 0;
-      const footerY = doc.page.height - 30;
-      doc.moveTo(40, footerY - 6).lineTo(555, footerY - 6).lineWidth(0.5).strokeColor("#ccc").stroke();
-      doc.fontSize(7).fillColor("#999").font("Helvetica")
-         .text(`${p.nom} — Réseau de Soins Conventionné`, 40, footerY, { width: 320, lineBreak: false });
-      doc.text(`${total} prestataires · ${nbVilles} villes · ${nbProvs} provinces`, 40, footerY, { width: PAGE_W, align: "right", lineBreak: false });
-      doc.page.margins.bottom = origBottom;
-      doc.y = savedY; // restaurer la position pour ne pas fausser la logique de pagination
-    };
-
-    const enteteTableau = () => {
-      const y = doc.y;
-      doc.rect(40, y, PAGE_W, 16).fillColor(coulPrim).fill();
-      doc.fillColor("white").font("Helvetica-Bold").fontSize(8);
-      doc.text("PRESTATAIRE", 44, y + 4, { width: COL.nom, lineBreak: false });
-      doc.text("TYPE", 44 + COL.nom + 3, y + 4, { width: COL.type, lineBreak: false });
-      doc.text("ADRESSE", 44 + COL.nom + COL.type + 6, y + 4, { width: COL.adresse, lineBreak: false });
-      doc.text("TÉLÉPHONE", 44 + COL.nom + COL.type + COL.adresse + 9, y + 4, { width: COL.tel, lineBreak: false });
-      doc.y = y + 18;
-    };
-
-    // ── Page de couverture ─────────────────────────────────────────────────
-    // En-tête : logo gauche
-    this.dessinerIdentiteEntete(doc, logoImage, 40, 22, 200, 60, () => {
-      doc.fontSize(9).font("Helvetica-Bold").fillColor(coulPrim).text(p.nom || "Courtier d'Assurances", 40, 26, { lineBreak: false });
-      doc.fontSize(7).font("Helvetica").fillColor(coulSecond).text("Assurance santé · Gabon", 40, 39, { lineBreak: false });
-      return 0;
-    });
-    // Trait accent couleur secondaire
-    doc.rect(40, 84, PAGE_W, 2).fillColor(coulSecond).fill();
-
-    // Bloc hero pleine largeur
-    const heroY = 100, heroH = 340;
-    doc.rect(40, heroY, PAGE_W, heroH).fillColor(coulPrim).fill();
-
-    // Motif décoratif (cercles en filigrane)
-    const cerclesHero: [number, number, number][] = [
-      [80,130,45],[150,120,55],[225,132,48],[300,124,52],[375,130,50],[450,122,55],[515,130,46],
-      [62,200,42],[138,192,52],[212,200,48],[288,194,52],[362,200,46],[438,192,54],[508,200,44],
-      [95,268,48],[168,260,52],[245,268,46],[318,262,50],[390,268,52],[462,260,48],
-    ];
-    for (const [cx, cy, cr] of cerclesHero) {
-      doc.circle(cx, cy, cr).fillOpacity(0.05).fillColor("white").fill();
-    }
-    doc.fillOpacity(1);
-
-    // Texte principal du hero
-    doc.fontSize(8).font("Helvetica").fillColor("rgba(255,255,255,0.5)")
-       .text("ASSURANCE SANTÉ · TOUTES BRANCHES", 55, heroY + 16, { lineBreak: false });
-    doc.moveTo(55, heroY + 30).lineTo(55 + 50, heroY + 30).lineWidth(2).strokeColor(coulSecond).stroke();
-    doc.fontSize(36).font("Helvetica-Bold").fillColor("white")
-       .text("Réseau de Soins", 55, heroY + 42, { width: PAGE_W - 30, lineBreak: false });
-    doc.fillColor(coulSecond)
-       .text("Conventionné", 55, heroY + 86, { width: PAGE_W - 30, lineBreak: false });
-    doc.fontSize(11).font("Helvetica").fillColor("rgba(255,255,255,0.65)")
-       .text("Classement par Province et Ville", 55, heroY + 136, { lineBreak: false });
-
-    // 3 boîtes de statistiques dans le hero
-    const SB_W = 148, SB_H = 72, SB_Y = heroY + 172, SB_GAP = 11;
-    const statBoxesCov = [
-      { val: String(total), label: "PRESTATAIRES" },
-      { val: String(nbProvs), label: "PROVINCES" },
-      { val: String(nbVilles), label: "VILLES" },
-    ];
-    for (let i = 0; i < statBoxesCov.length; i++) {
-      const sbX = 55 + i * (SB_W + SB_GAP);
-      doc.roundedRect(sbX, SB_Y, SB_W, SB_H, 5).strokeColor("rgba(255,255,255,0.2)").lineWidth(1).stroke();
-      doc.fontSize(38).font("Helvetica-Bold").fillColor("white")
-         .text(statBoxesCov[i].val, sbX, SB_Y + 6, { width: SB_W, align: "center", lineBreak: false });
-      doc.fontSize(7.5).font("Helvetica").fillColor("rgba(255,255,255,0.5)")
-         .text(statBoxesCov[i].label, sbX, SB_Y + 55, { width: SB_W, align: "center", lineBreak: false });
-    }
-
-    // Footer cover : liste des types
-    const typeListeCov = ["Hôpitaux", "Cliniques", "Cabinets", "Laboratoires", "Pharmacies", "Opticiens"];
-    const footerCovY = heroY + heroH + 16;
-    doc.fontSize(7.5).font("Helvetica").fillColor("#888")
-       .text(typeListeCov.join("  ·  "), 40, footerCovY, { width: PAGE_W, align: "center", lineBreak: false });
-    // Nom société en bas de cover
-    doc.fontSize(11).font("Helvetica-Bold").fillColor(coulPrim)
-       .text(p.nom || "MedAssur+", 40, footerCovY + 28, { width: PAGE_W, align: "center", lineBreak: false });
-    pied();
-
-    // ── Page de statistiques ───────────────────────────────────────────────
-    doc.addPage();
-
-    // En-tête page stats
-    this.dessinerIdentiteEntete(doc, logoImage, 40, 20, 160, 50, () => {
-      doc.fontSize(8).font("Helvetica").fillColor(coulPrim).text(p.nom || "", 40, 22, { lineBreak: false });
-      return 0;
-    });
-    doc.fontSize(18).font("Helvetica-Bold").fillColor(coulPrim)
-       .text("Statistiques du réseau", 0, 22, { align: "right", width: PAGE_W + 40 });
-    doc.fontSize(8).font("Helvetica").fillColor(coulSecond)
-       .text("RÉSEAU DE SOINS CONVENTIONNÉ", 0, 44, { align: "right", width: PAGE_W + 40 });
-    doc.moveTo(40, 68).lineTo(555, 68).lineWidth(1.5).strokeColor(coulSecond).stroke();
-
-    // 3 boîtes stats avec couleurs distinctes
-    const STATS_BOXES = [
-      { val: String(total), label: "PRESTATAIRES", bg: coulPrim, accent: coulSecond },
-      { val: String(nbProvs), label: "PROVINCES", bg: coulSecond, accent: "white" },
-      { val: String(nbVilles), label: "VILLES", bg: coulPrim, accent: coulSecond },
-    ];
-    const SB2_W = 155, SB2_H = 60, SB2_Y = 82;
-    for (let i = 0; i < STATS_BOXES.length; i++) {
-      const bx = 40 + i * (SB2_W + 12);
-      doc.rect(bx, SB2_Y, SB2_W, SB2_H).fillColor(STATS_BOXES[i].bg).fill();
-      doc.fontSize(30).font("Helvetica-Bold").fillColor(STATS_BOXES[i].accent)
-         .text(STATS_BOXES[i].val, bx, SB2_Y + 6, { width: SB2_W, align: "center", lineBreak: false });
-      doc.fontSize(7.5).font("Helvetica").fillColor("rgba(255,255,255,0.65)")
-         .text(STATS_BOXES[i].label, bx, SB2_Y + 42, { width: SB2_W, align: "center", lineBreak: false });
-    }
-
-    // Titre section "Répartition par province et par ville"
-    let tblY = SB2_Y + SB2_H + 20;
-    doc.moveTo(40, tblY - 2).lineTo(40 + 40, tblY - 2).lineWidth(2).strokeColor(coulSecond).stroke();
-    doc.fontSize(11).font("Helvetica-Bold").fillColor(coulPrim)
-       .text("Répartition par province et par ville", 44, tblY - 6, { lineBreak: false });
-    tblY += 16;
-
-    // Tableau province avec sous-détail des villes
-    const TCOL = { prov: 200, villes: 50, prest: 80, bar: 185 };
-    doc.rect(40, tblY, PAGE_W, 14).fillColor(coulPrim).fill();
-    doc.fillColor("white").font("Helvetica-Bold").fontSize(7.5);
-    doc.text("PROVINCE · VILLES", 44, tblY + 3, { width: TCOL.prov, lineBreak: false });
-    doc.text("VILLES", 44 + TCOL.prov, tblY + 3, { width: TCOL.villes, align: "center", lineBreak: false });
-    doc.text("PRESTATAIRES", 44 + TCOL.prov + TCOL.villes, tblY + 3, { width: TCOL.prest, align: "center", lineBreak: false });
-    doc.text("RÉPARTITION", 44 + TCOL.prov + TCOL.villes + TCOL.prest, tblY + 3, { width: TCOL.bar - 8, align: "center", lineBreak: false });
-    tblY += 16;
-
-    let rowIdx = 0;
-    for (const prov of [...ORDRE_PROVINCES, "Autres"]) {
-      if (!groupes[prov]) continue;
-      const villesProv = Object.keys(groupes[prov]).sort((a, b) => groupes[prov][b].length - groupes[prov][a].length);
-      const nbP = villesProv.reduce((s, v) => s + groupes[prov][v].length, 0);
-      const pct = total > 0 ? ((nbP / total) * 100).toFixed(1) : "0.0";
-      const bg = rowIdx % 2 === 0 ? COUL_LIGNE : "white";
-      const rowH = 24;
-      doc.rect(40, tblY, PAGE_W, rowH).fillColor(bg).fill();
-      doc.rect(40, tblY, PAGE_W, rowH).lineWidth(0.3).strokeColor("#dde").stroke();
-      // Nom province en gras
-      doc.fillColor(coulPrim).font("Helvetica-Bold").fontSize(8)
-         .text(prov, 44, tblY + 3, { width: TCOL.prov, lineBreak: false });
-      // Villes en petits caractères (max 5 villes affichées)
-      const villesResume = villesProv.slice(0, 5)
-        .map(v => `${v} ${groupes[prov][v].length}`).join(" · ");
-      const plusVilles = villesProv.length > 5 ? ` +${villesProv.length - 5}` : "";
-      doc.fillColor("#666").font("Helvetica").fontSize(6.5)
-         .text(villesResume + plusVilles, 44, tblY + 14, { width: TCOL.prov, lineBreak: false });
-      // Compteurs
-      doc.fillColor("#444").font("Helvetica").fontSize(8)
-         .text(String(villesProv.length), 44 + TCOL.prov, tblY + 8, { width: TCOL.villes, align: "center", lineBreak: false });
-      doc.fillColor(coulPrim).font("Helvetica-Bold").fontSize(9)
-         .text(String(nbP), 44 + TCOL.prov + TCOL.villes, tblY + 7, { width: TCOL.prest, align: "center", lineBreak: false });
-      // Barre de progression
-      const barMaxW = TCOL.bar - 50;
-      const barW = total > 0 ? Math.round((nbP / total) * barMaxW) : 0;
-      const barX = 44 + TCOL.prov + TCOL.villes + TCOL.prest;
-      doc.rect(barX, tblY + 8, barMaxW, 7).fillColor("#e0e8f0").fill();
-      if (barW > 0) doc.rect(barX, tblY + 8, barW, 7).fillColor(coulSecond).fill();
-      doc.fillColor("#555").font("Helvetica").fontSize(7.5)
-         .text(`${pct} %`, barX + barMaxW + 4, tblY + 7, { width: 36, lineBreak: false });
-      tblY += rowH;
-      rowIdx++;
-    }
-    // Ligne totale
-    doc.rect(40, tblY, PAGE_W, 16).fillColor(coulPrim).fill();
-    doc.fillColor("white").font("Helvetica-Bold").fontSize(8)
-       .text("TOTAL", 44, tblY + 4, { width: TCOL.prov, lineBreak: false });
-    doc.text(String(nbVilles), 44 + TCOL.prov, tblY + 4, { width: TCOL.villes, align: "center", lineBreak: false });
-    doc.text(String(total), 44 + TCOL.prov + TCOL.villes, tblY + 4, { width: TCOL.prest, align: "center", lineBreak: false });
-    doc.text("100 %", 44 + TCOL.prov + TCOL.villes + TCOL.prest, tblY + 4, { width: 50, lineBreak: false });
-    tblY += 20;
-
-    // ── Répartition par type de prestataire ──────────────────────────────
-    if (tblY + 80 < doc.page.height - 80) {
-      doc.moveTo(40, tblY + 6).lineTo(80, tblY + 6).lineWidth(2).strokeColor(coulSecond).stroke();
-      doc.fontSize(11).font("Helvetica-Bold").fillColor(coulPrim)
-         .text("Répartition par type de prestataire", 44, tblY + 2, { lineBreak: false });
-      tblY += 26;
-
-      // Comptage par type
-      const parType = new Map<string, number>();
-      for (const vg of Object.values(groupes))
-        for (const lignes of Object.values(vg))
-          for (const pr of lignes) { const t = pr.type ?? "Autre"; parType.set(t, (parType.get(t) ?? 0) + 1); }
-      const typesTriés = [...parType.entries()].sort((a, b) => b[1] - a[1]);
-
-      const TYP_W = 155, TYP_H = 46, TYP_GAP_X = 12, TYP_GAP_Y = 10, TYP_NCOLS = 3;
-      typesTriés.forEach(([type, nb], idx) => {
-        const col = idx % TYP_NCOLS;
-        const row = Math.floor(idx / TYP_NCOLS);
-        const bx = 40 + col * (TYP_W + TYP_GAP_X);
-        const by = tblY + row * (TYP_H + TYP_GAP_Y);
-        if (by + TYP_H > doc.page.height - 60) return; // ne dépasse pas la page
-        doc.rect(bx, by, TYP_W, TYP_H).fillColor(COUL_LIGNE).fill();
-        doc.rect(bx, by, 4, TYP_H).fillColor(coulSecond).fill();
-        doc.fontSize(22).font("Helvetica-Bold").fillColor(coulPrim)
-           .text(String(nb), bx + 10, by + 6, { lineBreak: false });
-        doc.fontSize(8).font("Helvetica").fillColor("#444")
-           .text(type, bx + 10, by + 30, { width: TYP_W - 16, lineBreak: false });
-      });
-    }
-
-    pied();
-    // Les pages de contenu commencent toujours sur une nouvelle page (stats = page autonome)
-    doc.addPage();
-
-    // ── Pages de contenu : prestataires par province → ville ──────────────
-    const ordreType = ["Hôpital","Clinique","Cabinet","Cabinet Dentaire","Centre d'Imagerie","Centre de Kinésithérapie","Laboratoire","Pharmacie","Dépôt pharmaceutique","Opticien"];
-
-    let premiereProv = true;
-    for (const prov of [...ORDRE_PROVINCES, "Autres"]) {
-      if (!groupes[prov]) continue;
-      const villes = Object.keys(groupes[prov]).sort((a, b) => prioriteVilleDansProvince(a, prov) - prioriteVilleDansProvince(b, prov) || a.localeCompare(b, "fr"));
-
-      // En-tête province — page fraîche déjà garantie pour la première province ;
-      // pour les suivantes, saut si l'espace restant est insuffisant
-      const MIN_PROV = 22 + 16 + 30; // bannière province + ville + 1 ligne
-      if (!premiereProv && doc.y + MIN_PROV > doc.page.height - 50) { pied(); doc.addPage(); }
-      premiereProv = false;
-      const nbPrestProv = villes.reduce((s, v) => s + groupes[prov][v].length, 0);
-      const yProv = doc.y;
-      doc.rect(40, yProv, PAGE_W, 22).fillColor(COUL_PROVINCE).fill();
-      doc.fillColor("white").font("Helvetica-Bold").fontSize(12)
-         .text(`  ${prov.toUpperCase()}`, 44, yProv + 5, { width: 300, lineBreak: false });
-      doc.fillColor("rgba(255,255,255,0.8)").font("Helvetica").fontSize(8)
-         .text(`${nbPrestProv} prestataires — ${villes.length} ville(s)`, 44 + 300, yProv + 7, { width: 210, align: "right", lineBreak: false });
-      doc.y = yProv + 26;
-
-      for (const ville of villes) {
-        const lignes = [...groupes[prov][ville]].sort((a, b) => {
-          const iA = ordreType.indexOf(a.type ?? ""); const iB = ordreType.indexOf(b.type ?? "");
-          if ((iA === -1 ? 99 : iA) !== (iB === -1 ? 99 : iB)) return (iA === -1 ? 99 : iA) - (iB === -1 ? 99 : iB);
-          return (a.nom ?? "").localeCompare(b.nom ?? "", "fr");
-        });
-
-        if (doc.y + 16 + 30 > doc.page.height - 50) { pied(); doc.addPage(); }
-
-        const yVille = doc.y;
-        doc.rect(40, yVille, PAGE_W, 16).fillColor(COUL_VILLE).fill();
-        doc.fillColor("white").font("Helvetica-Bold").fontSize(9)
-           .text(`  ${ville}`, 44, yVille + 3, { width: 300, lineBreak: false });
-        doc.fillColor("rgba(255,255,255,0.8)").font("Helvetica").fontSize(7.5)
-           .text(`${lignes.length} prestataire(s)`, 44 + 300, yVille + 4, { width: 210, align: "right", lineBreak: false });
-        doc.y = yVille + 18;
-
-        enteteTableau();
-
-        let li = 0;
-        for (const pr of lignes) {
-          const nomTxt = (pr.nom || "").trim();
-          const typeTxt = (pr.type || "").trim();
-          const adrTxt  = (pr.adresse || "").trim();
-          const telTxt  = (pr.telephone || "").trim();
-          doc.fontSize(8);
-          const hNom = doc.heightOfString(nomTxt, { width: COL.nom - 4 });
-          doc.fontSize(7);
-          const hAdr = doc.heightOfString(adrTxt, { width: COL.adresse - 4 });
-          const hLigne = Math.max(hNom, hAdr, 12) + 5;
-          if (doc.y + hLigne > doc.page.height - 55) {
-            pied();
-            if (li < lignes.length - 1) {
-              doc.addPage();
-              enteteTableau();
-            }
-          }
-          const yRow = doc.y;
-          if (li % 2 === 0) doc.rect(40, yRow, PAGE_W, hLigne).fillColor(COUL_LIGNE).fill();
-          doc.rect(40, yRow, PAGE_W, hLigne).lineWidth(0.3).strokeColor("#dde").stroke();
-          doc.fillColor("#111").font("Helvetica-Bold").fontSize(8)
-             .text(nomTxt, 44, yRow + 3, { width: COL.nom - 4, lineBreak: true });
-          doc.fillColor("#444").font("Helvetica").fontSize(7)
-             .text(typeTxt, 44 + COL.nom + 3, yRow + 3, { width: COL.type - 4, lineBreak: true });
-          doc.fillColor("#555").fontSize(7)
-             .text(adrTxt, 44 + COL.nom + COL.type + 6, yRow + 3, { width: COL.adresse - 4, lineBreak: true });
-          doc.fillColor(COUL_VILLE).font("Helvetica-Bold").fontSize(7)
-             .text(telTxt, 44 + COL.nom + COL.type + COL.adresse + 9, yRow + 3, { width: COL.tel - 4, lineBreak: true });
-          doc.y = yRow + hLigne;
-          li++;
-        }
-        doc.moveDown(0.4);
-      }
-      pied(); // pied en fin de chaque section province
-    }
-
+    genererReseauSoins(doc, p, logoImage, provinces);
     doc.end();
   }
 

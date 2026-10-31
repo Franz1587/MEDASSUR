@@ -35,6 +35,9 @@ export async function getReseauSoins(filtres?: { type?: string; ville?: string; 
   return http.get<PrestataireReseau[]>(`/prestataires/reseau${qs ? `?${qs}` : ""}`);
 }
 
+// Même document officiel que le bouton PDF des portails web.
+export const cheminReseauSoinsPdf = "/documents/reseau-soins";
+
 export async function getPrestataireReseau(id: string): Promise<PrestataireReseauDetail> {
   return http.get<PrestataireReseauDetail>(`/prestataires/reseau/${id}`);
 }
