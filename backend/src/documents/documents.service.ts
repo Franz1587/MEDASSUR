@@ -5050,10 +5050,15 @@ export class DocumentsService {
     const COL = { nom: 185, type: 80, adresse: 155, tel: 95 };
 
     const pied = () => {
+      const savedY = doc.y;
+      const origBottom = doc.page.margins.bottom;
+      doc.page.margins.bottom = 0; // neutralise le saut auto PDFKit dans la zone footer
       doc.fontSize(7).fillColor("#999").font("Helvetica")
          .text(`${p.nom} — Réseau de Soins Conventionné`, 40, doc.page.height - 30, { width: 320, lineBreak: false });
       doc.text(`${total} prestataires · ${nbVilles} villes · ${nbProvs} provinces`, 40, doc.page.height - 30, { width: PAGE_W, align: "right", lineBreak: false });
       doc.moveTo(40, doc.page.height - 36).lineTo(555, doc.page.height - 36).lineWidth(0.5).strokeColor("#ccc").stroke();
+      doc.page.margins.bottom = origBottom;
+      doc.y = savedY; // ne pas laisser le curseur dans la zone footer
     };
 
     const enteteTableau = () => {
@@ -5215,7 +5220,7 @@ export class DocumentsService {
       // En-tête province — nouvelle page seulement si la courante a du contenu
       // (seuil 120 : au-dessous on est sur une page fraîche, pas besoin de saut)
       const MIN_PROV = 22 + 16 + 30; // bannière province + ville + 1 ligne
-      if (doc.y + MIN_PROV > doc.page.height - 50) { pied(); doc.addPage(); }
+      if (doc.y + MIN_PROV > doc.page.height - 50) { doc.addPage(); }
       const nbPrestProv = villes.reduce((s, v) => s + groupes[prov][v].length, 0);
       const yProv = doc.y;
       doc.rect(40, yProv, PAGE_W, 22).fillColor(COUL_PROVINCE).fill();
@@ -5257,8 +5262,10 @@ export class DocumentsService {
           const hLigne = Math.max(hNom, hAdr, 12) + 5;
           if (doc.y + hLigne > doc.page.height - 55) {
             pied();
-            doc.addPage();
-            enteteTableau();
+            if (li < lignes.length - 1) {
+              doc.addPage();
+              enteteTableau();
+            }
           }
           const yRow = doc.y;
           if (li % 2 === 0) doc.rect(40, yRow, PAGE_W, hLigne).fillColor(COUL_LIGNE).fill();
