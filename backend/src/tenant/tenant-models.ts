@@ -25,6 +25,7 @@ export const TENANT_MODELS = new Set<string>([
   "Prospect",
   "AppelOffres",
   "Cotation",
+  "OffreGeneree",
   "Contrat",
   "QuittanceLibre",
   "Sinistre",

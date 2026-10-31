@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Calculator, Save, Plus, Trash2, FileDown, PackagePlus, Pencil, X, Image as ImageIcon, Building2, MapPinned, Sparkles } from "lucide-react";
+import { Calculator, Save, Plus, Trash2, FileDown, PackagePlus, Pencil, X, Image as ImageIcon, Building2, MapPinned, Sparkles, Loader2 } from "lucide-react";
 import { CotationParImportModal } from "./CotationParImport";
+import { HistoriqueOffres } from "./HistoriqueOffres";
 import { toast } from "sonner";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
@@ -80,6 +81,10 @@ export default function CotationView() {
   const [pendingLogoPreview, setPendingLogoPreview] = useState<string | null>(null);
   const [uploadingCotationLogo, setUploadingCotationLogo] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  // Génération en cours (plusieurs secondes : annexe réseau, présentation) et
+  // compteur qui recharge l'historique des offres après chaque génération.
+  const [generation, setGeneration] = useState<string | null>(null);
+  const [versionHistorique, setVersionHistorique] = useState(0);
 
   const refreshAppelsOffres = () => getAppelsOffres().then(setAppelsOffres);
 
@@ -227,7 +232,7 @@ export default function CotationView() {
       // apparaître dans le même document.
       const cles = Array.from(new Set(crees.map((c) => dossierKey(c))));
       cles.forEach((cle) => {
-        openCotationOffre(cotationIdsDuDossier(cle, fraiches)).catch(() => toast.error("Ouverture du document impossible."));
+        voirDocument(cotationIdsDuDossier(cle, fraiches));
       });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Enregistrement impossible.");
@@ -368,12 +373,16 @@ export default function CotationView() {
 
   const toggleSelectionHistorique = (id: string) => setSelectionHistorique((v) => (v.includes(id) ? v.filter((x) => x !== id) : [...v, id]));
 
-  const voirDocument = (ids: string[]) => {
-    if (ids.length === 0) return;
-    openCotationOffre(ids).catch(() => toast.error("Ouverture du document impossible."));
+  const voirDocument = (ids: string[], cle = "combine") => {
+    if (ids.length === 0 || generation) return;
+    setGeneration(cle);
+    openCotationOffre(ids)
+      .then(() => setVersionHistorique((v) => v + 1))
+      .catch((e) => toast.error(e instanceof Error ? e.message : "Ouverture du document impossible."))
+      .finally(() => setGeneration(null));
   };
 
-  const voirDocumentDuDossier = (c: Cotation) => voirDocument(cotationIdsDuDossier(dossierKey(c), cotations));
+  const voirDocumentDuDossier = (c: Cotation) => voirDocument(cotationIdsDuDossier(dossierKey(c), cotations), c.id);
 
   // Réseau de soins (2026-08) — voir demande utilisateur : "le réseau qui
   // doit s'ajouter à chaque cotation" ; déjà joint en annexe de chaque offre
@@ -392,7 +401,7 @@ export default function CotationView() {
       />
       {showImport && (
         <CotationParImportModal compagnies={compagnies}
-          onClose={() => { setShowImport(false); getCotations().then(setCotations); refreshAppelsOffres(); }} />
+          onClose={() => { setShowImport(false); getCotations().then(setCotations); refreshAppelsOffres(); setVersionHistorique((v) => v + 1); }} />
       )}
 
       {aoHandoffNom && (
@@ -722,7 +731,7 @@ export default function CotationView() {
         <div className="px-4 py-3 border-b border-border flex items-center justify-between">
           <h3 className="font-semibold text-foreground text-sm">Cotations enregistrées</h3>
           {selectionHistorique.length > 0 && (
-            <button type="button" onClick={() => voirDocument(selectionHistorique)} className="text-[11.5px] text-primary hover:underline inline-flex items-center gap-1"><FileDown className="w-3.5 h-3.5" />Voir le document combiné ({selectionHistorique.length})</button>
+            <button type="button" onClick={() => voirDocument(selectionHistorique)} disabled={!!generation} className="text-[11.5px] text-primary hover:underline inline-flex items-center gap-1 disabled:opacity-60">{generation === "combine" ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Génération du document…</> : <><FileDown className="w-3.5 h-3.5" />Voir le document combiné ({selectionHistorique.length})</>}</button>
           )}
         </div>
         <table className="w-full text-sm">
@@ -749,7 +758,7 @@ export default function CotationView() {
                 <td className="px-4 py-3 whitespace-nowrap">
                   <div className="flex items-center gap-3">
                     <button type="button" onClick={() => handleModifierCotation(c)} className="text-[11.5px] text-primary hover:underline inline-flex items-center gap-1"><Pencil className="w-3.5 h-3.5" />Modifier</button>
-                    <button type="button" onClick={() => voirDocumentDuDossier(c)} className="text-[11.5px] text-primary hover:underline inline-flex items-center gap-1"><FileDown className="w-3.5 h-3.5" />Document</button>
+                    <button type="button" onClick={() => voirDocumentDuDossier(c)} disabled={!!generation} className="text-[11.5px] text-primary hover:underline inline-flex items-center gap-1 disabled:opacity-60">{generation === c.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}{generation === c.id ? "Génération…" : "Document"}</button>
                   </div>
                 </td>
               </tr>
@@ -765,6 +774,8 @@ export default function CotationView() {
           onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
         />
       </div>
+
+      <HistoriqueOffres version={versionHistorique} />
     </div>
   );
 }

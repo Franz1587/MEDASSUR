@@ -1,5 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
+import { randomUUID } from "crypto";
+import { PDFDocument as PdfLib } from "pdf-lib";
 import PDFDocument from "pdfkit";
 import sharp from "sharp";
 import * as QRCode from "qrcode";
@@ -104,6 +106,7 @@ const UPLOADS_LOGOS_COMPAGNIES_DIR = path.join(UPLOADS_ROOT, "logos");
 const UPLOADS_MODELES_CARTE_DIR = path.join(UPLOADS_ROOT, "modeles-carte");
 const UPLOADS_PAGES_GARDE_STATISTIQUES_DIR = path.join(UPLOADS_ROOT, "pages-garde-statistiques");
 const UPLOADS_SIGNATURES_DIR = path.join(UPLOADS_ROOT, "signatures");
+const UPLOADS_OFFRES_SANTE_DIR = path.join(UPLOADS_ROOT, "offres-sante");
 
 // Taille UNIQUE de toute image de signature dessinée sur un document
 // (2026-09) — voir demande utilisateur : "toutes les signatures dans
@@ -4915,12 +4918,17 @@ export class DocumentsService {
     const ao = aos.length === 1 && aos[0] ? cotations[0].appelOffres : null;
     const params = ao ? await this.appelOffres.parametresOffre(ao.id, userId) : await this.appelOffres.parametresParDefaut(userId);
     const logoCotation = cotations.find((c) => c.logo)?.logo;
-    return this.genererOffreSante(cotations, {
-      clientNom: ao?.clientNom ?? cotations[0].clientNom,
+    const clientNom = ao?.clientNom ?? cotations[0].clientNom;
+    const pdf = await this.genererOffreSante(cotations, {
+      clientNom,
       logoClient: ao?.prospect?.logo ? ["logos-prospects", ao.prospect.logo] : logoCotation ? ["logos-cotations", logoCotation] : null,
       params: { ...params, cotationIdsExclues: [] },
       dateDoc: ao ? new Map(ao.documents.map((d) => [d.id, d.createdAt.getTime()])) : undefined,
-    }, res);
+    });
+    const archive = await this.archiverOffre(pdf, {
+      appelOffresId: ao?.id ?? null, clientNom, origine: cotations.length > 1 ? "Document combiné" : "Cotation", cotationIds: cotations.map((c) => c.id), userId,
+    });
+    this.envoyerPdfOffre(res, pdf, clientNom, archive.id);
   }
 
   // Réseau de soins — annuaire des prestataires conventionnés, trié par province puis ville.
@@ -5058,6 +5066,19 @@ export class DocumentsService {
   // de garanties / décompte, comparatif, pages de présentation et annexe
   // réseau de soins (données réelles du réseau, jamais une liste figée).
   async renderOffreSante(appelOffresId: string, userId: string | undefined, res: Response) {
+    const { pdf, ao, ids } = await this.offreDeAppelOffres(appelOffresId, userId);
+    const archive = await this.archiverOffre(pdf, { appelOffresId, clientNom: ao.clientNom, origine: "Appel d'offres", cotationIds: ids, userId });
+    this.envoyerPdfOffre(res, pdf, ao.clientNom, archive.id);
+  }
+
+  // Première offre montée par ARIANA (fin de la cotation par import) :
+  // générée et archivée sans être ouverte.
+  async archiverOffreAriana(appelOffresId: string, userId?: string) {
+    const { pdf, ao, ids } = await this.offreDeAppelOffres(appelOffresId, userId);
+    return this.archiverOffre(pdf, { appelOffresId, clientNom: ao.clientNom, origine: "ARIANA", cotationIds: ids, userId });
+  }
+
+  private async offreDeAppelOffres(appelOffresId: string, userId?: string) {
     const ao = await this.prisma.appelOffres.findUnique({
       where: { id: appelOffresId },
       include: { prospect: true, documents: { select: { id: true, createdAt: true } }, cotations: { include: { compagnie: true, garanties: { orderBy: { ordre: "asc" } } } } },
@@ -5066,9 +5087,11 @@ export class DocumentsService {
     const params = await this.appelOffres.parametresOffre(appelOffresId, userId);
     const exclues = new Set(params.cotationIdsExclues ?? []);
     const dateDoc = new Map(ao.documents.map((d) => [d.id, d.createdAt.getTime()]));
-    return this.genererOffreSante(ao.cotations.filter((c) => !exclues.has(c.id)), {
+    const retenues = ao.cotations.filter((c) => !exclues.has(c.id));
+    const pdf = await this.genererOffreSante(retenues, {
       clientNom: ao.clientNom, logoClient: ao.prospect?.logo ? ["logos-prospects", ao.prospect.logo] : null, params, dateDoc,
-    }, res);
+    });
+    return { pdf, ao, ids: retenues.map((c) => c.id) };
   }
 
   // Offre santé au format LA RUCHE — un seul générateur pour l'offre d'un
@@ -5077,8 +5100,7 @@ export class DocumentsService {
   private async genererOffreSante(
     cotations: (Cotation & { compagnie: Compagnie | null; garanties: CotationGarantieLigne[] })[],
     ctx: { clientNom: string; logoClient: [string, string] | null; params: ParametresOffre; dateDoc?: Map<string, number> },
-    res: Response,
-  ) {
+  ): Promise<Buffer> {
     const params = ctx.params;
     const retenues = cotations;
     if (!retenues.length) throw new BadRequestException("Aucune cotation à présenter dans l'offre.");
@@ -5144,10 +5166,46 @@ export class DocumentsService {
         portails: await pPortails,
       };
     }
-    const pdf = await assemblerOffre(await pCorps, dernier, annexe, presentation, clientLogo);
+    return assemblerOffre(await pCorps, dernier, annexe, presentation, clientLogo);
+  }
+
+  // Chaque offre générée est archivée telle quelle (OffreGeneree) avant
+  // d'être envoyée : on rouvre et retélécharge toujours le PDF remis.
+  private async archiverOffre(pdf: Buffer, meta: { appelOffresId: string | null; clientNom: string; origine: string; cotationIds: string[]; userId?: string }) {
+    const fichier = `${randomUUID()}.pdf`;
+    if (this.storage.actif) await this.storage.upload("offres-sante", fichier, pdf, "application/pdf");
+    else {
+      await fs.promises.mkdir(UPLOADS_OFFRES_SANTE_DIR, { recursive: true });
+      await fs.promises.writeFile(path.join(UPLOADS_OFFRES_SANTE_DIR, fichier), pdf);
+    }
+    const user = meta.userId ? await this.prisma.user.findUnique({ where: { id: meta.userId }, select: { nom: true } }) : null;
+    return this.prisma.offreGeneree.create({
+      data: {
+        appelOffresId: meta.appelOffresId, clientNom: meta.clientNom, origine: meta.origine, fichier, tailleOctets: pdf.length,
+        nbPages: (await PdfLib.load(pdf)).getPageCount(), cotationIds: meta.cotationIds, creeParId: meta.userId ?? null, creeParNom: user?.nom ?? null,
+      },
+    });
+  }
+
+  private envoyerPdfOffre(res: Response, pdf: Buffer, clientNom: string, offreId?: string) {
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="OFFRE SANTE ${ctx.clientNom.replace(/[^\w .-]+/g, "")}.pdf"`);
+    res.setHeader("Content-Disposition", `inline; filename="OFFRE SANTE ${clientNom.replace(/[^\w .-]+/g, "")}.pdf"`);
+    if (offreId) res.setHeader("X-Offre-Generee-Id", offreId);
     res.end(pdf);
+  }
+
+  listerOffresGenerees(appelOffresId?: string) {
+    return this.prisma.offreGeneree.findMany({ where: appelOffresId ? { appelOffresId } : undefined, orderBy: { createdAt: "desc" }, take: 300 });
+  }
+
+  async renderOffreGeneree(id: string, res: Response) {
+    const o = await this.prisma.offreGeneree.findUnique({ where: { id } });
+    if (!o) throw new NotFoundException("Offre introuvable dans l'historique.");
+    const pdf = this.storage.actif
+      ? await this.storage.download("offres-sante", o.fichier)
+      : await fs.promises.readFile(path.join(UPLOADS_OFFRES_SANTE_DIR, o.fichier)).catch(() => null);
+    if (!pdf) throw new NotFoundException("Le fichier de cette offre est introuvable sur le serveur.");
+    this.envoyerPdfOffre(res, pdf, `${o.clientNom} ${o.createdAt.toLocaleDateString("fr-FR").replace(/\//g, "-")}`);
   }
 
   // Fiche prestataire — synthèse imprimable d'un établissement du réseau.

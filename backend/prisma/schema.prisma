@@ -298,6 +298,7 @@ model SocieteAssurance {
   prospects Prospect[]
   appelsOffres AppelOffres[]
   cotations Cotation[]
+  offresGenerees OffreGeneree[]
   contrats Contrat[]
   quittanceLibres QuittanceLibre[]
   sinistres Sinistre[]
@@ -992,6 +993,7 @@ model AppelOffres {
   propositions PropositionCommerciale[]
   cotations    Cotation[]
   documents    AppelOffresDocument[]
+  offresGenerees OffreGeneree[]
 
   @@index([societeId])
 }
@@ -1102,6 +1104,31 @@ model Cotation {
   garanties   CotationGarantieLigne[]
 
   @@index([societeId])
+}
+
+// Historique des offres santé générées (2026-10) — voir demande utilisateur :
+// « sauvegarder le fichier d'offres généré la première fois par Ariana…
+// retrouver l'historique des offres générées et les ouvrir à nouveau, les
+// consulter, les imprimer et les télécharger ». Le PDF est conservé tel
+// qu'il a été remis (fichier sous uploads/offres-sante/), jamais régénéré.
+model OffreGeneree {
+  id            String   @id @default(cuid())
+  societeId     String?
+  societe       SocieteAssurance? @relation(fields: [societeId], references: [id])
+  appelOffresId String?
+  appelOffres   AppelOffres? @relation(fields: [appelOffresId], references: [id], onDelete: SetNull)
+  clientNom     String
+  origine       String // "ARIANA" | "Appel d'offres" | "Document combiné" | "Cotation"
+  fichier       String
+  tailleOctets  Int
+  nbPages       Int
+  cotationIds   String[]
+  creeParId     String?
+  creeParNom    String?
+  createdAt     DateTime @default(now())
+
+  @@index([societeId])
+  @@index([appelOffresId])
 }
 
 // Ligne du tableau de garanties/plafonds tel que transmis par la compagnie

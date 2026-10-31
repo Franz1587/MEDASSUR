@@ -10,7 +10,7 @@ const TOKEN_KEY = "medassur-access-token";
 const CACHE_TTL_MS = 45_000;
 const cacheMemoire = new Map<string, { data: unknown; expiry: number }>();
 
-function invaliderCache(path: string) {
+export function invaliderCache(path: string) {
   const prefixe = "/" + path.split("/")[1];
   for (const cle of cacheMemoire.keys()) {
     if (cle.startsWith(prefixe)) cacheMemoire.delete(cle);

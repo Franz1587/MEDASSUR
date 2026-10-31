@@ -9,6 +9,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { createProspect, getProspects, prospectLogoUrl, uploadProspectLogo, type ProspectUpsertInput } from "@/services/crm.service";
 import { analyserDocumentAppelOffres, createAppelOffres, getAppelOffres, uploaderDocumentAppelOffres } from "@/services/appelOffres.service";
 import { OffreSantePanel, RelectureCotationModal } from "@/features/appel-offres/OffreSante";
+import { archiverOffreAriana } from "@/services/documents.service";
 import type { Compagnie } from "@/types/compagnies";
 import type { Cotation } from "@/types/cotation";
 import type { AppelOffres } from "@/types/appelOffres";
@@ -124,7 +125,15 @@ export function CotationParImportModal({ compagnies, onClose }: { compagnies: Co
         }
       }
       setAo(await getAppelOffres(appel.id));
-      if (!erreurs) setEtape("offre");
+      if (!erreurs) {
+        // L'offre montée par ARIANA est archivée dès sa création : on la
+        // retrouve dans l'historique même si d'autres versions suivent.
+        await archiverOffreAriana(appel.id).then(
+          () => toast.success("Offre générée par ARIANA enregistrée dans l'historique."),
+          (err) => toast.error(`Offre non archivée : ${messageLisible(err)}`),
+        );
+        setEtape("offre");
+      }
       else toast.error(`${erreurs} document(s) non lu(s) : relancez-les ou retirez-les.`);
     } catch (err) {
       toast.error(messageLisible(err));

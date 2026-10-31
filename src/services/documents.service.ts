@@ -1,4 +1,4 @@
-import { API_URL, getAccessToken } from "@/lib/http";
+import { http, invaliderCache, API_URL, getAccessToken } from "@/lib/http";
 import type { AnalyseNarrative } from "@/services/statistiques.service";
 import { afficherPdf } from "@/lib/pdfViewerBridge";
 
@@ -30,7 +30,9 @@ function nomFichierDepuisReponse(res: Response, repli: string): string {
 
 async function openBlobUrl(res: Response, nomRepli = "document.pdf") {
   if (!res.ok) {
-    throw new Error(`Génération du document impossible (${res.status})`);
+    // Message d'erreur du serveur (NestJS : { message }) plutôt qu'un statut muet.
+    const message = await res.json().then((b) => (Array.isArray(b?.message) ? b.message.join(" ") : b?.message), () => null);
+    throw new Error(message || `Génération du document impossible (${res.status})`);
   }
   const blob = await res.blob();
   const nomFichier = nomFichierDepuisReponse(res, nomRepli);
@@ -193,6 +195,27 @@ export function openCotationOffre(cotationIds: string[]): Promise<void> {
 // Offre santé complète d'un appel d'offres (format LA RUCHE, 2026-10).
 export function openOffreSante(appelOffresId: string): Promise<void> {
   return openDocument(`/documents/offre-sante/${appelOffresId}`);
+}
+
+// Historique des offres santé générées : chaque PDF remis est archivé tel quel.
+export interface OffreGeneree {
+  id: string; appelOffresId: string | null; clientNom: string; origine: string;
+  tailleOctets: number; nbPages: number; cotationIds: string[]; creeParNom: string | null; createdAt: string;
+}
+
+export function listerOffresGenerees(appelOffresId?: string): Promise<OffreGeneree[]> {
+  // Les générations passent par un fetch direct (PDF) : rien n'invalide le cache des lectures.
+  invaliderCache("/documents/offres-generees");
+  return http.get<OffreGeneree[]>(`/documents/offres-generees${appelOffresId ? `?appelOffresId=${encodeURIComponent(appelOffresId)}` : ""}`);
+}
+
+export function openOffreGeneree(id: string): Promise<void> {
+  return openDocument(`/documents/offres-generees/${id}`);
+}
+
+// Archive la première offre montée par ARIANA sans l'ouvrir.
+export function archiverOffreAriana(appelOffresId: string): Promise<OffreGeneree> {
+  return http.post<OffreGeneree>(`/documents/offre-sante/${appelOffresId}/archiver`, {});
 }
 
 export function openReseauSoins(): Promise<void> {

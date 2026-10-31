@@ -8,6 +8,7 @@ import { fmtM } from "@/lib/format";
 import { updateCotation } from "@/services/cotation.service";
 import { enregistrerParametresOffre, getParametresOffre } from "@/services/appelOffres.service";
 import { openOffreSante } from "@/services/documents.service";
+import { HistoriqueOffres } from "@/features/cotation/HistoriqueOffres";
 import type { Compagnie } from "@/types/compagnies";
 import type { ContenuOffre, Cotation, ParametresOffre, SectionGaranties } from "@/types/cotation";
 
@@ -194,6 +195,7 @@ export function OffreSantePanel({ appelOffresId, cotations }: { appelOffresId: s
   const [params, setParams] = useState<ParametresOffre | null>(null);
   const [ouvert, setOuvert] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [versionHistorique, setVersionHistorique] = useState(0);
 
   useEffect(() => { setParams(null); getParametresOffre(appelOffresId).then(setParams).catch(() => toast.error("Paramètres de l'offre indisponibles.")); }, [appelOffresId]);
 
@@ -219,6 +221,7 @@ export function OffreSantePanel({ appelOffresId, cotations }: { appelOffresId: s
     try {
       await enregistrerParametresOffre(appelOffresId, { ...params, ordreCompagnies: compagnies.map(([id]) => id) });
       await openOffreSante(appelOffresId);
+      setVersionHistorique((v) => v + 1);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Génération de l'offre impossible.");
     } finally {
@@ -292,6 +295,7 @@ export function OffreSantePanel({ appelOffresId, cotations }: { appelOffresId: s
           </div>
         </div>
       )}
+      <div className="mt-4"><HistoriqueOffres appelOffresId={appelOffresId} version={versionHistorique} /></div>
     </div>
   );
 }

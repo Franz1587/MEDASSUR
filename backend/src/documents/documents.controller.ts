@@ -165,6 +165,23 @@ export class DocumentsController {
     return this.documentsService.renderReseauSoins(res);
   }
 
+  // Historique des offres santé générées (PDF archivés tels que remis).
+  @Get("offres-generees")
+  offresGenerees(@Query("appelOffresId") appelOffresId?: string) {
+    return this.documentsService.listerOffresGenerees(appelOffresId);
+  }
+
+  @Get("offres-generees/:id")
+  offreGeneree(@Param("id") id: string, @Res() res: Response) {
+    return this.documentsService.renderOffreGeneree(id, res);
+  }
+
+  // Première offre montée par ARIANA : générée et archivée sans être ouverte.
+  @Post("offre-sante/:appelOffresId/archiver")
+  archiverOffreAriana(@Param("appelOffresId") id: string, @Req() req: StaffRequest) {
+    return this.documentsService.archiverOffreAriana(id, req.user.userId);
+  }
+
   // Offre santé complète d'un appel d'offres (format LA RUCHE).
   @Get("offre-sante/:appelOffresId")
   offreSante(@Param("appelOffresId") id: string, @Req() req: StaffRequest, @Res() res: Response) {
