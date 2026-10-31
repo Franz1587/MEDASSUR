@@ -578,16 +578,16 @@ export default function PrestatairesView() {
                 <div className="mt-1 flex gap-2 items-center">
                   <div className="flex-1">
                     <Combobox
-                      items={prestataires
-                        .filter((p) => p.id !== selected.id)
-                        .map((p) => ({ value: p.id, label: `${p.nom} (${p.type}, ${p.ville})` }))}
-                      value={doublonId ?? ""}
-                      onChange={(v) => setDoublonId(v || null)}
+                      options={prestataires.filter((p) => p.id !== selected.id)}
+                      value={prestataires.find((p) => p.id === doublonId) ?? null}
+                      onChange={(p) => setDoublonId(p?.id ?? null)}
+                      getLabel={(p) => `${p.nom} (${p.type ?? ""}${p.ville ? `, ${p.ville}` : ""})`}
+                      getId={(p) => p.id}
                       placeholder="Chercher le doublon à absorber…"
                     />
                   </div>
                   <Btn
-                    variant="danger"
+                    variant="secondary"
                     disabled={!doublonId || fusionEnCours}
                     onClick={handleFusionner}
                   >
