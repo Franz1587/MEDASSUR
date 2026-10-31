@@ -15,6 +15,7 @@ export interface PrestataireReseau {
   titre?: "Professeur" | "Docteur" | null;
   specialite?: string | null;
   pays: string;
+  province?: string | null;
   ville: string;
   telephone?: string | null;
   adresse?: string | null;
