@@ -5119,12 +5119,13 @@ export class DocumentsService {
     const rang = (c: typeof retenues[number]) => [ctx.dateDoc?.get(c.documentSourceId ?? "") ?? 0, contenuDe(c).ordre ?? 0];
     retenues.sort((a, b) => { const [da, oa] = rang(a), [db, ob] = rang(b); return da - db || oa - ob; });
     const ordre = params.ordreCompagnies ?? [];
-    const ids = [...new Set(retenues.map((c) => c.compagnieId!))]
-      .sort((a, b) => (ordre.includes(a) ? ordre.indexOf(a) : 999) - (ordre.includes(b) ? ordre.indexOf(b) : 999));
+    // Cotation sans compagnie : regroupée sous « COMPAGNIE NON RENSEIGNEE » plutôt qu'un échec.
+    const ids = [...new Set(retenues.map((c) => c.compagnieId))]
+      .sort((a, b) => (a && ordre.includes(a) ? ordre.indexOf(a) : 999) - (b && ordre.includes(b) ? ordre.indexOf(b) : 999));
     const compagnies: CompagnieOffre[] = [];
     for (const id of ids) {
       const cots = retenues.filter((c) => c.compagnieId === id);
-      const comp = cots[0].compagnie!;
+      const comp = cots[0].compagnie ?? { nom: "COMPAGNIE NON RENSEIGNEE", logo: null };
       const modele = logoModeleCompagnie(comp.nom);
       const logoBase = modele ? null : await this.chargerImage("logos", comp.logo, UPLOADS_LOGOS_COMPAGNIES_DIR).then(versPng);
       compagnies.push({

@@ -91,13 +91,27 @@ function couper(doc: Doc, s: string, st: Style, max: number): string[] {
   const lignes: string[] = [];
   for (const para of s.split("\n")) {
     let cur = "";
-    for (const mot of para.split(/\s+/).filter(Boolean)) {
+    for (let mot of para.split(/\s+/).filter(Boolean)) {
+      // Mot plus large que la colonne (adresse web, code…) : coupé à la lettre.
+      while (mot.length > 1 && largeur(doc, mot, st) > max) {
+        if (cur) { lignes.push(cur); cur = ""; }
+        let n = mot.length - 1;
+        while (n > 1 && largeur(doc, mot.slice(0, n), st) > max) n--;
+        lignes.push(mot.slice(0, n));
+        mot = mot.slice(n);
+      }
       const essai = cur ? `${cur} ${mot}` : mot;
       if (cur && largeur(doc, essai, st) > max) { lignes.push(cur); cur = mot; } else cur = essai;
     }
     lignes.push(cur);
   }
   return lignes;
+}
+
+// Texte sur une seule ligne réduit pour tenir dans `max` (noms de client…).
+function ajuste(doc: Doc, s: string, st: Style, max: number): Style {
+  const w = largeur(doc, s, st);
+  return w > max ? { ...st, s: st.s * max / w } : st;
 }
 
 function ligneH(doc: Doc, x0: number, x1: number, y: number, c = "#000", e = 0.48) { doc.rect(x0, y, x1 - x0, e).fill(c); }
@@ -133,7 +147,8 @@ function rond(doc: Doc, x: number, top: number) { doc.circle(x + 2.76, top + 7.0
 const fmtEsp =(n: number) => Math.round(n).toLocaleString("fr-FR").replace(/[  ]/g, " ");
 const fmtPts = (n: number) => Math.round(n).toLocaleString("fr-FR").replace(/[  \s]/g, ".");
 
-function numeroPage(doc: Doc, n: number) { t(doc, String(n), 559.3, 794.6, { f: TR, s: 11.04 }, "d"); }
+// Placé depuis le coin bas-droit : juste aussi sur une page paysage.
+function numeroPage(doc: Doc, n: number) { t(doc, String(n), doc.page.width - 37.22, doc.page.height - 47.92, { f: TR, s: 11.04 }, "d"); }
 
 // Bandeau d'en-tête à trois cases (logo société | titre | logo client).
 interface Bandeau { x: [number, number, number, number]; y: [number, number]; logoSoc: [number, number, number, number]; logoCli: [number, number, number, number] }
@@ -183,13 +198,16 @@ const B12: Style = { f: TB, s: 12 };
 const designation = (doc: Doc, l: CotationOffre) => l.contenu.designationRecap.flatMap((s) => couper(doc, s, B12, RX[2] - RX[1] - 10));
 const hauteurLigneRecap = (doc: Doc, l: CotationOffre) => 14.3 + 13.8 * Math.max(1, designation(doc, l).length);
 
-function blocRecap(doc: Doc, c: CompagnieOffre, y: number): number {
+// Bloc d'une compagnie, lignes [debut, fin) ; le total (de toutes les
+// lignes de la compagnie) n'est imprimé que sur la dernière partie.
+function blocRecap(doc: Doc, c: CompagnieOffre, y: number, debut: number, fin: number): number {
   const [x0, x1, x2, x3] = RX;
   const b12 = B12;
-  const lignes = [...c.cotations];
+  const lignes = c.cotations.slice(debut, fin);
+  const avecTotal = fin === c.cotations.length;
   const hLignes = lignes.map((l) => hauteurLigneRecap(doc, l));
   const yPar = y + 28.3, yItems = yPar + 29.2;
-  const yTotal = yItems + hLignes.reduce((a, h) => a + h, 0), yFin = yTotal + 20.6;
+  const yTotal = yItems + hLignes.reduce((a, h) => a + h, 0), yFin = yTotal + (avecTotal ? 20.6 : 0);
   // Grille
   for (const yy of [y, yPar, yItems, yFin]) ligneH(doc, x0, x3 + 0.48, yy);
   let yy = yItems;
@@ -204,17 +222,21 @@ function blocRecap(doc: Doc, c: CompagnieOffre, y: number): number {
   image(doc, c.logoPetit ?? c.logo, x2 + 8, yPar + 0.6, x3 - x2 - 16, 28);
   // Lignes
   yy = yItems;
-  let total = 0, nonCommunique = false;
   lignes.forEach((l, i) => {
-    t(doc, String(i + 1), (x0 + x1) / 2, yy + 0.8, b12, "c");
+    t(doc, String(debut + i + 1), (x0 + x1) / 2, yy + 0.8, b12, "c");
     designation(doc, l).forEach((s, k) => t(doc, s, (x1 + x2) / 2, yy + 0.9 + 13.8 * k, b12, "c"));
-    if (l.contenu.primeNonCommuniquee) { nonCommunique = true; t(doc, "Non communiqué", (x2 + x3) / 2, yy + 0.9, b12, "c"); }
-    else { total += l.ttc; t(doc, fmtEsp(l.ttc), (x2 + x3) / 2, yy + 0.9, { f: TB, s: 11.52 }, "c"); }
+    if (l.contenu.primeNonCommuniquee) t(doc, "Non communiqué", (x2 + x3) / 2, yy + 0.9, b12, "c");
+    else { const m = fmtEsp(l.ttc); t(doc, m, (x2 + x3) / 2, yy + 0.9, ajuste(doc, m, { f: TB, s: 11.52 }, x3 - x2 - 6), "c"); }
     yy += hLignes[i];
   });
-  const rouge: Style = { f: TBI, s: 12, c: "#c00000" };
-  t(doc, "Total Budget Assurances", (x1 + x2) / 2, yTotal + 0.9, rouge, "c");
-  t(doc, nonCommunique && total === 0 ? "Non communiqué" : fmtEsp(total), (x2 + x3) / 2, yTotal + 0.9, rouge, "c");
+  if (avecTotal) {
+    const total = c.cotations.reduce((a, l) => a + (l.contenu.primeNonCommuniquee ? 0 : l.ttc), 0);
+    const nonCommunique = c.cotations.some((l) => l.contenu.primeNonCommuniquee);
+    const rouge: Style = { f: TBI, s: 12, c: "#c00000" };
+    const m = nonCommunique && total === 0 ? "Non communiqué" : fmtEsp(total);
+    t(doc, "Total Budget Assurances", (x1 + x2) / 2, yTotal + 0.9, rouge, "c");
+    t(doc, m, (x2 + x3) / 2, yTotal + 0.9, ajuste(doc, m, rouge, x3 - x2 - 6), "c");
+  }
   return yFin;
 }
 
@@ -222,11 +244,23 @@ function pagesRecap(doc: Doc, d: DonneesOffre) {
   doc.addPage({ size: [PAGE_W, PAGE_H], margin: 0 });
   bandeau(doc, { x: [38.6, 202.0, 439.4, 567.1], y: [38.8, 107.2], logoSoc: [52.0, 43.6, 84.6, 40.9], logoCli: [449.5, 51.0, 107, 45] },
     d, ["RECAPITULATIF", "DES PRIMES", d.params.exercice], [53.7, 69.8, 85.9], 320.9);
+  const HAUT = 70.8, BAS = 790, CADRE = 28.3 + 29.2 + 20.6;
+  const nouvelle = () => { doc.addPage({ size: [PAGE_W, PAGE_H], margin: 0 }); y = HAUT; };
   let y = 118.1;
   for (const c of d.compagnies) {
-    const h = 28.3 + 29.2 + c.cotations.reduce((a, l) => a + hauteurLigneRecap(doc, l), 0) + 20.6;
-    if (y + h > 790) { doc.addPage({ size: [PAGE_W, PAGE_H], margin: 0 }); y = 70.8; }
-    y = blocRecap(doc, c, y) + 18.2;
+    const hl = c.cotations.map((l) => hauteurLigneRecap(doc, l));
+    const somme = (a: number, b: number) => hl.slice(a, b).reduce((x, h) => x + h, 0);
+    let debut = 0;
+    while (debut < c.cotations.length) {
+      let fin = debut;
+      while (fin < hl.length && y + CADRE + somme(debut, fin + 1) <= BAS) fin++;
+      // Le bloc entier tiendrait sur une page neuve : il n'est pas coupé.
+      if (fin < hl.length && y > HAUT && (fin === debut || HAUT + CADRE + somme(debut, hl.length) <= BAS)) { nouvelle(); continue; }
+      if (fin === debut) fin = debut + 1;
+      y = blocRecap(doc, c, y, debut, fin) + 18.2;
+      debut = fin;
+      if (debut < c.cotations.length) nouvelle();
+    }
   }
   // Formule d'acceptation et signatures
   let top = y - 18.2 + 15;
@@ -237,16 +271,19 @@ function pagesRecap(doc: Doc, d: DonneesOffre) {
   t(doc, "BON POUR", 49.7 + w, top + 16.1, b14);
   t(doc, "ACCORD’’.", 49.7, top + 32.1, b14);
   t(doc, "LE PROPOSANT", 70.6, top + 59.7, b14, "g", true);
-  t(doc, d.params.mentionSignature, 556.7, top + 59.7, b14, "d", true);
+  t(doc, d.params.mentionSignature, 556.7, top + 59.7, ajuste(doc, d.params.mentionSignature, b14, 556.7 - 260), "d", true);
 }
 
 // ── Intercalaire compagnie ────────────────────────────────────────────
 
 function pageIntercalaire(doc: Doc, d: DonneesOffre, c: CompagnieOffre) {
   const titre = couper(doc, `PROPOSITIONS ${c.nom.toUpperCase()}`, { f: TB, s: 14.04 }, 225);
+  // Au-delà de 3 lignes, le titre est réduit pour tenir dans le bandeau.
+  const k = Math.min(1, 3 / titre.length);
   bandeau(doc, { x: [56.06, 169.49, 406.9, 534.6], y: [39.72, 108.62], logoSoc: [69.4, 44.57, 84.67, 40.9], logoCli: [416.9, 51.0, 107.7, 47] },
-    d, titre, titre.map((_, i) => 54.69 + 16.1 * i), 288.4);
-  t(doc, "PROPOSITIONS", 301.4, 293.26, { f: TB, s: 27.96 }, "c");
+    d, titre, titre.map((_, i) => 54.69 + 16.1 * k * i), 288.4, 14.04 * k);
+  const nom = ajuste(doc, "PROPOSITIONS", { f: TB, s: 27.96 }, 470);
+  t(doc, "PROPOSITIONS", 301.4, 293.26, nom, "c");
   const [w, h] = c.tailleLogo ?? [300, 145];
   image(doc, c.logo ?? c.logoPetit, 295.5 - w / 2, 346.5 + (145 - h) / 2 + (h < 100 ? -19 : 0), w, h);
 }
@@ -256,7 +293,7 @@ function pageIntercalaire(doc: Doc, d: DonneesOffre, c: CompagnieOffre) {
 function infosAssure(doc: Doc, d: DonneesOffre, x: number, xDeux: number, top: number, regle: [number, number, number]) {
   const p12: Style = { f: TR, s: 12 };
   t(doc, "Nom de l’assuré", x, top, p12); t(doc, ":", xDeux, top, p12);
-  t(doc, d.clientNom, xDeux + 6.36, top - 1.82, { f: TB, s: 14.04 });
+  t(doc, d.clientNom, xDeux + 6.36, top - 1.82, ajuste(doc, d.clientNom, { f: TB, s: 14.04 }, MARGE_DROITE - xDeux - 6.36));
   t(doc, "Adresse de l’assuré", x, top + 14.76, p12); t(doc, `: ${d.params.adresseAssure}`, xDeux, top + 14.76, p12);
   t(doc, "Période de garantie", x, top + 28.56, p12); t(doc, `: ${d.params.periode}`, xDeux, top + 28.56, p12);
   t(doc, "Durée", x, top + 42.84, p12); t(doc, `: ${d.params.duree}`, xDeux, top + 42.84, p12);
@@ -372,30 +409,53 @@ function tableauGrille(doc: Doc, tb: TableauGaranties, nouvellePage: () => void)
     bande(y, 15.4); t(doc, tb.titreCollege, (X0 + X3) / 2, y + 0.3, w > max ? { ...st, s: st.s * max / w } : st, "c"); y += 15.4;
   }
 
+  const HAUT = 52.2, L = 9.3;
+  const nb = (r: string[][]) => Math.max(1, ...r.map((c) => c.length));
+  const dessine = (r: string[][], yy: number) => {
+    r[0].forEach((s, k) => t(doc, s, 37.8, yy + L * k, p8));
+    r[1].forEach((s, k) => t(doc, s, (X1 + X2) / 2, yy + L * k, p8, "c"));
+    r[2].forEach((s, k) => t(doc, s, 342.7, yy + L * k, p8));
+  };
   for (const sec of tb.sections) {
-    const hauteurs = sec.lignes.map((l) => Math.max(couper(doc, l.libelle, p8, X1 - X0 - 7).length, couper(doc, l.taux ?? "", p8, X2 - X1 - 8).length, sec.plafondCommun ? 1 : couper(doc, l.plafond ?? "", p8, X3 - X2 - 8).length));
-    const pas = hauteurs.map((n) => 9.3 * n + 5.6);
-    const plafondLignes = sec.plafondCommun ? couper(doc, sec.plafondCommun, p8, X3 - X2 - 16) : [];
-    let corps = 0.9 + pas.reduce((a, h) => a + h, 0) + 3.4;
-    corps = Math.max(corps, plafondLignes.length * 9.3 + 8);
-    const hTitre = sec.titre ? 16 : 0;
-    if (y + hTitre + Math.min(corps, 120) > BAS_TABLEAU) { nouvellePage(); y = 52.2; ligneH(doc, X0, X3 + 0.48, y); }
-    if (sec.titre) { bande(y, 16); t(doc, couper(doc, sec.titre, b8, X3 - X0 - 8)[0], 37.8, y + 0.9, b8); y += 16; }
-    const y0 = y;
-    let yy = y + 0.9;
-    sec.lignes.forEach((l, i) => {
-      couper(doc, l.libelle, p8, X1 - X0 - 7).forEach((s, k) => t(doc, s, 37.8, yy + 9.3 * k, p8));
-      if (l.taux) couper(doc, l.taux, p8, X2 - X1 - 8).forEach((s, k) => t(doc, s, (X1 + X2) / 2, yy + 9.3 * k, p8, "c"));
-      if (!sec.plafondCommun && l.plafond) couper(doc, l.plafond, p8, X3 - X2 - 8).forEach((s, k) => t(doc, s, 342.7, yy + 9.3 * k, p8));
-      yy += pas[i];
-    });
-    y = y0 + corps;
-    if (plafondLignes.length) {
-      const yp = sec.lignes.length >= 4 ? y0 + (corps - plafondLignes.length * 9.3) / 2 : y0 + 0.9;
-      plafondLignes.forEach((s, k) => t(doc, s, (X2 + X3) / 2, yp + 9.3 * k, p8, "c"));
+    const titre = sec.titre ? couper(doc, sec.titre, b8, X3 - X0 - 8) : [];
+    const hTitre = titre.length ? 16 + L * (titre.length - 1) : 0;
+    const plafond = sec.plafondCommun ? couper(doc, sec.plafondCommun, p8, X3 - X2 - 16) : [];
+    const rows = sec.lignes.map((l) => [
+      couper(doc, l.libelle, p8, X1 - X0 - 7),
+      l.taux ? couper(doc, l.taux, p8, X2 - X1 - 8) : [],
+      !sec.plafondCommun && l.plafond ? couper(doc, l.plafond, p8, X3 - X2 - 8) : [],
+    ]);
+    // Le titre de rubrique ne reste jamais seul en bas de page.
+    const premiere = rows.length ? L * Math.min(nb(rows[0]), 5) + 5.6 : 0;
+    if (y + hTitre + premiere + 4.3 > BAS_TABLEAU) { nouvellePage(); y = HAUT; ligneH(doc, X0, X3 + 0.48, y); }
+    if (titre.length) { bande(y, hTitre); titre.forEach((s, k) => t(doc, s, 37.8, y + 0.9 + L * k, b8)); y += hTitre; }
+    let y0 = y, yy = y + 0.9, n = 0;
+    const fermer = (fin: number) => {
+      const yFin = plafond.length ? Math.max(fin, y0 + plafond.length * L + 8) : fin;
+      if (plafond.length) {
+        const yp = n >= 4 ? y0 + (yFin - y0 - plafond.length * L) / 2 : y0 + 0.9;
+        plafond.forEach((s, k) => t(doc, s, (X2 + X3) / 2, yp + L * k, p8, "c"));
+      }
+      for (const xx of [X0, X1, X2, X3]) ligneV(doc, xx, y0, yFin);
+      ligneH(doc, X0, X3 + 0.48, yFin);
+      return yFin;
+    };
+    const pleine = Math.floor((BAS_TABLEAU - HAUT - 0.9 - 3.4 - 5.6) / L);
+    for (let r of rows) {
+      for (;;) {
+        const h = L * nb(r) + 5.6;
+        if (yy + h + 3.4 <= BAS_TABLEAU) { dessine(r, yy); yy += h; n++; break; }
+        // Ligne plus haute qu'une page : on remplit celle-ci, la suite continue après.
+        const ici = Math.floor((BAS_TABLEAU - yy - 3.4 - 5.6) / L);
+        if (nb(r) > pleine && ici >= 3) {
+          dessine(r.map((c) => c.slice(0, ici)), yy); yy += L * ici + 5.6; n++;
+          r = r.map((c) => c.slice(ici));
+        }
+        if (n) fermer(yy + 3.4);
+        nouvellePage(); y0 = HAUT; ligneH(doc, X0, X3 + 0.48, y0); yy = y0 + 0.9; n = 0;
+      }
     }
-    for (const xx of [X0, X1, X2, X3]) ligneV(doc, xx, y0, y);
-    ligneH(doc, X0, X3 + 0.48, y);
+    y = fermer(yy + 3.4);
   }
   if (tb.piedTableau) {
     const pied = couper(doc, tb.piedTableau, b10, X3 - X0 - 8), hPied = 5.6 + 11 * pied.length;
@@ -418,13 +478,14 @@ function tableauColonnes(doc: Doc, tb: TableauGaranties, nouvellePage: () => voi
 
   // Une ligne de texte de plus = 11,5 pt de plus : la cellule suit son texte.
   const hauteur = (n: number) => 16.2 + 11.5 * (n - 1);
+  const titres = [tb.titreColonneGaranties || "GARANTIES", tb.titreColonneTaux || "TAUX", "PLAFOND DE REMBOURSEMENT"].map((s, k) => couper(doc, s, b10, colW[k]));
+  const hEntete = hauteur(Math.max(...titres.map((c) => c.length)));
   const entete = (y: number) => {
-    doc.rect(X[0] + 0.48, y + 0.48, X[3] - X[0] - 0.48, 15.7).fill(ENTETE);
-    ligneH(doc, X[0], X[3] + 0.48, y, ENTETE); ligneV(doc, X[0], y, y + 16.2, ENTETE); ligneV(doc, X[3], y, y + 16.2, ENTETE);
-    const titres = [tb.titreColonneGaranties || "GARANTIES", tb.titreColonneTaux || "TAUX", "PLAFOND DE REMBOURSEMENT"];
-    titres.forEach((s, k) => t(doc, couper(doc, s, b10, colW[k])[0], X[k] + 5.6, y + 1.0, b10));
-    ligneH(doc, X[0], X[3] + 0.48, y + 16.2, ENTETE);
-    return y + 16.2;
+    doc.rect(X[0] + 0.48, y + 0.48, X[3] - X[0] - 0.48, hEntete - 0.5).fill(ENTETE);
+    ligneH(doc, X[0], X[3] + 0.48, y, ENTETE); ligneV(doc, X[0], y, y + hEntete, ENTETE); ligneV(doc, X[3], y, y + hEntete, ENTETE);
+    titres.forEach((c, k) => c.forEach((s, j) => t(doc, s, X[k] + 5.6, y + 1.0 + 11.5 * j, b10)));
+    ligneH(doc, X[0], X[3] + 0.48, y + hEntete, ENTETE);
+    return y + hEntete;
   };
   let y = entete(101.4);
   const terr = couper(doc, `TERRITORIALITE : ${tb.territorialite}`, b10, X[3] - X[0] - 12);
@@ -434,16 +495,27 @@ function tableauColonnes(doc: Doc, tb: TableauGaranties, nouvellePage: () => voi
   terr.forEach((s, j) => t(doc, s, (X[0] + X[3]) / 2, y + 1.0 + 11.5 * j, b10, "c"));
   y += hTerr;
   ligneH(doc, X[0], X[3] + 0.48, y, BORD);
-  lignes.forEach((l, i) => {
-    const txt = l.cells.map((s, k) => (s ? couper(doc, s, k === 0 && l.gras ? b10 : p10, colW[k]) : []));
-    const n = Math.max(1, ...txt.map((c) => c.length));
-    const h = hauteur(n);
-    if (y + h > BAS_TABLEAU) { nouvellePage(); y = entete(56); }
-    if (i % 2 === 1) doc.rect(X[0] + 0.48, y + 0.48, X[3] - X[0] - 0.48, h - 0.48).fill(PALE);
+
+  const rangee = (txt: string[][], pale: boolean) => {
+    const h = hauteur(Math.max(1, ...txt.map((c) => c.length)));
+    if (pale) doc.rect(X[0] + 0.48, y + 0.48, X[3] - X[0] - 0.48, h - 0.48).fill(PALE);
     txt.forEach((c, k) => c.forEach((s, j) => t(doc, s, X[k] + 5.6, y + 1.0 + 11.5 * j, k === 0 ? b10 : p10)));
     for (const x of X) ligneV(doc, x, y, y + h, BORD);
     y += h;
     ligneH(doc, X[0], X[3] + 0.48, y, BORD);
+  };
+  const capacite = (yy: number) => Math.floor((BAS_TABLEAU - yy - 16.2) / 11.5) + 1;
+  const pleine = capacite(56 + hEntete);
+  lignes.forEach((l, i) => {
+    let txt = l.cells.map((s, k) => (s ? couper(doc, s, k === 0 && l.gras ? b10 : p10, colW[k]) : []));
+    for (;;) {
+      const n = Math.max(1, ...txt.map((c) => c.length));
+      if (y + hauteur(n) <= BAS_TABLEAU) { rangee(txt, i % 2 === 1); break; }
+      // Ligne plus haute qu'une page : on remplit celle-ci, la suite continue après l'en-tête.
+      const ici = capacite(y);
+      if (n > pleine && ici >= 3) { rangee(txt.map((c) => c.slice(0, ici)), i % 2 === 1); txt = txt.map((c) => c.slice(ici)); }
+      nouvellePage(); y = entete(56);
+    }
   });
 }
 
@@ -493,17 +565,18 @@ function pageDecompte(doc: Doc, d: DonneesOffre, cot: CotationOffre) {
 
 // ── Récapitulatif comparatif ──────────────────────────────────────────
 
-function pageComparatif(doc: Doc, d: DonneesOffre) {
+function pageComparatif(doc: Doc, d: DonneesOffre, numeroter: () => void) {
   const paysage = d.compagnies.length >= 5;
-  const W = paysage ? PAGE_H : PAGE_W;
-  doc.addPage({ size: paysage ? [PAGE_H, PAGE_W] : [PAGE_W, PAGE_H], margin: 0 });
+  const W = paysage ? PAGE_H : PAGE_W, BAS = (paysage ? PAGE_W : PAGE_H) - 50;
+  const page = () => doc.addPage({ size: paysage ? [PAGE_H, PAGE_W] : [PAGE_W, PAGE_H], margin: 0 });
+  page();
   const dx = paysage ? (W - PAGE_W) / 2 - 30 : 0;
   bandeau(doc, { x: [73.8 + dx, 187.2 + dx, 424.8 + dx, 552.6 + dx], y: [70.4, 139.0], logoSoc: [87.1 + dx, 75.4, 84.7, 40.9], logoCli: [434.8 + dx, 84.9, 108, 40.9] },
     d, ["RECAPITULATIF DES PRIMES"], [101.5], 306.0 + dx);
   const p12: Style = { f: TR, s: 12 };
   const xi = 78.7 + dx;
   const w = t(doc, "Nom de l’assuré : ", xi, 141.8, p12);
-  t(doc, d.clientNom, xi + w, 140.0, { f: TB, s: 14.04 });
+  t(doc, d.clientNom, xi + w, 140.0, ajuste(doc, d.clientNom, { f: TB, s: 14.04 }, MARGE_DROITE + dx - xi - w));
   t(doc, "Adresse de l’assuré", xi, 156.5, p12); t(doc, `: ${d.params.adresseAssure}`, xi + 123.4, 156.5, p12);
   t(doc, "Période de garantie", xi, 170.3, p12); t(doc, `: ${d.params.periode}`, xi + 123.4, 170.3, p12);
   t(doc, "Durée", xi, 184.1, p12); t(doc, `: ${d.params.duree}`, xi + 86.6, 184.1, p12);
@@ -515,38 +588,53 @@ function pageComparatif(doc: Doc, d: DonneesOffre) {
   const X0 = 28.2, XC = 156.6, XF = paysage ? W - 50 : 546.5;
   const cw = (XF - XC) / d.compagnies.length;
   const b10: Style = { f: TB, s: 9.96 }, p10: Style = { f: TR, s: 9.96 };
-  let y = 297.2;
-  // En-tête saumon + logos
-  d.compagnies.forEach((c, i) => {
-    const x = XC + cw * i;
-    doc.rect(x + 0.48, y + 0.4, cw - 0.48, 12.4).fill("#f4af84");
-    const nom = c.nom.toUpperCase(), wNom = largeur(doc, nom, b10);
-    t(doc, nom, x + 3.9, y + 0.9, wNom > cw - 8 ? { ...b10, s: b10.s * (cw - 8) / wNom } : b10);
-    image(doc, c.logoPetit ?? c.logo, x + 4, y + 13.6, cw - 8, 30);
+  // En-tête saumon + logos, répété en haut de chaque page de suite. Un nom
+  // trop long passe sur 3 lignes au plus (en 8 pt), le bandeau s'agrandit.
+  const b8: Style = { f: TB, s: 8 };
+  const noms = d.compagnies.map((c) => {
+    const nom = c.nom.toUpperCase();
+    if (largeur(doc, nom, b10) * 0.8 <= cw - 8) return { lignes: [nom], st: b10 };
+    const lignes = couper(doc, nom, b8, cw - 8);
+    return { lignes: lignes.length > 3 ? [...lignes.slice(0, 2), `${lignes[2]}…`] : lignes, st: b8 };
   });
-  ligneH(doc, XC, XF + 0.48, y); ligneH(doc, XC, XF + 0.48, y + 12.8);
-  for (let i = 0; i <= d.compagnies.length; i++) ligneV(doc, XC + cw * i, y, y + 48.6);
-  y += 48.6;
-  ligneH(doc, X0, XF + 0.48, y);
+  const hNom = Math.max(12.8, ...noms.map((n) => (n.st === b10 ? 12.8 : 3.4 + 9.2 * n.lignes.length)));
+  const entete = (y: number) => {
+    d.compagnies.forEach((c, i) => {
+      const x = XC + cw * i;
+      doc.rect(x + 0.48, y + 0.4, cw - 0.48, hNom - 0.4).fill("#f4af84");
+      noms[i].lignes.forEach((s, k) => t(doc, s, x + 3.9, y + 0.9 + 9.2 * k, ajuste(doc, s, noms[i].st, cw - 8)));
+      image(doc, c.logoPetit ?? c.logo, x + 4, y + hNom + 0.8, cw - 8, 30);
+    });
+    const yFin = y + hNom + 35.8;
+    ligneH(doc, XC, XF + 0.48, y); ligneH(doc, XC, XF + 0.48, y + hNom);
+    for (let i = 0; i <= d.compagnies.length; i++) ligneV(doc, XC + cw * i, y, yFin);
+    ligneH(doc, X0, XF + 0.48, yFin);
+    return yFin;
+  };
+  const suite = () => { numeroter(); page(); return entete(50); };
+  const montant = (val: string, i: number, top: number, st: Style) => t(doc, val, XC + cw * (i + 1) - 2.3, top, ajuste(doc, val, st, cw - 5), "d");
+  let y = entete(297.2);
   const totaux = d.compagnies.map(() => 0);
   for (const lib of libelles) {
     const lignesLib = couper(doc, lib, p10, XC - X0 - 8);
     const h = Math.max(14.4, 12.8 * lignesLib.length + 0.4);
+    if (y + h > BAS) y = suite();
     doc.rect(X0 + 0.48, y + 0.4, XC - X0 - 0.48, h - 0.4).fill("#bcd6ed");
     lignesLib.forEach((s, k) => t(doc, s, X0 + 4, y + 1.4 + 12.8 * k, p10));
     d.compagnies.forEach((c, i) => {
       const cot = c.cotations.find((l) => l.contenu.libelleComparatif === lib);
       const val = !cot ? "—" : cot.contenu.primeNonCommuniquee ? "Non communiqué" : fmtEsp(cot.ttc);
       if (cot && !cot.contenu.primeNonCommuniquee) totaux[i] += cot.ttc;
-      t(doc, val, XC + cw * (i + 1) - 2.3, y + (h - 11) / 2, p10, "d");
+      montant(val, i, y + (h - 11) / 2, p10);
     });
     for (let i = 0; i <= d.compagnies.length; i++) ligneV(doc, XC + cw * i, y, y + h);
     ligneV(doc, X0, y, y + h);
     y += h;
     ligneH(doc, X0, XF + 0.48, y);
   }
+  if (y + 14.4 > BAS) y = suite();
   t(doc, "TOTAUX", (X0 + XC) / 2, y + 2.4, b10, "c");
-  totaux.forEach((v, i) => t(doc, fmtEsp(v), XC + cw * (i + 1) - 2.3, y + 2.4, b10, "d"));
+  totaux.forEach((v, i) => montant(fmtEsp(v), i, y + 2.4, b10));
   for (let i = 0; i <= d.compagnies.length; i++) ligneV(doc, XC + cw * i, y, y + 14.4);
   ligneV(doc, X0, y, y + 14.4);
   ligneH(doc, X0, XF + 0.48, y + 14.4);
@@ -576,7 +664,7 @@ export function genererCorpsOffre(doc: Doc, d: DonneesOffre): number {
       nouvelle(); pageDecompte(doc, d, cot);
     }
   }
-  if (d.compagnies.length > 1) { pageComparatif(doc, d); numeroPage(doc, ++numero); }
+  if (d.compagnies.length > 1) { pageComparatif(doc, d, () => numeroPage(doc, ++numero)); numeroPage(doc, ++numero); }
   return numero;
 }
 

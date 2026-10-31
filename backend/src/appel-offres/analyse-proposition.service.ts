@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { BadRequestException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
@@ -160,13 +161,20 @@ export class AnalysePropositionService {
 
   // Compagnie du document : celle choisie à l'import, sinon celle dont le
   // nom (ou celui de sa compagnie mère) apparaît dans le nom lu par ARIANA.
-  private async resoudreCompagnie(compagnieId: string | null, nomLu: string): Promise<string | null> {
-    if (compagnieId) return compagnieId;
+  // Assureur encore inconnu : créé avec le nom lu (logo à compléter), pour
+  // que l'offre se génère avec n'importe quelle compagnie.
+  private async resoudreCompagnie(compagnieId: string | null, nomLu: string): Promise<{ id: string | null; creee: boolean }> {
+    if (compagnieId) return { id: compagnieId, creee: false };
     const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
-    const lu = norm(nomLu);
+    const lu = norm(nomLu ?? "");
+    if (!lu) return { id: null, creee: false };
     const toutes = await this.prisma.compagnie.findMany({ select: { id: true, nom: true, compagnieMereId: true } });
     const candidates = toutes.filter((c) => !c.compagnieMereId && norm(c.nom) && (lu.includes(norm(c.nom)) || norm(c.nom).includes(lu)));
-    return candidates.sort((a, b) => b.nom.length - a.nom.length)[0]?.id ?? null;
+    const trouvee = candidates.sort((a, b) => b.nom.length - a.nom.length)[0]?.id;
+    if (trouvee) return { id: trouvee, creee: false };
+    const id = `CMP-${randomUUID().slice(0, 6).toUpperCase()}`;
+    await this.prisma.compagnie.create({ data: { id, nom: nomLu.trim().toUpperCase(), pays: "Gabon" } });
+    return { id, creee: true };
   }
 
   async analyser(appelOffresId: string, documentId: string, userId: string | undefined, options: { style?: string; tarifCarte?: number }) {
@@ -195,7 +203,7 @@ export class AnalysePropositionService {
     this.logger.log(`ARIANA a lu "${doc.nom}" en ${Math.round((Date.now() - t0) / 1000)} s : ${lecture.propositions.length} proposition(s).`);
     if (!lecture.propositions.length) throw new BadRequestException("ARIANA n'a trouvé aucune proposition chiffrée dans ce document.");
 
-    const compagnieId = await this.resoudreCompagnie(doc.compagnieId, lecture.compagnie);
+    const { id: compagnieId, creee } = await this.resoudreCompagnie(doc.compagnieId, lecture.compagnie);
     // Une nouvelle lecture du même document remplace la précédente.
     await this.prisma.cotation.deleteMany({ where: { documentSourceId: doc.id } });
     const creees = [];
@@ -215,7 +223,7 @@ export class AnalysePropositionService {
           primeCommuniquee: p.primeCommuniquee, primeNonCommuniquee: p.primeNonCommuniquee, ordre,
         };
         const accessoiresDefaut = !p.primeNonCommuniquee && !p.accessoires;
-        const remarques = [p.remarques, accessoiresDefaut && `Accessoires non chiffrés par la compagnie : ${ACCESSOIRES_DEFAUT.toLocaleString("fr-FR")} F CFA appliqués par défaut.`, !p.population && "Population non lue dans le document : à renseigner.", !compagnieId && `Compagnie « ${lecture.compagnie} » non reconnue : à choisir.`]
+        const remarques = [p.remarques, accessoiresDefaut && `Accessoires non chiffrés par la compagnie : ${ACCESSOIRES_DEFAUT.toLocaleString("fr-FR")} F CFA appliqués par défaut.`, !p.population && "Population non lue dans le document : à renseigner.", !compagnieId && "Compagnie non lue dans le document : à choisir.", creee && `Compagnie « ${lecture.compagnie} » ajoutée automatiquement : ajoutez son logo dans Compagnies.`]
           .filter(Boolean).join(" ");
         creees.push(await this.cotations.create({
           appelOffresId, compagnieId: compagnieId ?? undefined, branche: p.branche, clientNom: ao.clientNom, population,
