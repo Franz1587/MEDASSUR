@@ -5245,7 +5245,7 @@ export class DocumentsService {
       const parType = new Map<string, number>();
       for (const vg of Object.values(groupes))
         for (const lignes of Object.values(vg))
-          for (const pr of lignes) parType.set(pr.type, (parType.get(pr.type) ?? 0) + 1);
+          for (const pr of lignes) { const t = pr.type ?? "Autre"; parType.set(t, (parType.get(t) ?? 0) + 1); }
       const typesTriés = [...parType.entries()].sort((a, b) => b[1] - a[1]);
 
       const TYP_W = 155, TYP_H = 46, TYP_GAP_X = 12, TYP_GAP_Y = 10, TYP_NCOLS = 3;
