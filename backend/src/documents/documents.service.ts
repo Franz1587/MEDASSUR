@@ -35,7 +35,7 @@ import { TAUX_TPS } from "../sante/sante.service";
 import { populationDuContrat } from "../mouvements/population-historique.util";
 import { ORDRE_PROVINCES, provinceDeVille, prioriteVilleDansProvince } from "../lib/gabonGeo";
 import { genererReseauSoins, type ProvinceAnnuaire } from "./reseau-soins.pdf";
-import { genererCorpsOffre, genererAnnexeReseau, assemblerOffre, pdfVersBuffer, versPng, logoModeleCompagnie, annexeDepuisAnnuaire, type CompagnieOffre } from "./offre-sante.pdf";
+import { genererCorpsOffre, genererAnnexeReseau, assemblerOffre, pdfVersBuffer, versPng, logoModeleCompagnie, annexeDepuisAnnuaire, genererPagesPortails, type CompagnieOffre } from "./offre-sante.pdf";
 import type { ContenuOffre } from "../cotation/contenu-offre";
 import type { Prisma, ParametresEntreprise } from "@prisma/client";
 import { numeroPolice, policePourNomFichier } from "../lib/police.util";
@@ -4963,6 +4963,21 @@ export class DocumentsService {
     doc.end();
   }
 
+  // Carte d'assurance SPECIMEN (recto/verso) de la société, au nom du
+  // prospect et aux taux de l'offre — illustre la page « LA CARTE SANTE »
+  // de l'offre. Données fictives : jamais la carte d'un vrai assuré.
+  private async carteSpecimen(p: ParametresEntreprise, client: string, compagnie: string, tauxAmb: string | null, tauxHosp: string | null): Promise<Buffer> {
+    const doc = new PDFDocument({ size: [CARD_WIDTH, CARD_HEIGHT], margin: 0, autoFirstPage: false });
+    const fin = pdfVersBuffer(doc);
+    await this.ajouterCarteRectoVerso(doc, {
+      nom: "SPECIMEN", prenom: "Assuré", matricule: `${p.prefixeMatricule ?? "MAT"}-000000`, typeAssure: "AS", dateNaissance: "01/01/1985",
+      telephone: p.telephone, photo: null,
+      contrat: { id: "SPECIMEN", dateDebut: "", dateFin: "", client: { nom: client }, compagnie: { nom: compagnie }, tauxCouvertureAmbulatoire: tauxAmb, tauxCouvertureHospitalisation: tauxHosp },
+    }, p);
+    doc.end();
+    return fin;
+  }
+
   // Annuaire du réseau (dédoublonné, groupé par province puis ville) —
   // partagé par le PDF Réseau de Soins et l'annexe de l'offre santé.
   private async construireAnnuaire(): Promise<ProvinceAnnuaire[]> {
@@ -5131,7 +5146,19 @@ export class DocumentsService {
       docAnnexe.end();
       annexe = await pAnnexe;
     }
-    const pdf = await assemblerOffre(await pCorps, dernier, annexe, params.pagesPresentation, clientLogo);
+    let presentation: { carte: Buffer | null; portails: Buffer } | null = null;
+    if (params.pagesPresentation) {
+      const maladie = retenues.find((c) => c.branche === "Maladie") ?? retenues[0];
+      const docPortails = new PDFDocument({ size: [596.52, 842.52], margin: 0, autoFirstPage: false });
+      const pPortails = pdfVersBuffer(docPortails);
+      genererPagesPortails(docPortails, p.nom.toUpperCase(), dernier + 3);
+      docPortails.end();
+      presentation = {
+        carte: await this.carteSpecimen(p, ao.clientNom, maladie.compagnie?.nom ?? "", maladie.tauxCouvertureAmbulatoire, maladie.tauxCouvertureHospitalisation).catch(() => null),
+        portails: await pPortails,
+      };
+    }
+    const pdf = await assemblerOffre(await pCorps, dernier, annexe, presentation, clientLogo);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="OFFRE SANTE ${ao.clientNom.replace(/[^\w .-]+/g, "")}.pdf"`);
     res.end(pdf);

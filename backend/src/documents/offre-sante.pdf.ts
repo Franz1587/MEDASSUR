@@ -109,9 +109,20 @@ function couper(doc: Doc, s: string, st: Style, max: number): string[] {
 function ligneH(doc: Doc, x0: number, x1: number, y: number, c = "#000", e = 0.48) { doc.rect(x0, y, x1 - x0, e).fill(c); }
 function ligneV(doc: Doc, x: number, y0: number, y1: number, c = "#000", e = 0.48) { doc.rect(x, y0, e, y1 - y0).fill(c); }
 
+// PDFKit ne met en cache que les images données par chemin : un logo passé
+// en Buffer était réembarqué à chaque page (26 copies = plusieurs Mo).
+// openImage existe dans PDFKit mais n'est pas déclaré par @types/pdfkit.
+type AvecOpenImage = { openImage(src: ImageSrc): unknown };
+const imagesOuvertes = new WeakMap<Doc, Map<ImageSrc, unknown>>();
 function image(doc: Doc, img: ImageSrc | null, x: number, y: number, w: number, h: number) {
   if (!img) return;
-  try { doc.image(img, x, y, { fit: [w, h], align: "center", valign: "center" }); } catch { /* image illisible : jamais bloquant */ }
+  try {
+    let cache = imagesOuvertes.get(doc);
+    if (!cache) imagesOuvertes.set(doc, (cache = new Map()));
+    let ouverte = cache.get(img);
+    if (!ouverte) cache.set(img, (ouverte = (doc as unknown as AvecOpenImage).openImage(img)));
+    doc.image(ouverte as ImageSrc, x, y, { fit: [w, h], align: "center", valign: "center" });
+  } catch { /* image illisible : jamais bloquant */ }
 }
 
 // Puce ➢ : glyphe 190 de la police Wingdings embarquée dans le modèle
@@ -609,13 +620,99 @@ export function genererAnnexeReseau(doc: Doc, d: DonneesOffre) {
   image(doc, d.signature, 392.6, y + 111.3, 169, 100.1);
 }
 
+// ── Présentation des portails MEDASSUR+ ───────────────────────────────
+
+// Remplace les pages « B – OUTILS DEMATERIALISES » du modèle (Passeport
+// Médical, SI Médical, Eyone-Tiers) par les portails réels de MEDASSUR+,
+// même mise en page (Calibri, titres numérotés, texte justifié) avec deux
+// vraies captures d'écran par portail (société de démonstration, données
+// fictives — jamais les données d'un vrai assuré).
+interface Portail { titre: string; texte: string; points: string[]; captures: [string, string] }
+const PORTAILS = (societe: string): Portail[] => [
+  {
+    titre: `LE PORTAIL DE GESTION ${societe}`,
+    texte: `Le portail de gestion est l'outil de travail quotidien des équipes de ${societe}. Il centralise toute la vie du contrat santé : cotations et appels d'offres, contrats et avenants, mouvements de population (incorporations, retraits), émission des cartes d'assurance, saisie et contrôle des factures des prestataires, accords préalables et prises en charge, règlements et reporting.`,
+    points: [
+      "Tableau de bord de pilotage : primes émises, sinistralité (S/P), assurés et trésorerie en temps réel ;",
+      "Contrôle des factures ligne à ligne, au regard des garanties et plafonds du contrat ;",
+      "Gestion électronique des documents et lecture automatique des pièces par l'assistant IA ARIANA ;",
+      "Rapports statistiques par rubrique, bénéficiaire et prestataire, exportables en PDF.",
+    ],
+    captures: ["gestion-1", "gestion-2"],
+  },
+  {
+    titre: "LE PORTAIL DES PRESTATAIRES ET DES MÉDECINS",
+    texte: "Les établissements du réseau de soins (hôpitaux, cliniques, pharmacies, laboratoires…) et les médecins prescripteurs disposent chacun de leur espace. Le prestataire identifie l'assuré (carte, QR code, matricule ou téléphone), vérifie ses droits et son taux de prise en charge, saisit ses prestations et transmet ses factures en ligne. Le médecin gère sa file d'attente et ses consultations, établit des ordonnances électroniques transmises directement aux pharmacies du réseau et consulte le dossier de ses patients.",
+    points: [
+      "Identification instantanée de l'assuré et contrôle des droits avant les soins ;",
+      "Bons de prise en charge, prestations et factures dématérialisés ;",
+      "Ordonnance électronique lue et délivrée par les pharmacies conventionnées ;",
+      "Suivi des règlements et messagerie avec le gestionnaire.",
+    ],
+    captures: ["prestataire-1", "medecin-1"],
+  },
+  {
+    titre: "LE PORTAIL DE L'ASSURÉ (WEB ET APPLICATION MOBILE)",
+    texte: "Chaque assuré principal dispose de son espace, sur le web comme sur l'application mobile : carte d'assurance électronique pour lui et ses ayants droit, garanties et plafonds de son contrat, demandes de prise en charge et de remboursement suivies en temps réel, réseau de soins avec les prestataires les plus proches, e-carnet de santé et historique des consommations du foyer.",
+    points: [
+      "Carte d'assurance santé de chaque membre de la famille, toujours disponible ;",
+      "Taux de couverture et plafonds consultables à tout moment ;",
+      "Demandes de prise en charge et de remboursement en ligne, avec pièces jointes ;",
+      "Messagerie directe avec le gestionnaire santé.",
+    ],
+    captures: ["assure-1", "assure-2"],
+  },
+  {
+    titre: "LE PORTAIL DU SOUSCRIPTEUR",
+    texte: "L'entreprise souscriptrice suit son contrat en toute autonomie : contrats et documents, liste de ses bénéficiaires, demandes d'incorporation et de retrait, réseau de soins, procédures, gestion de ses propres utilisateurs et statistiques de consommation (par mois, par famille, par bénéficiaire, par prestataire, par rubrique et évolution du S/P).",
+    points: [
+      "Vue d'ensemble des contrats, participants et prises en charge par rubrique ;",
+      "Incorporations et retraits demandés en ligne, avec suivi de leur traitement ;",
+      "Statistiques de consommation pour piloter le budget santé de l'entreprise ;",
+      "Comptes utilisateurs et droits d'accès gérés par l'entreprise elle-même.",
+    ],
+    captures: ["souscripteur-1", "souscripteur-2"],
+  },
+];
+
+export function genererPagesPortails(doc: Doc, societe: string, premierNumero: number) {
+  doc.registerFont(CA, path.join(ASSETS, "Carlito-Regular.ttf"));
+  doc.registerFont(CAB, path.join(ASSETS, "Carlito-Bold.ttf"));
+  const corps: Style = { f: CA, s: 11.04 }, gras: Style = { f: CAB, s: 11.04 };
+  const X = 56.7, L = 481.9;
+  PORTAILS(societe).forEach((po, i) => {
+    doc.addPage({ size: [PAGE_W, PAGE_H], margin: 0 });
+    t(doc, String(premierNumero + i), 538.6, 801.4, { f: TR, s: 11.04 }, "d");
+    let top = 72.1;
+    if (i === 0) { t(doc, "B – OUTILS DEMATERIALISES", 92.7, top, gras, "g", true); top = 117.1; }
+    t(doc, `${i + 1}.`, 92.7, top, gras);
+    t(doc, po.titre, 110.7, top, gras);
+    top += 22;
+    doc.font(CA).fontSize(11.04).fillColor("#000").text(winAnsi(po.texte), X, top, { width: L, align: "justify", lineGap: 0.3 });
+    top = doc.y + 8;
+    for (const pt of po.points) {
+      rond(doc, 74.4, top - 1.5);
+      doc.font(CA).fontSize(11.04).text(winAnsi(pt), 92.7, top, { width: X + L - 92.7, align: "left" });
+      top = doc.y + 2;
+    }
+    top += 10;
+    const h = Math.min(L * 733 / 1400, (790 - top - 14) / 2), w = h * 1400 / 733;
+    po.captures.forEach((c, k) => {
+      const y = top + k * (h + 14), x = X + (L - w) / 2;
+      image(doc, path.join(ASSETS, "portails", `${c}.jpg`), x, y, w, h);
+      doc.rect(x, y, w, h).lineWidth(0.5).stroke("#c9d3df");
+    });
+  });
+  return PORTAILS(societe).length;
+}
+
 // ── Données ───────────────────────────────────────────────────────────
 
 // PDFKit et pdf-lib ne lisent que PNG/JPEG : tout logo est normalisé en PNG
 // (transparence conservée). Image illisible → null, jamais bloquant.
 export async function versPng(img: ImageSrc | null): Promise<Buffer | null> {
   if (!img) return null;
-  try { return await sharp(img).png().toBuffer(); } catch { return null; }
+  try { return await sharp(img).resize(1200, 1200, { fit: "inside", withoutEnlargement: true }).png().toBuffer(); } catch { return null; }
 }
 
 // Logos des compagnies tels qu'imprimés dans les offres de référence, avec
@@ -671,15 +768,22 @@ export function pdfVersBuffer(doc: Doc): Promise<Buffer> {
   });
 }
 
-// Corps PDFKit + pages de présentation LA RUCHE copiées du modèle (outils,
-// carte santé, applications — renumérotées, logo client réinséré) + annexe.
-export async function assemblerOffre(corps: Buffer, dernierNumero: number, annexe: Buffer | null, presentation: boolean, clientLogoPng: Buffer | null): Promise<Buffer> {
+// Corps PDFKit + pages de présentation copiées du modèle (outils de gestion,
+// carte santé — renumérotées, logo client et vraie carte réinsérés) +
+// pages des portails MEDASSUR+ + annexe réseau.
+export interface PiecesPresentation { carte: Buffer | null; portails: Buffer | null }
+// Emplacements recto / verso de la carte sur la page « LA CARTE SANTE » du modèle (pt, depuis le haut).
+const CARTE_RECTO = [56.7, 99.3, 218.9, 139.1], CARTE_VERSO = [281.1, 100.1, 218.3, 138.7];
+
+export async function assemblerOffre(corps: Buffer, dernierNumero: number, annexe: Buffer | null, presentation: PiecesPresentation | null, clientLogoPng: Buffer | null): Promise<Buffer> {
   const final = await PdfLib.load(corps);
   if (presentation) {
     const src = await PdfLib.load(fs.readFileSync(path.join(ASSETS, "presentation.pdf")));
     const pages = await final.copyPages(src, src.getPageIndices());
     const times = await final.embedFont(StandardFonts.TimesRoman);
     const logo = clientLogoPng ? await final.embedPng(clientLogoPng) : null;
+    const carte = presentation.carte ? await PdfLib.load(presentation.carte) : null;
+    const faces = carte ? await final.embedPdf(carte, carte.getPageIndices().slice(0, 2)) : [];
     pages.forEach((pg, i) => {
       final.addPage(pg);
       const n = String(dernierNumero + 1 + i);
@@ -689,7 +793,15 @@ export async function assemblerOffre(corps: Buffer, dernierNumero: number, annex
         const w = logo.width * s, h = logo.height * s;
         pg.drawImage(logo, { x: 491.25 - w / 2, y: pg.getHeight() - 104.75 - h / 2, width: w, height: h });
       }
+      if (i === 1) faces.forEach((f, k) => {
+        const [x, top, w, h] = k === 0 ? CARTE_RECTO : CARTE_VERSO;
+        pg.drawPage(f, { x, y: pg.getHeight() - top - h, width: w, height: h });
+      });
     });
+    if (presentation.portails) {
+      const p = await PdfLib.load(presentation.portails);
+      for (const pg of await final.copyPages(p, p.getPageIndices())) final.addPage(pg);
+    }
   }
   if (annexe) {
     const src = await PdfLib.load(annexe);
