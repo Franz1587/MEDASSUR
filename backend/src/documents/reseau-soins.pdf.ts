@@ -556,11 +556,19 @@ const ST_NOM = { f: I7, s: 9, c: "" }, ST_ADR = { f: I4, s: 9, c: "" }, ST_TEL =
 
 interface LigneAnnuaire { p: PrestataireAnnuaire; t: InfoType; nom: string[]; adr: string[]; tels: string[]; badge: string[]; h: number }
 
+// Demande utilisateur : « 011.74.31.31 » → « +241 11.74.31.31 ». Un numéro
+// déjà international (+…, 00…) ou étranger sans 0 initial reste tel quel.
+export function indicatifGabon(tel: string): string {
+  if (/^0(?!0)/.test(tel)) return `+241 ${tel.slice(1)}`;
+  if (/^241[\s.]/.test(tel)) return `+${tel}`;
+  return tel;
+}
+
 function preparerLigne(doc: Doc, p: PrestataireAnnuaire): LigneAnnuaire {
   const t = infoType(p.type);
   const nom = couper(doc, p.nom, ST_NOM, 161.5);
   const adr = p.adresse?.trim() ? couper(doc, p.adresse.trim(), ST_ADR, 141) : ["—"];
-  const tels = (p.telephone || "").split(/\s*[\/;,|·]\s*|\s{2,}|\n/).map((s) => s.trim()).filter(Boolean);
+  const tels = (p.telephone || "").split(/\s*[\/;,|·]\s*|\s{2,}|\n/).map((s) => indicatifGabon(s.trim())).filter(Boolean);
   const badge = couper(doc, t.badge, ST_BADGE, 66.5);
   // Hauteurs moyennes mesurées sur le modèle : 21,8 + 12,2 par ligne au-delà de la 1re.
   const n = Math.max(nom.length, adr.length, tels.length);
