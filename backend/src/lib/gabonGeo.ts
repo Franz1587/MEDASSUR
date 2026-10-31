@@ -49,10 +49,11 @@ const VILLE_PROVINCE: [string, ProvinceGabon][] = [
   ["bakoumba", "Haut-Ogooué"], ["akieni", "Haut-Ogooué"],
   ["mouila", "Ngounié"], ["fougamou", "Ngounié"], ["ndende", "Ngounié"],
   ["mbigou", "Ngounié"], ["mimongo", "Ngounié"],
-  ["oyem", "Woleu-Ntem"], ["bitam", "Woleu-Ntem"], ["mitzic", "Woleu-Ntem"],
+  ["oyem", "Woleu-Ntem"], ["afenan", "Woleu-Ntem"],
+  ["bitam", "Woleu-Ntem"], ["mitzic", "Woleu-Ntem"],
   ["minvoul", "Woleu-Ntem"], ["medouneu", "Woleu-Ntem"],
   ["tchibanga", "Nyanga"], ["tsogni", "Nyanga"], ["mayumba", "Nyanga"], ["ndindi", "Nyanga"],
-  ["koulamoutou", "Ogooué-Lolo"], ["lastoursville", "Ogooué-Lolo"],
+  ["koulamoutou", "Ogooué-Lolo"], ["lastoursville", "Ogooué-Lolo"], ["lastourville", "Ogooué-Lolo"],
   ["lambarene", "Moyen-Ogooué"], ["ndjole", "Moyen-Ogooué"], ["sindara", "Moyen-Ogooué"],
   ["makokou", "Ogooué-Ivindo"], ["booue", "Ogooué-Ivindo"], ["mekambo", "Ogooué-Ivindo"],
 ];
