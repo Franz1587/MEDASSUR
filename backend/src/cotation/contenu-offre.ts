@@ -89,3 +89,67 @@ export interface ParametresOffre {
   pagesPresentation: boolean;
   annexeReseau: boolean;
 }
+
+// Garanties imprimées par LA RUCHE sur toute proposition Maladie (puces ➢).
+export const GARANTIES_STANDARD = [
+  "Maladie : (consultations, visite, analyses médicales, pharmacie, consultations de spécialistes, sauf les spécialistes soumises à plafond listées ci-après)",
+  "Hospitalisations médicales et chirurgicales", "Prothèses en général (autres que dentaires et optiques)", "Maternité",
+  "Dentisterie (soins dentaires, prothèses, orthodontie, chirurgie dentaire)", "Orthophonie", "Lunetterie",
+  "Cures thermales et massages", "Evacuation sanitaire (intérieur du pays vers Libreville)",
+];
+
+export interface CotationSaisie {
+  branche: string; clientNom: string; population: number; territorialite: string;
+  tauxCouvertureAmbulatoire?: string | null; tauxCouvertureHospitalisation?: string | null;
+  plafondFamilial?: unknown; exclusions?: string | null; clauseAjustement?: string | null;
+  limiteAgeAdulte?: number | null; conditionsFermete?: string | null; primeNette: unknown;
+  garanties: { categorie: string; libelle: string; plafond: string; tauxStructurePrivee?: string | null; tauxStructurePublique?: string | null }[];
+}
+
+// Cotation saisie à la main (sans lecture ARIANA) → même contenu que celui
+// qu'ARIANA rédige, pour que le document soit identique quelle que soit
+// l'origine de la cotation.
+export function contenuDepuisCotation(c: CotationSaisie): ContenuOffre {
+  const pct = (v?: string | null) => (v ? (/%/.test(v) ? v.trim() : `${v.trim()}%`) : "");
+  const amb = pct(c.tauxCouvertureAmbulatoire), hosp = pct(c.tauxCouvertureHospitalisation);
+  const terr = c.territorialite?.trim() || "Gabon uniquement";
+  const terrPhrase = terr.charAt(0).toUpperCase() + terr.slice(1).toLowerCase();
+  const population = c.population > 0 ? c.population : 1;
+  const net = Number(c.primeNette);
+  const plafond = Number(c.plafondFamilial ?? 0);
+  const multi = new Set(c.garanties.map((g) => g.categorie)).size > 1;
+  const sections: SectionGaranties[] = [];
+  for (const g of c.garanties) {
+    const titre = multi ? g.categorie : null;
+    let s = sections.find((x) => x.titre === titre);
+    if (!s) sections.push((s = { titre, lignes: [] }));
+    const taux = [g.tauxStructurePrivee, g.tauxStructurePublique].filter(Boolean).join(" / ");
+    s.lignes.push({ libelle: g.libelle, taux: taux || null, plafond: g.plafond || null });
+  }
+  if (c.branche === "Assistance") {
+    return {
+      titre: ["PROPOSITION", "ASSISTANCE"], designationRecap: ["Assistance"], libelleComparatif: `${c.clientNom} - Assistance`,
+      population, garanties: c.garanties.map((g) => g.libelle), limites: [], mentionsFraisReels: false, tableau: null,
+      primeParPersonne: net ? Math.round(net / population) : null,
+    };
+  }
+  return {
+    titre: [`PROPOSITION SANTE ${c.clientNom.toUpperCase()} :`, terr.toUpperCase(), ...(amb ? [`${amb} Ambulatoires &`] : []), ...(hosp ? [`${hosp.replace("%", " %")} hospitalisations`] : [])],
+    designationRecap: amb && hosp ? [`Maladie ${c.clientNom} : ${terrPhrase} - ${amb}`, `Frais médicaux & ${hosp} Hospitalisations`] : [`Maladie ${c.clientNom} : ${terrPhrase}`],
+    libelleComparatif: amb && hosp ? `${c.clientNom} - ${terrPhrase} (${amb} / ${hosp})` : `${c.clientNom} - ${terrPhrase}`,
+    population, garanties: GARANTIES_STANDARD,
+    limites: [
+      ...(plafond ? [{ texte: `Le plafond de remboursement est fixé à ${Math.round(plafond).toLocaleString("fr-FR").replace(/\s/g, ".")} FCFA par famille et par année d’assurance y compris rechutes et séquelles.` }] : []),
+      ...(c.exclusions ? [{ texte: c.exclusions }] : []),
+      ...(c.clauseAjustement ? [{ texte: c.clauseAjustement }] : []),
+      ...(c.limiteAgeAdulte ? [{ texte: `Limite d’âge fixée à ${c.limiteAgeAdulte} ans` }] : []),
+      ...(c.conditionsFermete ? [{ texte: "Cette cotation est ferme sous réserve de :", detail: c.conditionsFermete }] : []),
+    ],
+    mentionsFraisReels: true,
+    tableau: sections.length ? {
+      style: "colonnes", territorialite: terr.toUpperCase(),
+      titreColonneTaux: c.garanties.some((g) => g.tauxStructurePublique) ? "TAUX (privé / public)" : "TAUX", sections,
+    } : null,
+    primeParPersonne: net ? Math.round(net / population) : null,
+  };
+}

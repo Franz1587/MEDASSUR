@@ -126,10 +126,18 @@ export class AppelOffresService {
   async parametresOffre(id: string, userId?: string): Promise<ParametresOffre> {
     const ao = await this.findOne(id);
     if (ao.parametresOffre) return ao.parametresOffre as unknown as ParametresOffre;
+    return this.parametresParDefaut(userId, id);
+  }
+
+  // Aussi utilisé pour une cotation sans appel d'offres (document combiné).
+  async parametresParDefaut(userId?: string, saufAppelOffresId?: string): Promise<ParametresOffre> {
     const [p, user, precedent] = await Promise.all([
       this.parametresEntreprise.findOne(),
       userId ? this.prisma.user.findUnique({ where: { id: userId } }) : null,
-      this.prisma.appelOffres.findFirst({ where: { parametresOffre: { not: Prisma.DbNull }, NOT: { id } }, orderBy: { dateCreation: "desc" } }),
+      this.prisma.appelOffres.findFirst({
+        where: { parametresOffre: { not: Prisma.DbNull }, ...(saufAppelOffresId ? { NOT: { id: saufAppelOffresId } } : {}) },
+        orderBy: { dateCreation: "desc" },
+      }),
     ]);
     const prec = (precedent?.parametresOffre ?? null) as unknown as ParametresOffre | null;
     const maintenant = new Date(), an = maintenant.getFullYear();

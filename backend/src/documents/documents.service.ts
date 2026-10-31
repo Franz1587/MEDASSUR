@@ -36,8 +36,8 @@ import { populationDuContrat } from "../mouvements/population-historique.util";
 import { ORDRE_PROVINCES, provinceDeVille, prioriteVilleDansProvince } from "../lib/gabonGeo";
 import { genererReseauSoins, type ProvinceAnnuaire } from "./reseau-soins.pdf";
 import { genererCorpsOffre, assemblerOffre, pdfVersBuffer, versPng, logoModeleCompagnie, genererPagesPortails, type CompagnieOffre } from "./offre-sante.pdf";
-import type { ContenuOffre } from "../cotation/contenu-offre";
-import type { Prisma, ParametresEntreprise } from "@prisma/client";
+import { contenuDepuisCotation, type ContenuOffre, type ParametresOffre } from "../cotation/contenu-offre";
+import type { Prisma, ParametresEntreprise, Cotation, Compagnie, CotationGarantieLigne } from "@prisma/client";
 import { numeroPolice, policePourNomFichier } from "../lib/police.util";
 
 // Groupes d'actes considérés "Examen" (bon d'examen) — le reste (Consultation,
@@ -4902,52 +4902,25 @@ export class DocumentsService {
   // en une seule proposition (voir schema.prisma Prospect.logo : "logo du
   // client pour le document de cotation"). Logo du prospect lié en
   // priorité, sinon celui de la première cotation.
-  async renderCotationOffre(cotationIds: string[], res: Response) {
+  async renderCotationOffre(cotationIds: string[], res: Response, userId?: string) {
     if (cotationIds.length === 0) throw new BadRequestException("Aucune cotation sélectionnée.");
-    const cotations = await Promise.all(cotationIds.map((id) => this.cotation.findOne(id)));
-    const p = await this.parametresEntreprise.findOne();
-    const doc = new PDFDocument({ size: "A4", margin: 40 });
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="Offre-${cotations[0].id}.pdf"`);
-    doc.pipe(res);
-
-    const left = doc.page.margins.left;
-    const right = doc.page.width - doc.page.margins.right;
-    const width = right - left;
-
-    for (let i = 0; i < cotations.length; i++) {
-      if (i > 0) doc.addPage();
-      const c = cotations[i];
-      this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 28, 200, 66, () => {
-        doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
-        return 0;
-      });
-      doc.fontSize(12).font("Helvetica-Bold").fillColor("#000").text(`OFFRE DE COTATION — ${c.branche.toUpperCase()}`, left, 60, { width, align: "right" });
-      doc.fontSize(9).font("Helvetica").text(`Client : ${c.clientNom}`, left, 78, { width, align: "right" });
-
-      let y = 110;
-      let yy = champ(doc, left, y, "Population :", String(c.population), 100, 200, { boldLabel: true });
-      yy = champ(doc, left, yy, "Territorialité :", c.territorialite, 100, 300, { boldLabel: true });
-      if (c.tauxCouvertureAmbulatoire) yy = champ(doc, left, yy, "Taux Ambulatoire :", c.tauxCouvertureAmbulatoire, 130, width - 130, { boldLabel: true });
-      if (c.tauxCouvertureHospitalisation) yy = champ(doc, left, yy, "Taux Hospitalisation :", c.tauxCouvertureHospitalisation, 130, width - 130, { boldLabel: true });
-      if (c.exclusions) yy = champ(doc, left, yy, "Exclusions :", c.exclusions, 100, width - 100, { boldLabel: true });
-      if (c.clauseAjustement) yy = champ(doc, left, yy, "Ajustement :", c.clauseAjustement, 100, width - 100, { boldLabel: true });
-      y = yy + 20;
-
-      doc.rect(left, y, width, 80).stroke();
-      const recap: [string, string][] = [
-        ["Prime nette", `${fmt(Number(c.primeNette))} FCFA`], ["Cartes", `${fmt(Number(c.montantCartes))} FCFA`],
-        ["Accessoires", `${fmt(Number(c.montantAccessoires))} FCFA`], ["Taxe", `${fmt(Number(c.montantTaxe))} FCFA`],
-        ["PRIME TTC", `${fmt(Number(c.primeTTC))} FCFA`],
-      ];
-      let ry = y + 8;
-      for (const [label, valeur] of recap) { champ(doc, left + 10, ry, label, valeur, 200, width - 220, { boldLabel: label === "PRIME TTC", boldValeur: true, alignValeur: "right" }); ry += 14; }
-      y += 90;
-
-      doc.fontSize(8).font("Helvetica").fillColor("#555").text(`Cotation établie le ${c.dateCreation}${c.conditionsFermete ? ` — ${c.conditionsFermete}` : ""}`, left, y, { width });
-      doc.fillColor("#000");
-    }
-    doc.end();
+    const cotations = await this.prisma.cotation.findMany({
+      where: { id: { in: cotationIds } },
+      include: { compagnie: true, garanties: { orderBy: { ordre: "asc" } }, appelOffres: { include: { prospect: true, documents: { select: { id: true, createdAt: true } } } } },
+    });
+    if (!cotations.length) throw new NotFoundException("Cotations introuvables.");
+    // Toutes du même appel d'offres → ses paramètres et le logo du prospect ;
+    // sinon paramètres par défaut et logo saisi sur la cotation.
+    const aos = [...new Set(cotations.map((c) => c.appelOffresId))];
+    const ao = aos.length === 1 && aos[0] ? cotations[0].appelOffres : null;
+    const params = ao ? await this.appelOffres.parametresOffre(ao.id, userId) : await this.appelOffres.parametresParDefaut(userId);
+    const logoCotation = cotations.find((c) => c.logo)?.logo;
+    return this.genererOffreSante(cotations, {
+      clientNom: ao?.clientNom ?? cotations[0].clientNom,
+      logoClient: ao?.prospect?.logo ? ["logos-prospects", ao.prospect.logo] : logoCotation ? ["logos-cotations", logoCotation] : null,
+      params: { ...params, cotationIdsExclues: [] },
+      dateDoc: ao ? new Map(ao.documents.map((d) => [d.id, d.createdAt.getTime()])) : undefined,
+    }, res);
   }
 
   // Réseau de soins — annuaire des prestataires conventionnés, trié par province puis ville.
@@ -5087,26 +5060,41 @@ export class DocumentsService {
   async renderOffreSante(appelOffresId: string, userId: string | undefined, res: Response) {
     const ao = await this.prisma.appelOffres.findUnique({
       where: { id: appelOffresId },
-      include: { prospect: true, documents: { select: { id: true, createdAt: true } }, cotations: { include: { compagnie: true } } },
+      include: { prospect: true, documents: { select: { id: true, createdAt: true } }, cotations: { include: { compagnie: true, garanties: { orderBy: { ordre: "asc" } } } } },
     });
     if (!ao) throw new NotFoundException(`Appel d'offres ${appelOffresId} introuvable`);
     const params = await this.appelOffres.parametresOffre(appelOffresId, userId);
     const exclues = new Set(params.cotationIdsExclues ?? []);
-    const retenues = ao.cotations.filter((c) => c.contenuOffre && !exclues.has(c.id));
-    if (!retenues.length) throw new BadRequestException("Aucune cotation analysée par ARIANA n'est retenue pour cette offre.");
+    const dateDoc = new Map(ao.documents.map((d) => [d.id, d.createdAt.getTime()]));
+    return this.genererOffreSante(ao.cotations.filter((c) => !exclues.has(c.id)), {
+      clientNom: ao.clientNom, logoClient: ao.prospect?.logo ? ["logos-prospects", ao.prospect.logo] : null, params, dateDoc,
+    }, res);
+  }
+
+  // Offre santé au format LA RUCHE — un seul générateur pour l'offre d'un
+  // appel d'offres, le document combiné et le document d'une cotation, que
+  // les cotations viennent d'ARIANA ou d'une saisie manuelle.
+  private async genererOffreSante(
+    cotations: (Cotation & { compagnie: Compagnie | null; garanties: CotationGarantieLigne[] })[],
+    ctx: { clientNom: string; logoClient: [string, string] | null; params: ParametresOffre; dateDoc?: Map<string, number> },
+    res: Response,
+  ) {
+    const params = ctx.params;
+    const retenues = cotations;
+    if (!retenues.length) throw new BadRequestException("Aucune cotation à présenter dans l'offre.");
     const sansCompagnie = retenues.filter((c) => !c.compagnie);
     if (sansCompagnie.length) throw new BadRequestException(`Choisissez la compagnie des cotations ${sansCompagnie.map((c) => c.id).join(", ")} avant de générer l'offre.`);
+    const contenuDe = (c: typeof retenues[number]) => (c.contenuOffre as unknown as ContenuOffre | null) ?? contenuDepuisCotation(c);
 
     const p = await this.parametresEntreprise.findOne();
     const logoSociete = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
     const [societeLogo, clientLogo] = await Promise.all([
       versPng(logoSociete),
-      this.chargerImage("logos-prospects", ao.prospect?.logo, path.join(UPLOADS_ROOT, "logos-prospects")).then(versPng),
+      ctx.logoClient ? this.chargerImage(ctx.logoClient[0], ctx.logoClient[1], path.join(UPLOADS_ROOT, ctx.logoClient[0])).then(versPng) : null,
     ]);
 
     // Compagnies dans l'ordre choisi, sinon dans l'ordre d'import des documents.
-    const dateDoc = new Map(ao.documents.map((d) => [d.id, d.createdAt.getTime()]));
-    const rang = (c: typeof retenues[number]) => [dateDoc.get(c.documentSourceId ?? "") ?? 0, (c.contenuOffre as unknown as ContenuOffre).ordre ?? 0];
+    const rang = (c: typeof retenues[number]) => [ctx.dateDoc?.get(c.documentSourceId ?? "") ?? 0, contenuDe(c).ordre ?? 0];
     retenues.sort((a, b) => { const [da, oa] = rang(a), [db, ob] = rang(b); return da - db || oa - ob; });
     const ordre = params.ordreCompagnies ?? [];
     const ids = [...new Set(retenues.map((c) => c.compagnieId!))]
@@ -5122,14 +5110,14 @@ export class DocumentsService {
         nom: comp.nom.replace(/\s+ASSURANCES?$/i, ""),
         logo: modele?.logo ?? logoBase, logoPetit: modele?.petit ?? logoBase, tailleLogo: modele?.taille ?? null,
         cotations: cots.map((c) => ({
-          branche: c.branche, contenu: c.contenuOffre as unknown as ContenuOffre,
+          branche: c.branche, contenu: contenuDe(c),
           primeNette: Number(c.primeNette), cartes: Number(c.montantCartes), accessoires: Number(c.montantAccessoires),
           taxe: Number(c.montantTaxe), ttc: Number(c.primeTTC), tauxTaxe: 8,
         })),
       });
     }
 
-    const donnees = { clientNom: ao.clientNom, clientLogo, societeLogo, params, compagnies };
+    const donnees = { clientNom: ctx.clientNom, clientLogo, societeLogo, params, compagnies };
     const corps = new PDFDocument({ size: [596.52, 842.52], margin: 0, bufferPages: true });
     const pCorps = pdfVersBuffer(corps);
     const dernier = genererCorpsOffre(corps, donnees);
@@ -5152,13 +5140,13 @@ export class DocumentsService {
       genererPagesPortails(docPortails, p.nom.toUpperCase(), dernier + 3);
       docPortails.end();
       presentation = {
-        carte: await this.carteSpecimen(p, ao.clientNom, maladie.compagnie?.nom ?? "", maladie.tauxCouvertureAmbulatoire, maladie.tauxCouvertureHospitalisation).catch(() => null),
+        carte: await this.carteSpecimen(p, ctx.clientNom, maladie.compagnie?.nom ?? "", maladie.tauxCouvertureAmbulatoire, maladie.tauxCouvertureHospitalisation).catch(() => null),
         portails: await pPortails,
       };
     }
     const pdf = await assemblerOffre(await pCorps, dernier, annexe, presentation, clientLogo);
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="OFFRE SANTE ${ao.clientNom.replace(/[^\w .-]+/g, "")}.pdf"`);
+    res.setHeader("Content-Disposition", `inline; filename="OFFRE SANTE ${ctx.clientNom.replace(/[^\w .-]+/g, "")}.pdf"`);
     res.end(pdf);
   }
 

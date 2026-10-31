@@ -156,8 +156,8 @@ export class DocumentsController {
   }
 
   @Post("cotation-offre")
-  cotationOffre(@Body() body: { cotationIds: string[] }, @Res() res: Response) {
-    return this.documentsService.renderCotationOffre(body.cotationIds, res);
+  cotationOffre(@Body() body: { cotationIds: string[] }, @Req() req: StaffRequest, @Res() res: Response) {
+    return this.documentsService.renderCotationOffre(body.cotationIds, res, req.user.userId);
   }
 
   @Get("reseau-soins")
