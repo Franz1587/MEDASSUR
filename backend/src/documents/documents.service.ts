@@ -5004,8 +5004,8 @@ export class DocumentsService {
     // ── Ville effective : adresse peut affiner la ville déclarée ──────────
     // Ex. : ville="Libreville" mais adresse commence par "Owendo"
     const VILLES_CONNUES: [string, string][] = [
-      ["akanda","Akanda"],["angondje","Akanda"],["angondjo","Akanda"],["nzeng ayong","Akanda"],
-      ["owendo","Owendo"],["oloumi","Owendo"],["ntoum","Ntoum"],["kango","Kango"],
+      ["akanda","Akanda"],["angondje","Akanda"],["angondjo","Akanda"],
+      ["owendo","Owendo"],["ntoum","Ntoum"],["kango","Kango"],
       ["nkan","Nkan"],["cocobeach","Cocobeach"],
       ["port gentil","Port-Gentil"],["portgentil","Port-Gentil"],
       ["gamba","Gamba"],["omboue","Omboué"],

@@ -17,7 +17,7 @@ export type ProvinceGabon = (typeof ORDRE_PROVINCES)[number];
 
 // Capitales provinciales en premier, puis autres villes dans l'ordre logique.
 const CAPITALES_PROVINCE: Record<string, string[]> = {
-  "Estuaire":        ["libreville", "akanda", "angondje", "angondjo", "owendo", "oloumi", "ntoum", "kango", "cocobeach"],
+  "Estuaire":        ["libreville", "akanda", "angondje", "owendo", "ntoum", "kango", "cocobeach"],
   "Ogooué-Maritime": ["port gentil", "portgentil", "gamba", "omboue"],
   "Haut-Ogooué":     ["franceville", "moanda", "mounana", "okondja", "lekoni", "bakoumba", "akieni", "masuku"],
   "Ngounié":         ["mouila", "fougamou", "ndende", "mbigou", "mimongo"],
@@ -38,9 +38,9 @@ function norm(s: string): string {
 }
 
 const VILLE_PROVINCE: [string, ProvinceGabon][] = [
-  ["libreville", "Estuaire"], ["akanda", "Estuaire"], ["angondje", "Estuaire"],
-  ["angondjo", "Estuaire"], ["nzeng ayong", "Estuaire"],
-  ["owendo", "Estuaire"], ["oloumi", "Estuaire"],
+  ["libreville", "Estuaire"], ["akanda", "Estuaire"],
+  ["angondje", "Estuaire"], ["angondjo", "Estuaire"],
+  ["owendo", "Estuaire"],
   ["ntoum", "Estuaire"], ["nkan", "Estuaire"], ["cocobeach", "Estuaire"], ["kango", "Estuaire"],
   ["port gentil", "Ogooué-Maritime"], ["portgentil", "Ogooué-Maritime"],
   ["gamba", "Ogooué-Maritime"], ["omboue", "Ogooué-Maritime"],
