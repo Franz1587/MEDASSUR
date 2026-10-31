@@ -32,6 +32,7 @@ import { genererGraphiqueBarres, genererGraphiqueBarresEtiquetees, genererGraphi
 import { montantEnLettresFcfa } from "../lib/montant-en-lettres.util";
 import { TAUX_TPS } from "../sante/sante.service";
 import { populationDuContrat } from "../mouvements/population-historique.util";
+import { ORDRE_PROVINCES, provinceDeVille, prioriteVilleDansProvince } from "../lib/gabonGeo";
 import type { Prisma, ParametresEntreprise } from "@prisma/client";
 import { numeroPolice, policePourNomFichier } from "../lib/police.util";
 
@@ -4945,49 +4946,267 @@ export class DocumentsService {
     doc.end();
   }
 
-  // Réseau de soins — annuaire des prestataires conventionnés (aucun
-  // argument : c'est un document global, pas scopé à un contrat).
+  // Réseau de soins — annuaire des prestataires conventionnés, trié par province puis ville.
   async renderReseauSoins(res: Response) {
-    const prestataires = await this.prestataires.findAllReseau({});
+    const tous = await this.prestataires.findAllReseau({});
     const p = await this.parametresEntreprise.findOne();
-    const doc = new PDFDocument({ size: "A4", margin: 40 });
+    const logoImage = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
+    const coulPrim = p.couleurPrimaire || "#1d3557";
+
+    // Couleurs fixes pour les sections (indépendant de la couleur société)
+    const COUL_PROVINCE = "#e63946";
+    const COUL_VILLE    = "#457b9d";
+    const COUL_LIGNE    = "#f1f7fb";
+
+    // Grouper par province → ville
+    const groupes: Record<string, Record<string, typeof tous>> = {};
+    for (const pr of tous) {
+      if (!pr.nom || /^[0-9A-F]{8,}$/i.test(pr.nom)) continue;
+      const prov = pr.province || provinceDeVille(pr.ville) || "Autres";
+      const ville = pr.ville || "Libreville";
+      if (!groupes[prov]) groupes[prov] = {};
+      if (!groupes[prov][ville]) groupes[prov][ville] = [];
+      groupes[prov][ville].push(pr);
+    }
+    const total = Object.values(groupes).reduce((s, vg) => s + Object.values(vg).reduce((sv, lg) => sv + lg.length, 0), 0);
+    const nbVilles = Object.values(groupes).reduce((s, vg) => s + Object.keys(vg).length, 0);
+    const nbProvs = Object.keys(groupes).filter(k => k !== "Autres").length;
+
+    const doc = new PDFDocument({ size: "A4", margins: { top: 40, bottom: 40, left: 40, right: 40 } });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", 'inline; filename="Reseau-de-Soins.pdf"');
     doc.pipe(res);
 
-    const left = doc.page.margins.left;
-    const right = doc.page.width - doc.page.margins.right;
-    const width = right - left;
-    let y = 40;
+    const PAGE_W = 515;
+    const COL = { nom: 185, type: 80, adresse: 155, tel: 95 };
 
-    const largeurLogo = this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 28, 200, 50, () => {
-      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, y);
+    const pied = () => {
+      doc.fontSize(7).fillColor("#999").font("Helvetica")
+         .text(`${p.nom} — Réseau de Soins Conventionné`, 40, doc.page.height - 30, { width: 320, lineBreak: false });
+      doc.text(`${total} prestataires · ${nbVilles} villes · ${nbProvs} provinces`, 40, doc.page.height - 30, { width: PAGE_W, align: "right", lineBreak: false });
+      doc.moveTo(40, doc.page.height - 36).lineTo(555, doc.page.height - 36).lineWidth(0.5).strokeColor("#ccc").stroke();
+    };
+
+    const enteteTableau = () => {
+      const y = doc.y;
+      doc.rect(40, y, PAGE_W, 16).fillColor(coulPrim).fill();
+      doc.fillColor("white").font("Helvetica-Bold").fontSize(8);
+      doc.text("PRESTATAIRE", 44, y + 4, { width: COL.nom, lineBreak: false });
+      doc.text("TYPE", 44 + COL.nom + 3, y + 4, { width: COL.type, lineBreak: false });
+      doc.text("ADRESSE", 44 + COL.nom + COL.type + 6, y + 4, { width: COL.adresse, lineBreak: false });
+      doc.text("TÉLÉPHONE", 44 + COL.nom + COL.type + COL.adresse + 9, y + 4, { width: COL.tel, lineBreak: false });
+      doc.y = y + 18;
+    };
+
+    // ── Page de titre ──────────────────────────────────────────────────────
+    const largeurLogo = this.dessinerIdentiteEntete(doc, logoImage, 40, 28, 200, 62, () => {
+      doc.fontSize(13).font("Helvetica-Bold").fillColor(coulPrim).text(p.nom, 40, 40);
       return 0;
     });
-    doc.fontSize(12).font("Helvetica-Bold").fillColor("#000").text("RÉSEAU DE SOINS CONVENTIONNÉ", left, y, { width, align: "right" });
-    doc.fillColor("#000");
-    y = largeurLogo > 0 ? 90 : y + 30;
+    const titreY = largeurLogo > 0 ? 110 : 80;
+    doc.fontSize(18).fillColor(coulPrim).font("Helvetica-Bold")
+       .text("RÉSEAU DE SOINS CONVENTIONNÉ", 0, titreY, { align: "center" });
+    doc.fontSize(10).fillColor(COUL_PROVINCE).font("Helvetica")
+       .text("Classement par Province et Ville", 0, titreY + 24, { align: "center" });
+    doc.moveTo(40, titreY + 44).lineTo(555, titreY + 44).lineWidth(1.5).strokeColor(coulPrim).stroke();
+    doc.fontSize(10).fillColor("#333").font("Helvetica")
+       .text(`${total} prestataires · ${nbVilles} villes · ${nbProvs} provinces`, 0, titreY + 52, { align: "center" });
 
-    const cols = [{ h: "Prestataire", w: width * 0.3 }, { h: "Type", w: width * 0.18 }, { h: "Ville", w: width * 0.15 }, { h: "Adresse", w: width * 0.22 }, { h: "Téléphone", w: width * 0.15 }];
-    const drawHeader = () => {
-      doc.rect(left, y, width, 16).fill(p.couleurPrimaire);
-      let cx = left;
-      doc.fillColor("#fff").fontSize(7.5).font("Helvetica-Bold");
-      for (const c of cols) { doc.text(c.h, cx + 3, y + 4, { width: c.w - 6 }); cx += c.w; }
-      doc.fillColor("#000");
-      y += 16;
-    };
-    drawHeader();
-    doc.font("Helvetica").fontSize(7.5);
-    for (const pr of prestataires) {
-      const rowH = 14;
-      if (y + rowH > doc.page.height - 50) { doc.addPage(); y = 40; drawHeader(); doc.font("Helvetica").fontSize(7.5); }
-      let cx = left;
-      const vals = [pr.nom, pr.type ?? "—", pr.ville ?? "—", pr.adresse ?? "—", pr.telephone ?? "—"];
-      for (let i = 0; i < cols.length; i++) { doc.text(vals[i], cx + 3, y + 3, { width: cols[i].w - 6 }); cx += cols[i].w; }
-      doc.moveTo(left, y + rowH).lineTo(right, y + rowH).strokeColor("#eee").stroke();
-      y += rowH;
+    // ── Page de statistiques ───────────────────────────────────────────────
+    doc.addPage();
+    doc.fontSize(13).fillColor(coulPrim).font("Helvetica-Bold")
+       .text("STATISTIQUES DU RÉSEAU", 40, 45, { align: "center", width: PAGE_W });
+    doc.moveTo(40, 66).lineTo(555, 66).lineWidth(1.5).strokeColor(coulPrim).stroke();
+
+    // Boîtes résumé
+    const BOX_W = 150;
+    const boxData = [
+      { label: "PRESTATAIRES", val: String(total), x: 40 },
+      { label: "PROVINCES", val: String(nbProvs), x: 205 },
+      { label: "VILLES", val: String(nbVilles), x: 370 },
+    ];
+    for (const b of boxData) {
+      doc.rect(b.x, 78, BOX_W, 46).fillColor(coulPrim).fill();
+      doc.fillColor("white").font("Helvetica-Bold").fontSize(24)
+         .text(b.val, b.x, 84, { width: BOX_W, align: "center", lineBreak: false });
+      doc.fillColor("rgba(255,255,255,0.75)").font("Helvetica").fontSize(8)
+         .text(b.label, b.x, 107, { width: BOX_W, align: "center", lineBreak: false });
     }
+
+    // Tableau par province
+    const TCOL = { prov: 220, villes: 90, prest: 100, bar: 105 };
+    let tblY = 140;
+    doc.rect(40, tblY, PAGE_W, 15).fillColor(coulPrim).fill();
+    doc.fillColor("white").font("Helvetica-Bold").fontSize(8);
+    doc.text("PROVINCE", 44, tblY + 3, { width: TCOL.prov, lineBreak: false });
+    doc.text("VILLES", 44 + TCOL.prov, tblY + 3, { width: TCOL.villes, align: "center", lineBreak: false });
+    doc.text("PRESTATAIRES", 44 + TCOL.prov + TCOL.villes, tblY + 3, { width: TCOL.prest, align: "center", lineBreak: false });
+    doc.text("RÉPARTITION", 44 + TCOL.prov + TCOL.villes + TCOL.prest, tblY + 3, { width: TCOL.bar - 8, align: "center", lineBreak: false });
+    tblY += 17;
+
+    let rowIdx = 0;
+    for (const prov of [...ORDRE_PROVINCES, "Autres"]) {
+      if (!groupes[prov]) continue;
+      const villesProv = Object.keys(groupes[prov]);
+      const nbP = villesProv.reduce((s, v) => s + groupes[prov][v].length, 0);
+      const pct = total > 0 ? ((nbP / total) * 100).toFixed(1) : "0.0";
+      const bg = rowIdx % 2 === 0 ? COUL_LIGNE : "white";
+      doc.rect(40, tblY, PAGE_W, 14).fillColor(bg).fill();
+      doc.rect(40, tblY, PAGE_W, 14).lineWidth(0.3).strokeColor("#dde").stroke();
+      doc.fillColor("#111").font("Helvetica-Bold").fontSize(8)
+         .text(prov, 44, tblY + 3, { width: TCOL.prov, lineBreak: false });
+      doc.fillColor("#444").font("Helvetica").fontSize(8)
+         .text(String(villesProv.length), 44 + TCOL.prov, tblY + 3, { width: TCOL.villes, align: "center", lineBreak: false });
+      doc.fillColor(coulPrim).font("Helvetica-Bold").fontSize(8)
+         .text(String(nbP), 44 + TCOL.prov + TCOL.villes, tblY + 3, { width: TCOL.prest, align: "center", lineBreak: false });
+      const barMaxW = TCOL.bar - 30;
+      const barW = total > 0 ? Math.round((nbP / total) * barMaxW) : 0;
+      const barX = 44 + TCOL.prov + TCOL.villes + TCOL.prest;
+      doc.rect(barX, tblY + 4, barMaxW, 6).fillColor("#e0e8f0").fill();
+      if (barW > 0) doc.rect(barX, tblY + 4, barW, 6).fillColor(COUL_PROVINCE).fill();
+      doc.fillColor("#555").font("Helvetica").fontSize(7)
+         .text(`${pct}%`, barX + barMaxW + 3, tblY + 3, { width: 26, lineBreak: false });
+      tblY += 14;
+      rowIdx++;
+    }
+    // Ligne totale
+    doc.rect(40, tblY, PAGE_W, 15).fillColor(coulPrim).fill();
+    doc.fillColor("white").font("Helvetica-Bold").fontSize(8)
+       .text("TOTAL", 44, tblY + 3, { width: TCOL.prov, lineBreak: false });
+    doc.text(String(nbVilles), 44 + TCOL.prov, tblY + 3, { width: TCOL.villes, align: "center", lineBreak: false });
+    doc.text(String(total), 44 + TCOL.prov + TCOL.villes, tblY + 3, { width: TCOL.prest, align: "center", lineBreak: false });
+    doc.text("100%", 44 + TCOL.prov + TCOL.villes + TCOL.prest, tblY + 3, { width: TCOL.bar - 8, align: "center", lineBreak: false });
+    tblY += 20;
+
+    // Tableau détail par ville — 3 colonnes
+    doc.fontSize(11).fillColor(coulPrim).font("Helvetica-Bold")
+       .text("DÉTAIL PAR VILLE", 40, tblY + 8);
+    const NCOLS = 3;
+    const colW = Math.floor(PAGE_W / NCOLS);
+    let detY = tblY + 26;
+    for (let c = 0; c < NCOLS; c++) {
+      const cx = 40 + c * colW;
+      doc.rect(cx, detY, colW - 2, 13).fillColor(coulPrim).fill();
+      doc.fillColor("white").font("Helvetica-Bold").fontSize(7)
+         .text("VILLE", cx + 3, detY + 3, { width: colW - 22, lineBreak: false });
+      doc.text("N", cx + colW - 18, detY + 3, { width: 14, align: "right", lineBreak: false });
+    }
+    detY += 15;
+
+    const villeStats: Array<{ prov: string; ville: string; nb: number }> = [];
+    for (const prov of [...ORDRE_PROVINCES, "Autres"]) {
+      if (!groupes[prov]) continue;
+      const villes = Object.keys(groupes[prov]).sort((a, b) => prioriteVilleDansProvince(a, prov) - prioriteVilleDansProvince(b, prov) || a.localeCompare(b, "fr"));
+      for (const v of villes) villeStats.push({ prov, ville: v, nb: groupes[prov][v].length });
+    }
+    const ROW_H = 12;
+    const PASTILLES = ["#e63946","#457b9d","#2a9d8f","#e9c46a","#f4a261","#264653","#a8dadc","#06d6a0","#118ab2","#888"];
+    for (let i = 0; i < villeStats.length; i++) {
+      const col = i % NCOLS;
+      const row = Math.floor(i / NCOLS);
+      const cx = 40 + col * colW;
+      const cy = detY + row * ROW_H;
+      if (cy + ROW_H > doc.page.height - 50) {
+        if (col === 0) {
+          pied();
+          doc.addPage();
+          detY = 50;
+          for (let c2 = 0; c2 < NCOLS; c2++) {
+            const cx2 = 40 + c2 * colW;
+            doc.rect(cx2, 40, colW - 2, 13).fillColor(coulPrim).fill();
+            doc.fillColor("white").font("Helvetica-Bold").fontSize(7)
+               .text("VILLE", cx2 + 3, 43, { width: colW - 22, lineBreak: false });
+            doc.text("N", cx2 + colW - 18, 43, { width: 14, align: "right", lineBreak: false });
+          }
+          detY = 55;
+        }
+        continue;
+      }
+      const { prov, ville, nb } = villeStats[i];
+      const provIdx = [...ORDRE_PROVINCES, "Autres"].indexOf(prov as never);
+      const isEven = row % 2 === 0;
+      doc.rect(cx, cy, colW - 2, ROW_H - 1).fillColor(isEven ? COUL_LIGNE : "white").fill();
+      doc.rect(cx, cy, colW - 2, ROW_H - 1).lineWidth(0.2).strokeColor("#dde").stroke();
+      doc.rect(cx + 2, cy + 3, 4, 6).fillColor(PASTILLES[provIdx] || "#888").fill();
+      doc.fillColor("#222").font("Helvetica").fontSize(7)
+         .text(ville, cx + 9, cy + 2, { width: colW - 28, lineBreak: false });
+      doc.fillColor(coulPrim).font("Helvetica-Bold").fontSize(7)
+         .text(String(nb), cx + colW - 18, cy + 2, { width: 14, align: "right", lineBreak: false });
+    }
+    pied();
+
+    // ── Pages de contenu : prestataires par province → ville ──────────────
+    const ordreType = ["Hôpital","Clinique","Cabinet","Cabinet Dentaire","Centre d'Imagerie","Centre de Kinésithérapie","Laboratoire","Pharmacie","Dépôt pharmaceutique","Opticien"];
+
+    for (const prov of [...ORDRE_PROVINCES, "Autres"]) {
+      if (!groupes[prov]) continue;
+      const villes = Object.keys(groupes[prov]).sort((a, b) => prioriteVilleDansProvince(a, prov) - prioriteVilleDansProvince(b, prov) || a.localeCompare(b, "fr"));
+
+      // En-tête province
+      doc.addPage();
+      const nbPrestProv = villes.reduce((s, v) => s + groupes[prov][v].length, 0);
+      const yProv = doc.y;
+      doc.rect(40, yProv, PAGE_W, 22).fillColor(COUL_PROVINCE).fill();
+      doc.fillColor("white").font("Helvetica-Bold").fontSize(12)
+         .text(`  ${prov.toUpperCase()}`, 44, yProv + 5, { width: 300, lineBreak: false });
+      doc.fillColor("rgba(255,255,255,0.8)").font("Helvetica").fontSize(8)
+         .text(`${nbPrestProv} prestataires — ${villes.length} ville(s)`, 44 + 300, yProv + 7, { width: 210, align: "right", lineBreak: false });
+      doc.y = yProv + 26;
+
+      for (const ville of villes) {
+        const lignes = [...groupes[prov][ville]].sort((a, b) => {
+          const iA = ordreType.indexOf(a.type ?? ""); const iB = ordreType.indexOf(b.type ?? "");
+          if ((iA === -1 ? 99 : iA) !== (iB === -1 ? 99 : iB)) return (iA === -1 ? 99 : iA) - (iB === -1 ? 99 : iB);
+          return (a.nom ?? "").localeCompare(b.nom ?? "", "fr");
+        });
+
+        if (doc.y > doc.page.height - 80) { pied(); doc.addPage(); }
+
+        const yVille = doc.y;
+        doc.rect(40, yVille, PAGE_W, 16).fillColor(COUL_VILLE).fill();
+        doc.fillColor("white").font("Helvetica-Bold").fontSize(9)
+           .text(`  ${ville}`, 44, yVille + 3, { width: 300, lineBreak: false });
+        doc.fillColor("rgba(255,255,255,0.8)").font("Helvetica").fontSize(7.5)
+           .text(`${lignes.length} prestataire(s)`, 44 + 300, yVille + 4, { width: 210, align: "right", lineBreak: false });
+        doc.y = yVille + 18;
+
+        enteteTableau();
+
+        let li = 0;
+        for (const pr of lignes) {
+          const nomTxt = (pr.nom || "").trim();
+          const typeTxt = (pr.type || "").trim();
+          const adrTxt  = (pr.adresse || "").trim();
+          const telTxt  = (pr.telephone || "").trim();
+          doc.fontSize(8);
+          const hNom = doc.heightOfString(nomTxt, { width: COL.nom - 4 });
+          doc.fontSize(7);
+          const hAdr = doc.heightOfString(adrTxt, { width: COL.adresse - 4 });
+          const hLigne = Math.max(hNom, hAdr, 12) + 5;
+          if (doc.y + hLigne > doc.page.height - 55) {
+            pied();
+            doc.addPage();
+            enteteTableau();
+          }
+          const yRow = doc.y;
+          if (li % 2 === 0) doc.rect(40, yRow, PAGE_W, hLigne).fillColor(COUL_LIGNE).fill();
+          doc.rect(40, yRow, PAGE_W, hLigne).lineWidth(0.3).strokeColor("#dde").stroke();
+          doc.fillColor("#111").font("Helvetica-Bold").fontSize(8)
+             .text(nomTxt, 44, yRow + 3, { width: COL.nom - 4, lineBreak: true });
+          doc.fillColor("#444").font("Helvetica").fontSize(7)
+             .text(typeTxt, 44 + COL.nom + 3, yRow + 3, { width: COL.type - 4, lineBreak: true });
+          doc.fillColor("#555").fontSize(7)
+             .text(adrTxt, 44 + COL.nom + COL.type + 6, yRow + 3, { width: COL.adresse - 4, lineBreak: true });
+          doc.fillColor(COUL_VILLE).font("Helvetica-Bold").fontSize(7)
+             .text(telTxt, 44 + COL.nom + COL.type + COL.adresse + 9, yRow + 3, { width: COL.tel - 4, lineBreak: true });
+          doc.y = yRow + hLigne;
+          li++;
+        }
+        doc.moveDown(0.4);
+      }
+      pied();
+    }
+
     doc.end();
   }
 
