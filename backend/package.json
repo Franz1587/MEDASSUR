@@ -42,7 +42,8 @@
     "qrcode": "^1.5.4",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.1",
-    "sharp": "^0.33.5"
+    "sharp": "^0.33.5",
+    "xlsx": "^0.18.5"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
