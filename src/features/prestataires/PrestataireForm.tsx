@@ -17,6 +17,7 @@ const labelCls = "text-[12px] text-muted-foreground mb-1.5";
 // distinct des structures gérées dans cet écran.
 const TYPES = ["Hôpital", "Clinique", "Cabinet", "Centre de Kinésithérapie", "Opticien", "Pharmacie", "Laboratoire", "Dépôt pharmaceutique", "Centre d'Imagerie", "Cabinet Dentaire"];
 const STATUTS = ["En négociation", "Conventionné", "Suspendu"];
+const PROVINCES_GABON = ["Estuaire", "Haut-Ogooué", "Moyen-Ogooué", "Ngounié", "Nyanga", "Ogooué-Ivindo", "Ogooué-Lolo", "Ogooué-Maritime", "Woleu-Ntem"];
 
 // Suggestions par type de prestataire (2026-08) — voir demande utilisateur :
 // "on doit pouvoir définir les garanties... en fonction du type de
@@ -33,7 +34,7 @@ const SUGGESTIONS_PAR_TYPE: Record<string, { garanties: string[]; actes: string[
 function toForm(p?: Prestataire | null): PrestataireUpsertInput {
   return {
     nom: p?.nom ?? "", type: p?.type ?? TYPES[0], secteur: p?.secteur ?? undefined, specialite: p?.specialite ?? "",
-    pays: p?.pays ?? "Gabon", ville: p?.ville ?? "", telephone: p?.telephone ?? "", adresse: p?.adresse ?? "",
+    pays: p?.pays ?? "Gabon", province: p?.province ?? "", ville: p?.ville ?? "", telephone: p?.telephone ?? "", adresse: p?.adresse ?? "",
     statutConvention: p?.statutConvention ?? "En négociation", dateConventionnement: p?.dateConventionnement ?? "",
     tpsAssujetti: p?.tpsAssujetti ?? false, tpsDateEffet: p?.tpsDateEffet ?? "", tpsDateArret: p?.tpsDateArret ?? "",
     garantiesVisibles: p?.garantiesVisibles ?? [], categoriesActesVisibles: p?.categoriesActesVisibles ?? [],
@@ -159,6 +160,13 @@ export default function PrestataireForm({ prestataire, onClose, onSaved }: { pre
                 )}
               </label>
               <label className="block"><div className={labelCls}>Pays *</div><input value={form.pays} onChange={(e) => setForm((v) => ({ ...v, pays: e.target.value }))} className={fieldCls} /></label>
+              <label className="block">
+                <div className={labelCls}>Province</div>
+                <select value={form.province ?? ""} onChange={(e) => setForm((v) => ({ ...v, province: e.target.value || undefined }))} className={fieldCls}>
+                  <option value="">Non renseignée</option>
+                  {PROVINCES_GABON.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </label>
               <label className="block"><div className={labelCls}>Ville *</div><input value={form.ville} onChange={(e) => setForm((v) => ({ ...v, ville: e.target.value }))} className={fieldCls} /></label>
               <label className="block"><div className={labelCls}>Téléphone</div><input value={form.telephone ?? ""} onChange={(e) => setForm((v) => ({ ...v, telephone: e.target.value }))} className={fieldCls} /></label>
               <label className="block"><div className={labelCls}>Adresse</div><input value={form.adresse ?? ""} onChange={(e) => setForm((v) => ({ ...v, adresse: e.target.value }))} className={fieldCls} /></label>

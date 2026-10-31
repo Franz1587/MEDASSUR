@@ -26,7 +26,7 @@ const INCLUDE_GRILLES = { grillesTarifaires: true } as const;
 // besoin de voir pour choisir un prestataire.
 const SELECT_RESEAU = {
   id: true, nom: true, type: true, secteur: true, titre: true, specialite: true,
-  pays: true, ville: true, telephone: true, adresse: true, statutConvention: true,
+  pays: true, province: true, ville: true, telephone: true, adresse: true, statutConvention: true,
   latitude: true, longitude: true,
 } as const;
 
@@ -52,8 +52,13 @@ export class PrestatairesService {
     return prestataire;
   }
 
-  create(dto: CreatePrestataireDto) {
-    return this.prisma.prestataire.create({ data: { id: randomUUID(), ...dto }, include: INCLUDE_GRILLES });
+  async create(dto: CreatePrestataireDto) {
+    const existing = await this.prisma.prestataire.findFirst({
+      where: { nom: { equals: dto.nom.trim(), mode: "insensitive" } },
+      select: { id: true },
+    });
+    if (existing) throw new ConflictException(`Un prestataire nommé « ${dto.nom.trim()} » existe déjà.`);
+    return this.prisma.prestataire.create({ data: { id: randomUUID(), ...dto, nom: dto.nom.trim() }, include: INCLUDE_GRILLES });
   }
 
   async update(id: string, dto: UpdatePrestataireDto) {
@@ -414,7 +419,7 @@ export class PrestatairesService {
   // (données non sensibles, réseau partagé — pas de cloisonnement par
   // Client), voir PrestatairesController.
 
-  findAllReseau(filtres: { type?: string; ville?: string; q?: string }) {
+  findAllReseau(filtres: { type?: string; ville?: string; province?: string; q?: string }) {
     const where: Record<string, unknown> = {
       // Seuls les établissements/praticiens conventionnés ont vocation à
       // apparaître dans le réseau vu par le client — un prestataire suspendu
@@ -422,12 +427,13 @@ export class PrestatairesService {
       statutConvention: "Conventionné",
     };
     if (filtres.type) where.type = filtres.type;
+    if (filtres.province) where.province = filtres.province;
     if (filtres.ville) where.ville = filtres.ville;
     if (filtres.q) {
       const q = filtres.q.trim();
       if (q) where.OR = [{ nom: { contains: q, mode: "insensitive" } }, { specialite: { contains: q, mode: "insensitive" } }];
     }
-    return this.prisma.prestataire.findMany({ where, select: SELECT_RESEAU, orderBy: [{ type: "asc" }, { ville: "asc" }, { nom: "asc" }] });
+    return this.prisma.prestataire.findMany({ where, select: SELECT_RESEAU, orderBy: [{ province: "asc" }, { ville: "asc" }, { type: "asc" }, { nom: "asc" }] });
   }
 
   // Médecins de l'établissement (2026-08) — voir demande utilisateur :

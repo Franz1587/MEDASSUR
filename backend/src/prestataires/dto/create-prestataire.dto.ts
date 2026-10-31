@@ -41,6 +41,10 @@ export class CreatePrestataireDto {
 
   @IsOptional()
   @IsString()
+  province?: string;
+
+  @IsOptional()
+  @IsString()
   ville?: string;
 
   // Points retirés à la saisie (2026-08) — voir demande utilisateur :

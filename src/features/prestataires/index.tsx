@@ -38,6 +38,7 @@ export default function PrestatairesView() {
   const [recherche, setRecherche] = useState("");
   const [filtreType, setFiltreType] = useState<string | null>(null);
   const [filtreVille, setFiltreVille] = useState<string | null>(null);
+  const [filtreProvince, setFiltreProvince] = useState<string | null>(null);
 
   const typesDisponibles = useMemo(
     () => [...new Set(prestataires.map((p) => p.type))].sort((a, b) => a.localeCompare(b, "fr")),
@@ -47,46 +48,60 @@ export default function PrestatairesView() {
     () => [...new Set(prestataires.map((p) => p.ville))].sort((a, b) => a.localeCompare(b, "fr")),
     [prestataires],
   );
+  const provincesDisponibles = useMemo(
+    () => [...new Set(prestataires.map((p) => p.province).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "fr")),
+    [prestataires],
+  );
 
   const prestatairesFiltres = useMemo(() => {
     const q = recherche.trim().toLowerCase();
     return prestataires.filter((p) => {
       if (filtreType && p.type !== filtreType) return false;
+      if (filtreProvince && p.province !== filtreProvince) return false;
       if (filtreVille && p.ville !== filtreVille) return false;
       if (q && !`${p.nom} ${p.specialite ?? ""}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [prestataires, recherche, filtreType, filtreVille]);
+  }, [prestataires, recherche, filtreType, filtreVille, filtreProvince]);
 
-  // Pagination (2026-09) — appliquée à la liste PLATE déjà filtrée, avant
-  // le regroupement ville → type ci-dessous : chaque page reste ensuite
-  // regroupée normalement (un groupe peut être scindé entre deux pages en
-  // cas de grosse ville, comme pour toute liste paginée puis groupée).
+  // Pagination — appliquée à la liste PLATE déjà filtrée, avant le regroupement.
   const pagination = usePagination(prestatairesFiltres);
 
-  // Classement ville → type → prestataires (ordre alphabétique) — reflète
-  // l'organisation du réseau de soins (voir DocumentsService.renderReseauSoins).
+  // Classement province → ville → type → prestataires (ordre alphabétique).
   const groupes = useMemo(() => {
-    const parVille = new Map<string, Map<string, Prestataire[]>>();
+    const SANS_PROVINCE = "(Province non renseignée)";
+    const parProvince = new Map<string, Map<string, Map<string, Prestataire[]>>>();
     for (const p of pagination.pageItems) {
+      const prov = p.province || SANS_PROVINCE;
+      if (!parProvince.has(prov)) parProvince.set(prov, new Map());
+      const parVille = parProvince.get(prov)!;
       if (!parVille.has(p.ville)) parVille.set(p.ville, new Map());
       const parType = parVille.get(p.ville)!;
       if (!parType.has(p.type)) parType.set(p.type, []);
       parType.get(p.type)!.push(p);
     }
-    return [...parVille.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0], "fr"))
-      .map(([ville, parType]) => ({
-        ville,
-        total: [...parType.values()].reduce((s, items) => s + items.length, 0),
-        types: [...parType.entries()]
+    return [...parProvince.entries()]
+      .sort((a, b) => {
+        if (a[0] === SANS_PROVINCE) return 1;
+        if (b[0] === SANS_PROVINCE) return -1;
+        return a[0].localeCompare(b[0], "fr");
+      })
+      .map(([province, parVille]) => ({
+        province,
+        total: [...parVille.values()].reduce((s, parType) => s + [...parType.values()].reduce((ss, items) => ss + items.length, 0), 0),
+        villes: [...parVille.entries()]
           .sort((a, b) => a[0].localeCompare(b[0], "fr"))
-          .map(([type, items]) => ({ type, items: [...items].sort((a, b) => a.nom.localeCompare(b.nom, "fr")) })),
+          .map(([ville, parType]) => ({
+            ville,
+            types: [...parType.entries()]
+              .sort((a, b) => a[0].localeCompare(b[0], "fr"))
+              .map(([type, items]) => ({ type, items: [...items].sort((a, b) => a.nom.localeCompare(b.nom, "fr")) })),
+          })),
       }));
   }, [pagination.pageItems]);
 
-  const filtresActifs = recherche.trim() !== "" || filtreType !== null || filtreVille !== null;
-  const reinitialiserFiltres = () => { setRecherche(""); setFiltreType(null); setFiltreVille(null); };
+  const filtresActifs = recherche.trim() !== "" || filtreType !== null || filtreVille !== null || filtreProvince !== null;
+  const reinitialiserFiltres = () => { setRecherche(""); setFiltreType(null); setFiltreVille(null); setFiltreProvince(null); };
 
   // Géolocalisation en masse (2026-08) — voir demande utilisateur : "grâce
   // à la liste présente, aller sur Google Maps ou n'importe quelle solution
@@ -274,41 +289,52 @@ export default function PrestatairesView() {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <Combobox
-                options={typesDisponibles} value={filtreType} onChange={setFiltreType}
-                getLabel={(t) => t} getId={(t) => t} placeholder="Type" allowClear clearLabel="Tous les types"
+                options={provincesDisponibles} value={filtreProvince} onChange={setFiltreProvince}
+                getLabel={(p) => p} getId={(p) => p} placeholder="Province" allowClear clearLabel="Toutes les provinces"
               />
               <Combobox
                 options={villesDisponibles} value={filtreVille} onChange={setFiltreVille}
                 getLabel={(v) => v} getId={(v) => v} placeholder="Ville" allowClear clearLabel="Toutes les villes"
               />
+              <Combobox
+                options={typesDisponibles} value={filtreType} onChange={setFiltreType}
+                getLabel={(t) => t} getId={(t) => t} placeholder="Type" allowClear clearLabel="Tous les types"
+              />
             </div>
           </div>
           <div className="divide-y divide-border/50 max-h-[70vh] overflow-y-auto">
             {groupes.map((g) => (
-              <div key={g.ville}>
-                <div className="px-4 py-1.5 bg-secondary/60 sticky top-0 z-10 flex items-center justify-between">
-                  <p className="text-[11px] font-bold text-primary uppercase tracking-wide">{g.ville}</p>
+              <div key={g.province}>
+                <div className="px-4 py-1.5 bg-primary/10 sticky top-0 z-10 flex items-center justify-between border-b border-primary/20">
+                  <p className="text-[11px] font-bold text-primary uppercase tracking-wide">{g.province}</p>
                   <span className="text-[10px] text-muted-foreground">{g.total}</span>
                 </div>
-                {g.types.map((t) => (
-                  <div key={t.type}>
-                    <div className="px-4 py-1 bg-secondary/20">
-                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{t.type} · {t.items.length}</p>
+                {g.villes.map((v) => (
+                  <div key={v.ville}>
+                    <div className="px-4 py-1.5 bg-secondary/60 sticky top-7 z-[5] flex items-center">
+                      <p className="text-[11px] font-semibold text-foreground uppercase tracking-wide">{v.ville}</p>
                     </div>
-                    {t.items.map((p) => (
-                      <div key={p.id} onClick={() => { setSelected(p); scrollToTop(); }}
-                        className={`px-4 py-3 cursor-pointer transition-colors ${selected?.id === p.id ? "bg-primary/8" : "hover:bg-secondary/40"}`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="text-sm font-semibold text-foreground truncate">{p.nom}</p>
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
-                            {p.latitude != null && p.longitude != null
-                              ? <MapPin className="w-3 h-3 text-green-500" />
-                              : <MapPinOff className="w-3 h-3 text-muted-foreground/40" />}
-                            <Badge variant={statutVariant[p.statutConvention] ?? "neutral"}>{p.statutConvention}</Badge>
-                          </div>
+                    {v.types.map((t) => (
+                      <div key={t.type}>
+                        <div className="px-4 py-1 bg-secondary/20">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{t.type} · {t.items.length}</p>
                         </div>
-                        <p className="text-xs text-muted-foreground">{p.type} · {p.ville}, {p.pays}</p>
+                        {t.items.map((p) => (
+                          <div key={p.id} onClick={() => { setSelected(p); scrollToTop(); }}
+                            className={`px-4 py-3 cursor-pointer transition-colors ${selected?.id === p.id ? "bg-primary/8" : "hover:bg-secondary/40"}`}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="text-sm font-semibold text-foreground truncate">{p.nom}</p>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                {p.latitude != null && p.longitude != null
+                                  ? <MapPin className="w-3 h-3 text-green-500" />
+                                  : <MapPinOff className="w-3 h-3 text-muted-foreground/40" />}
+                                <Badge variant={statutVariant[p.statutConvention] ?? "neutral"}>{p.statutConvention}</Badge>
+                              </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{p.type} · {p.ville}, {p.pays}</p>
+                          </div>
+                        ))}
                       </div>
                     ))}
                   </div>

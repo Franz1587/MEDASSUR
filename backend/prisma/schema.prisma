@@ -2301,6 +2301,7 @@ model Prestataire {
   // les migrations.
   specialite           String?
   pays                 String?
+  province             String?
   ville                String?
   telephone            String?
   adresse              String?

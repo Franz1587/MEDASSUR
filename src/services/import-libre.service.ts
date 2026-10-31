@@ -46,12 +46,14 @@ function getToken(): string | null {
   return localStorage.getItem("medassur-access-token");
 }
 
-export async function apercuImportLibre(fichier: File, modeCorrection = false): Promise<ResultatApercu> {
+export type TypeImportLibre = "factures" | "souscripteurs" | "contrats" | "assures" | "prises-en-charge" | "reglements";
+
+export async function apercuImportLibre(fichier: File, modeCorrection = false, type: TypeImportLibre = "factures"): Promise<ResultatApercu> {
   const form = new FormData();
   form.append("fichier", fichier);
   form.append("modeCorrection", String(modeCorrection));
   const token = getToken();
-  const res = await fetch(`${API_URL}/import-libre/apercu`, {
+  const res = await fetch(`${API_URL}/import-libre/apercu?type=${encodeURIComponent(type)}`, {
     method: "POST",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: form,
@@ -60,6 +62,6 @@ export async function apercuImportLibre(fichier: File, modeCorrection = false): 
   return res.json() as Promise<ResultatApercu>;
 }
 
-export function confirmerImportLibre(lignes: LigneApercu[], modeCorrection = false): Promise<ResultatConfirmation> {
-  return http.post<ResultatConfirmation>("/import-libre/confirmer", { lignes, modeCorrection });
+export function confirmerImportLibre(lignes: LigneApercu[], modeCorrection = false, type: TypeImportLibre = "factures"): Promise<ResultatConfirmation> {
+  return http.post<ResultatConfirmation>(`/import-libre/confirmer?type=${encodeURIComponent(type)}`, { lignes, modeCorrection });
 }

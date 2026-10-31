@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { Btn } from "@/components/shared/Btn";
-import { apercuImportLibre, confirmerImportLibre, type LigneApercu, type ResultatApercu } from "@/services/import-libre.service";
+import { apercuImportLibre, confirmerImportLibre, type LigneApercu, type ResultatApercu, type TypeImportLibre } from "@/services/import-libre.service";
 
 // Import libre de factures (2026-10) — voir demande utilisateur : "je voudrais
 // que tu crées un import libre pour les factures. Ce type d'import sera aidé
@@ -32,10 +32,11 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
   const [fichiers, setFichiers] = useState<EtatFichier[]>([]);
   const [fichierEnCours, setFichierEnCours] = useState("");
   const [modeCorrection, setModeCorrection] = useState(false);
+  const [typeImport, setTypeImport] = useState<TypeImportLibre>("factures");
 
   if (!ouvert) return null;
 
-  const reset = () => { setEtape("upload"); setFichiers([]); setFichierEnCours(""); };
+  const reset = () => { setEtape("upload"); setFichiers([]); setFichierEnCours(""); setTypeImport("factures"); };
   const fermer = () => { reset(); onFermer(); };
 
   // Résumé cumulé de tous les fichiers analysés
@@ -51,7 +52,7 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
     for (const fichier of Array.from(liste)) {
       setFichierEnCours(fichier.name);
       try {
-        const res = await apercuImportLibre(fichier, modeCorrection);
+        const res = await apercuImportLibre(fichier, modeCorrection, typeImport);
         resultats.push({ nom: fichier.name, apercu: res });
       } catch (err) {
         toast.error(`${fichier.name} : ${err instanceof Error ? err.message : "Analyse impossible."}`);
@@ -70,7 +71,7 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
     }
     setEtape("confirmation");
     try {
-      const res = await confirmerImportLibre([...lignesAImporter, ...lignesMaj], modeCorrection);
+      const res = await confirmerImportLibre([...lignesAImporter, ...lignesMaj], modeCorrection, typeImport);
       const msgs = [];
       if (res.importees > 0) msgs.push(`${res.importees} ligne(s) importée(s)`);
       if (res.corrigees > 0) msgs.push(`${res.corrigees} montant(s) corrigé(s)`);
@@ -90,7 +91,7 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
         {/* En-tête */}
         <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
           <div>
-            <h3 className="text-[15px] font-semibold text-foreground">Import libre de factures — ARIANA</h3>
+            <h3 className="text-[15px] font-semibold text-foreground">Import libre — ARIANA</h3>
             {fichiers.length > 0 && etape === "apercu" && (
               <p className="text-[12px] text-muted-foreground mt-0.5">
                 <span className="font-medium">{fichiers.length} fichier(s)</span>{" — "}
@@ -112,6 +113,30 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
           {/* Zone upload */}
           {etape === "upload" && (
             <div className="space-y-4">
+              {/* Sélecteur de type */}
+              <div className="p-3 rounded-lg border border-border bg-secondary/30 space-y-2">
+                <p className="text-[12.5px] font-medium text-foreground">Type de données à importer</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {([
+                    ["factures", "Factures"],
+                    ["souscripteurs", "Souscripteurs"],
+                    ["contrats", "Contrats"],
+                    ["assures", "Assurés"],
+                    ["prises-en-charge", "Prises en charge"],
+                    ["reglements", "Règlements"],
+                  ] as [TypeImportLibre, string][]).map(([val, label]) => (
+                    <button
+                      key={val} type="button"
+                      onClick={() => setTypeImport(val)}
+                      className={`px-3 py-2 rounded-lg border text-[12px] transition-colors text-left ${typeImport === val ? "border-primary bg-primary/10 text-primary font-semibold" : "border-border text-muted-foreground hover:text-foreground"}`}
+                    >
+                      {label}
+                      {val !== "factures" && <span className="block text-[10px] text-muted-foreground font-normal">via Ariana (analyse)</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Mode correction */}
               <label className="flex items-start gap-3 p-3 rounded-lg border border-border bg-secondary/30 cursor-pointer hover:bg-secondary/50 transition-colors">
                 <input

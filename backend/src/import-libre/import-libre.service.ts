@@ -15,6 +15,8 @@ import { PrestatairesService } from "../prestataires/prestataires.service";
 // détaillées"...) et résout automatiquement l'assuré, le contrat et le
 // prestataire.
 
+export type TypeImportLibre = "factures" | "souscripteurs" | "contrats" | "assures" | "prises-en-charge" | "reglements";
+
 export interface LigneApercu {
   referenceFacture: string;
   designation: string;        // acte médical (ex: ANALYSES MÉDICALES)
@@ -415,7 +417,13 @@ export class ImportLibreService {
   }
 
   // ── Aperçu (lecture seule) — résolution parallèle par batch ──────────
-  async apercu(file: Express.Multer.File, modeCorrection = false): Promise<ResultatApercu> {
+  async apercu(file: Express.Multer.File, modeCorrection = false, type: TypeImportLibre = "factures"): Promise<ResultatApercu> {
+    // Types autres que "factures" — phase de préparation : Ariana reçoit
+    // le fichier avec un prompt adapté au type, mais la confirmation
+    // est gérée par les imports dédiés (voir /api/import/).
+    if (type !== "factures") {
+      return this.apercuGenerique(file, type);
+    }
     const ext = path.extname(file.originalname).toLowerCase();
     let parsed: { contratRef: string; organisme: string; periode: string; lignesRaw: Omit<LigneApercu, "assureId" | "contratId" | "prestataireId" | "erreur" | "doublon" | "miseAJour" | "priseEnChargeId">[] };
 
@@ -466,8 +474,70 @@ export class ImportLibreService {
     };
   }
 
+  // ── Aperçu générique (types non-factures) — Ariana extrait les données ─
+  private async apercuGenerique(file: Express.Multer.File, type: TypeImportLibre): Promise<ResultatApercu> {
+    const labels: Record<TypeImportLibre, string> = {
+      factures: "factures médicales",
+      souscripteurs: "souscripteurs (entreprises clientes)",
+      contrats: "contrats d'assurance santé",
+      assures: "assurés (personnes couvertes)",
+      "prises-en-charge": "prises en charge médicales",
+      reglements: "règlements de factures",
+    };
+    const ext = path.extname(file.originalname).toLowerCase();
+    let texteContenu = "";
+    if (ext === ".xlsx" || ext === ".xls") {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(file.buffer as unknown as ExcelJS.Buffer);
+      const ws = wb.worksheets[0];
+      const lignes: string[] = [];
+      ws.eachRow((row, i) => {
+        if (i > 500) return;
+        const vals: string[] = [];
+        row.eachCell((cell) => vals.push(celluleEnTexte(cell.value)));
+        lignes.push(vals.filter(Boolean).join(" | "));
+      });
+      texteContenu = lignes.join("\n");
+    } else if (ext === ".csv" || ext === ".txt") {
+      texteContenu = file.buffer.toString("utf-8").slice(0, 80000);
+    } else {
+      throw new BadRequestException(`Format ${ext} non supporté pour le type ${type}. Utilisez Excel (.xlsx), CSV ou TXT.`);
+    }
+
+    const client = this.getAnthropicClient();
+    const reponse = await client.messages.create({
+      model: "claude-sonnet-5",
+      max_tokens: 4096,
+      messages: [{ role: "user", content: `Ce fichier contient des données de ${labels[type]} pour un système d'assurance santé gabonais.\n\nAnalyse le fichier et renvoie un RÉSUMÉ JSON avec :\n{\n  "contratRef": "référence ou titre trouvé",\n  "organisme": "nom de l'organisme/société",\n  "periode": "période couverte",\n  "lignes": [],\n  "totalDetecte": <nombre de lignes de données détectées>,\n  "colonnesDetectees": ["liste des colonnes identifiées"],\n  "apercu": "résumé en 2-3 lignes de ce que contient le fichier"\n}\nRetourne UNIQUEMENT le JSON, sans markdown.\n\n${texteContenu.slice(0, 60000)}` }],
+    });
+
+    const texte = reponse.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
+    let resume: { contratRef?: string; organisme?: string; periode?: string; totalDetecte?: number; colonnesDetectees?: string[]; apercu?: string } = {};
+    try {
+      const m = texte.match(/\{[\s\S]*\}/);
+      if (m) resume = JSON.parse(m[0]);
+    } catch { /* ok */ }
+
+    return {
+      contratRef: resume.contratRef ?? "",
+      organisme: resume.organisme ?? `Import ${labels[type]}`,
+      periode: resume.periode ?? "",
+      lignes: [],
+      totalLignes: resume.totalDetecte ?? 0,
+      totalResolues: 0,
+      totalDoublons: 0,
+      totalErreurs: 0,
+      totalMisesAJour: 0,
+      apercu: resume.apercu,
+      colonnesDetectees: resume.colonnesDetectees,
+    } as ResultatApercu & { apercu?: string; colonnesDetectees?: string[] };
+  }
+
   // ── Confirmer l'import ───────────────────────────────────────────────
-  async confirmer(lignes: LigneApercu[], modeCorrection = false): Promise<{ importees: number; corrigees: number; ignorees: number }> {
+  async confirmer(lignes: LigneApercu[], modeCorrection = false, type: TypeImportLibre = "factures"): Promise<{ importees: number; corrigees: number; ignorees: number }> {
+    if (type !== "factures") {
+      throw new BadRequestException(`L'import en mode libre pour « ${type} » nécessite d'utiliser l'import dédié (/api/import/) après analyse d'Ariana. Contactez l'administrateur.`);
+    }
     const lignesValides = lignes.filter((l) => l.assureId && l.contratId && !l.doublon && !l.erreur);
     let importees = 0;
     let corrigees = 0;

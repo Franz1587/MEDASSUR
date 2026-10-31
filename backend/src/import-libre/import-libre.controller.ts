@@ -1,8 +1,8 @@
-import { BadRequestException, Body, Controller, Post, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Post, Query, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
-import { ImportLibreService, LigneApercu } from "./import-libre.service";
+import { ImportLibreService, LigneApercu, TypeImportLibre } from "./import-libre.service";
 
 const LIMITE_FICHIER = 50 * 1024 * 1024; // 50 MB
 
@@ -13,14 +13,22 @@ export class ImportLibreController {
 
   @Post("apercu")
   @UseInterceptors(FileInterceptor("fichier", { storage: memoryStorage(), limits: { fileSize: LIMITE_FICHIER } }))
-  apercu(@UploadedFile() file: Express.Multer.File, @Body("modeCorrection") modeCorrection?: string) {
+  apercu(
+    @UploadedFile() file: Express.Multer.File,
+    @Body("modeCorrection") modeCorrection?: string,
+    @Query("type") type?: TypeImportLibre,
+  ) {
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
-    return this.service.apercu(file, modeCorrection === "true");
+    return this.service.apercu(file, modeCorrection === "true", type ?? "factures");
   }
 
   @Post("confirmer")
-  confirmer(@Body("lignes") lignes: LigneApercu[], @Body("modeCorrection") modeCorrection?: boolean) {
+  confirmer(
+    @Body("lignes") lignes: LigneApercu[],
+    @Body("modeCorrection") modeCorrection?: boolean,
+    @Query("type") type?: TypeImportLibre,
+  ) {
     if (!Array.isArray(lignes) || lignes.length === 0) throw new BadRequestException("Aucune ligne à importer.");
-    return this.service.confirmer(lignes, modeCorrection === true);
+    return this.service.confirmer(lignes, modeCorrection === true, type ?? "factures");
   }
 }

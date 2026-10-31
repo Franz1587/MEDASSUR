@@ -10,6 +10,7 @@ interface ApiPrestataire {
   titre?: "Professeur" | "Docteur" | null;
   specialite?: string | null;
   pays: string;
+  province?: string | null;
   ville: string;
   telephone?: string | null;
   adresse?: string | null;
@@ -53,6 +54,7 @@ export interface PrestataireUpsertInput {
   titre?: "Professeur" | "Docteur";
   specialite?: string;
   pays: string;
+  province?: string;
   ville: string;
   telephone?: string;
   adresse?: string;
