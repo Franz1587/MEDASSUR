@@ -4951,22 +4951,90 @@ export class DocumentsService {
     const tous = await this.prestataires.findAllReseau({});
     const p = await this.parametresEntreprise.findOne();
     const logoImage = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
-    const coulPrim = p.couleurPrimaire || "#1d3557";
+    const coulPrim   = p.couleurPrimaire   || "#1d3557";
+    const coulSecond = p.couleurSecondaire || "#f4a261";
 
-    // Couleurs fixes pour les sections (indépendant de la couleur société)
-    const COUL_PROVINCE = "#e63946";
-    const COUL_VILLE    = "#457b9d";
+    // Couleurs depuis la charte société
+    const COUL_PROVINCE = coulSecond; // couleur secondaire (ex. orange pour LA RUCHE)
+    const COUL_VILLE    = coulPrim;   // couleur primaire (bleu/vert société)
     const COUL_LIGNE    = "#f1f7fb";
 
-    // Grouper par province → ville
+    // ── Déduplication ──────────────────────────────────────────────────────
+    // Deux prestataires sont considérés identiques si :
+    //   1. Même numéro de téléphone (8 derniers chiffres) non vide
+    //   2. OU noms quasi-identiques (correspondance par préfixe de tous les tokens)
+    const normNom = (s: string) =>
+      s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
+    const normTel = (s: string | null) => (s || "").replace(/\D/g, "").slice(-8);
+    const tokensMatch = (a: string, b: string): boolean => {
+      const ta = normNom(a).split(" ").filter(t => t.length >= 3);
+      const tb = normNom(b).split(" ").filter(t => t.length >= 3);
+      if (ta.length === 0 || tb.length === 0) return false;
+      const shorter = ta.length <= tb.length ? ta : tb;
+      const longer  = [...(ta.length <= tb.length ? tb : ta)];
+      return shorter.every(tok => {
+        const idx = longer.findIndex(m => m.startsWith(tok) || tok.startsWith(m));
+        if (idx !== -1) { longer.splice(idx, 1); return true; }
+        return false;
+      });
+    };
+    const score = (pr: typeof tous[0]) =>
+      [pr.adresse, pr.telephone, pr.specialite, pr.secteur].filter(Boolean).length;
+
+    const dedupliques = (() => {
+      const gardes: typeof tous = [];
+      for (const pr of tous) {
+        if (!pr.nom || /^[0-9A-F]{8,}$/i.test(pr.nom)) continue;
+        if (pr.pays && !["Gabon","GABON",""].includes(pr.pays.trim())) continue; // exclure hors-Gabon
+        const tel = normTel(pr.telephone);
+        const dup = gardes.find(g => {
+          if (tel.length >= 6 && tel === normTel(g.telephone)) return true;
+          return tokensMatch(pr.nom, g.nom);
+        });
+        if (!dup) { gardes.push(pr); }
+        else if (score(pr) > score(dup)) {
+          const idx = gardes.indexOf(dup);
+          // Garder le nom le plus court/propre (moins de mots parasites)
+          gardes[idx] = { ...pr, nom: normNom(dup.nom).length <= normNom(pr.nom).length ? dup.nom : pr.nom };
+        }
+      }
+      return gardes;
+    })();
+
+    // ── Ville effective : adresse peut affiner la ville déclarée ──────────
+    // Ex. : ville="Libreville" mais adresse commence par "Owendo"
+    const VILLES_CONNUES: [string, string][] = [
+      ["akanda","Akanda"],["owendo","Owendo"],["ntoum","Ntoum"],["kango","Kango"],
+      ["nkan","Nkan"],["cocobeach","Cocobeach"],
+      ["port gentil","Port-Gentil"],["portgentil","Port-Gentil"],
+      ["gamba","Gamba"],["omboue","Omboué"],
+      ["franceville","Franceville"],["moanda","Moanda"],["mounana","Mounana"],
+      ["okondja","Okondja"],["bakoumba","Bakoumba"],["akieni","Akiéni"],
+      ["mouila","Mouila"],["fougamou","Fougamou"],["ndende","Ndendé"],["mbigou","Mbigou"],
+      ["oyem","Oyem"],["bitam","Bitam"],["mitzic","Mitzic"],["minvoul","Minvoul"],["medouneu","Médouneu"],
+      ["tchibanga","Tchibanga"],["mayumba","Mayumba"],["tsogni","Tsogni"],
+      ["koulamoutou","Koulamoutou"],["lastoursville","Lastoursville"],
+      ["lambarene","Lambaréné"],["ndjole","Ndjolé"],
+      ["makokou","Makokou"],["booue","Booué"],["mekambo","Mékambo"],
+      ["libreville","Libreville"],
+    ];
+    const villeEffective = (pr: typeof tous[0]): string => {
+      const adr = (pr.adresse || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+        .toLowerCase().replace(/-/g, " ").trim();
+      for (const [k, display] of VILLES_CONNUES) {
+        if (adr.startsWith(k + ",") || adr.startsWith(k + " ") || adr === k) return display;
+      }
+      return pr.ville || "Libreville";
+    };
+
+    // Grouper par province → ville (en utilisant ville effective)
     const groupes: Record<string, Record<string, typeof tous>> = {};
-    for (const pr of tous) {
-      if (!pr.nom || /^[0-9A-F]{8,}$/i.test(pr.nom)) continue;
-      const prov = pr.province || provinceDeVille(pr.ville) || "Autres";
-      const ville = pr.ville || "Libreville";
+    for (const pr of dedupliques) {
+      const villeReel = villeEffective(pr);
+      const prov = pr.province || provinceDeVille(villeReel) || provinceDeVille(pr.ville) || "Autres";
       if (!groupes[prov]) groupes[prov] = {};
-      if (!groupes[prov][ville]) groupes[prov][ville] = [];
-      groupes[prov][ville].push(pr);
+      if (!groupes[prov][villeReel]) groupes[prov][villeReel] = [];
+      groupes[prov][villeReel].push(pr);
     }
     const total = Object.values(groupes).reduce((s, vg) => s + Object.values(vg).reduce((sv, lg) => sv + lg.length, 0), 0);
     const nbVilles = Object.values(groupes).reduce((s, vg) => s + Object.keys(vg).length, 0);
@@ -5142,8 +5210,8 @@ export class DocumentsService {
       if (!groupes[prov]) continue;
       const villes = Object.keys(groupes[prov]).sort((a, b) => prioriteVilleDansProvince(a, prov) - prioriteVilleDansProvince(b, prov) || a.localeCompare(b, "fr"));
 
-      // En-tête province
-      doc.addPage();
+      // En-tête province — nouvelle page seulement si la courante a du contenu
+      if (doc.y > 80) { pied(); doc.addPage(); }
       const nbPrestProv = villes.reduce((s, v) => s + groupes[prov][v].length, 0);
       const yProv = doc.y;
       doc.rect(40, yProv, PAGE_W, 22).fillColor(COUL_PROVINCE).fill();
@@ -5204,7 +5272,7 @@ export class DocumentsService {
         }
         doc.moveDown(0.4);
       }
-      pied();
+      if (doc.y > 80) pied(); // n'appeler pied() que si la page a du contenu
     }
 
     doc.end();
