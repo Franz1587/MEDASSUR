@@ -5004,7 +5004,8 @@ export class DocumentsService {
     // ── Ville effective : adresse peut affiner la ville déclarée ──────────
     // Ex. : ville="Libreville" mais adresse commence par "Owendo"
     const VILLES_CONNUES: [string, string][] = [
-      ["akanda","Akanda"],["owendo","Owendo"],["ntoum","Ntoum"],["kango","Kango"],
+      ["akanda","Akanda"],["angondje","Akanda"],["angondjo","Akanda"],["nzeng ayong","Akanda"],
+      ["owendo","Owendo"],["oloumi","Owendo"],["ntoum","Ntoum"],["kango","Kango"],
       ["nkan","Nkan"],["cocobeach","Cocobeach"],
       ["port gentil","Port-Gentil"],["portgentil","Port-Gentil"],
       ["gamba","Gamba"],["omboue","Omboué"],
@@ -5146,19 +5147,25 @@ export class DocumentsService {
     doc.text("100%", 44 + TCOL.prov + TCOL.villes + TCOL.prest, tblY + 3, { width: TCOL.bar - 8, align: "center", lineBreak: false });
     tblY += 20;
 
-    // Tableau détail par ville — 3 colonnes
+    // Tableau détail par ville — 3 colonnes (rendu ligne par ligne, index relatif à la page)
     doc.fontSize(11).fillColor(coulPrim).font("Helvetica-Bold")
        .text("DÉTAIL PAR VILLE", 40, tblY + 8);
     const NCOLS = 3;
     const colW = Math.floor(PAGE_W / NCOLS);
+    const ROW_H = 12;
+    const PASTILLES = ["#e63946","#457b9d","#2a9d8f","#e9c46a","#f4a261","#264653","#a8dadc","#06d6a0","#118ab2","#888"];
+
+    const dessinerEntetevilles = (y: number) => {
+      for (let c = 0; c < NCOLS; c++) {
+        const cx2 = 40 + c * colW;
+        doc.rect(cx2, y, colW - 2, 13).fillColor(coulPrim).fill();
+        doc.fillColor("white").font("Helvetica-Bold").fontSize(7)
+           .text("VILLE", cx2 + 3, y + 3, { width: colW - 22, lineBreak: false });
+        doc.text("N", cx2 + colW - 18, y + 3, { width: 14, align: "right", lineBreak: false });
+      }
+    };
     let detY = tblY + 26;
-    for (let c = 0; c < NCOLS; c++) {
-      const cx = 40 + c * colW;
-      doc.rect(cx, detY, colW - 2, 13).fillColor(coulPrim).fill();
-      doc.fillColor("white").font("Helvetica-Bold").fontSize(7)
-         .text("VILLE", cx + 3, detY + 3, { width: colW - 22, lineBreak: false });
-      doc.text("N", cx + colW - 18, detY + 3, { width: 14, align: "right", lineBreak: false });
-    }
+    dessinerEntetevilles(detY);
     detY += 15;
 
     const villeStats: Array<{ prov: string; ville: string; nb: number }> = [];
@@ -5167,32 +5174,23 @@ export class DocumentsService {
       const villes = Object.keys(groupes[prov]).sort((a, b) => prioriteVilleDansProvince(a, prov) - prioriteVilleDansProvince(b, prov) || a.localeCompare(b, "fr"));
       for (const v of villes) villeStats.push({ prov, ville: v, nb: groupes[prov][v].length });
     }
-    const ROW_H = 12;
-    const PASTILLES = ["#e63946","#457b9d","#2a9d8f","#e9c46a","#f4a261","#264653","#a8dadc","#06d6a0","#118ab2","#888"];
+    let pageRow = 0; // index de ligne RELATIF à la page courante (reset à chaque changement de page)
     for (let i = 0; i < villeStats.length; i++) {
       const col = i % NCOLS;
-      const row = Math.floor(i / NCOLS);
-      const cx = 40 + col * colW;
-      const cy = detY + row * ROW_H;
-      if (cy + ROW_H > doc.page.height - 50) {
-        if (col === 0) {
-          pied();
-          doc.addPage();
-          detY = 50;
-          for (let c2 = 0; c2 < NCOLS; c2++) {
-            const cx2 = 40 + c2 * colW;
-            doc.rect(cx2, 40, colW - 2, 13).fillColor(coulPrim).fill();
-            doc.fillColor("white").font("Helvetica-Bold").fontSize(7)
-               .text("VILLE", cx2 + 3, 43, { width: colW - 22, lineBreak: false });
-            doc.text("N", cx2 + colW - 18, 43, { width: 14, align: "right", lineBreak: false });
-          }
-          detY = 55;
-        }
-        continue;
+      // Avant de commencer une nouvelle ligne (col=0), vérifier l'espace disponible
+      if (col === 0 && detY + pageRow * ROW_H + ROW_H > doc.page.height - 50) {
+        pied();
+        doc.addPage();
+        detY = 40;
+        dessinerEntetevilles(detY);
+        detY += 15;
+        pageRow = 0;
       }
+      const cy = detY + pageRow * ROW_H;
+      const cx = 40 + col * colW;
       const { prov, ville, nb } = villeStats[i];
       const provIdx = [...ORDRE_PROVINCES, "Autres"].indexOf(prov as never);
-      const isEven = row % 2 === 0;
+      const isEven = pageRow % 2 === 0;
       doc.rect(cx, cy, colW - 2, ROW_H - 1).fillColor(isEven ? COUL_LIGNE : "white").fill();
       doc.rect(cx, cy, colW - 2, ROW_H - 1).lineWidth(0.2).strokeColor("#dde").stroke();
       doc.rect(cx + 2, cy + 3, 4, 6).fillColor(PASTILLES[provIdx] || "#888").fill();
@@ -5200,7 +5198,11 @@ export class DocumentsService {
          .text(ville, cx + 9, cy + 2, { width: colW - 28, lineBreak: false });
       doc.fillColor(coulPrim).font("Helvetica-Bold").fontSize(7)
          .text(String(nb), cx + colW - 18, cy + 2, { width: 14, align: "right", lineBreak: false });
+      if (col === NCOLS - 1) pageRow++; // ligne complète → ligne suivante
     }
+    // Mettre à jour doc.y après la table des villes
+    const lastVilleY = detY + pageRow * ROW_H + 5;
+    doc.y = Math.min(lastVilleY, doc.page.height - 60);
     pied();
 
     // ── Pages de contenu : prestataires par province → ville ──────────────
@@ -5211,7 +5213,9 @@ export class DocumentsService {
       const villes = Object.keys(groupes[prov]).sort((a, b) => prioriteVilleDansProvince(a, prov) - prioriteVilleDansProvince(b, prov) || a.localeCompare(b, "fr"));
 
       // En-tête province — nouvelle page seulement si la courante a du contenu
-      if (doc.y > 80) { pied(); doc.addPage(); }
+      // (seuil 120 : au-dessous on est sur une page fraîche, pas besoin de saut)
+      const MIN_PROV = 22 + 16 + 30; // bannière province + ville + 1 ligne
+      if (doc.y + MIN_PROV > doc.page.height - 50) { pied(); doc.addPage(); }
       const nbPrestProv = villes.reduce((s, v) => s + groupes[prov][v].length, 0);
       const yProv = doc.y;
       doc.rect(40, yProv, PAGE_W, 22).fillColor(COUL_PROVINCE).fill();
@@ -5228,7 +5232,7 @@ export class DocumentsService {
           return (a.nom ?? "").localeCompare(b.nom ?? "", "fr");
         });
 
-        if (doc.y > doc.page.height - 80) { pied(); doc.addPage(); }
+        if (doc.y + 16 + 30 > doc.page.height - 50) { pied(); doc.addPage(); }
 
         const yVille = doc.y;
         doc.rect(40, yVille, PAGE_W, 16).fillColor(COUL_VILLE).fill();
@@ -5272,7 +5276,7 @@ export class DocumentsService {
         }
         doc.moveDown(0.4);
       }
-      if (doc.y > 80) pied(); // n'appeler pied() que si la page a du contenu
+      pied(); // pied en fin de chaque section province
     }
 
     doc.end();
