@@ -286,10 +286,9 @@ export function OffreSantePanel({ appelOffresId, cotations }: { appelOffresId: s
           {champ("periode", "Période de garantie")}
           {champ("duree", "Durée")}
           {champ("mentionSignature", "Signature du récapitulatif")}
-          {champ("lieuSignature", "Lieu (annexe)")}
           <div className="flex flex-col gap-2 pt-6">
             <label className="flex items-center gap-2 text-[13px] text-foreground"><input type="checkbox" checked={params.pagesPresentation} onChange={(e) => set({ pagesPresentation: e.target.checked })} className="w-4 h-4 accent-primary" />Pages de présentation (outils, carte santé, applications)</label>
-            <label className="flex items-center gap-2 text-[13px] text-foreground"><input type="checkbox" checked={params.annexeReseau} onChange={(e) => set({ annexeReseau: e.target.checked })} className="w-4 h-4 accent-primary" />Annexe réseau de soins</label>
+            <label className="flex items-center gap-2 text-[13px] text-foreground"><input type="checkbox" checked={params.annexeReseau} onChange={(e) => set({ annexeReseau: e.target.checked })} className="w-4 h-4 accent-primary" />Annexe : réseau de soins MEDASSUR+ à jour</label>
           </div>
         </div>
       )}

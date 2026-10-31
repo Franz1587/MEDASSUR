@@ -35,7 +35,7 @@ import { TAUX_TPS } from "../sante/sante.service";
 import { populationDuContrat } from "../mouvements/population-historique.util";
 import { ORDRE_PROVINCES, provinceDeVille, prioriteVilleDansProvince } from "../lib/gabonGeo";
 import { genererReseauSoins, type ProvinceAnnuaire } from "./reseau-soins.pdf";
-import { genererCorpsOffre, genererAnnexeReseau, assemblerOffre, pdfVersBuffer, versPng, logoModeleCompagnie, annexeDepuisAnnuaire, genererPagesPortails, type CompagnieOffre } from "./offre-sante.pdf";
+import { genererCorpsOffre, assemblerOffre, pdfVersBuffer, versPng, logoModeleCompagnie, genererPagesPortails, type CompagnieOffre } from "./offre-sante.pdf";
 import type { ContenuOffre } from "../cotation/contenu-offre";
 import type { Prisma, ParametresEntreprise } from "@prisma/client";
 import { numeroPolice, policePourNomFichier } from "../lib/police.util";
@@ -5098,10 +5098,10 @@ export class DocumentsService {
     if (sansCompagnie.length) throw new BadRequestException(`Choisissez la compagnie des cotations ${sansCompagnie.map((c) => c.id).join(", ")} avant de générer l'offre.`);
 
     const p = await this.parametresEntreprise.findOne();
-    const [societeLogo, clientLogo, signature] = await Promise.all([
-      this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR).then(versPng),
+    const logoSociete = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
+    const [societeLogo, clientLogo] = await Promise.all([
+      versPng(logoSociete),
       this.chargerImage("logos-prospects", ao.prospect?.logo, path.join(UPLOADS_ROOT, "logos-prospects")).then(versPng),
-      this.chargerSignatureUtilisateur(userId).then(versPng),
     ]);
 
     // Compagnies dans l'ordre choisi, sinon dans l'ordre d'import des documents.
@@ -5129,20 +5129,18 @@ export class DocumentsService {
       });
     }
 
-    const donnees = {
-      clientNom: ao.clientNom, clientLogo, societeLogo, signature, params, compagnies,
-      reseau: params.annexeReseau ? annexeDepuisAnnuaire(await this.construireAnnuaire()) : null,
-      dateSignature: new Date().toLocaleDateString("fr-FR"),
-    };
+    const donnees = { clientNom: ao.clientNom, clientLogo, societeLogo, params, compagnies };
     const corps = new PDFDocument({ size: [596.52, 842.52], margin: 0, bufferPages: true });
     const pCorps = pdfVersBuffer(corps);
     const dernier = genererCorpsOffre(corps, donnees);
     corps.end();
+    // Annexe = le PDF officiel « Réseau de Soins » de MEDASSUR+ (même moteur
+    // et mêmes données en direct que le bouton Réseau de soins).
     let annexe: Buffer | null = null;
-    if (donnees.reseau) {
-      const docAnnexe = new PDFDocument({ size: [596.52, 842.52], margin: 0, autoFirstPage: false });
+    if (params.annexeReseau) {
+      const docAnnexe = new PDFDocument({ size: "A4", margin: 0, bufferPages: true });
       const pAnnexe = pdfVersBuffer(docAnnexe);
-      genererAnnexeReseau(docAnnexe, donnees);
+      genererReseauSoins(docAnnexe, p, logoSociete, await this.construireAnnuaire());
       docAnnexe.end();
       annexe = await pAnnexe;
     }

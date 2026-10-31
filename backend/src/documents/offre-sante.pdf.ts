@@ -4,7 +4,6 @@ import PDFDocument from "pdfkit";
 import { PDFDocument as PdfLib, StandardFonts, rgb } from "pdf-lib";
 import type { ContenuOffre, LimiteGarantie, ParametresOffre, SectionGaranties, TableauGaranties } from "../cotation/contenu-offre";
 import sharp from "sharp";
-import { indicatifGabon, type PrestataireAnnuaire, type ProvinceAnnuaire } from "./reseau-soins.pdf";
 
 // Offre santé — copie du modèle Word de LA RUCHE (OFFRE SANTE LAY PRO.pdf,
 // la plus récente des trois offres de référence ; BW ENERGY et ETS MSSZ
@@ -13,16 +12,16 @@ import { indicatifGabon, type PrestataireAnnuaire, type ProvinceAnnuaire } from 
 // retoucher une cote = re-mesurer sur le modèle, jamais à l'œil.
 // Polices : Times du PDF (métriques identiques à Times New Roman, aucune
 // police Microsoft embarquée), Carlito (métriques Calibri) pour le tableau
-// de décompte, Helvetica (métriques Arial) pour l'annexe réseau.
+// de décompte. L'annexe réseau est le PDF officiel Réseau de Soins.
 
 type Doc = InstanceType<typeof PDFDocument>;
 export type ImageSrc = Buffer | string;
 
 const ASSETS = path.join(process.cwd(), "assets", "offre-sante");
 const TR = "Times-Roman", TB = "Times-Bold", TBI = "Times-BoldItalic";
-const CA = "Carlito", CAB = "Carlito-Bold", AR = "Helvetica", ARB = "Helvetica-Bold";
+const CA = "Carlito", CAB = "Carlito-Bold";
 // Ascendant Times New Roman / Calibri / Arial : top de boîte → ligne de base.
-const ASC: Record<string, number> = { [TR]: 0.891, [TB]: 0.891, [TBI]: 0.891, [CA]: 0.75, [CAB]: 0.75, [AR]: 0.905, [ARB]: 0.905 };
+const ASC: Record<string, number> = { [TR]: 0.891, [TB]: 0.891, [TBI]: 0.891, [CA]: 0.75, [CAB]: 0.75 };
 const MARINE = "#000080";
 const PAGE_W = 596.52, PAGE_H = 842.52;
 // Marge droite du texte courant (coupures identiques au modèle Word).
@@ -49,18 +48,12 @@ export interface CompagnieOffre {
   cotations: CotationOffre[];
 }
 
-export interface PrestataireAnnexe { nom: string; telephone: string | null; localite: string | null }
-export interface VilleAnnexe { ville: string; categories: { titre: string; prestataires: PrestataireAnnexe[] }[] }
-
 export interface DonneesOffre {
   clientNom: string;
   clientLogo: ImageSrc | null;
   societeLogo: ImageSrc | null;
-  signature: ImageSrc | null;
   params: ParametresOffre;
   compagnies: CompagnieOffre[];
-  reseau: VilleAnnexe[] | null;
-  dateSignature: string;
 }
 
 // ── Primitives ─────────────────────────────────────────────────────────
@@ -555,71 +548,6 @@ export function genererCorpsOffre(doc: Doc, d: DonneesOffre): number {
   return numero;
 }
 
-// ── Annexe : réseau de soins (tableau Excel du modèle) ────────────────
-
-export function genererAnnexeReseau(doc: Doc, d: DonneesOffre) {
-  const reseau = d.reseau ?? [];
-  const XG = 50.0, X1 = 220.4, X2 = 332.5, XD = 540.6, E = 1.7, BAS = 780.5;
-  const nom: Style = { f: ARB, s: 7.8 }, tel: Style = { f: AR, s: 7.8, c: "#262626" }, loc: Style = { f: AR, s: 7.8 };
-  let yHaut = 54.5, y = 54.5;
-  const fermer = () => { for (const x of [XG, X1, X2, XD]) ligneV(doc, x, yHaut, y, "#000", E); };
-  const trait = (yy: number) => ligneH(doc, XG + E, XD + E, yy, "#000", E);
-  const place = (h: number) => { if (y + h > BAS) { fermer(); doc.addPage({ size: [PAGE_W, PAGE_H], margin: 0 }); yHaut = y = 54.5; trait(y); } };
-  // Première page : logo, titre, en-tête de colonnes.
-  doc.addPage({ size: [PAGE_W, PAGE_H], margin: 0 });
-  y = yHaut = 53.6;
-  trait(y);
-  image(doc, d.societeLogo, 63.9, 59.2, 121.8, 60.6);
-  ligneV(doc, XG, y, 151.3, "#000", E); ligneV(doc, XD, y, 151.3, "#000", E);
-  y = 124.1; trait(y);
-  const t10: Style = { f: ARB, s: 10.3 };
-  const parts = ["STRUCTURES CONVENTIONNEES (", "OPERATIONNELLES A CE JOUR", ")"];
-  let x = (XG + XD + E) / 2 - parts.reduce((a, s) => a + largeur(doc, s, t10), 0) / 2;
-  parts.forEach((s, i) => { x += t(doc, s, x, 132.5, { ...t10, c: i === 1 ? "#ff0000" : "#000" }); });
-  y = 151.3; trait(y);
-  yHaut = y;
-  doc.rect(XG + E, y + E, XD - XG - E, 13 - E).fill("#fde9d9");
-  const ent: Style = { f: ARB, s: 7.8, c: "#262626" };
-  t(doc, "NOM DE L’ETABLISSEMENT", (XG + X1) / 2 + 1, y + 3.2, ent, "c");
-  t(doc, "CONTACTS", (X1 + X2) / 2 + 1, y + 3.2, ent, "c");
-  t(doc, "LOCALITE", (X2 + XD) / 2 + 1, y + 3.2, ent, "c");
-  y += 13; trait(y);
-  const bande = (txt: string, fond: string, st: Style, souligne: boolean) => {
-    place(14);
-    for (const x of [X1, X2]) ligneV(doc, x, yHaut, y, "#000", E);
-    doc.rect(XG + E, y + E, XD - XG - E, 14 - E).fill(fond);
-    const w = t(doc, txt, (XG + XD + E) / 2, y + (14 - st.s * 1.15) / 2 + 0.6, st, "c");
-    if (souligne) doc.rect((XG + XD + E) / 2 - w / 2, y + 12.2, w, 0.6).fill("#0070c0");
-    y += 14; trait(y);
-    yHaut = y;
-  };
-  for (const v of reseau) {
-    bande(v.ville.toUpperCase(), "#ffff00", { f: TBI, s: 10.3, c: "#0070c0" }, true);
-    for (const cat of v.categories) {
-      const st: Style = { f: ARB, s: largeur(doc, cat.titre, { f: ARB, s: 9.5 }) > 400 ? 7.8 : 9.5, c: "#0070c0" };
-      bande(cat.titre, "#fde9d9", st, false);
-      for (const p of cat.prestataires) {
-        const ln = couper(doc, p.nom.toUpperCase(), nom, X1 - XG - 5);
-        const tels = (p.telephone ?? "").split(/\s*[\/;,]\s*|\s{2,}/).map((s) => s.trim()).filter(Boolean).map(indicatifGabon).join(" / ");
-        const lt = couper(doc, tels, tel, X2 - X1 - 4), ll = couper(doc, p.localite ?? "", loc, XD - X2 - 4);
-        const n = Math.max(ln.length, lt.length, ll.length);
-        const h = 13 + 8.6 * (n - 1);
-        place(h);
-        ln.forEach((s, k) => t(doc, s, 52.4, y + 3.1 + 8.6 * k, nom));
-        lt.forEach((s, k) => t(doc, s, 222.8, y + 3.1 + 8.6 * k, tel));
-        ll.forEach((s, k) => t(doc, s, 334.9, y + 3.1 + 8.6 * k, loc));
-        y += h; trait(y);
-      }
-    }
-  }
-  fermer();
-  // Lieu, date, cachet
-  if (y + 165 > PAGE_H - 20) { doc.addPage({ size: [PAGE_W, PAGE_H], margin: 0 }); y = 40; }
-  t(doc, `Fait à ${d.params.lieuSignature}, le ${d.dateSignature}`, 399.7, y + 43.7, { f: AR, s: 12 });
-  t(doc, "POUR LA SOCIETE", 400.5, y + 94.3, { f: ARB, s: 12 });
-  image(doc, d.signature, 392.6, y + 111.3, 169, 100.1);
-}
-
 // ── Présentation des portails MEDASSUR+ ───────────────────────────────
 
 // Remplace les pages « B – OUTILS DEMATERIALISES » du modèle (Passeport
@@ -728,33 +656,6 @@ export function logoModeleCompagnie(nom: string): { logo: string; petit: string;
   if (!m) return null;
   const dir = path.join(ASSETS, "logos");
   return { logo: path.join(dir, `${m[1]}.png`), petit: path.join(dir, m[3] ? `${m[1]}-petit.png` : `${m[1]}.png`), taille: m[2] };
-}
-
-// Annexe : villes du réseau (Akanda et Owendo rattachées à Libreville comme
-// dans le modèle), puis catégories du tableau Excel de LA RUCHE.
-const CATEGORIES: [string, RegExp][] = [
-  // Fourre-tout : tout type qui ne relève d'aucune catégorie suivante.
-  ["CONSULTATIONS, SOINS, ANALYSES MEDICALES, HOSPITALISATIONS & RADIOLOGIE", /^/],
-  ["PHARMACIES", /PHARMA|DEPOT/], ["ANALYSES MEDICALES", /LABO/], ["IMAGERIE MEDICALE (Radio, Echo,…)", /IMAGERIE|RADIO/],
-  ["DENTISTES", /DENTAIRE|DENTISTE/], ["OPTICIENS", /OPTI/], ["KINESITHERAPIE / REEDUCATION", /KINE/],
-];
-export function annexeDepuisAnnuaire(provinces: ProvinceAnnuaire[]): VilleAnnexe[] {
-  const norm = (s: string | null) => (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
-  const villes = new Map<string, PrestataireAnnuaire[]>();
-  for (const prov of provinces) for (const v of prov.villes) {
-    const nom = /^(AKANDA|OWENDO|LIBREVILLE)$/.test(norm(v.nom)) ? "LIBREVILLE (Compris AKANDA/OWENDO)" : norm(v.nom);
-    villes.set(nom, [...(villes.get(nom) ?? []), ...v.prestataires]);
-  }
-  return [...villes.entries()].map(([ville, prestataires]) => ({
-    ville,
-    categories: CATEGORIES.map(([titre, re], i) => ({
-      titre,
-      prestataires: prestataires
-        .filter((p) => { const t = norm(p.type); return re.test(t) && !CATEGORIES.slice(i + 1).some(([, r]) => i === 0 && r.test(t)); })
-        .sort((a, b) => a.nom.localeCompare(b.nom, "fr"))
-        .map((p) => ({ nom: p.nom, telephone: p.telephone, localite: p.adresse })),
-    })).filter((c) => c.prestataires.length),
-  })).filter((v) => v.categories.length);
 }
 
 // ── Assemblage final ──────────────────────────────────────────────────
