@@ -185,6 +185,9 @@ export class AnalysePropositionService {
     } catch (err) {
       if (err instanceof Anthropic.APIError) {
         this.logger.warn(`Lecture ARIANA de "${doc.nom}" échouée (${err.status}) : ${err.message}`);
+        if (/credit balance/i.test(err.message)) {
+          throw new ServiceUnavailableException("ARIANA est indisponible : le crédit du compte Anthropic est épuisé. Rechargez-le (console Anthropic → Plans & Billing) puis relancez l'analyse.");
+        }
         throw new ServiceUnavailableException("ARIANA n'a pas pu lire ce document pour le moment. Réessayez dans quelques instants.");
       }
       throw err;
@@ -196,30 +199,41 @@ export class AnalysePropositionService {
     // Une nouvelle lecture du même document remplace la précédente.
     await this.prisma.cotation.deleteMany({ where: { documentSourceId: doc.id } });
     const creees = [];
-    for (const [ordre, p] of lecture.propositions.entries()) {
-      const population = p.population && p.population > 0 ? p.population : 1;
-      const primeNette = p.primeNonCommuniquee ? 0 : p.primeNette ?? (p.primeParPersonne ? p.primeParPersonne * population : 0);
-      const contenu: ContenuOffre = {
-        titre: p.titre ?? [], designationRecap: p.designationRecap?.length ? p.designationRecap : [p.branche],
-        libelleComparatif: p.libelleComparatif ?? `${ao.clientNom} - ${p.branche}`, population,
-        garanties: p.garanties ?? [], limites: p.limites ?? [], mentionsFraisReels: !!p.mentionsFraisReels,
-        tableau: p.tableau?.sections?.length ? p.tableau : null, primeParPersonne: p.primeParPersonne ?? (primeNette ? Math.round(primeNette / population) : null),
-        primeCommuniquee: p.primeCommuniquee, primeNonCommuniquee: p.primeNonCommuniquee, ordre,
-      };
-      const accessoiresDefaut = !p.primeNonCommuniquee && !p.accessoires;
-      const remarques = [p.remarques, accessoiresDefaut && `Accessoires non chiffrés par la compagnie : ${ACCESSOIRES_DEFAUT.toLocaleString("fr-FR")} F CFA appliqués par défaut.`, !p.population && "Population non lue dans le document : à renseigner.", !compagnieId && `Compagnie « ${lecture.compagnie} » non reconnue : à choisir.`]
-        .filter(Boolean).join(" ");
-      creees.push(await this.cotations.create({
-        appelOffresId, compagnieId: compagnieId ?? undefined, branche: p.branche, clientNom: ao.clientNom, population,
-        territorialite: p.territorialite ?? p.tableau?.territorialite ?? "", tauxCouvertureAmbulatoire: p.tauxAmbulatoire ?? undefined, tauxCouvertureHospitalisation: p.tauxHospitalisation ?? undefined,
-        plafondFamilial: p.plafondFamilial ?? undefined, limiteAgeAdulte: p.limiteAgeAdulte ?? undefined, limiteAgeEnfant: p.limiteAgeEnfant ?? undefined,
-        conditionsFermete: p.libelleOption,
-        primeNette, montantCartes: p.branche === "Maladie" && !p.primeNonCommuniquee ? population * tarifCarte : 0,
-        montantAccessoires: p.primeNonCommuniquee ? 0 : p.accessoires ?? ACCESSOIRES_DEFAUT,
-        garanties: lignesGaranties(p.tableau?.sections?.length ? p.tableau : null),
-        contenuOffre: { ...contenu, remarques: remarques || null, controleCompagnie: { taxe: p.taxeCompagnie, ttc: p.primeTTCCompagnie } } as unknown as Record<string, unknown>,
-        documentSourceId: doc.id,
-      }, userId));
+    try {
+      for (const [ordre, p] of lecture.propositions.entries()) {
+        // Lignes vides retirées, libellé manquant → "" (colonnes obligatoires).
+        if (p.tableau?.sections) p.tableau.sections = p.tableau.sections.map((s) => ({
+          ...s, lignes: (s.lignes ?? []).filter((l) => l.libelle || l.taux || l.plafond).map((l) => ({ ...l, libelle: l.libelle ?? "" })),
+        }));
+        const population = p.population && p.population > 0 ? p.population : 1;
+        const primeNette = p.primeNonCommuniquee ? 0 : p.primeNette ?? (p.primeParPersonne ? p.primeParPersonne * population : 0);
+        const contenu: ContenuOffre = {
+          titre: p.titre ?? [], designationRecap: p.designationRecap?.length ? p.designationRecap : [p.branche],
+          libelleComparatif: p.libelleComparatif ?? `${ao.clientNom} - ${p.branche}`, population,
+          garanties: p.garanties ?? [], limites: p.limites ?? [], mentionsFraisReels: !!p.mentionsFraisReels,
+          tableau: p.tableau?.sections?.length ? p.tableau : null, primeParPersonne: p.primeParPersonne ?? (primeNette ? Math.round(primeNette / population) : null),
+          primeCommuniquee: p.primeCommuniquee, primeNonCommuniquee: p.primeNonCommuniquee, ordre,
+        };
+        const accessoiresDefaut = !p.primeNonCommuniquee && !p.accessoires;
+        const remarques = [p.remarques, accessoiresDefaut && `Accessoires non chiffrés par la compagnie : ${ACCESSOIRES_DEFAUT.toLocaleString("fr-FR")} F CFA appliqués par défaut.`, !p.population && "Population non lue dans le document : à renseigner.", !compagnieId && `Compagnie « ${lecture.compagnie} » non reconnue : à choisir.`]
+          .filter(Boolean).join(" ");
+        creees.push(await this.cotations.create({
+          appelOffresId, compagnieId: compagnieId ?? undefined, branche: p.branche, clientNom: ao.clientNom, population,
+          territorialite: p.territorialite ?? p.tableau?.territorialite ?? "", tauxCouvertureAmbulatoire: p.tauxAmbulatoire ?? undefined, tauxCouvertureHospitalisation: p.tauxHospitalisation ?? undefined,
+          plafondFamilial: p.plafondFamilial ?? undefined, limiteAgeAdulte: p.limiteAgeAdulte ?? undefined, limiteAgeEnfant: p.limiteAgeEnfant ?? undefined,
+          conditionsFermete: p.libelleOption,
+          primeNette, montantCartes: p.branche === "Maladie" && !p.primeNonCommuniquee ? population * tarifCarte : 0,
+          montantAccessoires: p.primeNonCommuniquee ? 0 : p.accessoires ?? ACCESSOIRES_DEFAUT,
+          garanties: lignesGaranties(p.tableau?.sections?.length ? p.tableau : null),
+          contenuOffre: { ...contenu, remarques: remarques || null, controleCompagnie: { taxe: p.taxeCompagnie, ttc: p.primeTTCCompagnie } } as unknown as Record<string, unknown>,
+          documentSourceId: doc.id,
+        }, userId));
+      }
+    } catch (err) {
+      // Tout ou rien : jamais une lecture à moitié enregistrée.
+      await this.prisma.cotation.deleteMany({ where: { documentSourceId: doc.id } });
+      this.logger.error(`Enregistrement de la lecture de "${doc.nom}" impossible : ${err instanceof Error ? err.message : err}`);
+      throw new BadRequestException("ARIANA a lu le document mais une proposition n'a pas pu être enregistrée. Relancez l'analyse ; si le problème persiste, saisissez cette cotation à la main.");
     }
     return { compagnie: lecture.compagnie, compagnieReconnue: !!compagnieId, cotations: creees };
   }
@@ -238,6 +252,6 @@ function sansVides(v: unknown): unknown {
 function lignesGaranties(tb: TableauGaranties | null) {
   if (!tb) return [];
   return tb.sections.flatMap((s: SectionGaranties) => s.lignes.map((l) => ({
-    categorie: s.titre || "Garanties", libelle: l.libelle, plafond: l.plafond || s.plafondCommun || "", tauxStructurePrivee: l.taux ?? undefined,
+    categorie: s.titre || "Garanties", libelle: l.libelle ?? "", plafond: l.plafond || s.plafondCommun || "", tauxStructurePrivee: l.taux ?? undefined,
   })));
 }
