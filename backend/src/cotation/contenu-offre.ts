@@ -98,6 +98,14 @@ export const GARANTIES_STANDARD = [
   "Cures thermales et massages", "Evacuation sanitaire (intérieur du pays vers Libreville)",
 ];
 
+// Garanties Assistance : rubriques classiques, identiques pour toutes les
+// compagnies — toujours imprimées sur une proposition Assistance.
+export const GARANTIES_ASSISTANCE = [
+  "Transport sanitaire", "Transport du corps en cas de décès du bénéficiaire", "Retour après convalescence",
+  "Accompagnement du bénéficiaire", "Voyage en cas de décès d’un proche parent", "Billet de visite",
+  "Frais d’avocat", "Avance de caution pénale",
+];
+
 export interface CotationSaisie {
   branche: string; clientNom: string; population: number; territorialite: string;
   tauxCouvertureAmbulatoire?: string | null; tauxCouvertureHospitalisation?: string | null;
@@ -129,7 +137,7 @@ export function contenuDepuisCotation(c: CotationSaisie): ContenuOffre {
   if (c.branche === "Assistance") {
     return {
       titre: ["PROPOSITION", "ASSISTANCE"], designationRecap: ["Assistance"], libelleComparatif: `${c.clientNom} - Assistance`,
-      population, garanties: c.garanties.map((g) => g.libelle), limites: [], mentionsFraisReels: false, tableau: null,
+      population, garanties: GARANTIES_ASSISTANCE, limites: [], mentionsFraisReels: false, tableau: null,
       primeParPersonne: net ? Math.round(net / population) : null,
     };
   }

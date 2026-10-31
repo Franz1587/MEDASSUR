@@ -3,6 +3,7 @@ import * as path from "path";
 import PDFDocument from "pdfkit";
 import { PDFDocument as PdfLib, StandardFonts, rgb } from "pdf-lib";
 import type { ContenuOffre, LimiteGarantie, ParametresOffre, SectionGaranties, TableauGaranties } from "../cotation/contenu-offre";
+import { GARANTIES_ASSISTANCE } from "../cotation/contenu-offre";
 import sharp from "sharp";
 
 // Offre santé — copie du modèle Word de LA RUCHE (OFFRE SANTE LAY PRO.pdf,
@@ -262,16 +263,23 @@ function infosAssure(doc: Doc, d: DonneesOffre, x: number, xDeux: number, top: n
   doc.rect(regle[0], regle[2], regle[1] - regle[0], 1.45).fill(MARINE);
 }
 
-function listePuces(doc: Doc, items: string[], xPuce: number, xTexte: number, top: number, pas: number, puce: "fleche" | "rond"): number {
+// Au-delà de BAS_TEXTE, la suite passe sur une nouvelle page (numérotée).
+const BAS_TEXTE = 775, HAUT_SUITE = 60;
+type Saut = () => void;
+const place = (top: number, h: number, saut: Saut) => (top + h > BAS_TEXTE ? (saut(), HAUT_SUITE) : top);
+
+function listePuces(doc: Doc, items: string[], xPuce: number, xTexte: number, top: number, pas: number, puce: "fleche" | "rond", saut: Saut): number {
   const p12: Style = { f: TR, s: 12 };
   for (const it of items) {
+    const lignes = couper(doc, it, p12, MARGE_DROITE - xTexte);
+    top = place(top, pas * lignes.length, saut);
     if (puce === "fleche") fleche(doc, xPuce, top - 0.1); else rond(doc, xPuce, top);
-    for (const l of couper(doc, it, p12, MARGE_DROITE - xTexte)) { t(doc, l, xTexte, top, p12); top += pas; }
+    for (const l of lignes) { t(doc, l, xTexte, top, p12); top += pas; }
   }
   return top;
 }
 
-function pageProposition(doc: Doc, d: DonneesOffre, cot: CotationOffre) {
+function pageProposition(doc: Doc, d: DonneesOffre, cot: CotationOffre, saut: Saut) {
   const c = cot.contenu;
   const maladie = cot.branche !== "Assistance";
   const titre = (c.titre.length ? c.titre : maladie ? ["PROPOSITION SANTE"] : ["PROPOSITION", "ASSISTANCE"])
@@ -285,16 +293,19 @@ function pageProposition(doc: Doc, d: DonneesOffre, cot: CotationOffre) {
   const b12: Style = { f: TB, s: 12 };
   t(doc, `Population : ${c.population} personnes`, 70.82, 211.33, b12, "g", true);
   t(doc, maladie ? "Garanties :" : "Garanties", 70.82, 248.17, b12, "g", true);
-  let top = listePuces(doc, c.garanties, 88.82, 106.82, 275.8, maladie ? 13.8 : 14.65, maladie ? "fleche" : "rond");
+  // Assistance : rubriques classiques, les mêmes pour toutes les compagnies.
+  const garanties = maladie ? c.garanties : GARANTIES_ASSISTANCE;
+  let top = listePuces(doc, garanties, 88.82, 106.82, 275.8, maladie ? 13.8 : 14.65, maladie ? "fleche" : "rond", saut);
   if (maladie && c.limites.length) {
-    top += 13.8;
+    top = place(top + 13.8, 27.6 + 13.8, saut);
     t(doc, "Limite de garantie", 70.82, top, b12, "g", true);
     top += 27.6;
-    top = listeLimites(doc, c.limites, top);
+    top = listeLimites(doc, c.limites, top, saut);
   }
   if (maladie && c.mentionsFraisReels) {
     top += 14.64;
     for (const m of ["FRAIS REELS : FRAIS EXPOSES CONFORMEMENT A LA TARIFICATION\nREGLEMENTAIRE ET/OU CONVENTIONNEE   EN VIGUEUR", "BTAM : BAREME TARIFAIRE DES ACTES MEDICAUX"]) {
+      top = place(top, 27.6, saut);
       rond(doc, 51.96, top);
       for (const l of m.split("\n")) { t(doc, l, 69.98, top, b12); top += 13.8; }
       top += 14.67;
@@ -302,12 +313,13 @@ function pageProposition(doc: Doc, d: DonneesOffre, cot: CotationOffre) {
   }
 }
 
-function listeLimites(doc: Doc, limites: LimiteGarantie[], top: number): number {
+function listeLimites(doc: Doc, limites: LimiteGarantie[], top: number, saut: Saut): number {
   const p12: Style = { f: TR, s: 12 };
   for (const lim of limites) {
+    const lignes = [...couper(doc, lim.texte, p12, MARGE_DROITE - 127.22), ...(lim.detail ? couper(doc, lim.detail, p12, MARGE_DROITE - 127.22) : [])];
+    top = place(top, 13.8 * lignes.length, saut);
     fleche(doc, 109.1, top - 0.1);
-    for (const l of couper(doc, lim.texte, p12, MARGE_DROITE - 127.22)) { t(doc, l, 127.22, top, p12); top += 13.8; }
-    if (lim.detail) for (const l of couper(doc, lim.detail, p12, MARGE_DROITE - 127.1)) { t(doc, l, 127.1, top, p12); top += 13.8; }
+    for (const l of lignes) { t(doc, l, 127.22, top, p12); top += 13.8; }
   }
   return top;
 }
@@ -331,36 +343,49 @@ function tableauGrille(doc: Doc, tb: TableauGaranties, nouvellePage: () => void)
   t(doc, "PLAFOND DE REMBOURSEMENT", (X2 + X3) / 2, y + 0.9, b9, "c");
   y += 16.7;
   ligneH(doc, X0, X3 + 0.48, y);
-  for (const x of [X0, X2, XM, X3]) ligneV(doc, x, y, y + 26.4);
   const b10: Style = { f: TB, s: 9.96 }, b10b: Style = { ...b10, c: "#0070c0" };
-  let x = 37.8 + t(doc, "TERRITORIALITE : ", 37.8, y + 0.9, b10);
-  t(doc, tb.territorialite, x, y + 0.9, b10b);
-  if (tb.tauxAmbulatoire || tb.tauxHospitalisation) {
-    x = 37.8 + t(doc, "TAUX : AMBULATOIRES : ", 37.8, y + 13.7, b10);
-    x += t(doc, `${tb.tauxAmbulatoire ?? ""} `, x, y + 13.7, b10b);
-    x += t(doc, "- HOSPITALISATIONS : ", x, y + 13.7, b10);
-    t(doc, tb.tauxHospitalisation ?? "", x, y + 13.7, b10b);
+  // Territorialité longue : libellé puis pays en bleu sur les lignes suivantes.
+  const lib = "TERRITORIALITE : ", wLib = largeur(doc, lib, b10), larg = X2 - X0 - 8;
+  const enLigne = wLib + largeur(doc, tb.territorialite, b10b) <= larg;
+  const pays = enLigne ? [tb.territorialite] : couper(doc, tb.territorialite, b10b, larg);
+  const taux = tb.tauxAmbulatoire || tb.tauxHospitalisation;
+  const nLignes = (enLigne ? 1 : 1 + pays.length) + (taux ? 1 : 0);
+  const hEntete = Math.max(26.4, 12.8 * nLignes + 0.8);
+  for (const x of [X0, X2, XM, X3]) ligneV(doc, x, y, y + hEntete);
+  let top = y + 0.9;
+  t(doc, lib, 37.8, top, b10);
+  if (enLigne) t(doc, tb.territorialite, 37.8 + wLib, top, b10b);
+  else pays.forEach((s) => { top += 12.8; t(doc, s, 37.8, top, b10b); });
+  if (taux) {
+    top += 12.8;
+    let x = 37.8 + t(doc, "TAUX : AMBULATOIRES : ", 37.8, top, b10);
+    x += t(doc, `${tb.tauxAmbulatoire ?? ""} `, x, top, b10b);
+    x += t(doc, "- HOSPITALISATIONS : ", x, top, b10);
+    t(doc, tb.tauxHospitalisation ?? "", x, top, b10b);
   }
   t(doc, "ASSURE", 342.7, y + 0.9, b8); t(doc, "AYANTS DROITS", 434.5, y + 0.9, b8);
-  y += 26.4;
+  y += hEntete;
   doc.rect(X0, y, X3 - X0 + 0.48, 0.96).fill("#000");
   y += 0.96;
-  if (tb.titreCollege) { bande(y, 15.4); t(doc, tb.titreCollege, (X0 + X3) / 2, y + 0.3, { f: TB, s: 11.04 }, "c"); y += 15.4; }
+  if (tb.titreCollege) {
+    const st: Style = { f: TB, s: 11.04 }, w = largeur(doc, tb.titreCollege, st), max = X3 - X0 - 10;
+    bande(y, 15.4); t(doc, tb.titreCollege, (X0 + X3) / 2, y + 0.3, w > max ? { ...st, s: st.s * max / w } : st, "c"); y += 15.4;
+  }
 
   for (const sec of tb.sections) {
-    const hauteurs = sec.lignes.map((l) => Math.max(couper(doc, l.libelle, p8, X1 - X0 - 7).length, sec.plafondCommun ? 1 : couper(doc, l.plafond ?? "", p8, X3 - X2 - 8).length));
+    const hauteurs = sec.lignes.map((l) => Math.max(couper(doc, l.libelle, p8, X1 - X0 - 7).length, couper(doc, l.taux ?? "", p8, X2 - X1 - 8).length, sec.plafondCommun ? 1 : couper(doc, l.plafond ?? "", p8, X3 - X2 - 8).length));
     const pas = hauteurs.map((n) => 9.3 * n + 5.6);
     const plafondLignes = sec.plafondCommun ? couper(doc, sec.plafondCommun, p8, X3 - X2 - 16) : [];
     let corps = 0.9 + pas.reduce((a, h) => a + h, 0) + 3.4;
     corps = Math.max(corps, plafondLignes.length * 9.3 + 8);
     const hTitre = sec.titre ? 16 : 0;
     if (y + hTitre + Math.min(corps, 120) > BAS_TABLEAU) { nouvellePage(); y = 52.2; ligneH(doc, X0, X3 + 0.48, y); }
-    if (sec.titre) { bande(y, 16); t(doc, sec.titre, 37.8, y + 0.9, b8); y += 16; }
+    if (sec.titre) { bande(y, 16); t(doc, couper(doc, sec.titre, b8, X3 - X0 - 8)[0], 37.8, y + 0.9, b8); y += 16; }
     const y0 = y;
     let yy = y + 0.9;
     sec.lignes.forEach((l, i) => {
       couper(doc, l.libelle, p8, X1 - X0 - 7).forEach((s, k) => t(doc, s, 37.8, yy + 9.3 * k, p8));
-      if (l.taux) t(doc, l.taux, (X1 + X2) / 2, yy, p8, "c");
+      if (l.taux) couper(doc, l.taux, p8, X2 - X1 - 8).forEach((s, k) => t(doc, s, (X1 + X2) / 2, yy + 9.3 * k, p8, "c"));
       if (!sec.plafondCommun && l.plafond) couper(doc, l.plafond, p8, X3 - X2 - 8).forEach((s, k) => t(doc, s, 342.7, yy + 9.3 * k, p8));
       yy += pas[i];
     });
@@ -373,8 +398,9 @@ function tableauGrille(doc: Doc, tb: TableauGaranties, nouvellePage: () => void)
     ligneH(doc, X0, X3 + 0.48, y);
   }
   if (tb.piedTableau) {
-    if (y + 17 > BAS_TABLEAU) { nouvellePage(); y = 52.2; }
-    bande(y, 16.6);
+    const pied = couper(doc, tb.piedTableau, b10, X3 - X0 - 8), hPied = 5.6 + 11 * pied.length;
+    if (y + hPied > BAS_TABLEAU) { nouvellePage(); y = 52.2; }
+    bande(y, hPied);
     couper(doc, tb.piedTableau, b10, X3 - X0 - 8).forEach((s, k) => t(doc, s, 37.8, y + 0.4 + 11 * k, b10));
   }
 }
@@ -390,24 +416,29 @@ function tableauColonnes(doc: Doc, tb: TableauGaranties, nouvellePage: () => voi
   }
   if (tb.piedTableau) lignes.push({ cells: [tb.piedTableau, "", ""], gras: true });
 
-  let y = 101.4;
-  doc.rect(X[0] + 0.48, y + 0.48, X[3] - X[0] - 0.48, 15.7).fill(ENTETE);
-  ligneH(doc, X[0], X[3] + 0.48, y, ENTETE); ligneV(doc, X[0], y, y + 16.2, ENTETE); ligneV(doc, X[3], y, y + 16.2, ENTETE);
-  t(doc, tb.titreColonneGaranties || "GARANTIES", 27.7, y + 1.0, b10);
-  t(doc, tb.titreColonneTaux || "TAUX", 247.2, y + 1.0, b10);
-  t(doc, "PLAFOND DE REMBOURSEMENT", 382.4, y + 1.0, b10);
-  y += 16.2;
-  ligneH(doc, X[0], X[3] + 0.48, y, ENTETE);
-  doc.rect(X[0] + 0.48, y + 0.48, X[3] - X[0] - 0.48, 15.7).fill(PALE);
-  ligneV(doc, X[0], y, y + 16.2, BORD); ligneV(doc, X[3], y, y + 16.2, BORD);
-  t(doc, `TERRITORIALITE : ${tb.territorialite}`, (X[0] + X[3]) / 2, y + 1.0, b10, "c");
-  y += 16.2;
+  // Une ligne de texte de plus = 11,5 pt de plus : la cellule suit son texte.
+  const hauteur = (n: number) => 16.2 + 11.5 * (n - 1);
+  const entete = (y: number) => {
+    doc.rect(X[0] + 0.48, y + 0.48, X[3] - X[0] - 0.48, 15.7).fill(ENTETE);
+    ligneH(doc, X[0], X[3] + 0.48, y, ENTETE); ligneV(doc, X[0], y, y + 16.2, ENTETE); ligneV(doc, X[3], y, y + 16.2, ENTETE);
+    const titres = [tb.titreColonneGaranties || "GARANTIES", tb.titreColonneTaux || "TAUX", "PLAFOND DE REMBOURSEMENT"];
+    titres.forEach((s, k) => t(doc, couper(doc, s, b10, colW[k])[0], X[k] + 5.6, y + 1.0, b10));
+    ligneH(doc, X[0], X[3] + 0.48, y + 16.2, ENTETE);
+    return y + 16.2;
+  };
+  let y = entete(101.4);
+  const terr = couper(doc, `TERRITORIALITE : ${tb.territorialite}`, b10, X[3] - X[0] - 12);
+  const hTerr = hauteur(terr.length);
+  doc.rect(X[0] + 0.48, y + 0.48, X[3] - X[0] - 0.48, hTerr - 0.48).fill(PALE);
+  ligneV(doc, X[0], y, y + hTerr, BORD); ligneV(doc, X[3], y, y + hTerr, BORD);
+  terr.forEach((s, j) => t(doc, s, (X[0] + X[3]) / 2, y + 1.0 + 11.5 * j, b10, "c"));
+  y += hTerr;
   ligneH(doc, X[0], X[3] + 0.48, y, BORD);
   lignes.forEach((l, i) => {
     const txt = l.cells.map((s, k) => (s ? couper(doc, s, k === 0 && l.gras ? b10 : p10, colW[k]) : []));
     const n = Math.max(1, ...txt.map((c) => c.length));
-    const h = 16.2 + 15.8 * (n - 1);
-    if (y + h > BAS_TABLEAU) { nouvellePage(); y = 56; ligneH(doc, X[0], X[3] + 0.48, y, BORD); }
+    const h = hauteur(n);
+    if (y + h > BAS_TABLEAU) { nouvellePage(); y = entete(56); }
     if (i % 2 === 1) doc.rect(X[0] + 0.48, y + 0.48, X[3] - X[0] - 0.48, h - 0.48).fill(PALE);
     txt.forEach((c, k) => c.forEach((s, j) => t(doc, s, X[k] + 5.6, y + 1.0 + 11.5 * j, k === 0 ? b10 : p10)));
     for (const x of X) ligneV(doc, x, y, y + h, BORD);
@@ -489,7 +520,8 @@ function pageComparatif(doc: Doc, d: DonneesOffre) {
   d.compagnies.forEach((c, i) => {
     const x = XC + cw * i;
     doc.rect(x + 0.48, y + 0.4, cw - 0.48, 12.4).fill("#f4af84");
-    t(doc, c.nom.toUpperCase(), x + 3.9, y + 0.9, b10);
+    const nom = c.nom.toUpperCase(), wNom = largeur(doc, nom, b10);
+    t(doc, nom, x + 3.9, y + 0.9, wNom > cw - 8 ? { ...b10, s: b10.s * (cw - 8) / wNom } : b10);
     image(doc, c.logoPetit ?? c.logo, x + 4, y + 13.6, cw - 8, 30);
   });
   ligneH(doc, XC, XF + 0.48, y); ligneH(doc, XC, XF + 0.48, y + 12.8);
@@ -535,7 +567,7 @@ export function genererCorpsOffre(doc: Doc, d: DonneesOffre): number {
   for (const c of d.compagnies) {
     nouvelle(); pageIntercalaire(doc, d, c);
     for (const cot of c.cotations) {
-      nouvelle(); pageProposition(doc, d, cot);
+      nouvelle(); pageProposition(doc, d, cot, nouvelle);
       const tb = cot.contenu.tableau;
       if (tb && tb.sections.length) {
         nouvelle();
