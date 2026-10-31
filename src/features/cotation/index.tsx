@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Calculator, Save, Plus, Trash2, FileDown, PackagePlus, Pencil, X, Image as ImageIcon, Building2, MapPinned } from "lucide-react";
+import { Calculator, Save, Plus, Trash2, FileDown, PackagePlus, Pencil, X, Image as ImageIcon, Building2, MapPinned, Sparkles } from "lucide-react";
+import { CotationParImportModal } from "./CotationParImport";
 import { toast } from "sonner";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
@@ -78,6 +79,7 @@ export default function CotationView() {
   const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null);
   const [pendingLogoPreview, setPendingLogoPreview] = useState<string | null>(null);
   const [uploadingCotationLogo, setUploadingCotationLogo] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const refreshAppelsOffres = () => getAppelsOffres().then(setAppelsOffres);
 
@@ -383,8 +385,15 @@ export default function CotationView() {
     <div className="p-6 space-y-6">
       <ModuleHeader
         title="Cotation" subtitle="Offres compagnies pour un client — garanties, plafonds et décompte de prime" icon={Calculator}
-        actions={<Btn variant="secondary" onClick={voirReseauSoins}><MapPinned className="w-4 h-4" />Réseau de soins</Btn>}
+        actions={<>
+          <Btn variant="secondary" onClick={voirReseauSoins}><MapPinned className="w-4 h-4" />Réseau de soins</Btn>
+          <Btn variant="primary" onClick={() => setShowImport(true)}><Sparkles className="w-4 h-4" />Cotation par import</Btn>
+        </>}
       />
+      {showImport && (
+        <CotationParImportModal compagnies={compagnies}
+          onClose={() => { setShowImport(false); getCotations().then(setCotations); refreshAppelsOffres(); }} />
+      )}
 
       {aoHandoffNom && (
         <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-[12.5px] text-foreground">
