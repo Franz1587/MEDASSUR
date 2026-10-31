@@ -5218,18 +5218,22 @@ export class DocumentsService {
     const lastVilleY = detY + pageRow * ROW_H + 5;
     doc.y = Math.min(lastVilleY, doc.page.height - 60);
     pied();
+    // Les pages de contenu commencent toujours sur une nouvelle page (stats = page autonome)
+    doc.addPage();
 
     // ── Pages de contenu : prestataires par province → ville ──────────────
     const ordreType = ["Hôpital","Clinique","Cabinet","Cabinet Dentaire","Centre d'Imagerie","Centre de Kinésithérapie","Laboratoire","Pharmacie","Dépôt pharmaceutique","Opticien"];
 
+    let premiereProv = true;
     for (const prov of [...ORDRE_PROVINCES, "Autres"]) {
       if (!groupes[prov]) continue;
       const villes = Object.keys(groupes[prov]).sort((a, b) => prioriteVilleDansProvince(a, prov) - prioriteVilleDansProvince(b, prov) || a.localeCompare(b, "fr"));
 
-      // En-tête province — nouvelle page seulement si la courante a du contenu
-      // (seuil 120 : au-dessous on est sur une page fraîche, pas besoin de saut)
+      // En-tête province — page fraîche déjà garantie pour la première province ;
+      // pour les suivantes, saut si l'espace restant est insuffisant
       const MIN_PROV = 22 + 16 + 30; // bannière province + ville + 1 ligne
-      if (doc.y + MIN_PROV > doc.page.height - 50) { doc.addPage(); }
+      if (!premiereProv && doc.y + MIN_PROV > doc.page.height - 50) { pied(); doc.addPage(); }
+      premiereProv = false;
       const nbPrestProv = villes.reduce((s, v) => s + groupes[prov][v].length, 0);
       const yProv = doc.y;
       doc.rect(40, yProv, PAGE_W, 22).fillColor(COUL_PROVINCE).fill();
