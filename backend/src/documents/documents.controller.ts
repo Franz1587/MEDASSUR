@@ -165,6 +165,12 @@ export class DocumentsController {
     return this.documentsService.renderReseauSoins(res);
   }
 
+  // Offre santé complète d'un appel d'offres (format LA RUCHE).
+  @Get("offre-sante/:appelOffresId")
+  offreSante(@Param("appelOffresId") id: string, @Req() req: StaffRequest, @Res() res: Response) {
+    return this.documentsService.renderOffreSante(id, req.user.userId, res);
+  }
+
   @Get("fiche-prestataire/:id")
   fichePrestataire(@Param("id") id: string, @Res() res: Response) {
     return this.documentsService.renderFichePrestataire(id, res);

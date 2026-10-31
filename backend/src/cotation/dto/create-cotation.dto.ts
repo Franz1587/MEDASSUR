@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsArray, IsIn, IsNumber, IsOptional, IsPositive, IsString, Min, ValidateNested } from "class-validator";
+import { IsArray, IsIn, IsNumber, IsObject, IsOptional, IsPositive, IsString, Min, ValidateNested } from "class-validator";
 
 export class CotationGarantieLigneDto {
   @IsString() categorie: string;
@@ -47,4 +47,9 @@ export class CreateCotationDto {
   @ValidateNested({ each: true })
   @Type(() => CotationGarantieLigneDto)
   garanties: CotationGarantieLigneDto[];
+
+  // Contenu « offre santé » (voir ../contenu-offre.ts), lu par ARIANA puis
+  // relu/corrigé à l'écran ; validé à la génération, pas champ par champ ici.
+  @IsOptional() @IsObject() contenuOffre?: Record<string, unknown>;
+  @IsOptional() @IsString() documentSourceId?: string;
 }

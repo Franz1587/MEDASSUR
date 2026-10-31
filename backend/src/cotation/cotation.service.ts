@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateCotationDto } from "./dto/create-cotation.dto";
 import { UpdateCotationDto } from "./dto/update-cotation.dto";
@@ -11,6 +12,14 @@ import { StorageService } from "../storage/storage.service";
 // Même taux que documents.service.ts (TAUX_TAXE_GABON) — redéclaré ici pour
 // ne pas introduire de dépendance entre modules pour une seule constante.
 const TAUX_TAXE_GABON = 0.08;
+
+// Taxe = 8 % de (prime nette + accessoires) : les cartes ne sont pas
+// taxées — règle vérifiée au franc près sur les décomptes des offres LA
+// RUCHE (LAY PRO, BW ENERGY, ETS MSSZ).
+export function calculerPrimes(primeNette: number, montantCartes: number, montantAccessoires: number) {
+  const montantTaxe = Math.round((primeNette + montantAccessoires) * TAUX_TAXE_GABON);
+  return { montantTaxe, primeTTC: primeNette + montantCartes + montantAccessoires + montantTaxe };
+}
 
 // Logo du client pour les cotations sans appel d'offres (donc sans Prospect
 // à rattacher, voir CrmService.uploadLogo pour le même pattern) — repli
@@ -44,8 +53,7 @@ export class CotationService {
   create(dto: CreateCotationDto, gestionnaireId?: string) {
     const montantCartes = dto.montantCartes ?? 0;
     const montantAccessoires = dto.montantAccessoires ?? 0;
-    const montantTaxe = Math.round((dto.primeNette + montantCartes + montantAccessoires) * TAUX_TAXE_GABON);
-    const primeTTC = dto.primeNette + montantCartes + montantAccessoires + montantTaxe;
+    const { montantTaxe, primeTTC } = calculerPrimes(dto.primeNette, montantCartes, montantAccessoires);
 
     return this.prisma.cotation.create({
       data: {
@@ -71,6 +79,8 @@ export class CotationService {
         montantTaxe,
         primeTTC,
         dateCreation: new Date().toLocaleDateString("fr-FR"),
+        contenuOffre: dto.contenuOffre as Prisma.InputJsonValue | undefined,
+        documentSourceId: dto.documentSourceId,
         garanties: {
           create: dto.garanties.map((g, ordre) => ({ ...g, ordre })),
         },
@@ -91,8 +101,7 @@ export class CotationService {
     const primeNette = dto.primeNette ?? Number(existing.primeNette);
     const montantCartes = dto.montantCartes ?? Number(existing.montantCartes);
     const montantAccessoires = dto.montantAccessoires ?? Number(existing.montantAccessoires);
-    const montantTaxe = Math.round((primeNette + montantCartes + montantAccessoires) * TAUX_TAXE_GABON);
-    const primeTTC = primeNette + montantCartes + montantAccessoires + montantTaxe;
+    const { montantTaxe, primeTTC } = calculerPrimes(primeNette, montantCartes, montantAccessoires);
 
     await this.prisma.$transaction([
       this.prisma.cotation.update({
@@ -113,6 +122,7 @@ export class CotationService {
           plafondFamilial: dto.plafondFamilial,
           conditionsFermete: dto.conditionsFermete,
           primeNette, montantCartes, montantAccessoires, montantTaxe, primeTTC,
+          contenuOffre: dto.contenuOffre as Prisma.InputJsonValue | undefined,
         },
       }),
       ...(dto.garanties

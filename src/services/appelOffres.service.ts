@@ -1,7 +1,7 @@
 import { http, API_URL, getAccessToken } from "@/lib/http";
 import { toNumber } from "@/lib/decimal";
 import type { AppelOffres, AppelOffresUpsertInput, PropositionUpsertInput } from "@/types/appelOffres";
-import type { Cotation } from "@/types/cotation";
+import type { ContenuOffre, Cotation, ParametresOffre } from "@/types/cotation";
 
 interface ApiCotation {
   id: string;
@@ -25,6 +25,8 @@ interface ApiCotation {
   primeTTC: string | number;
   dateCreation: string;
   garanties: { categorie: string; libelle: string; plafond: string }[];
+  contenuOffre?: ContenuOffre | null;
+  documentSourceId?: string | null;
 }
 
 function mapCotation(c: ApiCotation): Cotation {
@@ -133,4 +135,23 @@ export async function supprimerDocumentAppelOffres(appelOffresId: string, docume
 // backend/src/main.ts, même pattern que compagnieLogoUrl).
 export function appelOffresDocumentUrl(fichier: string): string {
   return `${API_URL.replace(/\/api\/?$/, "")}/uploads/appel-offres/${fichier}`;
+}
+
+// ARIANA lit une proposition de compagnie importée et crée ses cotations
+// (une par option chiffrée). Peut prendre une à deux minutes sur un scan.
+export async function analyserDocumentAppelOffres(
+  appelOffresId: string, documentId: string, options: { style?: "auto" | "grille" | "colonnes"; tarifCarte?: number } = {},
+): Promise<{ compagnie: string; compagnieReconnue: boolean; cotations: Cotation[] }> {
+  const data = await http.post<{ compagnie: string; compagnieReconnue: boolean; cotations: ApiCotation[] }>(
+    `/appel-offres/${appelOffresId}/documents/${documentId}/analyser`, options,
+  );
+  return { ...data, cotations: data.cotations.map(mapCotation) };
+}
+
+export function getParametresOffre(appelOffresId: string): Promise<ParametresOffre> {
+  return http.get<ParametresOffre>(`/appel-offres/${appelOffresId}/offre-parametres`);
+}
+
+export function enregistrerParametresOffre(appelOffresId: string, params: ParametresOffre): Promise<ParametresOffre> {
+  return http.put<ParametresOffre>(`/appel-offres/${appelOffresId}/offre-parametres`, params);
 }

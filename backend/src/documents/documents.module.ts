@@ -15,12 +15,13 @@ import { ReglementPrestataireModule } from "../reglement-prestataire/reglement-p
 import { RenouvellementsModule } from "../renouvellements/renouvellements.module";
 import { AccordPrealableModule } from "../accord-prealable/accord-prealable.module";
 import { PrestatairesModule } from "../prestataires/prestataires.module";
+import { AppelOffresModule } from "../appel-offres/appel-offres.module";
 
 @Module({
   imports: [
     ParametresEntrepriseModule, StatistiquesModule, SanteModule, BordereauxModule,
     CotationModule, CourrierModule, CrmModule, ReglementComptableModule, ReglementPrestataireModule,
-    RenouvellementsModule, AccordPrealableModule, PrestatairesModule,
+    RenouvellementsModule, AccordPrealableModule, PrestatairesModule, AppelOffresModule,
   ],
   providers: [DocumentsService, DocumentSignatureService],
   controllers: [DocumentsController, VerificationPubliqueController],

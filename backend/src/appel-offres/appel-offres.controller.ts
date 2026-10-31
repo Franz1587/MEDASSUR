@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Delete, Get, Param, Patch, Post, UploadedFile, UseGuards, UseInterceptors,
+  Body, Controller, Delete, Get, Param, Patch, Post, Put, Req, UploadedFile, UseGuards, UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
@@ -10,11 +10,16 @@ import { CreatePropositionDto } from "./dto/create-proposition.dto";
 import { UpdatePropositionDto } from "./dto/update-proposition.dto";
 import { UploadAppelOffresDocumentDto } from "./dto/upload-document.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { AnalysePropositionService } from "./analyse-proposition.service";
+import { AnalyserDocumentDto, ParametresOffreDto } from "./dto/offre-sante.dto";
+import type { ParametresOffre } from "../cotation/contenu-offre";
+
+type ReqUser = { user: { userId: string } };
 
 @Controller("appel-offres")
 @UseGuards(JwtAuthGuard)
 export class AppelOffresController {
-  constructor(private readonly service: AppelOffresService) {}
+  constructor(private readonly service: AppelOffresService, private readonly analyse: AnalysePropositionService) {}
 
   @Get()
   findAll() {
@@ -60,5 +65,21 @@ export class AppelOffresController {
   @Delete(":id/documents/:docId")
   supprimerDocument(@Param("id") id: string, @Param("docId") docId: string) {
     return this.service.supprimerDocument(id, docId);
+  }
+
+  // ARIANA lit une proposition de compagnie importée et en crée les cotations.
+  @Post(":id/documents/:docId/analyser")
+  analyserDocument(@Param("id") id: string, @Param("docId") docId: string, @Body() dto: AnalyserDocumentDto, @Req() req: ReqUser) {
+    return this.analyse.analyser(id, docId, req.user.userId, dto);
+  }
+
+  @Get(":id/offre-parametres")
+  parametresOffre(@Param("id") id: string, @Req() req: ReqUser) {
+    return this.service.parametresOffre(id, req.user.userId);
+  }
+
+  @Put(":id/offre-parametres")
+  enregistrerParametresOffre(@Param("id") id: string, @Body() dto: ParametresOffreDto) {
+    return this.service.enregistrerParametresOffre(id, dto as unknown as ParametresOffre);
   }
 }

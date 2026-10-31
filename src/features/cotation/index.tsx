@@ -160,7 +160,8 @@ export default function CotationView() {
   // (idem Cartes) — Accessoires reste un montant forfaitaire par police.
   const primeNetteTotale = Math.round(primeNetteParPersonne * ligne.population);
   const montantCartesTotal = Math.round(carteParPersonne * ligne.population);
-  const montantTaxe = Math.round((primeNetteTotale + montantCartesTotal + ligne.montantAccessoires) * TAUX_TAXE_GABON);
+  // Cartes non taxées (voir calculerPrimes côté backend).
+  const montantTaxe = Math.round((primeNetteTotale + ligne.montantAccessoires) * TAUX_TAXE_GABON);
   const primeTTC = primeNetteTotale + montantCartesTotal + ligne.montantAccessoires + montantTaxe;
 
   const compagnieNomLigne = (l: CotationInput) => compagnies.find((c) => c.id === l.compagnieId)?.nom ?? "—";

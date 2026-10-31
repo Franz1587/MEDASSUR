@@ -190,6 +190,11 @@ export function openCotationOffre(cotationIds: string[]): Promise<void> {
   return openPostDocument("/documents/cotation-offre", { cotationIds });
 }
 
+// Offre santé complète d'un appel d'offres (format LA RUCHE, 2026-10).
+export function openOffreSante(appelOffresId: string): Promise<void> {
+  return openDocument(`/documents/offre-sante/${appelOffresId}`);
+}
+
 export function openReseauSoins(): Promise<void> {
   return openDocument("/documents/reseau-soins");
 }

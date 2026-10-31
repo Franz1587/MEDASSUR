@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  FileSearch, TrendingUp, Plus, Upload, Trash2, FileDown, Send, Pencil, Calculator,
+  FileSearch, TrendingUp, Plus, Upload, Trash2, FileDown, Send, Pencil, Calculator, Sparkles, AlertTriangle, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/shared/Badge";
@@ -14,8 +14,10 @@ import { useShellNavigation } from "@/layout/ShellNavigationContext";
 import {
   getAppelsOffres, createAppelOffres, updateAppelOffres,
   ajouterProposition, modifierProposition, supprimerProposition,
-  uploaderDocumentAppelOffres, supprimerDocumentAppelOffres, appelOffresDocumentUrl,
+  uploaderDocumentAppelOffres, supprimerDocumentAppelOffres, appelOffresDocumentUrl, analyserDocumentAppelOffres,
 } from "@/services/appelOffres.service";
+import { OffreSantePanel, RelectureCotationModal } from "./OffreSante";
+import type { Cotation } from "@/types/cotation";
 import { getProspects } from "@/services/crm.service";
 import { getCompagnies } from "@/services/compagnies.service";
 import { openCotationOffre } from "@/services/documents.service";
@@ -54,6 +56,8 @@ export default function AppelOffresView() {
   const [uploadType, setUploadType] = useState("Cahier des charges");
   const [uploadCompagnieId, setUploadCompagnieId] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [analyseDocId, setAnalyseDocId] = useState<string | null>(null);
+  const [relecture, setRelecture] = useState<Cotation | null>(null);
 
   const [showPropositionForm, setShowPropositionForm] = useState(false);
   const [editingPropositionId, setEditingPropositionId] = useState<string | null>(null);
@@ -133,6 +137,22 @@ export default function AppelOffresView() {
       toast.success("Document supprimé.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Suppression impossible.");
+    }
+  };
+
+  // ARIANA lit la proposition (PDF ou scan) et crée une cotation par option.
+  const handleAnalyser = async (documentId: string) => {
+    if (!selected) return;
+    setAnalyseDocId(documentId);
+    try {
+      const r = await analyserDocumentAppelOffres(selected.id, documentId);
+      await refresh();
+      const aVerifier = r.cotations.filter((c) => c.contenuOffre?.remarques).length;
+      toast.success(`ARIANA a lu ${r.cotations.length} proposition(s) de ${r.compagnie}${aVerifier ? ` — ${aVerifier} à vérifier` : ""}.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Lecture impossible.");
+    } finally {
+      setAnalyseDocId(null);
     }
   };
 
@@ -282,12 +302,20 @@ export default function AppelOffresView() {
                 <h3 className="font-semibold text-foreground text-sm mb-3">Documents</h3>
                 <div className="space-y-1.5 mb-3">
                   {selected.documents.map((d) => (
-                    <div key={d.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-secondary/30 text-[12.5px]">
-                      <div className="flex items-center gap-2 min-w-0">
+                    <div key={d.id} className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-3 py-2 rounded-lg bg-secondary/30 text-[12.5px]">
+                      <div className="flex items-center gap-2 min-w-0 flex-1 basis-48">
                         <Badge variant="neutral">{d.type}</Badge>
                         <a href={appelOffresDocumentUrl(d.fichier)} target="_blank" rel="noreferrer" className="text-foreground hover:underline truncate">{d.nom}</a>
                       </div>
-                      <button type="button" onClick={() => handleSupprimerDocument(d.id)} className="text-muted-foreground hover:text-destructive flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <span className="flex items-center gap-2 flex-shrink-0">
+                        {d.type === "Offre compagnie" && (
+                          <button type="button" disabled={!!analyseDocId} onClick={() => handleAnalyser(d.id)}
+                            className="h-8 px-2.5 rounded-lg border border-primary/40 text-primary text-[11.5px] font-medium inline-flex items-center gap-1 hover:bg-primary/10 disabled:opacity-50">
+                            {analyseDocId === d.id ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Lecture en cours…</> : <><Sparkles className="w-3.5 h-3.5" />{selected.cotations.some((c) => c.documentSourceId === d.id) ? "Relire avec ARIANA" : "Analyser avec ARIANA"}</>}
+                          </button>
+                        )}
+                        <button type="button" aria-label="Supprimer le document" onClick={() => handleSupprimerDocument(d.id)} className="h-8 w-8 inline-flex items-center justify-center text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </span>
                     </div>
                   ))}
                   {selected.documents.length === 0 && <p className="text-[12px] text-muted-foreground">Aucun document importé</p>}
@@ -337,12 +365,18 @@ export default function AppelOffresView() {
                           ? <Badge variant="info">Dans une proposition</Badge>
                           : <Badge variant="neutral">Libre</Badge>}
                       </div>
-                      <span className="font-semibold text-foreground med-num">{fmtM(c.primeTTC)} FCFA</span>
+                      <span className="flex items-center gap-2">
+                        {c.contenuOffre?.remarques && <span title={c.contenuOffre.remarques}><AlertTriangle className="w-4 h-4 text-amber-500" aria-label="Points à vérifier" /></span>}
+                        <span className="font-semibold text-foreground med-num">{c.contenuOffre?.primeNonCommuniquee ? "Non communiqué" : `${fmtM(c.primeTTC)} FCFA`}</span>
+                        {c.contenuOffre && <button type="button" onClick={() => setRelecture(c)} className="text-[11.5px] text-primary hover:underline">Relire</button>}
+                      </span>
                     </div>
                   ))}
                   {selected.cotations.length === 0 && <p className="text-[12px] text-muted-foreground">Aucune offre reçue pour l'instant</p>}
                 </div>
               </div>
+
+              <OffreSantePanel appelOffresId={selected.id} cotations={selected.cotations} />
 
               <div className="bg-card border border-border rounded-xl p-5">
                 <div className="flex items-center justify-between mb-3">
@@ -432,6 +466,11 @@ export default function AppelOffresView() {
             </div>
           </div>
         </div>
+      )}
+
+      {relecture && (
+        <RelectureCotationModal cotation={relecture} compagnies={compagnies} onClose={() => setRelecture(null)}
+          onSaved={async () => { setRelecture(null); await refresh(); }} />
       )}
 
       {showPropositionForm && selected && (

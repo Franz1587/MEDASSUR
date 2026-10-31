@@ -25,6 +25,7 @@ import { ReglementPrestataireService } from "../reglement-prestataire/reglement-
 import { RenouvellementsService } from "../renouvellements/renouvellements.service";
 import { AccordPrealableService } from "../accord-prealable/accord-prealable.service";
 import { PrestatairesService } from "../prestataires/prestataires.service";
+import { AppelOffresService } from "../appel-offres/appel-offres.service";
 import { DocumentSignatureService } from "./document-signature.service";
 import { UPLOADS_ROOT, ASSETS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
@@ -34,6 +35,8 @@ import { TAUX_TPS } from "../sante/sante.service";
 import { populationDuContrat } from "../mouvements/population-historique.util";
 import { ORDRE_PROVINCES, provinceDeVille, prioriteVilleDansProvince } from "../lib/gabonGeo";
 import { genererReseauSoins, type ProvinceAnnuaire } from "./reseau-soins.pdf";
+import { genererCorpsOffre, genererAnnexeReseau, assemblerOffre, pdfVersBuffer, versPng, logoModeleCompagnie, annexeDepuisAnnuaire, type CompagnieOffre } from "./offre-sante.pdf";
+import type { ContenuOffre } from "../cotation/contenu-offre";
 import type { Prisma, ParametresEntreprise } from "@prisma/client";
 import { numeroPolice, policePourNomFichier } from "../lib/police.util";
 
@@ -393,7 +396,7 @@ export class DocumentsService {
     private reglementComptable: ReglementComptableService, private reglementPrestataire: ReglementPrestataireService,
     private renouvellements: RenouvellementsService, private accordPrealable: AccordPrealableService,
     private prestataires: PrestatairesService, private storage: StorageService,
-    private documentSignature: DocumentSignatureService,
+    private documentSignature: DocumentSignatureService, private appelOffres: AppelOffresService,
   ) {}
 
   // Charge une image (logo/page de garde/modèle de carte/photo) depuis
@@ -4949,9 +4952,21 @@ export class DocumentsService {
 
   // Réseau de soins — annuaire des prestataires conventionnés, trié par province puis ville.
   async renderReseauSoins(res: Response) {
-    const tous = await this.prestataires.findAllReseau({});
     const p = await this.parametresEntreprise.findOne();
     const logoImage = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
+    const provinces = await this.construireAnnuaire();
+    const doc = new PDFDocument({ size: "A4", margin: 0, bufferPages: true });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'inline; filename="Reseau-de-Soins.pdf"');
+    doc.pipe(res);
+    genererReseauSoins(doc, p, logoImage, provinces);
+    doc.end();
+  }
+
+  // Annuaire du réseau (dédoublonné, groupé par province puis ville) —
+  // partagé par le PDF Réseau de Soins et l'annexe de l'offre santé.
+  private async construireAnnuaire(): Promise<ProvinceAnnuaire[]> {
+    const tous = await this.prestataires.findAllReseau({});
 
     // ── Déduplication ──────────────────────────────────────────────────────
     // Deux prestataires sont considérés identiques si :
@@ -5046,12 +5061,80 @@ export class DocumentsService {
           .map((v) => ({ nom: v, prestataires: groupes[prov][v] })),
       }));
 
-    const doc = new PDFDocument({ size: "A4", margin: 0, bufferPages: true });
+    return provinces;
+  }
+
+  // Offre santé (2026-10) — document complet remis au client, copie du
+  // modèle Word LA RUCHE (voir offre-sante.pdf.ts) : couverture,
+  // récapitulatif, puis par compagnie intercalaire / proposition / tableau
+  // de garanties / décompte, comparatif, pages de présentation et annexe
+  // réseau de soins (données réelles du réseau, jamais une liste figée).
+  async renderOffreSante(appelOffresId: string, userId: string | undefined, res: Response) {
+    const ao = await this.prisma.appelOffres.findUnique({
+      where: { id: appelOffresId },
+      include: { prospect: true, documents: { select: { id: true, createdAt: true } }, cotations: { include: { compagnie: true } } },
+    });
+    if (!ao) throw new NotFoundException(`Appel d'offres ${appelOffresId} introuvable`);
+    const params = await this.appelOffres.parametresOffre(appelOffresId, userId);
+    const exclues = new Set(params.cotationIdsExclues ?? []);
+    const retenues = ao.cotations.filter((c) => c.contenuOffre && !exclues.has(c.id));
+    if (!retenues.length) throw new BadRequestException("Aucune cotation analysée par ARIANA n'est retenue pour cette offre.");
+    const sansCompagnie = retenues.filter((c) => !c.compagnie);
+    if (sansCompagnie.length) throw new BadRequestException(`Choisissez la compagnie des cotations ${sansCompagnie.map((c) => c.id).join(", ")} avant de générer l'offre.`);
+
+    const p = await this.parametresEntreprise.findOne();
+    const [societeLogo, clientLogo, signature] = await Promise.all([
+      this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR).then(versPng),
+      this.chargerImage("logos-prospects", ao.prospect?.logo, path.join(UPLOADS_ROOT, "logos-prospects")).then(versPng),
+      this.chargerSignatureUtilisateur(userId).then(versPng),
+    ]);
+
+    // Compagnies dans l'ordre choisi, sinon dans l'ordre d'import des documents.
+    const dateDoc = new Map(ao.documents.map((d) => [d.id, d.createdAt.getTime()]));
+    const rang = (c: typeof retenues[number]) => [dateDoc.get(c.documentSourceId ?? "") ?? 0, (c.contenuOffre as unknown as ContenuOffre).ordre ?? 0];
+    retenues.sort((a, b) => { const [da, oa] = rang(a), [db, ob] = rang(b); return da - db || oa - ob; });
+    const ordre = params.ordreCompagnies ?? [];
+    const ids = [...new Set(retenues.map((c) => c.compagnieId!))]
+      .sort((a, b) => (ordre.includes(a) ? ordre.indexOf(a) : 999) - (ordre.includes(b) ? ordre.indexOf(b) : 999));
+    const compagnies: CompagnieOffre[] = [];
+    for (const id of ids) {
+      const cots = retenues.filter((c) => c.compagnieId === id);
+      const comp = cots[0].compagnie!;
+      const modele = logoModeleCompagnie(comp.nom);
+      const logoBase = modele ? null : await this.chargerImage("logos", comp.logo, UPLOADS_LOGOS_COMPAGNIES_DIR).then(versPng);
+      compagnies.push({
+        // Le modèle imprime « OGAR », « NSIA »… et non « OGAR ASSURANCES ».
+        nom: comp.nom.replace(/\s+ASSURANCES?$/i, ""),
+        logo: modele?.logo ?? logoBase, logoPetit: modele?.petit ?? logoBase, tailleLogo: modele?.taille ?? null,
+        cotations: cots.map((c) => ({
+          branche: c.branche, contenu: c.contenuOffre as unknown as ContenuOffre,
+          primeNette: Number(c.primeNette), cartes: Number(c.montantCartes), accessoires: Number(c.montantAccessoires),
+          taxe: Number(c.montantTaxe), ttc: Number(c.primeTTC), tauxTaxe: 8,
+        })),
+      });
+    }
+
+    const donnees = {
+      clientNom: ao.clientNom, clientLogo, societeLogo, signature, params, compagnies,
+      reseau: params.annexeReseau ? annexeDepuisAnnuaire(await this.construireAnnuaire()) : null,
+      dateSignature: new Date().toLocaleDateString("fr-FR"),
+    };
+    const corps = new PDFDocument({ size: [596.52, 842.52], margin: 0, bufferPages: true });
+    const pCorps = pdfVersBuffer(corps);
+    const dernier = genererCorpsOffre(corps, donnees);
+    corps.end();
+    let annexe: Buffer | null = null;
+    if (donnees.reseau) {
+      const docAnnexe = new PDFDocument({ size: [596.52, 842.52], margin: 0, autoFirstPage: false });
+      const pAnnexe = pdfVersBuffer(docAnnexe);
+      genererAnnexeReseau(docAnnexe, donnees);
+      docAnnexe.end();
+      annexe = await pAnnexe;
+    }
+    const pdf = await assemblerOffre(await pCorps, dernier, annexe, params.pagesPresentation, clientLogo);
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", 'inline; filename="Reseau-de-Soins.pdf"');
-    doc.pipe(res);
-    genererReseauSoins(doc, p, logoImage, provinces);
-    doc.end();
+    res.setHeader("Content-Disposition", `inline; filename="OFFRE SANTE ${ao.clientNom.replace(/[^\w .-]+/g, "")}.pdf"`);
+    res.end(pdf);
   }
 
   // Fiche prestataire — synthèse imprimable d'un établissement du réseau.

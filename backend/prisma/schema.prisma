@@ -984,6 +984,9 @@ model AppelOffres {
   estimationFondsRoulement Decimal @db.Decimal(18, 2)
   statut                   String
   dateCreation             String
+  // Paramètres du document « Offre santé » (titre, date, chargée
+  // clientèle, période…), voir ParametresOffre dans contenu-offre.ts.
+  parametresOffre          Json?
 
   prospect     Prospect                 @relation(fields: [prospectId], references: [id])
   propositions PropositionCommerciale[]
@@ -1084,6 +1087,13 @@ model Cotation {
   // profil de l'utilisateur et non toutes les données." Même principe que
   // Contrat.gestionnaireId — null pour les cotations déjà existantes.
   gestionnaireId String?
+
+  // Offre santé (2026-10) — contenu lu par ARIANA dans la proposition de
+  // la compagnie (titre, garanties, limites, tableau de garanties…), voir
+  // backend/src/cotation/contenu-offre.ts. documentSourceId = le document
+  // « Offre compagnie » de l'appel d'offres dont il a été extrait.
+  contenuOffre     Json?
+  documentSourceId String?
 
   appelOffres AppelOffres?            @relation(fields: [appelOffresId], references: [id])
   compagnie   Compagnie?              @relation(fields: [compagnieId], references: [id])

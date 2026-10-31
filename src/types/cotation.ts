@@ -45,6 +45,60 @@ export interface Cotation {
   // Prospect à rattacher, voir uploadProspectLogo pour ce cas).
   logo?: string | null;
   garanties: CotationGarantieLigne[];
+  // Offre santé (2026-10) : contenu lu par ARIANA dans la proposition de
+  // la compagnie, voir backend/src/cotation/contenu-offre.ts.
+  contenuOffre?: ContenuOffre | null;
+  documentSourceId?: string | null;
+}
+
+// Miroir de backend/src/cotation/contenu-offre.ts.
+export interface LigneGarantie { libelle: string; taux?: string | null; plafond?: string | null }
+export interface SectionGaranties { titre?: string | null; plafondCommun?: string | null; lignes: LigneGarantie[] }
+export interface TableauGaranties {
+  style: "grille" | "colonnes";
+  titreColonneGaranties?: string | null;
+  titreColonneTaux?: string | null;
+  territorialite: string;
+  tauxAmbulatoire?: string | null;
+  tauxHospitalisation?: string | null;
+  titreCollege?: string | null;
+  sections: SectionGaranties[];
+  piedTableau?: string | null;
+}
+export interface ContenuOffre {
+  titre: string[];
+  designationRecap: string[];
+  libelleComparatif: string;
+  population: number;
+  garanties: string[];
+  limites: { texte: string; detail?: string | null }[];
+  mentionsFraisReels: boolean;
+  tableau?: TableauGaranties | null;
+  primeParPersonne?: number | null;
+  primeCommuniquee?: number | null;
+  primeNonCommuniquee?: boolean;
+  ordre?: number;
+  remarques?: string | null;
+  controleCompagnie?: { taxe: number | null; ttc: number | null } | null;
+}
+
+export interface ParametresOffre {
+  titreDocument: string;
+  exercice: string;
+  date: string;
+  redacteur: string[];
+  chargeClientele: string;
+  telephone: string;
+  telecopie: string;
+  adresseAssure: string;
+  periode: string;
+  duree: string;
+  mentionSignature: string;
+  lieuSignature: string;
+  ordreCompagnies?: string[];
+  cotationIdsExclues?: string[];
+  pagesPresentation: boolean;
+  annexeReseau: boolean;
 }
 
 export interface CotationInput {
@@ -66,4 +120,5 @@ export interface CotationInput {
   montantCartes: number;
   montantAccessoires: number;
   garanties: CotationGarantieLigne[];
+  contenuOffre?: ContenuOffre;
 }

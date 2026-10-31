@@ -2,7 +2,9 @@ import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import type { ParametresOffre } from "../cotation/contenu-offre";
 import { CreateAppelOffresDto } from "./dto/create-appel-offres.dto";
 import { UpdateAppelOffresDto } from "./dto/update-appel-offres.dto";
 import { CreatePropositionDto } from "./dto/create-proposition.dto";
@@ -10,6 +12,7 @@ import { UpdatePropositionDto } from "./dto/update-proposition.dto";
 import { UploadAppelOffresDocumentDto } from "./dto/upload-document.dto";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
+import { ParametresEntrepriseService } from "../parametres-entreprise/parametres-entreprise.service";
 
 // Même mécanique que Compagnie.logo (CompagniesService.uploadLogo) — fichier
 // réel écrit sur disque, servi statiquement via /uploads (voir main.ts) —
@@ -25,7 +28,7 @@ const INCLUDE = {
 
 @Injectable()
 export class AppelOffresService {
-  constructor(private prisma: PrismaService, private storage: StorageService) {}
+  constructor(private prisma: PrismaService, private storage: StorageService, private parametresEntreprise: ParametresEntrepriseService) {}
 
   findAll() {
     return this.prisma.appelOffres.findMany({ include: INCLUDE, orderBy: { dateCreation: "desc" } });
@@ -108,11 +111,52 @@ export class AppelOffresService {
     }
     await this.prisma.appelOffresDocument.create({
       data: {
-        appelOffresId, fichier, nom: file.originalname, type: dto.type,
+        // Multer décode le nom de fichier en latin1 : « Santé » arrivait en « SantÃ© ».
+        appelOffresId, fichier, nom: Buffer.from(file.originalname, "latin1").toString("utf8"), type: dto.type,
         compagnieId: dto.compagnieId, tailleOctets: file.size,
       },
     });
     return this.findOne(appelOffresId);
+  }
+
+  // Paramètres du document « Offre santé » : ceux déjà enregistrés pour cet
+  // appel d'offres, sinon des valeurs par défaut — les champs propres au
+  // cabinet (rédacteur, téléphones, chargée clientèle…) repris de la
+  // dernière offre enregistrée pour ne pas les ressaisir à chaque fois.
+  async parametresOffre(id: string, userId?: string): Promise<ParametresOffre> {
+    const ao = await this.findOne(id);
+    if (ao.parametresOffre) return ao.parametresOffre as unknown as ParametresOffre;
+    const [p, user, precedent] = await Promise.all([
+      this.parametresEntreprise.findOne(),
+      userId ? this.prisma.user.findUnique({ where: { id: userId } }) : null,
+      this.prisma.appelOffres.findFirst({ where: { parametresOffre: { not: Prisma.DbNull }, NOT: { id } }, orderBy: { dateCreation: "desc" } }),
+    ]);
+    const prec = (precedent?.parametresOffre ?? null) as unknown as ParametresOffre | null;
+    const maintenant = new Date(), an = maintenant.getFullYear();
+    const mois = maintenant.toLocaleDateString("fr-FR", { month: "long" });
+    const nomSociete = (p?.nom ?? "").toUpperCase();
+    return {
+      titreDocument: `OFFRES SANTES ${an + 1}`,
+      exercice: `EXERCICE ${an}`,
+      date: `le ${maintenant.getDate()} ${mois.charAt(0).toUpperCase()}${mois.slice(1)} ${an}`,
+      redacteur: prec?.redacteur ?? [nomSociete, `${p?.boitePostale ?? ""} ${(p?.ville ?? "").toUpperCase()}`.trim()],
+      chargeClientele: prec?.chargeClientele ?? user?.nom ?? "",
+      telephone: prec?.telephone ?? p?.telephone ?? "",
+      telecopie: prec?.telecopie ?? "",
+      adresseAssure: `${p?.ville ?? "Libreville"}/ Gabon`,
+      periode: `du 01.01.${an + 1} au 31.12.${an + 1}`,
+      duree: "Un an",
+      mentionSignature: prec?.mentionSignature ?? `POUR ${nomSociete} SA`,
+      lieuSignature: prec?.lieuSignature ?? p?.ville ?? "Libreville",
+      pagesPresentation: prec?.pagesPresentation ?? nomSociete.includes("RUCHE"),
+      annexeReseau: prec?.annexeReseau ?? true,
+    };
+  }
+
+  async enregistrerParametresOffre(id: string, params: ParametresOffre) {
+    await this.findOne(id);
+    await this.prisma.appelOffres.update({ where: { id }, data: { parametresOffre: params as unknown as Prisma.InputJsonValue } });
+    return this.parametresOffre(id);
   }
 
   async supprimerDocument(appelOffresId: string, documentId: string) {
@@ -122,6 +166,8 @@ export class AppelOffresService {
     }
     if (this.storage.actif) await this.storage.delete("appel-offres", document.fichier);
     else await fs.promises.unlink(path.join(UPLOADS_APPEL_OFFRES_DIR, document.fichier)).catch(() => undefined);
+    // Les cotations lues par ARIANA dans ce document partent avec lui.
+    await this.prisma.cotation.deleteMany({ where: { documentSourceId: documentId } });
     await this.prisma.appelOffresDocument.delete({ where: { id: documentId } });
     return this.findOne(appelOffresId);
   }
