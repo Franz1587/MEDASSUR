@@ -2716,7 +2716,8 @@ export class DocumentsService {
     const lignes: LigneFormulaire[] = retenues.map((l) => ({
       libelle: l.acteMedical?.libelle ?? l.type, quantite: l.quantite ?? 1,
       montant: Number(l.montant), baseRemboursement: l.baseRemboursement !== null ? Number(l.baseRemboursement) : null,
-      tauxRemboursement: l.tauxRemboursement !== null ? Number(l.tauxRemboursement) : null,
+      tauxRemboursement: l.tauxRemboursement !== null ? Number(l.tauxRemboursement)
+        : l.baseRemboursement !== null && Number(l.montant) > 0 ? Math.round((Number(l.baseRemboursement) / Number(l.montant)) * 100) : null,
       codeAffection: l.codeAffection, lettreCleCode: l.lettreCleCode, type: l.type, createdAt: l.createdAt,
       familleActe: l.acteMedical?.famille ?? null,
     }));
@@ -3391,7 +3392,9 @@ export class DocumentsService {
         const montant = Number(l.montant);
         const baseRemb = montant - Number(l.montantRejete ?? 0);
         const baseTps = l.baseRemboursement !== null ? Number(l.baseRemboursement) : 0;
-        const taux = l.tauxRemboursement !== null ? Number(l.tauxRemboursement) : null;
+        // Ligne reprise sans taux enregistré : taux réellement appliqué = part
+        // de l'assurance / base remboursable (ex. 16 000 / 20 000 = 80 %).
+        const taux = l.tauxRemboursement !== null ? Number(l.tauxRemboursement) : baseRemb > 0 ? Math.round((baseTps / baseRemb) * 100) : null;
         const ticket = baseRemb - baseTps;
         const tps = l.montantTps !== null ? Number(l.montantTps) : 0;
         const net = baseTps - tps;

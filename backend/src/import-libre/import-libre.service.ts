@@ -7,6 +7,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { FacturesService } from "../factures/factures.service";
 import { PrestatairesService } from "../prestataires/prestataires.service";
 import { RUBRIQUES_ACTES, resoudreDesignations } from "../actes-medicaux/resolution-designation.util";
+import { beneficiaireReel, chargerFamilles, scoreNom } from "../import/beneficiaire.util";
 
 // Import libre Ariana (2026-10) — voir demande utilisateur : "elle doit
 // pouvoir traiter les données et dire à quoi ça correspond et ne jamais
@@ -836,7 +837,7 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
     const mat = l.matricule.trim();
     let assure = await this.prisma.assureSante.findFirst({
       where: { matricule: { equals: mat, mode: "insensitive" } },
-      select: { id: true, contratId: true },
+      select: { id: true, contratId: true, nom: true, prenom: true, familleId: true },
     });
 
     if (!assure) {
@@ -848,7 +849,7 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
         assure = await this.prisma.assureSante.findFirst({
           where: { identiteId: alias.identiteId },
           orderBy: { id: "desc" },
-          select: { id: true, contratId: true },
+          select: { id: true, contratId: true, nom: true, prenom: true, familleId: true },
         }) ?? null;
       }
     }
@@ -856,6 +857,10 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
     if (!assure) {
       return { ...l, assureId: null, contratId: null, prestataireId: null, erreur: `Assuré introuvable pour le matricule "${mat}"`, doublon: false };
     }
+    // Soins d'un ayant droit déclarés sous le matricule du titulaire : la
+    // ligne va au membre de la famille nommé dans la colonne Bénéficiaire.
+    const titulaireId = assure.id;
+    if (l.beneficiaire && scoreNom(l.beneficiaire, assure) < 1) assure = beneficiaireReel(assure, l.beneficiaire, await chargerFamilles(this.prisma, [assure]));
 
     let prestataireId: string | null = null;
     if (l.prestataireNom) {
@@ -873,12 +878,13 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
       // le type : il est recalculé à l'enregistrement selon le prestataire
       // (un dentiste → Dentisterie), la comparaison ratait et dupliquait.
       const existant = await this.prisma.priseEnCharge.findFirst({
-        where: { assureId: assure.id, date: l.datePrestation, montant: l.montantTotal, facture: { prestataireId, referenceFacture: l.referenceFacture } },
-        select: { id: true, baseRemboursement: true, acteMedical: { select: { libelle: true } } },
+        where: { assureId: { in: [assure.id, titulaireId] }, date: l.datePrestation, montant: l.montantTotal, facture: { prestataireId, referenceFacture: l.referenceFacture } },
+        select: { id: true, assureId: true, baseRemboursement: true, acteMedical: { select: { libelle: true } } },
       });
       if (existant) {
-        // Déjà importée sans le vrai acte : on lui rend sa désignation.
-        if (l.designation && (!existant.acteMedical || existant.acteMedical.libelle.includes("non détaillée"))) {
+        // Déjà importée sans le vrai acte, ou au nom du titulaire au lieu de
+        // la personne soignée : la ligne existante est corrigée.
+        if ((l.designation && (!existant.acteMedical || existant.acteMedical.libelle.includes("non détaillée"))) || existant.assureId !== assure.id) {
           return { ...l, assureId: assure.id, contratId: assure.contratId, prestataireId, erreur: null, doublon: false, miseAJour: true, acteARetablir: true, priseEnChargeId: existant.id };
         }
         if (modeCorrection) {
@@ -1063,11 +1069,10 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
     const designations = new Map<string, string>();
     for (const l of lignes) if (l.designation && !l.doublon && !l.erreur) designations.set(l.designation, mapperDesignation(l.designation));
     const acteParDesignation = await resoudreDesignations(this.prisma, designations, (t) => this.classerDesignations(t));
-    for (const l of lignes.filter((x) => x.acteARetablir && x.priseEnChargeId)) {
+    for (const l of lignes.filter((x) => x.acteARetablir && x.priseEnChargeId && x.assureId && x.contratId)) {
       const acteMedicalId = acteParDesignation.get(l.designation);
-      if (!acteMedicalId) { ignorees++; continue; }
       try {
-        await this.prisma.priseEnCharge.update({ where: { id: l.priseEnChargeId! }, data: { acteMedicalId } });
+        await this.prisma.priseEnCharge.update({ where: { id: l.priseEnChargeId! }, data: { assureId: l.assureId!, contratId: l.contratId!, ...(acteMedicalId ? { acteMedicalId } : {}) } });
         corrigees++;
       } catch { ignorees++; }
     }

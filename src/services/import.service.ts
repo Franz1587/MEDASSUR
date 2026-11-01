@@ -46,7 +46,7 @@ export function confirmerImportFactures(contratId: string, rows: ImportFactureRo
 // gérer de façon optimum plus de 50000 lignes en une fois." Pas d'aperçu
 // ligne à ligne (un tableau de 50 000 lignes gèlerait le navigateur) —
 // upload direct, résultat en résumé.
-export interface ResultatImportFacturesGlobal { total: number; crees: number; enAttente: number; rejets: Rejet[] }
+export interface ResultatImportFacturesGlobal { total: number; crees: number; corrigees: number; enAttente: number; rejets: Rejet[] }
 export function telechargerModeleImportFacturesGlobal(): Promise<void> {
   return downloadFile("/import/modele-factures-global", "modele-import-factures-tous-contrats.xlsx");
 }

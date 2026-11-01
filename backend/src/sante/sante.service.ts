@@ -1715,7 +1715,11 @@ export class SanteService {
     // demande utilisateur), pas des colonnes du modèle PriseEnCharge — à ne
     // jamais transmettre à Prisma.
     delete part.plafondRestant; delete part.messagePlafond;
-    if (opts?.baseRemboursementImpose !== undefined) part.resteACharge = montantPourCalcul - baseRemboursement;
+    if (opts?.baseRemboursementImpose !== undefined) {
+      part.resteACharge = montantPourCalcul - baseRemboursement;
+      // Taux réellement appliqué par l'ancien système, pour les décomptes.
+      if (montantPourCalcul > 0) part.tauxRemboursement = Math.round((baseRemboursement / montantPourCalcul) * 10000) / 100;
+    }
     const montantTps = ctx.appliquerTps ? await this.calculerTps(ctx.prestataireId, dto.acteMedicalId, baseRemboursement, dto.datePrestation) : 0;
     return this.prisma.priseEnCharge.create({
       data: {

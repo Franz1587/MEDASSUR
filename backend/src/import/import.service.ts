@@ -16,6 +16,7 @@ import { ImportAssureRowDto } from "./dto/import-assure.dto";
 import { normaliserDateImport } from "../lib/date-import.util";
 import { texteBrutDeCellule } from "../lib/excel-cell.util";
 import { resoudreDesignations } from "../actes-medicaux/resolution-designation.util";
+import { beneficiaireReel, chargerFamilles } from "./beneficiaire.util";
 
 // Onglet Import (Système) — 2026-08 — voir demande utilisateur : "pour
 // permettre aux sociétés d'assurance qui voudraient changer de logiciel
@@ -53,6 +54,18 @@ function normaliserEntete(s: string): string {
   return s.trim().toLowerCase().replace(/\s*\([^)]*\)\s*$/, "").trim().replace(/\s+/g, " ");
 }
 
+// En-têtes des exports d'anciens systèmes acceptés en plus de ceux du
+// modèle (2026-11) — voir demande utilisateur : la colonne "Désignation"
+// porte le vrai acte réalisé, elle ne doit jamais être ignorée.
+const sansAccentEntete = (s: string) => normaliserEntete(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const ALIAS_ENTETES: Record<string, string[]> = {
+  acteMedical: ["designation", "designation prestation", "designation prestations", "designation acte", "acte", "acte medical", "actes", "libelle", "libelle acte", "prestation realisee"],
+  beneficiaire: ["beneficiaire", "beneficiaire des soins", "nom du beneficiaire", "nom beneficiaire", "patient", "nom et prenom", "nom prenom"],
+  matricule: ["matricule", "matricule assure", "matricule beneficiaire"],
+  referenceFacture: ["reference facture", "reference", "reference externe", "n° facture", "numero facture", "facture"],
+  datePrestation: ["date prestation", "date de prestation", "date soins", "date des soins"],
+};
+
 // Référence de télétransmission (2026-08) — voir demande utilisateur :
 // "je voudrais que toute facture à ce format soit considérée comme
 // télétransmise par le prestataire car c'est le cas :
@@ -76,7 +89,7 @@ function normaliserEntete(s: string): string {
 // dictionnaire de synonymes usuels, puis repli sur "Autre" (déjà une
 // vraie valeur de la taxonomie) — jamais un rejet pour un simple écart de
 // formulation.
-const DIACRITIQUES_IMPORT = /[̀-ͯ]/g;
+const DIACRITIQUES_IMPORT = /[\u0300-\u036f]/g;
 function normaliserPourComparaison(s: string): string {
   return s.trim().toUpperCase().normalize("NFD").replace(DIACRITIQUES_IMPORT, "").replace(/[^A-Z0-9]/g, "");
 }
@@ -435,6 +448,10 @@ export class ImportService {
       const colonne = colonnes.find((c) => normaliserEntete(c.header) === norm);
       if (colonne) indexParCle.set(colonne.key, colNumber);
     });
+    feuille.getRow(1).eachCell((cell, colNumber) => {
+      const norm = sansAccentEntete(String(cell.value ?? ""));
+      for (const c of colonnes) if (!indexParCle.has(c.key) && ALIAS_ENTETES[c.key]?.includes(norm)) indexParCle.set(c.key, colNumber);
+    });
     const manquantes = colonnesObligatoires.filter((k) => !indexParCle.has(k));
     if (manquantes.length > 0) {
       throw new BadRequestException(`Colonne(s) introuvable(s) : ${manquantes.join(", ")} — utilisez le modèle téléchargeable.`);
@@ -785,6 +802,7 @@ export class ImportService {
     { header: "Quantité (facultatif, défaut 1)", key: "quantite" },
     { header: "Statut (Accepté ou Rejeté, défaut Accepté)", key: "statut" },
     { header: "Motif de rejet (si Rejeté)", key: "motifRejet" },
+    { header: "Bénéficiaire des soins (facultatif — nom de la personne soignée)", key: "beneficiaire" },
   ];
   private readonly COLONNES_NUMERIQUES_FACTURE_GLOBALE = ["montant", "quantite"];
 
@@ -796,7 +814,7 @@ export class ImportService {
     }], this.COLONNES_NUMERIQUES_FACTURE_GLOBALE);
   }
 
-  async importerFacturesGlobal(buffer: Buffer): Promise<{ total: number; crees: number; enAttente: number; rejets: Rejet[] }> {
+  async importerFacturesGlobal(buffer: Buffer): Promise<{ total: number; crees: number; corrigees: number; enAttente: number; rejets: Rejet[] }> {
     const { feuille, indexParCle } = await this.chargerFeuille(buffer, this.COLONNES_FACTURE_GLOBALE, [
       "matricule", "prestataire", "referenceFacture", "dateReception", "typePrestation", "datePrestation", "montant",
     ]);
@@ -806,7 +824,7 @@ export class ImportService {
     type LigneLue = {
       r: number; matricule: string; numeroPolice?: string; prestataire: string; referenceFacture: string; dateReception: string;
       typePrestation: string; datePrestation: string; acteMedical?: string; montant: number;
-      quantite?: number; statut?: string; motifRejet?: string;
+      quantite?: number; statut?: string; motifRejet?: string; beneficiaire?: string;
     };
     const lignes: LigneLue[] = [];
     const rejets: Rejet[] = [];
@@ -840,13 +858,13 @@ export class ImportService {
       if (statut === "Rejeté" && !motifRejet) { rejets.push({ ligne: r, motif: "Motif de rejet obligatoire pour une ligne Rejetée." }); continue; }
       const quantiteBrut = v("quantite");
       lignes.push({
-        r, matricule, numeroPolice: v("numeroPolice"), prestataire, referenceFacture,
+        r, matricule, numeroPolice: v("numeroPolice"), beneficiaire: v("beneficiaire"), prestataire, referenceFacture,
         dateReception: normaliserDateImport(dateReception) ?? dateReception,
         typePrestation: normaliserTypePrestation(typePrestationBrut), datePrestation: datePrestationParsed,
         acteMedical, montant, quantite: quantiteBrut ? Number(quantiteBrut) : undefined, statut, motifRejet,
       });
     }
-    if (lignes.length === 0) return { total: 0, crees: 0, enAttente: 0, rejets };
+    if (lignes.length === 0) return { total: 0, crees: 0, corrigees: 0, enAttente: 0, rejets };
 
     // ── Passe 2 : résolution EN LOTS — matricule/prestataire/acte médical,
     // une requête chacun pour TOUT le fichier (voir demande utilisateur :
@@ -895,6 +913,10 @@ export class ImportService {
       }
     }
 
+    // Familles des assurés trouvés : la ligne va au membre nommé dans la
+    // colonne Bénéficiaire (voir beneficiaireReel).
+    const familles = await chargerFamilles(this.prisma, [...assureParMatricule.values()].flat());
+
     // Alias déclaré puis auto-création EN LOTS — voir
     // resoudrePrestatairesEnLot (même mécanisme que le mode par contrat,
     // voir demande utilisateur : "pour les autres prestataires, il faut
@@ -922,12 +944,19 @@ export class ImportService {
       : [];
     const factureExistanteParId = new Map(facturesExistantesDuLot.map((f) => [f.id, f]));
     const lignesExistantesDuLot = facturesExistantesDuLot.length > 0
-      ? await this.prisma.priseEnCharge.findMany({ where: { factureId: { in: facturesExistantesDuLot.map((f) => f.id) } }, select: { factureId: true, assureId: true, date: true, type: true, montant: true } })
+      ? await this.prisma.priseEnCharge.findMany({ where: { factureId: { in: facturesExistantesDuLot.map((f) => f.id) } }, select: { id: true, factureId: true, assureId: true, date: true, montant: true, acteMedicalId: true } })
       : [];
-    const signaturesExistantes = new Set(lignesExistantesDuLot.map((l) => {
+    // Ligne déjà importée = même facture, date et montant pour l'assuré (ou
+    // le titulaire, si elle avait été rattachée à lui). Jamais le type : il
+    // est recalculé à l'enregistrement selon le prestataire.
+    const existantesParCle = new Map<string, (typeof lignesExistantesDuLot)[number][]>();
+    for (const l of lignesExistantesDuLot) {
       const f = factureExistanteParId.get(l.factureId!)!;
-      return `${f.prestataireId}|${f.referenceFacture}|${l.assureId}|${l.date}|${l.type}|${Number(l.montant)}`;
-    }));
+      const cle = `${f.prestataireId}|${f.referenceFacture}|${l.date}|${Number(l.montant)}`;
+      const liste = existantesParCle.get(cle);
+      if (liste) liste.push(l); else existantesParCle.set(cle, [l]);
+    }
+    const aCorriger: { id: string; assureId: string; contratId: string; acteMedicalId?: string }[] = [];
 
     // ── Répartition (2026-08 — voir demande utilisateur : "seulement faire
     // remonter les factures des matricules trouvés et mettre les autres en
@@ -943,13 +972,22 @@ export class ImportService {
       if (candidatsEligibles.length > 1) { rejets.push({ ligne: l.r, motif: `Le matricule "${l.matricule}" existe sur plusieurs polices actives — renseignez le numéro de police compagnie dans le fichier.` }); continue; }
       const prestataireRow = prestataireParValeur.get(l.prestataire.trim());
       if (!prestataireRow) { rejets.push({ ligne: l.r, motif: `Prestataire "${l.prestataire}" introuvable.` }); continue; }
-      const assure = candidatsEligibles[0];
-      const signature = `${prestataireRow.id}|${l.referenceFacture.trim()}|${assure.id}|${l.datePrestation}|${l.typePrestation}|${l.montant}`;
-      if (signaturesExistantes.has(signature)) {
-        rejets.push({ ligne: l.r, motif: `Déjà importée — une ligne identique existe pour le matricule "${l.matricule}" chez "${l.prestataire}" (facture ${l.referenceFacture}, ${l.datePrestation}, ${l.montant} FCFA). Ignorée automatiquement.` });
+      const assure = beneficiaireReel(candidatsEligibles[0], l.beneficiaire, familles);
+      const acte = (l.acteMedical ? acteParLibelle.get(l.acteMedical.trim().toLowerCase()) : undefined) ?? acteGenerique ?? undefined;
+      const memes = existantesParCle.get(`${prestataireRow.id}|${l.referenceFacture.trim()}|${l.datePrestation}|${l.montant}`) ?? [];
+      const existante = memes.find((e) => e.assureId === assure.id) ?? memes.find((e) => e.assureId === candidatsEligibles[0].id);
+      if (existante) {
+        memes.splice(memes.indexOf(existante), 1);
+        // Déjà importée sans la vraie désignation ou au nom du titulaire :
+        // la ligne existante est corrigée au lieu d'être ignorée.
+        const acteARendre = acte && acte.id !== acteGenerique?.id && existante.acteMedicalId !== acte.id && (!existante.acteMedicalId || existante.acteMedicalId === acteGenerique?.id);
+        if (acteARendre || existante.assureId !== assure.id) {
+          aCorriger.push({ id: existante.id, assureId: assure.id, contratId: assure.contratId, ...(acteARendre ? { acteMedicalId: acte!.id } : {}) });
+        } else {
+          rejets.push({ ligne: l.r, motif: `Déjà importée — une ligne identique existe pour le matricule "${l.matricule}" chez "${l.prestataire}" (facture ${l.referenceFacture}, ${l.datePrestation}, ${l.montant} FCFA). Ignorée automatiquement.` });
+        }
         continue;
       }
-      const acte = (l.acteMedical ? acteParLibelle.get(l.acteMedical.trim().toLowerCase()) : undefined) ?? acteGenerique ?? undefined;
       if (!acte) { rejets.push({ ligne: l.r, motif: "Aucun acte médical catalogué disponible." }); continue; }
       aCreer.push({
         ligne: l.r, contratId: assure.contratId, assureId: assure.id, prestataireId: prestataireRow.id,
@@ -972,7 +1010,10 @@ export class ImportService {
     }
 
     const crees = await this.creerFacturesDepuisLignesResolues(aCreer, rejets);
-    return { total: lignes.length, crees, enAttente: aMettreEnAttente.length, rejets };
+    for (const c of aCorriger) {
+      await this.prisma.priseEnCharge.update({ where: { id: c.id }, data: { assureId: c.assureId, contratId: c.contratId, ...(c.acteMedicalId ? { acteMedicalId: c.acteMedicalId } : {}) } });
+    }
+    return { total: lignes.length, crees, corrigees: aCorriger.length, enAttente: aMettreEnAttente.length, rejets };
   }
 
   // Rejoue la file d'attente (2026-08 — voir demande utilisateur : "une
