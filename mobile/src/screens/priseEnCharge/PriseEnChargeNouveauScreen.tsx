@@ -19,6 +19,7 @@ import { getReseauSoins, type PrestataireReseau } from "../../api/reseauSoins";
 import { getActesMedicaux, type ActeMedical } from "../../api/actesMedicaux";
 import { messageErreur, type RnFilePart } from "../../api/http";
 import { choisirFichiers } from "../../utils/choisirFichiers";
+import { formatDateDigits, todayFr } from "../../utils/saisieDate";
 
 // Nouvelle demande de prise en charge (route "AccordNouveau", sans params).
 // Référence web : src/features/portail-membre/PriseEnCharge.tsx.
@@ -26,19 +27,6 @@ import { choisirFichiers } from "../../utils/choisirFichiers";
 // backend : "la validation se fait côté assurance") — seule la présence de
 // l'ordonnance OU du devis conditionne l'envoi.
 
-function formatDateDigits(raw: string): string {
-  const digits = raw.replace(/\D/g, "").slice(0, 8);
-  let out = "";
-  if (digits.length > 0) out += digits.slice(0, 2);
-  if (digits.length > 2) out += "/" + digits.slice(2, 4);
-  if (digits.length > 4) out += "/" + digits.slice(4, 8);
-  return out;
-}
-function todayFr(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
-}
 function isValidFrDate(v: string): boolean {
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v);
   if (!m) return false;

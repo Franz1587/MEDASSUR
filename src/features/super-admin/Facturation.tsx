@@ -1,3 +1,4 @@
+import { DateInput } from "@/components/shared/DateInput";
 import { useEffect, useState } from "react";
 import {
   Receipt, Plus, Check, Ban, TrendingUp, Wallet, AlertTriangle, Clock, X, Trash2, BookOpen, Scale, ScrollText,
@@ -322,7 +323,7 @@ function GenererFactureModal({ societes, onClose, onSaved }: { societes: Societe
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <label className="block"><div className={labelCls}>Échéance (JJ/MM/AAAA)</div><input value={dateEcheance} onChange={(e) => setDateEcheance(e.target.value)} placeholder="15 jours par défaut" className={fieldCls} /></label>
+            <label className="block"><div className={labelCls}>Échéance (JJ/MM/AAAA)</div><DateInput value={dateEcheance} onChange={setDateEcheance} placeholder="15 jours par défaut" className={fieldCls} /></label>
             <label className="block"><div className={labelCls}>Note</div><input value={note} onChange={(e) => setNote(e.target.value)} className={fieldCls} /></label>
           </div>
         </div>
@@ -517,8 +518,8 @@ function OngletTaxes() {
   return (
     <div className="space-y-4">
       <div className="flex items-end gap-3">
-        <label className="block"><div className={labelCls}>Du</div><input value={du} onChange={(e) => setDu(e.target.value)} placeholder="JJ/MM/AAAA" className={fieldCls} /></label>
-        <label className="block"><div className={labelCls}>Au</div><input value={au} onChange={(e) => setAu(e.target.value)} placeholder="JJ/MM/AAAA" className={fieldCls} /></label>
+        <label className="block"><div className={labelCls}>Du</div><DateInput value={du} onChange={setDu} className={fieldCls} /></label>
+        <label className="block"><div className={labelCls}>Au</div><DateInput value={au} onChange={setAu} className={fieldCls} /></label>
         <Btn variant="secondary" onClick={refresh}>Filtrer</Btn>
       </div>
 

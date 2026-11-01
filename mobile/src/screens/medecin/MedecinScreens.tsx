@@ -13,6 +13,7 @@ import {
   TYPES_MESURE, UNITE_MESURE, versIso, type DossierPatient, type PatientPartage, type RendezVous,
 } from "../../api/suiviSante";
 import { BadgeRdv } from "../suiviSante/SuiviSanteScreens";
+import { formatDateDigits, formatHeureDigits } from "../../utils/saisieDate";
 
 // Espace médecin sur mobile (2026-11) — voir demande utilisateur : "les
 // médecins doivent également avoir accès à leur portail via l'application
@@ -55,7 +56,7 @@ function CarteRendezVous({ r, onChange }: { r: RendezVous; onChange: () => void 
     <Card>
       <View style={{ flexDirection: "row", gap: 8 }}>
         <View style={{ flex: 1 }}>
-          <Text style={s.titre}>{dateHeureFr(r.dateHeure)} · {r.type}</Text>
+          <Text style={s.titre}>{dateHeureFr(r.dateHeure)} · {r.type}{r.specialite ? ` · ${r.specialite}` : ""}</Text>
           <Text style={s.muted}>{r.assure.prenom ?? ""} {r.assure.nom} · {r.assure.matricule}{r.assure.telephone ? ` · ${r.assure.telephone}` : ""}</Text>
           {r.prestataire ? <Text style={s.muted}>{r.prestataire.nom}</Text> : null}
           {r.motif ? <Text style={s.texte}>Motif : {r.motif}</Text> : null}
@@ -67,8 +68,8 @@ function CarteRendezVous({ r, onChange }: { r: RendezVous; onChange: () => void 
         <View style={{ marginTop: spacing.sm, gap: 6 }}>
           {edition === "confirmer" ? (
             <View style={{ flexDirection: "row", gap: 6 }}>
-              <TextInput value={jour} onChangeText={setJour} style={[inputStyle.base, { flex: 1 }]} keyboardType="numbers-and-punctuation" accessibilityLabel="Date" />
-              <TextInput value={heure} onChangeText={setHeure} style={[inputStyle.base, { width: 90 }]} keyboardType="numbers-and-punctuation" accessibilityLabel="Heure" />
+              <TextInput value={jour} onChangeText={(v) => setJour(formatDateDigits(v))} placeholder="JJ/MM/AAAA" placeholderTextColor={colors.textSubtle} maxLength={10} style={[inputStyle.base, { flex: 1 }]} keyboardType="number-pad" accessibilityLabel="Date" />
+              <TextInput value={heure} onChangeText={(v) => setHeure(formatHeureDigits(v))} placeholder="HH:MM" placeholderTextColor={colors.textSubtle} maxLength={5} style={[inputStyle.base, { width: 90 }]} keyboardType="number-pad" accessibilityLabel="Heure" />
             </View>
           ) : null}
           <TextInput value={message} onChangeText={setMessage} placeholder={edition === "refuser" ? "Motif du refus (envoyé au patient)" : "Message au patient (facultatif)"} placeholderTextColor={colors.textSubtle} style={inputStyle.base} />

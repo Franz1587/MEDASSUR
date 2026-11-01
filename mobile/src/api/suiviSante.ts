@@ -8,7 +8,7 @@ export type TypeRendezVous = "Consultation" | "Contrôle" | "Examen";
 export type StatutRendezVous = "Demandé" | "Confirmé" | "Refusé" | "Annulé" | "Honoré" | "Absent";
 
 export interface RendezVous {
-  id: string; type: TypeRendezVous; motif: string | null; dateHeure: string; dureeMinutes: number; statut: StatutRendezVous; reponse: string | null;
+  id: string; type: TypeRendezVous; specialite: string | null; motif: string | null; dateHeure: string; dureeMinutes: number; statut: StatutRendezVous; reponse: string | null;
   assure: { id: string; nom: string; prenom: string | null; matricule: string; telephone: string | null };
   medecin: { id: string; nom: string; prenom: string | null; titre: string | null; specialite: string | null; telephone: string | null } | null;
   prestataire: { id: string; nom: string; type: string | null; ville: string | null; adresse: string | null; telephone: string | null } | null;
@@ -16,6 +16,11 @@ export interface RendezVous {
 export interface Professionnel {
   id: string; nom: string; prenom: string | null; titre: string | null; specialite: string | null; telephone: string | null; distanceKm: number | null;
   structures: { id: string; nom: string; type: string | null; ville: string | null; adresse: string | null; telephone: string | null; latitude: number | null; longitude: number | null; distanceKm: number | null }[];
+}
+// Établissement de soins avec les spécialités de ses médecins enregistrés.
+export interface StructureMedicale {
+  id: string; nom: string; type: string | null; ville: string | null; adresse: string | null; telephone: string | null;
+  latitude: number | null; longitude: number | null; distanceKm: number | null; nbMedecins: number; specialites: string[];
 }
 export interface AccesDossier {
   id: string; assureId: string; medecinId: string; actif: boolean; ouvertLe: string; fermeLe: string | null;
@@ -31,12 +36,16 @@ export const dateHeureFr = (iso: string) => new Date(iso).toLocaleString("fr-FR"
 
 // Assuré
 export const getMesRendezVous = () => http.get<RendezVous[]>("/portail-membre/suivi/rendez-vous");
-export const prendreRendezVous = (dto: { assureId: string; medecinId?: string; prestataireId?: string; type: TypeRendezVous; motif?: string; dateHeure: string }) => http.post<RendezVous>("/portail-membre/suivi/rendez-vous", dto);
+export const prendreRendezVous = (dto: { assureId: string; medecinId?: string; prestataireId?: string; type: TypeRendezVous; specialite?: string; motif?: string; dateHeure: string }) => http.post<RendezVous>("/portail-membre/suivi/rendez-vous", dto);
 export const annulerRendezVous = (id: string) => http.patch<RendezVous>(`/portail-membre/suivi/rendez-vous/${id}/annuler`);
-export function getProfessionnels(params: { lat?: number; lng?: number; q?: string; prestataireId?: string } = {}) {
+const requete = (params: Record<string, string | number | undefined>) => {
   const qs = Object.entries(params).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join("&");
-  return http.get<Professionnel[]>(`/portail-membre/suivi/professionnels${qs ? `?${qs}` : ""}`);
-}
+  return qs ? `?${qs}` : "";
+};
+export const getProfessionnels = (params: { lat?: number; lng?: number; q?: string; prestataireId?: string; specialite?: string } = {}) =>
+  http.get<Professionnel[]>(`/portail-membre/suivi/professionnels${requete(params)}`);
+export const getStructuresMedicales = (params: { lat?: number; lng?: number } = {}) =>
+  http.get<StructureMedicale[]>(`/portail-membre/suivi/structures${requete(params)}`);
 export const getAccesDossier = () => http.get<AccesDossier[]>("/portail-membre/suivi/acces");
 export const ouvrirAccesDossier = (assureId: string, medecinId: string) => http.post("/portail-membre/suivi/acces/ouvrir", { assureId, medecinId });
 export const fermerAccesDossier = (assureId: string, medecinId: string) => http.post("/portail-membre/suivi/acces/fermer", { assureId, medecinId });

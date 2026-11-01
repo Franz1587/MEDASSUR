@@ -9,10 +9,12 @@ import { colors, radius, spacing } from "../../theme/colors";
 import { messageErreur } from "../../api/http";
 import { getMaFamille, getMoi } from "../../api/portailMembre";
 import { obtenirPositionActuelle } from "../../utils/position";
+import { formatDateDigits, formatHeureDigits } from "../../utils/saisieDate";
+import { getReseauSoins, type PrestataireReseau } from "../../api/reseauSoins";
 import {
   ajouterMesure, annulerRendezVous, convertirBonPapier, dateHeureFr, fermerAccesDossier, getAccesDossier, getMesMesures, getMesRendezVous,
-  getProfessionnels, lireBonPapier, nomMedecin, ouvrirAccesDossier, prendreRendezVous, supprimerMesure, TYPES_MESURE, UNITE_MESURE, versIso,
-  type AccesDossier, type LigneLue, type MesureSante, type Professionnel, type RendezVous, type StatutRendezVous, type TypeRendezVous,
+  getProfessionnels, getStructuresMedicales, lireBonPapier, nomMedecin, ouvrirAccesDossier, prendreRendezVous, supprimerMesure, TYPES_MESURE, UNITE_MESURE, versIso,
+  type AccesDossier, type LigneLue, type MesureSante, type Professionnel, type RendezVous, type StatutRendezVous, type StructureMedicale, type TypeRendezVous,
 } from "../../api/suiviSante";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -43,6 +45,46 @@ function Puces<T extends string>({ options, valeur, onChange, libelle }: { optio
       </View>
     </View>
   );
+}
+
+// Recherche dans une liste de la base, avec saisie libre si l'entrée n'y
+// est pas (ex. établissement hors réseau) : le texte tapé est gardé.
+function ChampRecherche<T>({ options, valeur, texte, onChoix, onTexte, libelle, sousLibelle, cle, placeholder }: {
+  options: T[]; valeur: T | null; texte: string; onChoix: (o: T | null) => void; onTexte: (t: string) => void;
+  libelle: (o: T) => string; sousLibelle?: (o: T) => string; cle: (o: T) => string; placeholder: string;
+}) {
+  const [focus, setFocus] = useState(false);
+  const affiche = valeur ? libelle(valeur) : texte;
+  const q = sansAccent(affiche);
+  const suggestions = focus && !valeur ? options.filter((o) => !q || sansAccent(libelle(o)).includes(q) || (sousLibelle && sansAccent(sousLibelle(o)).includes(q))).slice(0, 8) : [];
+  return (
+    <View>
+      <View>
+        <TextInput value={affiche} onChangeText={(t) => { if (valeur) onChoix(null); onTexte(t); }} onFocus={() => setFocus(true)} onBlur={() => setTimeout(() => setFocus(false), 200)}
+          placeholder={placeholder} placeholderTextColor={colors.textSubtle} style={[inputStyle.base, valeur ? { borderColor: colors.primary, paddingRight: 40 } : null]} />
+        {valeur ? <Pressable onPress={() => { onChoix(null); onTexte(""); }} style={s.effacer} accessibilityLabel="Effacer"><Ionicons name="close-circle" size={20} color={colors.textMuted} /></Pressable> : null}
+      </View>
+      {valeur ? <Text style={[s.muted, { marginTop: 4 }]}>✓ Trouvé dans la base{sousLibelle ? ` · ${sousLibelle(valeur)}` : ""}</Text> : null}
+      {suggestions.length ? (
+        <View style={s.suggestions}>
+          {suggestions.map((o) => (
+            <Pressable key={cle(o)} onPress={() => { onChoix(o); setFocus(false); }} style={s.suggestion}>
+              <Text style={s.texte}>{libelle(o)}</Text>
+              {sousLibelle ? <Text style={s.muted}>{sousLibelle(o)}</Text> : null}
+            </Pressable>
+          ))}
+        </View>
+      ) : focus && !valeur && q ? <Text style={[s.muted, { marginTop: 4 }]}>Pas dans la liste : « {affiche.trim()} » sera gardé tel quel.</Text> : null}
+    </View>
+  );
+}
+
+const sansAccent = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+// Rapproche un nom lu sur le papier d'une entrée de la base.
+function rapprocher<T>(texte: string, options: T[], nom: (o: T) => string): T | null {
+  const t = sansAccent(texte);
+  if (t.length < 3) return null;
+  return options.find((o) => sansAccent(nom(o)) === t) ?? options.find((o) => { const n = sansAccent(nom(o)); return n.length >= 4 && (t.includes(n) || n.includes(t)); }) ?? null;
 }
 
 // Médecins du réseau : recherche ou tri par distance autour de l'assuré.
@@ -104,6 +146,21 @@ export function ConvertirBonScreen() {
   const [lignes, setLignes] = useState<LigneLue[]>([]);
   const [beneficiaire, setBeneficiaire] = useState(assureId);
   const [envoi, setEnvoi] = useState(false);
+  // Établissement et prescripteur pris dans la base, saisie libre sinon.
+  const [structures, setStructures] = useState<PrestataireReseau[]>([]);
+  const [medecins, setMedecins] = useState<Professionnel[]>([]);
+  const [structure, setStructure] = useState<PrestataireReseau | null>(null);
+  const [medecin, setMedecin] = useState<Professionnel | null>(null);
+  useEffect(() => {
+    getReseauSoins().then(setStructures).catch(() => undefined);
+    getProfessionnels().then(setMedecins).catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    if (etat !== "ok") return;
+    if (!structure && structures.length) setStructure(rapprocher(entete.structure, structures, (x) => x.nom));
+    if (!medecin && medecins.length) setMedecin(rapprocher(entete.prescripteur, medecins, (m) => `${m.prenom ?? ""} ${m.nom}`) ?? rapprocher(entete.prescripteur, medecins, (m) => m.nom));
+  }, [etat, structures, medecins]); // eslint-disable-line react-hooks/exhaustive-deps
+  const medecinsProposes = structure ? medecins.filter((m) => m.structures.some((x) => x.id === structure.id)) : medecins;
   const vide: LigneLue = { type: "Medicament", libelle: "", quantite: 1, posologie: "", acteMedicalId: null, acteLibelle: null };
 
   useEffect(() => {
@@ -124,7 +181,7 @@ export function ConvertirBonScreen() {
     setEnvoi(true);
     try {
       const r = await convertirBonPapier(documentId, {
-        assureId: beneficiaire, prescripteurNom: entete.prescripteur, structureNom: entete.structure, dateOrdonnance: entete.date,
+        assureId: beneficiaire, prescripteurNom: medecin ? nomMedecin(medecin) : entete.prescripteur, structureNom: structure?.nom ?? entete.structure, dateOrdonnance: entete.date,
         lignes: retenues.map((l) => ({ type: l.type, libelle: l.libelle, quantite: l.quantite, posologie: l.posologie || undefined, acteMedicalId: l.acteMedicalId ?? undefined })),
       });
       Alert.alert("Bon électronique créé", `${[r.numeroOrdonnance && `Ordonnance ${r.numeroOrdonnance}`, r.numeroBonExamen && `Bon d'examen ${r.numeroBonExamen}`].filter(Boolean).join("\n")}\n\nPrésentez cette référence en pharmacie ou au laboratoire (aussi envoyée par SMS).`);
@@ -141,9 +198,17 @@ export function ConvertirBonScreen() {
   return (
     <Screen>
       {remarque ? <Card style={{ backgroundColor: etat === "echec" ? colors.warningBg : colors.infoBg }}><Text style={s.texte}>{remarque}</Text></Card> : null}
-      <FormField label="Prescripteur"><TextInput value={entete.prescripteur} onChangeText={(v) => setEntete({ ...entete, prescripteur: v })} style={inputStyle.base} /></FormField>
-      <FormField label="Établissement"><TextInput value={entete.structure} onChangeText={(v) => setEntete({ ...entete, structure: v })} style={inputStyle.base} /></FormField>
-      <FormField label="Date (JJ/MM/AAAA)"><TextInput value={entete.date} onChangeText={(v) => setEntete({ ...entete, date: v })} style={inputStyle.base} keyboardType="numbers-and-punctuation" /></FormField>
+      <FormField label="Établissement">
+        <ChampRecherche options={structures} valeur={structure} texte={entete.structure} placeholder="Rechercher ou saisir l'établissement"
+          onChoix={(x) => { setStructure(x); if (x && medecin && !medecin.structures.some((m) => m.id === x.id)) setMedecin(null); }} onTexte={(t) => setEntete((e) => ({ ...e, structure: t }))}
+          libelle={(x) => x.nom} sousLibelle={(x) => [x.type, x.ville].filter(Boolean).join(" · ")} cle={(x) => x.id} />
+      </FormField>
+      <FormField label="Prescripteur">
+        <ChampRecherche options={medecinsProposes} valeur={medecin} texte={entete.prescripteur} placeholder="Rechercher ou saisir le médecin"
+          onChoix={setMedecin} onTexte={(t) => setEntete((e) => ({ ...e, prescripteur: t }))}
+          libelle={nomMedecin} sousLibelle={(m) => m.specialite ?? "Médecine générale"} cle={(m) => m.id} />
+      </FormField>
+      <FormField label="Date de l'ordonnance"><TextInput value={entete.date} onChangeText={(v) => setEntete({ ...entete, date: formatDateDigits(v) })} placeholder="JJ/MM/AAAA" placeholderTextColor={colors.textSubtle} maxLength={10} style={inputStyle.base} keyboardType="number-pad" /></FormField>
       <SectionTitle>Lignes</SectionTitle>
       {lignes.map((l, i) => (
         <Card key={i}>
@@ -172,8 +237,8 @@ function CarteRdv({ r, action }: { r: RendezVous; action?: React.ReactNode }) {
     <Card>
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
         <View style={{ flex: 1 }}>
-          <Text style={s.titre}>{dateHeureFr(r.dateHeure)} · {r.type}</Text>
-          <Text style={s.muted}>{r.medecin ? nomMedecin(r.medecin) : r.prestataire?.nom}{r.medecin && r.prestataire ? ` — ${r.prestataire.nom}` : ""}</Text>
+          <Text style={s.titre}>{dateHeureFr(r.dateHeure)} · {r.type}{r.specialite ? ` · ${r.specialite}` : ""}</Text>
+          <Text style={s.muted}>{r.medecin ? nomMedecin(r.medecin) : "Médecin à affecter par l'établissement"}{r.prestataire ? ` — ${r.prestataire.nom}` : ""}</Text>
           <Text style={s.muted}>{r.assure.prenom ?? ""} {r.assure.nom}{r.motif ? ` · ${r.motif}` : ""}</Text>
           {r.reponse ? <Text style={[s.texte, { marginTop: 4 }]}>Réponse : {r.reponse}</Text> : null}
         </View>
@@ -221,21 +286,54 @@ export function RendezVousNouveauScreen() {
   const beneficiaires = useBeneficiaires();
   const [assureId, setAssureId] = useState("");
   const [type, setType] = useState<TypeRendezVous>("Consultation");
+  // Structure → spécialité → médecin de la structure (ou affecté par elle).
+  const [structures, setStructures] = useState<StructureMedicale[] | null>(null);
+  const [recherche, setRecherche] = useState("");
+  const [localisation, setLocalisation] = useState(false);
+  const [structure, setStructure] = useState<StructureMedicale | null>(null);
+  const [specialite, setSpecialite] = useState("");
+  const [medecins, setMedecins] = useState<Professionnel[] | null>(null);
   const [medecin, setMedecin] = useState<Professionnel | null>(null);
-  const [structure, setStructure] = useState<string | null>(prestataireId ?? null);
   const [jour, setJour] = useState("");
   const [heure, setHeure] = useState("09:00");
   const [motif, setMotif] = useState("");
   const [envoi, setEnvoi] = useState(false);
   useEffect(() => { if (!assureId && beneficiaires[0]) setAssureId(beneficiaires[0].id); }, [beneficiaires, assureId]);
+  const choisirStructure = (st: StructureMedicale | null) => {
+    setStructure(st);
+    setSpecialite(st?.specialites.length === 1 ? st.specialites[0] : "");
+  };
+  useEffect(() => {
+    getStructuresMedicales().then((l) => {
+      setStructures(l);
+      const depuisReseau = prestataireId ? l.find((x) => x.id === prestataireId) : undefined;
+      if (depuisReseau) choisirStructure(depuisReseau);
+    }).catch(() => setStructures([]));
+  }, [prestataireId]);
+  useEffect(() => {
+    setMedecin(null);
+    if (!structure || !specialite) { setMedecins(null); return; }
+    getProfessionnels({ prestataireId: structure.id, specialite }).then(setMedecins).catch(() => setMedecins([]));
+  }, [structure, specialite]);
+
+  const autourDeMoi = async () => {
+    setLocalisation(true);
+    const p = await obtenirPositionActuelle();
+    if (p) setStructures(await getStructuresMedicales({ lat: p.latitude, lng: p.longitude }).catch(() => structures));
+    else Alert.alert("Position indisponible", "Autorisez la localisation pour voir les établissements les plus proches.");
+    setLocalisation(false);
+  };
+  const q = sansAccent(recherche);
+  const proposees = (structures ?? []).filter((x) => !q || sansAccent(`${x.nom} ${x.ville ?? ""} ${x.type ?? ""} ${x.specialites.join(" ")}`).includes(q)).slice(0, 25);
 
   const demander = async () => {
     const iso = versIso(jour, heure);
-    if (!medecin && !structure) { Alert.alert("Professionnel", "Choisissez un médecin."); return; }
+    if (!structure) { Alert.alert("Établissement", "Choisissez l'établissement."); return; }
+    if (structure.specialites.length > 0 && !specialite) { Alert.alert("Spécialité", "Choisissez la spécialité."); return; }
     if (!iso) { Alert.alert("Date", "Saisissez la date (JJ/MM/AAAA) et l'heure (HH:MM)."); return; }
     setEnvoi(true);
     try {
-      await prendreRendezVous({ assureId, medecinId: medecin?.id, prestataireId: structure ?? undefined, type, motif: motif.trim() || undefined, dateHeure: iso });
+      await prendreRendezVous({ assureId, prestataireId: structure.id, medecinId: medecin?.id, specialite: specialite || undefined, type, motif: motif.trim() || undefined, dateHeure: iso });
       Alert.alert("Demande envoyée", "Vous serez notifié dès que le rendez-vous sera confirmé.");
       navigation.goBack();
     } catch (err) {
@@ -249,11 +347,58 @@ export function RendezVousNouveauScreen() {
     <Screen>
       {beneficiaires.length > 1 ? <Puces libelle="Pour" options={beneficiaires.map((b) => ({ id: b.id, nom: b.vous ? `${b.nom} (vous)` : b.nom }))} valeur={assureId} onChange={setAssureId} /> : null}
       <Puces libelle="Type" options={[{ id: "Consultation", nom: "Consultation" }, { id: "Contrôle", nom: "Contrôle de santé" }, { id: "Examen", nom: "Examen" }]} valeur={type} onChange={(t) => setType(t as TypeRendezVous)} />
-      <Text style={s.label}>Médecin</Text>
-      <ChoixMedecin valeur={medecin} structure={structure} prestataireId={prestataireId} onChange={(m, st) => { setMedecin(m); setStructure(st); }} />
+      <Text style={s.label}>1. Établissement</Text>
+      {structure ? (
+        <Pressable onPress={() => choisirStructure(null)} style={[s.pro, s.proActif]} accessibilityLabel="Changer d'établissement">
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Ionicons name="business-outline" size={18} color={colors.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.titre}>{structure.nom}</Text>
+              <Text style={s.muted}>{[structure.type, structure.ville].filter(Boolean).join(" · ")} · Changer</Text>
+            </View>
+          </View>
+        </Pressable>
+      ) : (
+        <>
+          <View style={{ flexDirection: "row", gap: spacing.sm, marginBottom: spacing.sm }}>
+            <TextInput value={recherche} onChangeText={setRecherche} placeholder="Clinique, hôpital, ville, spécialité…" placeholderTextColor={colors.textSubtle} style={[inputStyle.base, { flex: 1 }]} />
+            <Pressable onPress={autourDeMoi} style={s.boutonPos} accessibilityLabel="Établissements autour de moi">
+              {localisation ? <ActivityIndicator color={colors.primary} /> : <Ionicons name="locate" size={20} color={colors.primary} />}
+            </Pressable>
+          </View>
+          {structures === null ? <LoadingView /> : proposees.length === 0 ? <Text style={s.muted}>Aucun établissement trouvé.</Text> : proposees.map((x) => (
+            <Pressable key={x.id} onPress={() => choisirStructure(x)} style={s.pro}>
+              <Text style={s.titre}>{x.nom}</Text>
+              <Text style={s.muted}>{[x.type, x.ville, x.distanceKm !== null ? `à ${x.distanceKm} km` : null, x.nbMedecins ? `${x.nbMedecins} médecin${x.nbMedecins > 1 ? "s" : ""}` : "aucun médecin enregistré"].filter(Boolean).join(" · ")}</Text>
+            </Pressable>
+          ))}
+        </>
+      )}
+      {structure && structure.specialites.length > 0 ? (
+        <Puces libelle="2. Spécialité / type de consultation" options={structure.specialites.map((x) => ({ id: x, nom: x }))} valeur={specialite} onChange={setSpecialite} />
+      ) : structure ? <Text style={[s.muted, { marginBottom: spacing.md }]}>Aucun médecin n'est encore enregistré dans cet établissement : il recevra votre demande et vous affectera un praticien.</Text> : null}
+      {specialite ? (
+        <View style={{ marginBottom: spacing.md }}>
+          <Text style={s.label}>3. Médecin</Text>
+          {medecins === null ? <LoadingView /> : (
+            <>
+              <Pressable onPress={() => setMedecin(null)} style={[s.pro, !medecin && s.proActif]}>
+                <Text style={s.titre}>Premier médecin disponible</Text>
+                <Text style={s.muted}>L'établissement vous affecte un praticien ({specialite})</Text>
+              </Pressable>
+              {medecins.map((m) => (
+                <Pressable key={m.id} onPress={() => setMedecin(m)} style={[s.pro, medecin?.id === m.id && s.proActif]}>
+                  <Text style={s.titre}>{nomMedecin(m)}</Text>
+                  <Text style={s.muted}>{m.specialite ?? "Médecine générale"}</Text>
+                </Pressable>
+              ))}
+            </>
+          )}
+        </View>
+      ) : null}
       <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.md }}>
-        <View style={{ flex: 1 }}><FormField label="Date (JJ/MM/AAAA)"><TextInput value={jour} onChangeText={setJour} placeholder="15/11/2026" placeholderTextColor={colors.textSubtle} keyboardType="numbers-and-punctuation" style={inputStyle.base} /></FormField></View>
-        <View style={{ width: 110 }}><FormField label="Heure"><TextInput value={heure} onChangeText={setHeure} placeholder="09:00" placeholderTextColor={colors.textSubtle} keyboardType="numbers-and-punctuation" style={inputStyle.base} /></FormField></View>
+        <View style={{ flex: 1 }}><FormField label="Date"><TextInput value={jour} onChangeText={(v) => setJour(formatDateDigits(v))} placeholder="JJ/MM/AAAA" placeholderTextColor={colors.textSubtle} maxLength={10} keyboardType="number-pad" style={inputStyle.base} /></FormField></View>
+        <View style={{ width: 110 }}><FormField label="Heure"><TextInput value={heure} onChangeText={(v) => setHeure(formatHeureDigits(v))} placeholder="HH:MM" placeholderTextColor={colors.textSubtle} maxLength={5} keyboardType="number-pad" style={inputStyle.base} /></FormField></View>
       </View>
       <FormField label="Motif (facultatif)"><TextInput value={motif} onChangeText={setMotif} placeholder="ex. fièvre depuis 3 jours" placeholderTextColor={colors.textSubtle} style={inputStyle.base} /></FormField>
       <PrimaryButton label="Demander le rendez-vous" icon="send-outline" onPress={demander} loading={envoi} />
@@ -364,6 +509,9 @@ const s = StyleSheet.create({
   pro: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: 10, marginBottom: 6, backgroundColor: colors.surface },
   proActif: { borderColor: colors.primary, backgroundColor: colors.infoBg },
   structure: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6, marginLeft: 26 },
+  effacer: { position: "absolute", right: 10, top: 0, bottom: 0, justifyContent: "center" },
+  suggestions: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, marginTop: 4, backgroundColor: colors.surface },
+  suggestion: { paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   titre: { fontSize: 14.5, fontWeight: "700", color: colors.text },
   texte: { fontSize: 13.5, color: colors.text },
   muted: { fontSize: 12.5, color: colors.textMuted },

@@ -1,10 +1,21 @@
 import { useEffect, useState } from "react";
 import { Loader2, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { convertirBonPapier, lireBonPapier, type LigneLue } from "@/services/suiviSante.service";
+import { Combobox } from "@/components/shared/Combobox";
+import { DateInput } from "@/components/shared/DateInput";
+import { getReseauSoins, type PrestataireReseau } from "@/services/reseauSoins.service";
+import { convertirBonPapier, getProfessionnels, lireBonPapier, nomMedecin, type LigneLue, type Professionnel } from "@/services/suiviSante.service";
 
 type Ligne = Omit<LigneLue, "acteLibelle"> & { acteLibelle?: string | null };
 const champ = "w-full h-9 px-3 rounded-lg border border-border bg-background text-[12.5px] text-foreground";
+
+// Rapproche un nom lu sur le papier d'une entrée de la base (sans casse ni accents).
+const sansAccent = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+function rapprocher<T>(texte: string, options: T[], nom: (o: T) => string): T | null {
+  const t = sansAccent(texte);
+  if (t.length < 3) return null;
+  return options.find((o) => sansAccent(nom(o)) === t) ?? options.find((o) => { const n = sansAccent(nom(o)); return n.length >= 4 && (t.includes(n) || n.includes(t)); }) ?? null;
+}
 
 // Ordonnance / bon d'examen papier → électronique (2026-11). ARIANA propose,
 // l'assuré relit et corrige ; sans lecture possible, saisie manuelle.
@@ -15,6 +26,24 @@ export function ConvertirBon({ documentId, assureId, onFermer, onConverti }: { d
   const [entete, setEntete] = useState({ prescripteur: "", structure: "", date: "" });
   const [lignes, setLignes] = useState<Ligne[]>([]);
   const [envoi, setEnvoi] = useState(false);
+  // Établissement et prescripteur pris dans la base quand ils y sont,
+  // saisie libre sinon (structure hors réseau, médecin non enregistré).
+  const [structures, setStructures] = useState<PrestataireReseau[]>([]);
+  const [medecins, setMedecins] = useState<Professionnel[]>([]);
+  const [structure, setStructure] = useState<PrestataireReseau | null>(null);
+  const [medecin, setMedecin] = useState<Professionnel | null>(null);
+
+  useEffect(() => {
+    getReseauSoins().then(setStructures).catch(() => undefined);
+    getProfessionnels().then(setMedecins).catch(() => undefined);
+  }, []);
+  // Rapprochement automatique de ce qu'ARIANA a lu avec la base.
+  useEffect(() => {
+    if (lecture !== "ok") return;
+    if (!structure && structures.length) setStructure(rapprocher(entete.structure, structures, (s) => s.nom));
+    if (!medecin && medecins.length) setMedecin(rapprocher(entete.prescripteur, medecins, (m) => `${m.prenom ?? ""} ${m.nom}`) ?? rapprocher(entete.prescripteur, medecins, (m) => m.nom));
+  }, [lecture, structures, medecins]); // eslint-disable-line react-hooks/exhaustive-deps
+  const medecinsProposes = structure ? medecins.filter((m) => m.structures.some((s) => s.id === structure.id)) : medecins;
 
   useEffect(() => {
     lireBonPapier(documentId)
@@ -40,7 +69,7 @@ export function ConvertirBon({ documentId, assureId, onFermer, onConverti }: { d
     setEnvoi(true);
     try {
       const r = await convertirBonPapier(documentId, {
-        assureId: beneficiaire, prescripteurNom: entete.prescripteur, structureNom: entete.structure, dateOrdonnance: entete.date,
+        assureId: beneficiaire, prescripteurNom: medecin ? nomMedecin(medecin) : entete.prescripteur, structureNom: structure?.nom ?? entete.structure, dateOrdonnance: entete.date,
         lignes: retenues.map((l) => ({ type: l.type, libelle: l.libelle, quantite: l.quantite, posologie: l.posologie || undefined, acteMedicalId: l.acteMedicalId ?? undefined })),
       });
       toast.success(`Bon électronique créé : ${[r.numeroOrdonnance && `ordonnance ${r.numeroOrdonnance}`, r.numeroBonExamen && `bon d'examen ${r.numeroBonExamen}`].filter(Boolean).join(" et ")}. La référence vous est aussi envoyée par SMS.`);
@@ -69,9 +98,19 @@ export function ConvertirBon({ documentId, assureId, onFermer, onConverti }: { d
             <>
               {remarque && <p className={`text-[12px] rounded-lg px-3 py-2 border ${lecture === "echec" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-border bg-secondary/30 text-foreground"}`}>{lecture === "echec" ? `${remarque} Saisissez les lignes à la main.` : `⚠ ${remarque}`}</p>}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <label className="block"><span className="text-[11.5px] text-muted-foreground">Prescripteur</span><input value={entete.prescripteur} onChange={(e) => setEntete({ ...entete, prescripteur: e.target.value })} className={champ} /></label>
-                <label className="block"><span className="text-[11.5px] text-muted-foreground">Établissement</span><input value={entete.structure} onChange={(e) => setEntete({ ...entete, structure: e.target.value })} className={champ} /></label>
-                <label className="block"><span className="text-[11.5px] text-muted-foreground">Date (JJ/MM/AAAA)</span><input value={entete.date} onChange={(e) => setEntete({ ...entete, date: e.target.value })} className={champ} /></label>
+                <div><span className="text-[11.5px] text-muted-foreground">Établissement</span>
+                  <Combobox options={structures} value={structure} onChange={(s) => { setStructure(s); if (s && medecin && !medecin.structures.some((x) => x.id === s.id)) setMedecin(null); }}
+                    getLabel={(s) => s.nom} getSubLabel={(s) => [s.type, s.ville].filter(Boolean).join(" · ")} getId={(s) => s.id}
+                    texteLibre={entete.structure} onTexteLibre={(t) => setEntete({ ...entete, structure: t })} placeholder="Rechercher ou saisir l'établissement" />
+                </div>
+                <div><span className="text-[11.5px] text-muted-foreground">Prescripteur</span>
+                  <Combobox options={medecinsProposes} value={medecin} onChange={setMedecin}
+                    getLabel={nomMedecin} getSubLabel={(m) => m.specialite ?? "Médecine générale"} getId={(m) => m.id}
+                    texteLibre={entete.prescripteur} onTexteLibre={(t) => setEntete({ ...entete, prescripteur: t })} placeholder="Rechercher ou saisir le médecin" />
+                </div>
+                <div><span className="text-[11.5px] text-muted-foreground">Date de l'ordonnance</span>
+                  <DateInput value={entete.date} onChange={(d) => setEntete({ ...entete, date: d })} className={champ} />
+                </div>
               </div>
               <div className="space-y-2">
                 {lignes.map((l, i) => (

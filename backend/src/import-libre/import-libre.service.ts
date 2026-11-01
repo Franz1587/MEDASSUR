@@ -6,6 +6,7 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { FacturesService } from "../factures/factures.service";
 import { PrestatairesService } from "../prestataires/prestataires.service";
+import { RUBRIQUES_ACTES, resoudreDesignations } from "../actes-medicaux/resolution-designation.util";
 
 // Import libre Ariana (2026-10) — voir demande utilisateur : "elle doit
 // pouvoir traiter les données et dire à quoi ça correspond et ne jamais
@@ -44,6 +45,9 @@ export interface LigneApercu {
   doublon: boolean;
   miseAJour?: boolean;
   priseEnChargeId?: string;
+  // Ligne déjà importée avec l'acte générique : la désignation d'origine
+  // lui sera rendue (voir resoudreDesignations).
+  acteARetablir?: boolean;
 }
 
 export interface ResultatApercu {
@@ -308,7 +312,7 @@ const PROMPT_LIGNES = `Structure JSON attendue (un seul objet racine) :
   "lignes": [
     {
       "referenceFacture": "ex: LRX-91044H",
-      "designation": "ex: ANALYSES MÉDICALES",
+      "designation": "libellé EXACT de l'acte tel qu'écrit dans la colonne Désignation, ex: NFS + VS, ECHOGRAPHIE PELVIENNE, CONSULTATION PEDIATRE",
       "categorie": "ex: MALADIE",
       "matricule": "ex: LRX-00234 ou 0493-01232",
       "beneficiaire": "NOM PRÉNOM",
@@ -324,6 +328,7 @@ const PROMPT_LIGNES = `Structure JSON attendue (un seul objet racine) :
 
 Règles impératives :
 - Une facture peut avoir plusieurs actes → une ligne JSON par ACTE (jamais par facture)
+- designation : recopie MOT POUR MOT le libellé de l'acte réalisé (colonne Désignation / Acte / Libellé), sans le résumer ni le remplacer par une catégorie ; c'est l'information de référence de l'ancien système
 - partFinanceur = Part financeur = montant payé par l'assurance = net à payer
 - montantTotal = Total de la ligne (frais réels)
 - TOUS les montants sont des NOMBRES ENTIERS en FCFA
@@ -347,6 +352,44 @@ export class ImportLibreService {
       this.anthropic = new Anthropic({ apiKey });
     }
     return this.anthropic;
+  }
+
+  // ARIANA classe les actes absents du catalogue dans la rubrique du tableau
+  // de garanties (ActeMedical.categorieGarantie) : "NFS" doit compter en
+  // Analyses, pas en "Actes de Spécialités" comme le ferait un mot-clé.
+  private async classerDesignations(textes: string[]): Promise<Map<string, string>> {
+    const client = this.getAnthropicClient();
+    const resultat = new Map<string, string>();
+    for (let i = 0; i < textes.length; i += 150) {
+      const lot = textes.slice(i, i + 150);
+      const reponse = await client.messages.create({
+        model: "claude-opus-5-5",
+        max_tokens: 8192,
+        messages: [{
+          role: "user",
+          content: `Tu classes des actes médicaux facturés par des prestataires de santé au Gabon (libellés repris tels quels d'un ancien logiciel, abréviations et fautes de frappe possibles).
+Rubriques autorisées (recopie EXACTEMENT l'une d'elles) : ${RUBRIQUES_ACTES.map((r) => `"${r}"`).join(", ")}.
+Règles :
+- toute consultation ou visite (CS, généraliste, spécialiste, professeur, urgence, pédiatre…) → "Consultations"
+- examens de biologie (NFS, CRP, glycémie, urée, sérologies, hormones, prélèvement…) → "Analyses Médicale"
+- radiologie, échographie, scanner/TDM, IRM, mammographie, doppler → "Imagerie"
+- actes techniques de spécialiste (ECG, fond d'œil, champ visuel, tonométrie, endoscopie, biopsie, anesthésie…) → "Actes de Spécialités"
+- verres, montures, frais d'optique → "Optique" ; soins et prothèses dentaires, détartrage → "Soins & Prothèses dentaires"
+- hospitalisation, chambre, hébergement, réanimation, médicaments ou actes pendant une hospitalisation → "Hospitalisation"
+- accouchement, échographie de grossesse → "Maternité" ; kinésithérapie, rééducation → "Kinésithérapie & Cure thermale"
+- médicaments en officine → "Pharmacie" ; soins infirmiers, pansements, aérosols, petite chirurgie → "Petite Chirurgie/Soins"
+Réponds UNIQUEMENT par un objet JSON {"<numéro>": "<rubrique>"} couvrant chaque numéro.
+
+${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
+        }],
+      });
+      const texte = reponse.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
+      const json = texte.match(/\{[\s\S]*\}/);
+      if (!json) continue;
+      const parNumero = JSON.parse(json[0]) as Record<string, string>;
+      lot.forEach((t, k) => { if (parNumero[String(k)]) resultat.set(t, parNumero[String(k)]); });
+    }
+    return resultat;
   }
 
   // ── Extraction du contenu textuel d'un fichier (tous formats) ──────────
@@ -825,13 +868,19 @@ export class ImportLibreService {
       )?.id ?? null;
     }
 
-    const typePrestation = mapperDesignation(l.designation);
     if (prestataireId) {
+      // Ligne déjà importée = même assuré, date, facture et montant. Jamais
+      // le type : il est recalculé à l'enregistrement selon le prestataire
+      // (un dentiste → Dentisterie), la comparaison ratait et dupliquait.
       const existant = await this.prisma.priseEnCharge.findFirst({
-        where: { assureId: assure.id, date: l.datePrestation, type: typePrestation, facture: { prestataireId, referenceFacture: l.referenceFacture } },
-        select: { id: true, baseRemboursement: true },
+        where: { assureId: assure.id, date: l.datePrestation, montant: l.montantTotal, facture: { prestataireId, referenceFacture: l.referenceFacture } },
+        select: { id: true, baseRemboursement: true, acteMedical: { select: { libelle: true } } },
       });
       if (existant) {
+        // Déjà importée sans le vrai acte : on lui rend sa désignation.
+        if (l.designation && (!existant.acteMedical || existant.acteMedical.libelle.includes("non détaillée"))) {
+          return { ...l, assureId: assure.id, contratId: assure.contratId, prestataireId, erreur: null, doublon: false, miseAJour: true, acteARetablir: true, priseEnChargeId: existant.id };
+        }
         if (modeCorrection) {
           const baseActuelle = existant.baseRemboursement ? Number(existant.baseRemboursement) : 0;
           if (baseActuelle === 0 && l.partFinanceur > 0) {
@@ -1005,13 +1054,26 @@ export class ImportLibreService {
       throw new BadRequestException(`L'import en mode libre pour « ${type} » nécessite d'utiliser l'import dédié (/api/import/).`);
     }
 
-    const lignesValides = lignes.filter((l) => l.assureId && l.contratId && !l.doublon && !l.erreur);
+    const lignesValides = lignes.filter((l) => l.assureId && l.contratId && !l.doublon && !l.erreur && !l.acteARetablir);
     let importees = 0;
     let corrigees = 0;
-    let ignorees = lignes.length - lignesValides.length;
+    let ignorees = lignes.filter((l) => !lignesValides.includes(l) && !l.acteARetablir).length;
+
+    // La désignation de l'ancien système devient l'acte de la ligne.
+    const designations = new Map<string, string>();
+    for (const l of lignes) if (l.designation && !l.doublon && !l.erreur) designations.set(l.designation, mapperDesignation(l.designation));
+    const acteParDesignation = await resoudreDesignations(this.prisma, designations, (t) => this.classerDesignations(t));
+    for (const l of lignes.filter((x) => x.acteARetablir && x.priseEnChargeId)) {
+      const acteMedicalId = acteParDesignation.get(l.designation);
+      if (!acteMedicalId) { ignorees++; continue; }
+      try {
+        await this.prisma.priseEnCharge.update({ where: { id: l.priseEnChargeId! }, data: { acteMedicalId } });
+        corrigees++;
+      } catch { ignorees++; }
+    }
 
     if (modeCorrection) {
-      const lignesMaj = lignes.filter((l) => l.miseAJour && l.priseEnChargeId && l.partFinanceur > 0);
+      const lignesMaj = lignes.filter((l) => l.miseAJour && !l.acteARetablir && l.priseEnChargeId && l.partFinanceur > 0);
       for (const l of lignesMaj) {
         try {
           await this.prisma.priseEnCharge.update({ where: { id: l.priseEnChargeId! }, data: { baseRemboursement: l.partFinanceur } });
@@ -1061,7 +1123,7 @@ export class ImportLibreService {
           assureId: l.assureId,
           typePrestation: mapperDesignation(l.designation),
           datePrestation: l.datePrestation,
-          acteMedicalId: acteGenerique?.id,
+          acteMedicalId: acteParDesignation.get(l.designation) ?? acteGenerique?.id,
           montant: l.montantTotal,
         }, { ignorerDoublonMemeJour: true, exigerAffection: false, baseRemboursementImpose: l.partFinanceur, ignorerRetrait: true });
         importees++;

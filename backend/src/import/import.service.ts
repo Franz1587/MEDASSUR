@@ -15,6 +15,7 @@ import { ImportAccordPrealableRowDto } from "./dto/import-accord-prealable.dto";
 import { ImportAssureRowDto } from "./dto/import-assure.dto";
 import { normaliserDateImport } from "../lib/date-import.util";
 import { texteBrutDeCellule } from "../lib/excel-cell.util";
+import { resoudreDesignations } from "../actes-medicaux/resolution-designation.util";
 
 // Onglet Import (Système) — 2026-08 — voir demande utilisateur : "pour
 // permettre aux sociétés d'assurance qui voudraient changer de logiciel
@@ -388,10 +389,10 @@ export class ImportService {
   // les chemins qui traitent une ligne à la fois (import scopé à un
   // contrat, volume modeste). Le mode global utilise sa propre résolution
   // EN LOTS (voir importerFacturesGlobal) pour rester performant.
-  private async resoudreActe(libelle?: string): Promise<{ id: string } | null> {
-    if (libelle) {
-      const trouve = await this.prisma.acteMedical.findFirst({ where: { libelle: { equals: libelle.trim(), mode: "insensitive" } }, select: { id: true } });
-      if (trouve) return trouve;
+  private async resoudreActe(libelle?: string, typePrestation = ""): Promise<{ id: string } | null> {
+    if (libelle?.trim()) {
+      const id = (await resoudreDesignations(this.prisma, new Map([[libelle.trim(), typePrestation]]))).get(libelle.trim());
+      if (id) return { id };
     }
     return this.acteGenerique();
   }
@@ -727,7 +728,7 @@ export class ImportService {
 
       // Acte facultatif (voir resoudreActe/LIBELLE_ACTE_NON_DETAILLE) —
       // repli sur le repère générique plutôt qu'un rejet.
-      const acte = await this.resoudreActe(ligne.acteMedical);
+      const acte = await this.resoudreActe(ligne.acteMedical, ligne.typePrestation);
       if (!acte) { rejets.push({ ligne: i + 1, motif: "Aucun acte médical catalogué disponible." }); continue; }
       const statutInitial = ligne.statut === "Rejeté" ? "Rejeté" : undefined;
       if (statutInitial === "Rejeté" && !ligne.motifRejet) { rejets.push({ ligne: i + 1, motif: "Motif de rejet obligatoire pour une ligne Rejetée." }); continue; }
@@ -904,12 +905,8 @@ export class ImportService {
     // rendre la prestation facultative") — seules les valeurs RENSEIGNÉES
     // sont recherchées en lot ; le repère générique (une seule requête,
     // jamais par ligne) couvre le reste.
-    const acteValeurs = [...new Set(lignes.filter((l) => l.acteMedical).map((l) => l.acteMedical!.trim()))];
-    const acteRows = acteValeurs.length > 0
-      ? await this.prisma.acteMedical.findMany({ where: { libelle: { in: acteValeurs, mode: "insensitive" } } })
-      : [];
-    const acteParLibelle = new Map<string, (typeof acteRows)[number]>();
-    for (const a of acteRows) acteParLibelle.set(a.libelle.trim().toLowerCase(), a);
+    const acteParLibelle = new Map<string, { id: string }>();
+    for (const [libelle, id] of await resoudreDesignations(this.prisma, new Map(lignes.filter((l) => l.acteMedical?.trim()).map((l) => [l.acteMedical!.trim(), l.typePrestation])))) acteParLibelle.set(libelle.toLowerCase(), { id });
     const acteGenerique = await this.acteGenerique();
 
     // Ré-import du même fichier, EN LOTS (2026-09 — voir demande
@@ -1040,12 +1037,8 @@ export class ImportService {
     // resoudrePrestatairesEnLot / importerFacturesGlobal ci-dessus.
     const prestataireParValeur = await this.resoudrePrestatairesEnLot(resolues.map((l) => l.prestataire));
 
-    const acteValeurs = [...new Set(resolues.filter((l) => l.acteMedical).map((l) => l.acteMedical.trim()))];
-    const acteRows = acteValeurs.length > 0
-      ? await this.prisma.acteMedical.findMany({ where: { libelle: { in: acteValeurs, mode: "insensitive" } } })
-      : [];
-    const acteParLibelle = new Map<string, (typeof acteRows)[number]>();
-    for (const a of acteRows) acteParLibelle.set(a.libelle.trim().toLowerCase(), a);
+    const acteParLibelle = new Map<string, { id: string }>();
+    for (const [libelle, id] of await resoudreDesignations(this.prisma, new Map(resolues.filter((l) => l.acteMedical?.trim()).map((l) => [l.acteMedical.trim(), l.typePrestation])))) acteParLibelle.set(libelle.toLowerCase(), { id });
     const acteGenerique = await this.acteGenerique();
 
     // Ré-import du même fichier, EN LOTS — voir importerFacturesGlobal

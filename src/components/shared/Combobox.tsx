@@ -17,6 +17,10 @@ interface ComboboxProps<T> {
   // choix obligatoire (ex. assuré d'une ligne de facture).
   allowClear?: boolean;
   clearLabel?: string;
+  // Saisie libre (2026-11) : le texte tapé est gardé même s'il ne
+  // correspond à aucune option (ex. établissement hors réseau).
+  texteLibre?: string;
+  onTexteLibre?: (texte: string) => void;
 }
 
 // Recherche à la frappe générique — filtre une liste préchargée par
@@ -24,7 +28,8 @@ interface ComboboxProps<T> {
 // d'un prestataire, nom+matricule d'un assuré). Cohérent avec le reste de
 // l'app (tout est préchargé puis filtré côté client), voir le plan
 // "Refonte de la saisie des Factures".
-export function Combobox<T>({ options, value, onChange, getLabel, getSubLabel, getId, placeholder = "Rechercher…", className = "", disabled = false, allowClear = false, clearLabel = "Tous" }: ComboboxProps<T>) {
+export function Combobox<T>({ options, value, onChange, getLabel, getSubLabel, getId, placeholder = "Rechercher…", className = "", disabled = false, allowClear = false, clearLabel = "Tous", texteLibre, onTexteLibre }: ComboboxProps<T>) {
+  const libre = onTexteLibre !== undefined;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
@@ -34,7 +39,6 @@ export function Combobox<T>({ options, value, onChange, getLabel, getSubLabel, g
     const onClickOutside = (e: MouseEvent) => {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
         setOpen(false);
-        setQuery("");
       }
     };
     document.addEventListener("mousedown", onClickOutside);
@@ -58,16 +62,16 @@ export function Combobox<T>({ options, value, onChange, getLabel, getSubLabel, g
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!open) {
-      if (e.key === "ArrowDown" || e.key === "Enter") { setOpen(true); setQuery(""); }
+      if (e.key === "ArrowDown" || e.key === "Enter") { setOpen(true); setQuery(libre ? texteLibre ?? "" : ""); }
       return;
     }
     if (e.key === "ArrowDown") { e.preventDefault(); setHighlight((h) => Math.min(h + 1, filtres.length - 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); setHighlight((h) => Math.max(h - 1, 0)); }
-    else if (e.key === "Enter") { e.preventDefault(); if (filtres[highlight]) selectionner(filtres[highlight]); }
+    else if (e.key === "Enter") { e.preventDefault(); if (filtres[highlight]) selectionner(filtres[highlight]); else if (libre) setOpen(false); }
     else if (e.key === "Escape") { setOpen(false); setQuery(""); }
   };
 
-  const valeurAffichee = open ? query : value ? getLabel(value) : allowClear ? clearLabel : "";
+  const valeurAffichee = open ? query : value ? getLabel(value) : libre ? texteLibre ?? "" : allowClear ? clearLabel : "";
 
   return (
     <div ref={rootRef} className="relative">
@@ -77,8 +81,12 @@ export function Combobox<T>({ options, value, onChange, getLabel, getSubLabel, g
           value={valeurAffichee}
           disabled={disabled}
           placeholder={placeholder}
-          onFocus={() => { setOpen(true); setQuery(""); }}
-          onChange={(e) => { setQuery(e.target.value); if (!open) setOpen(true); }}
+          onFocus={() => { setOpen(true); setQuery(libre ? (value ? getLabel(value) : texteLibre ?? "") : ""); }}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            if (!open) setOpen(true);
+            if (libre) { if (value) onChange(null); onTexteLibre!(e.target.value); }
+          }}
           onKeyDown={handleKeyDown}
           className={`w-full border border-border rounded-lg pl-8 pr-8 py-2 bg-background text-[13px] text-foreground disabled:opacity-60 ${className}`}
         />
@@ -94,7 +102,7 @@ export function Combobox<T>({ options, value, onChange, getLabel, getSubLabel, g
               {clearLabel}
             </div>
           )}
-          {filtres.length === 0 && <div className="px-3 py-2 text-[12px] text-muted-foreground">Aucun résultat</div>}
+          {filtres.length === 0 && <div className="px-3 py-2 text-[12px] text-muted-foreground">{libre && query.trim() ? `Aucun résultat : « ${query.trim()} » sera gardé tel quel` : "Aucun résultat"}</div>}
           {filtres.map((item, i) => (
             <div
               key={getId ? getId(item) : getLabel(item) + i}

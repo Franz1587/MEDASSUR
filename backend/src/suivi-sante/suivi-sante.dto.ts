@@ -21,6 +21,10 @@ export class CreerRendezVousDto {
 
   @IsOptional()
   @IsString()
+  specialite?: string;
+
+  @IsOptional()
+  @IsString()
   motif?: string;
 
   @IsDateString()
@@ -40,6 +44,11 @@ export class RepondreRendezVousDto {
   @IsOptional()
   @IsDateString()
   dateHeure?: string;
+
+  // Établissement seulement : affecte (ou réaffecte) un de ses médecins.
+  @IsOptional()
+  @IsString()
+  medecinId?: string;
 
   @IsOptional()
   @IsInt()

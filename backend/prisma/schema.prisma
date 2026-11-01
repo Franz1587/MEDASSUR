@@ -4287,6 +4287,9 @@ model RendezVous {
   prestataireId String?
   prestataire   Prestataire? @relation(fields: [prestataireId], references: [id])
   type          String       // Consultation | Contrôle | Examen
+  // Spécialité demandée (2026-11) : choisie dans la structure ; sans
+  // médecin précis, l'établissement affecte un de ses médecins.
+  specialite    String?
   motif         String?
   dateHeure     DateTime
   dureeMinutes  Int          @default(30)

@@ -41,6 +41,11 @@ export class SuiviSanteMembreController {
     return this.suivi.annulerRendezVous(id, await this.famille(req));
   }
 
+  @Get("structures")
+  structures(@Query("lat") lat?: string, @Query("lng") lng?: string) {
+    return this.suivi.structures({ lat: nombre(lat), lng: nombre(lng) });
+  }
+
   @Get("professionnels")
   professionnels(@Query("lat") lat?: string, @Query("lng") lng?: string, @Query("q") q?: string, @Query("specialite") specialite?: string, @Query("prestataireId") prestataireId?: string) {
     return this.suivi.professionnels({ lat: nombre(lat), lng: nombre(lng), q: q?.trim() || undefined, specialite: specialite?.trim() || undefined, prestataireId: prestataireId || undefined });

@@ -14,6 +14,9 @@ const INCLUDE_RDV = {
   prestataire: { select: { id: true, nom: true, type: true, ville: true, adresse: true, telephone: true } },
 } as const;
 
+// Libellé des médecins sans spécialité renseignée (généralistes).
+export const SPECIALITE_GENERALE = "Médecine générale";
+
 const nomComplet = (p: { nom: string; prenom?: string | null }) => `${p.prenom ?? ""} ${p.nom}`.trim();
 const nomMedecin = (m: { nom: string; prenom?: string | null; titre?: string | null }) => `${m.titre === "Professeur" ? "Pr" : "Dr"} ${nomComplet(m)}`;
 // Heure du Gabon (UTC+1), quel que soit le fuseau du serveur.
@@ -85,9 +88,11 @@ export class SuiviSanteService {
     if (!dto.medecinId && !dto.prestataireId) throw new BadRequestException("Choisissez un médecin ou un établissement.");
     const dateHeure = new Date(dto.dateHeure);
     if (dateHeure.getTime() < Date.now() + 15 * 60_000) throw new BadRequestException("Choisissez une date et une heure à venir.");
+    let specialite = dto.specialite?.trim() || null;
     if (dto.medecinId) {
-      const medecin = await this.prisma.medecin.findUnique({ where: { id: dto.medecinId }, select: { actif: true } });
+      const medecin = await this.prisma.medecin.findUnique({ where: { id: dto.medecinId }, select: { actif: true, specialite: true } });
       if (!medecin?.actif) throw new NotFoundException("Médecin introuvable.");
+      specialite ??= medecin.specialite;
       if (dto.prestataireId) {
         const lien = await this.prisma.medecinPrestataire.findUnique({ where: { medecinId_prestataireId: { medecinId: dto.medecinId, prestataireId: dto.prestataireId } } });
         if (!lien) throw new BadRequestException("Ce médecin n'exerce pas dans cet établissement.");
@@ -99,12 +104,12 @@ export class SuiviSanteService {
     const rdv = await this.prisma.rendezVous.create({
       data: {
         assureId: dto.assureId, medecinId: dto.medecinId ?? null, prestataireId: dto.prestataireId ?? null,
-        type: dto.type, motif: dto.motif?.trim() || null, dateHeure, demandeParUserId: userId,
+        type: dto.type, specialite, motif: dto.motif?.trim() || null, dateHeure, demandeParUserId: userId,
       },
       include: INCLUDE_RDV,
     });
     // Le médecin (et l'établissement) sont alertés avec la date et l'heure.
-    const message = `Nouveau rendez-vous (${rdv.type}) : ${nomComplet(rdv.assure)} ${quand(rdv.dateHeure)}${rdv.motif ? ` — ${rdv.motif}` : ""}.`;
+    const message = `Nouveau rendez-vous (${rdv.type}${rdv.specialite ? ` · ${rdv.specialite}` : ""}) : ${nomComplet(rdv.assure)} ${quand(rdv.dateHeure)}${rdv.medecin ? "" : " — médecin à affecter"}${rdv.motif ? ` — ${rdv.motif}` : ""}.`;
     const destinataires = [
       ...(rdv.medecinId ? await this.comptesMedecin(rdv.medecinId) : []),
       ...(rdv.prestataireId ? await this.comptesPrestataire(rdv.prestataireId) : []),
@@ -135,23 +140,64 @@ export class SuiviSanteService {
     if (!rdv || !autorise) throw new NotFoundException("Rendez-vous introuvable.");
     if (rdv.statut === "Annulé") throw new BadRequestException("Le patient a annulé ce rendez-vous.");
     if (dto.statut === "Refusé" && !dto.reponse?.trim()) throw new BadRequestException("Indiquez le motif du refus au patient.");
+    // Affectation à un autre médecin : seul l'établissement du rendez-vous
+    // le peut (indisponibilité du médecin demandé), parmi ses médecins.
+    const reaffecte = !!dto.medecinId && dto.medecinId !== rdv.medecinId;
+    if (reaffecte) {
+      if (!perimetre.prestataireId || rdv.prestataireId !== perimetre.prestataireId) throw new ForbiddenException("Seul l'établissement peut affecter un autre médecin.");
+      const lien = await this.prisma.medecinPrestataire.findUnique({ where: { medecinId_prestataireId: { medecinId: dto.medecinId!, prestataireId: perimetre.prestataireId } }, include: { medecin: { select: { actif: true } } } });
+      if (!lien?.medecin.actif) throw new BadRequestException("Ce médecin n'exerce pas dans votre établissement.");
+    }
+    if (dto.statut === "Confirmé" && !rdv.medecinId && !reaffecte && perimetre.prestataireId) throw new BadRequestException("Affectez un médecin avant de confirmer.");
     const nouvelleDate = dto.dateHeure ? new Date(dto.dateHeure) : null;
     const maj = await this.prisma.rendezVous.update({
       where: { id },
       data: {
         statut: dto.statut, reponse: dto.reponse?.trim() || rdv.reponse,
+        ...(reaffecte ? { medecinId: dto.medecinId } : {}),
         ...(nouvelleDate ? { dateHeure: nouvelleDate } : {}), ...(dto.dureeMinutes ? { dureeMinutes: dto.dureeMinutes } : {}),
       },
       include: INCLUDE_RDV,
     });
+    if (reaffecte) {
+      const message = `Rendez-vous affecté par ${auteur} : ${nomComplet(maj.assure)} ${quand(maj.dateHeure)}${maj.motif ? ` — ${maj.motif}` : ""}.`;
+      await this.notifierUtilisateurs(await this.comptesMedecin(dto.medecinId!), "RendezVous", "Nouveau rendez-vous", message, { type: "rendez-vous", id });
+      if (rdv.medecinId) {
+        await this.notifierUtilisateurs(await this.comptesMedecin(rdv.medecinId), "RendezVous", "Rendez-vous réaffecté", `${auteur} a confié le rendez-vous de ${nomComplet(maj.assure)} ${quand(rdv.dateHeure)} à ${nomMedecin(maj.medecin!)}.`, { type: "rendez-vous", id });
+      }
+    }
     if (["Confirmé", "Refusé"].includes(dto.statut)) {
       const deplace = nouvelleDate && nouvelleDate.getTime() !== rdv.dateHeure.getTime();
       const message = dto.statut === "Confirmé"
-        ? `${auteur} a confirmé votre rendez-vous ${quand(maj.dateHeure)}${deplace ? " (nouvel horaire)" : ""}${maj.reponse ? ` — ${maj.reponse}` : ""}.`
+        ? `${auteur} a confirmé votre rendez-vous ${quand(maj.dateHeure)}${maj.medecin ? ` avec ${nomMedecin(maj.medecin)}` : ""}${reaffecte && rdv.medecinId ? " (autre médecin, le médecin demandé n'étant pas disponible)" : ""}${deplace ? " (nouvel horaire)" : ""}${maj.reponse ? ` — ${maj.reponse}` : ""}.`
         : `${auteur} n'a pas pu accepter votre rendez-vous ${quand(rdv.dateHeure)} — ${maj.reponse}.`;
       await this.notifierUtilisateurs(await this.comptesAssure(rdv.assureId), "RendezVous", dto.statut === "Confirmé" ? "Rendez-vous confirmé" : "Rendez-vous refusé", message, { type: "rendez-vous", id });
     }
     return maj;
+  }
+
+  // ── Structures médicales (prise de rendez-vous) ───────────────────────
+
+  // Établissements conventionnés (hors pharmacies) avec les spécialités de
+  // leurs médecins enregistrés : l'assuré choisit la structure, puis la
+  // spécialité, puis un médecin (ou laisse l'établissement l'affecter).
+  async structures(params: { lat?: number; lng?: number }) {
+    const prestataires = await this.prisma.prestataire.findMany({
+      where: { statutConvention: "Conventionné", NOT: { type: { contains: "pharmac", mode: "insensitive" } } },
+      select: {
+        id: true, nom: true, type: true, ville: true, adresse: true, telephone: true, latitude: true, longitude: true,
+        medecins: { where: { medecin: { actif: true } }, select: { medecin: { select: { specialite: true } } } },
+      },
+    });
+    const position = params.lat !== undefined && params.lng !== undefined ? { lat: params.lat, lng: params.lng } : null;
+    return prestataires
+      .map(({ medecins, ...p }) => ({
+        ...p,
+        nbMedecins: medecins.length,
+        specialites: [...new Set(medecins.map((m) => m.medecin.specialite?.trim() || SPECIALITE_GENERALE))].sort((a, b) => a.localeCompare(b, "fr")),
+        distanceKm: position && p.latitude !== null && p.longitude !== null ? Math.round(distanceKm(position, { lat: p.latitude, lng: p.longitude }) * 10) / 10 : null,
+      }))
+      .sort((a, b) => (a.distanceKm ?? 1e9) - (b.distanceKm ?? 1e9) || Number(b.nbMedecins > 0) - Number(a.nbMedecins > 0) || a.nom.localeCompare(b.nom, "fr"));
   }
 
   // ── Professionnels de santé ───────────────────────────────────────────
@@ -163,8 +209,10 @@ export class SuiviSanteService {
       where: {
         actif: true,
         ...(params.prestataireId ? { structures: { some: { prestataireId: params.prestataireId } } } : {}),
-        ...(params.specialite ? { specialite: { contains: params.specialite, mode: "insensitive" } } : {}),
-        ...(params.q ? { OR: [{ nom: { contains: params.q, mode: "insensitive" } }, { prenom: { contains: params.q, mode: "insensitive" } }, { specialite: { contains: params.q, mode: "insensitive" } }] } : {}),
+        ...(params.specialite === SPECIALITE_GENERALE
+          ? { OR: [{ specialite: null }, { specialite: "" }, { specialite: { contains: "général", mode: "insensitive" } }] }
+          : params.specialite ? { specialite: { contains: params.specialite, mode: "insensitive" } } : {}),
+        ...(params.q ? { AND: [{ OR: [{ nom: { contains: params.q, mode: "insensitive" } }, { prenom: { contains: params.q, mode: "insensitive" } }, { specialite: { contains: params.q, mode: "insensitive" } }] }] } : {}),
       },
       select: {
         id: true, nom: true, prenom: true, titre: true, specialite: true, telephone: true,
