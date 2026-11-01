@@ -38,10 +38,11 @@ if(prise.type[0]==='h'){const ny=b(o.y+dy,0,o.y+o.h-MIN);h=o.h+o.y-ny;y=ny;}else
 c.addEventListener('touchend',()=>prise=null);
 function pivote(s){rot=(rot+90*s+360)%360;cadre={x:.03,y:.03,w:.94,h:.94};dessine();}
 document.getElementById('g').onclick=()=>pivote(-1);document.getElementById('d').onclick=()=>pivote(1);
-document.getElementById('non').onclick=()=>window.ReactNativeWebView.postMessage(JSON.stringify({t:'annuler'}));
-document.getElementById('ok').onclick=()=>{const plein=tourne(img,Math.min(1,2400/Math.max(img.width,img.height))),o=document.createElement('canvas');
+var rnwv=window.ReactNativeWebView||{postMessage:function(d){console.warn('RNWebView absent',d);}};
+document.getElementById('non').onclick=()=>rnwv.postMessage(JSON.stringify({t:'annuler'}));
+document.getElementById('ok').onclick=()=>{const plein=tourne(img,Math.min(1,1200/Math.max(img.width,img.height))),o=document.createElement('canvas');
 o.width=Math.round(plein.width*cadre.w);o.height=Math.round(plein.height*cadre.h);o.getContext('2d').drawImage(plein,plein.width*cadre.x,plein.height*cadre.y,o.width,o.height,0,0,o.width,o.height);
-window.ReactNativeWebView.postMessage(JSON.stringify({t:'ok',data:o.toDataURL('image/jpeg',.88).split(',')[1]}));};
+rnwv.postMessage(JSON.stringify({t:'ok',data:o.toDataURL('image/jpeg',.80).split(',')[1]}));};
 img.onload=dessine;window.addEventListener('resize',()=>{vue=null;dessine();});img.src='${dataUrl}';
 </script></body></html>`;
 
