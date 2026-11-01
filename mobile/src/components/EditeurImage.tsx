@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Modal, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, View } from "react-native";
 import { WebView } from "react-native-webview";
 import * as FileSystem from "expo-file-system/legacy";
 import type { RnFilePart } from "../api/http";
@@ -60,9 +60,16 @@ export function EditeurImage({ fichier, onValider, onAnnuler }: { fichier: RnFil
   const recevoir = async (brut: string) => {
     const m = JSON.parse(brut) as { t: "ok" | "annuler"; data?: string };
     if (m.t === "annuler" || !m.data || !fichier) { onAnnuler(); return; }
-    const uri = `${FileSystem.cacheDirectory}photo-${Date.now()}.jpg`;
-    await FileSystem.writeAsStringAsync(uri, m.data, { encoding: FileSystem.EncodingType.Base64 });
-    onValider({ uri, name: fichier.name.replace(/\.\w+$/, "") + ".jpg", type: "image/jpeg" });
+    try {
+      const dir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
+      if (!dir) { onValider(fichier); return; }
+      const uri = `${dir}photo-${Date.now()}.jpg`;
+      await FileSystem.writeAsStringAsync(uri, m.data, { encoding: FileSystem.EncodingType.Base64 });
+      onValider({ uri, name: fichier.name.replace(/\.\w+$/, "") + ".jpg", type: "image/jpeg" });
+    } catch {
+      Alert.alert("Erreur", "Impossible d'enregistrer la photo modifiée. La photo originale sera utilisée.");
+      onValider(fichier);
+    }
   };
 
   return (

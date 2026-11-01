@@ -1,6 +1,7 @@
 import React from "react";
 import {
   View, Text, StyleSheet, ActivityIndicator, Pressable, ScrollView, RefreshControl,
+  KeyboardAvoidingView, Platform,
   type StyleProp, type ViewStyle, type TextStyle,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -30,12 +31,15 @@ export function Screen({
   }
   return (
     <SafeAreaView style={[styles.screen, style]} edges={["top"]}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={colors.primary} /> : undefined}
-      >
-        {children}
-      </ScrollView>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={colors.primary} /> : undefined}
+        >
+          {children}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
