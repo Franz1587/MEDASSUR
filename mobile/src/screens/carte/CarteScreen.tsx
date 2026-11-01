@@ -195,7 +195,7 @@ export function CarteScreen() {
                 source={{
                   uri: `${API_URL}${cheminCarteDe(selected.id)}?v=${carteVersion}`,
                   headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-                  cache: false,
+                  cache: true,
                 }}
                 page={page}
                 singlePage
