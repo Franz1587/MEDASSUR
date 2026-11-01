@@ -2798,11 +2798,14 @@ export class DocumentsService {
       include: {
         medecin: true,
         priseEnCharge: { include: { assure: { include: { contrat: { include: { client: true, compagnie: true } }, famille: true } }, prestataireRef: true } },
+        // Prescription numérisée (2026-11) : assure résolu directement sur la
+        // prescription (pas de priseEnCharge) — nécessaire pour générer la FE
+        // électronique au lieu de l'original photographié.
+        assure: { include: { contrat: { include: { client: true, compagnie: true } }, famille: true } },
         lignes: { where: { type: "Examen" }, include: { traitements: { include: { priseEnCharge: { include: { acteMedical: true } } } } } },
       },
     });
     if (!prescription) throw new NotFoundException(`Prescription ${prescriptionId} introuvable`);
-    if (!prescription.priseEnCharge) return this.renderOriginalNumerise(prescriptionId, res);
     if (!prescription.numeroBonExamen) throw new BadRequestException("Cette prescription ne comporte aucun examen.");
 
     const lignesSource = prestataireFiltre
@@ -2821,6 +2824,22 @@ export class DocumentsService {
         familleActe: traite?.acteMedical?.famille ?? null,
       };
     });
+
+    if (!prescription.priseEnCharge) {
+      // Prescription numérisée — générer la vraie FE électronique depuis les
+      // données de la prescription (assure + lignes ARIANA), pas la photo.
+      if (!prescription.assure) return this.renderOriginalNumerise(prescriptionId, res);
+      const mecin = prescription.medecin ?? { id: "", nom: "—", prenom: null, titre: null, specialite: null, codePraticien: null };
+      const pec: FormulairePec = {
+        date: prescription.dateOrdonnance ?? new Date().toISOString().slice(0, 10),
+        type: "Examen", createdAt: prescription.createdAt,
+        assure: prescription.assure as unknown as FormulairePec["assure"],
+        prestataireRef: null,
+        prescriptionOrigine: { medecin: mecin, numeroBonExamen: prescription.numeroBonExamen, medicaments: [] },
+      };
+      return this.genererFormulaire("examen", prescription.numeroBonExamen, pec, lignes, res, prescriptionId, utilisateur, prestataireFiltre);
+    }
+
     const pec: FormulairePec = {
       date: prescription.priseEnCharge.date, type: prescription.priseEnCharge.type, createdAt: prescription.createdAt,
       assure: prescription.priseEnCharge.assure as unknown as FormulairePec["assure"],
