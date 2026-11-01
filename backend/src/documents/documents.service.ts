@@ -1595,7 +1595,12 @@ export class DocumentsService {
     // voir demande utilisateur : "fais remonter le QR code... et mets-le
     // en noir").
     const styleLaRuche = !fondRecto && modele?.styleCode === "la-ruche";
-    const qrBuffer = await QRCode.toBuffer(assure.numeroAssure ?? assure.matricule, { margin: 0, width: 240, color: { dark: styleLaRuche ? "#000000" : primaire, light: "#ffffff" } });
+    // QR d'authentification (2026-11) — lien vers /verifier/{id} :
+    // scannable par n'importe quel téléphone, renvoie le statut en direct.
+    // Specimen (id absent) : QR basique sur le matricule, pas de signature DB.
+    const qrBuffer = assure.id
+      ? (await this.documentSignature.signer("Carte d'assure", assure.id, { nom: assure.nom, roleId: "systeme" })).qrBuffer
+      : await QRCode.toBuffer(assure.numeroAssure ?? assure.matricule, { margin: 0, width: 240 });
 
     // ── Recto ──────────────────────────────────────────────────────────
     doc.addPage({ size: [CARD_WIDTH, CARD_HEIGHT], margin: 0 });
@@ -6531,6 +6536,7 @@ const CARD_WIDTH = 242.65; // 85,6 mm — format carte CR80 (Evolis Primacy)
 const CARD_HEIGHT = 153.01; // 53,98 mm
 
 interface CarteAssureData {
+  id?: string | null;
   nom: string;
   prenom?: string | null;
   matricule: string;

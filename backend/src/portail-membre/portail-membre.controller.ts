@@ -239,7 +239,7 @@ export class PortailMembreController {
       const cible = await this.prisma.assureSante.findUnique({ where: { id: assureId } });
       if (!cible || cible.familleId !== assureSanteId) throw new ForbiddenException(`Carte ${assureId} inaccessible`);
     }
-    res.setHeader("X-Signature", "aucune"); // PDF streamé directement, pas de QR d'authentification sur la carte membre
+    res.setHeader("X-Signature", "integree"); // QR d'authentification déjà intégré dans le PDF par ajouterCarteRectoVerso
     return this.documents.renderCarteUnique(assureId, res);
   }
 

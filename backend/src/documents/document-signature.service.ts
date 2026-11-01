@@ -175,6 +175,20 @@ export class DocumentSignatureService {
       return { reference: releve.numero, statut, details };
     }
 
+    if (documentType === "Carte d'assure") {
+      const assure = await this.prisma.assureSante.findUnique({
+        where: { id: documentRef },
+        include: { contrat: { select: { statut: true, numeroPolice: true } } },
+      });
+      if (!assure) return null;
+      const details: DetailStatutActuel[] = [
+        { label: "Matricule", valeur: assure.matricule },
+        { label: "Type", valeur: assure.typeAssure ?? "Assuré" },
+      ];
+      if (assure.contrat?.numeroPolice) details.push({ label: "Contrat", valeur: assure.contrat.numeroPolice });
+      return { reference: assure.matricule, statut: assure.statut, details };
+    }
+
     return null;
   }
 }
