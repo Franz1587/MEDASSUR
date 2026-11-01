@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { referenceLisible } from "@/lib/referenceFacture";
 import { ClipboardCheck, Plus, Pencil, FileText, Users, Building2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/shared/Badge";
@@ -13,7 +14,9 @@ import {
   type PriseEnChargeUpsertInput,
 } from "@/services/sante.service";
 import { getActesMedicaux } from "@/services/acteMedical.service";
-import { getFactures, createFacture, type FactureUpsertInput } from "@/services/factures.service";
+import { getFacturesPage, createFacture, type FactureUpsertInput } from "@/services/factures.service";
+import { Pagination } from "@/components/shared/Pagination";
+import { optionsTaillePage, usePagination } from "@/hooks/usePagination";
 import { getRemboursements, createRemboursement, type RemboursementUpsertInput } from "@/services/remboursements.service";
 import { getPrestataires } from "@/services/prestataires.service";
 import { getClients } from "@/services/clients.service";
@@ -60,16 +63,6 @@ function emptyFactureHeaderForm() {
   return { prestataire: null as Prestataire | null, client: null as Client | null, contratId: "", dateReception: new Date().toLocaleDateString("fr-FR"), referenceFacture: "" };
 }
 
-// Référence lisible (2026-10) — les factures télétransmises par le système
-// externe d'un prestataire portent "MS-PRESTA-<uuid>-<horodatage>" (opaque).
-// L'UUID n'a rien à déchiffrer ; l'horodatage encode une vraie date/heure
-// qu'on affiche à la place (même logique que documents.service.ts côté backend).
-function referenceLisible(ref: string): string {
-  const m = ref.match(/^MS-PRESTA-[0-9a-f-]{36}-(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})\d*$/i);
-  if (!m) return ref;
-  const [, annee, mois, jour, heure, minute] = m;
-  return `Télétrans. ${jour}/${mois}/${annee} ${heure}h${minute}`;
-}
 
 // En-tête de déclaration de remboursement (2026-08) — voir demande
 // utilisateur : "le remboursement ne se fait pas à l'ordre d'un
@@ -123,10 +116,18 @@ export default function PrisesEnChargeView() {
     reference: filtreReference.trim() || undefined,
   };
 
-  const refreshFactures = async () => {
+  // Pagination serveur : seule la page affichée est chargée, le total est réel.
+  const [pageFactures, setPageFactures] = useState(1);
+  const [tailleFactures, setTailleFactures] = useState(20);
+  const [totalFactures, setTotalFactures] = useState(0);
+  const refreshFactures = async (page = 1, taille = tailleFactures) => {
     setRecherchant(true);
     try {
-      setFactures(await getFactures(filtresFacturesActuels));
+      const r = await getFacturesPage(filtresFacturesActuels, page, taille);
+      setFactures(r.items);
+      setTotalFactures(r.total);
+      setPageFactures(page);
+      setTailleFactures(taille);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Recherche impossible.");
     } finally {
@@ -195,6 +196,7 @@ export default function PrisesEnChargeView() {
   // (jamais rattachées à une déclaration, voir PortailMembreController.
   // creerRemboursement) — la déclaration multi-lignes vit dans `remboursements`.
   const [remboursements, setRemboursements] = useState<Remboursement[]>([]);
+  const paginationRemboursements = usePagination(remboursements);
   const [showCreateRembHeader, setShowCreateRembHeader] = useState(false);
   const [rembHeaderForm, setRembHeaderForm] = useState(emptyRembHeaderForm());
   const [rembHeaderSubmitting, setRembHeaderSubmitting] = useState(false);
@@ -362,7 +364,7 @@ export default function PrisesEnChargeView() {
           <button key={o.id} type="button" onClick={() => setOnglet(o.id)}
             className={`px-4 py-1.5 text-[13px] rounded-md transition-colors ${onglet === o.id ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground hover:text-foreground"}`}
           >
-            {o.label} ({o.id === "TiersPayant" ? factures.length : remboursements.length + priseEnCharges.length})
+            {o.label} ({o.id === "TiersPayant" ? totalFactures : remboursements.length + priseEnCharges.length})
           </button>
         ))}
       </div>
@@ -429,7 +431,7 @@ export default function PrisesEnChargeView() {
                   <input value={filtreReference} onChange={(e) => setFiltreReference(e.target.value)} placeholder="ex. FAC-2026-000123" className={fieldCls} />
                 </label>
               </div>
-              <Btn variant="primary" onClick={refreshFactures} disabled={recherchant}>
+              <Btn variant="primary" onClick={() => refreshFactures(1)} disabled={recherchant}>
                 <Search className="w-4 h-4" />{recherchant ? "Recherche…" : "Rechercher"}
               </Btn>
             </div>
@@ -484,6 +486,12 @@ export default function PrisesEnChargeView() {
             </tbody>
           </table>
           {factures.length === 0 && <p className="text-xs text-center text-muted-foreground py-10">Aucune facture — cliquez sur "Nouvelle facture" pour commencer.</p>}
+          <Pagination
+            page={pageFactures} pageCount={Math.max(1, Math.ceil(totalFactures / tailleFactures))} pageSize={tailleFactures}
+            pageSizeOptions={optionsTaillePage(totalFactures)} total={totalFactures}
+            debut={totalFactures ? (pageFactures - 1) * tailleFactures + 1 : 0} fin={Math.min(totalFactures, pageFactures * tailleFactures)}
+            onPageChange={(p) => refreshFactures(p)} onPageSizeChange={(t) => refreshFactures(1, t)}
+          />
           {factures.some(estMontantDeclare) && (
             <p className="text-xs text-muted-foreground px-4 py-2 border-t border-border/50">* Montant déclaré par le prestataire — pas encore validé en prise en charge (affiché en italique).</p>
           )}
@@ -567,7 +575,7 @@ export default function PrisesEnChargeView() {
                 </tr>
               </thead>
               <tbody>
-                {remboursements.map((r) => (
+                {paginationRemboursements.pageItems.map((r) => (
                   <tr key={r.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer" onClick={() => setRemboursementOuvert(r.id)}>
                     <td className="px-4 py-3 text-xs font-semibold text-primary whitespace-nowrap" style={{ fontFamily: "'DM Mono', monospace" }}>{r.id}</td>
                     <td className="px-4 py-3 font-semibold text-foreground whitespace-nowrap">
@@ -598,6 +606,11 @@ export default function PrisesEnChargeView() {
               </tbody>
             </table>
             {remboursements.length === 0 && <p className="text-xs text-center text-muted-foreground py-10">Aucune déclaration — cliquez sur "Déclarer un remboursement" pour commencer.</p>}
+            <Pagination
+              page={paginationRemboursements.page} pageCount={paginationRemboursements.pageCount} pageSize={paginationRemboursements.pageSize}
+              pageSizeOptions={paginationRemboursements.pageSizeOptions} total={paginationRemboursements.total} debut={paginationRemboursements.debut} fin={paginationRemboursements.fin}
+              onPageChange={paginationRemboursements.setPage} onPageSizeChange={paginationRemboursements.setPageSize}
+            />
           </div>
 
           <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -709,7 +722,7 @@ export default function PrisesEnChargeView() {
       )}
 
       {factureOuverte && (
-        <FactureSaisie factureId={factureOuverte} onClose={() => setFactureOuverte(null)} onChanged={refreshFactures} />
+        <FactureSaisie factureId={factureOuverte} onClose={() => setFactureOuverte(null)} onChanged={() => refreshFactures(pageFactures)} />
       )}
 
       {showCreateRembHeader && (

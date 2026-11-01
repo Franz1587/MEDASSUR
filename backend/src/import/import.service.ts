@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { estReferenceTeleTransmise } from "../factures/reference-facture.util";
 import * as path from "path";
 import ExcelJS from "exceljs";
 import { BadRequestException, Injectable } from "@nestjs/common";
@@ -55,7 +56,8 @@ function normaliserEntete(s: string): string {
 // "je voudrais que toute facture à ce format soit considérée comme
 // télétransmise par le prestataire car c'est le cas :
 // MS-PRESTA-349bbdea-fb66-433d-bc8b-7c64a9382d0e-20260306133600455". Ce
-// format ("MS-PRESTA-" + UUID + horodatage numérique) est généré par le
+// format (préfixe — MS-PRESTA, ISFCT… — + UUID + horodatage numérique,
+// voir estReferenceTeleTransmise dans factures/reference-facture.util.ts) est généré par le
 // système externe du prestataire lors d'une VRAIE télétransmission —
 // jamais saisi manuellement (le portail MedAssur génère ses propres
 // références via genererReferencePortail, format différent). Une facture
@@ -63,10 +65,6 @@ function normaliserEntete(s: string): string {
 // "Soumise" (voir Facture.statut, PortailPrestataireController.
 // teletransmettre — même statut que le bouton "Télétransmettre le
 // dossier"), jamais "En saisie" par défaut.
-const REGEX_REFERENCE_TELETRANSMISE = /^MS-PRESTA-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-\d{10,20}$/i;
-function estReferenceTeleTransmise(reference: string): boolean {
-  return REGEX_REFERENCE_TELETRANSMISE.test(reference.trim());
-}
 
 // Tolérance de format (2026-08 — voir demande utilisateur : "l'application
 // doit tenir compte du format des données de l'origine et non rester

@@ -16,7 +16,7 @@ const TAILLE_PAR_DEFAUT = 20;
 // utilisateur ci-dessus). "Tout afficher" reste toujours la dernière
 // option, pour l'écran qui a besoin d'exporter/parcourir la liste entière
 // visuellement sans re-cliquer plusieurs pages.
-function optionsTaillePage(total: number): number[] {
+export function optionsTaillePage(total: number): number[] {
   const paliers = [20, 50, 100, 200, 500];
   const options = paliers.filter((p) => p < total);
   if (total > 0) options.push(total);

@@ -1,3 +1,5 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ChevronDown, ChevronRight, Eye, User, Download, Loader2 } from "lucide-react";
@@ -160,6 +162,7 @@ export default function PortailParticipantsView() {
     }
   };
 
+  const pagFamilles = usePagination(famillesFiltrees);
   return (
     <div className="p-6">
       <div className="mb-5 flex items-start justify-between gap-3 flex-wrap">
@@ -228,7 +231,7 @@ export default function PortailParticipantsView() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
-            {famillesFiltrees.map((f) => {
+            {pagFamilles.pageItems.map((f) => {
               const ouverte = ouvertes.has(f.racine.id);
               return (
                 <Fragment key={f.racine.id}>
@@ -284,6 +287,7 @@ export default function PortailParticipantsView() {
             )}
           </tbody>
         </table>
+        <Pager p={pagFamilles} />
       </div>
 
       {familleDetail && (

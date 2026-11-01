@@ -1,4 +1,7 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useState } from "react";
+import { referenceLisible } from "@/lib/referenceFacture";
 import { X, Printer, CheckCircle, XCircle, Banknote, Stethoscope, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/shared/Badge";
@@ -50,6 +53,7 @@ export default function ReglementDetail({ bordereauId, onClose, onChanged }: { b
     onChanged?.();
   };
 
+  const pagLignes = usePagination(bordereau?.lignes ?? []);
   if (!bordereau) return null;
 
   return (
@@ -122,12 +126,12 @@ export default function ReglementDetail({ bordereauId, onClose, onChanged }: { b
                 </tr>
               </thead>
               <tbody>
-                {bordereau.lignes.map((l) => (
+                {pagLignes.pageItems.map((l) => (
                   <tr key={l.id} className="border-b border-border/50">
                     <td className="px-3 py-2 whitespace-nowrap text-foreground">{l.familleNom}</td>
                     <td className="px-3 py-2 whitespace-nowrap font-semibold text-foreground">{l.assureNom}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{l.decompteNumero ?? "—"}</td>
-                    <td className="px-3 py-2 whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{l.factureReference ?? "—"}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{l.factureReference ? referenceLisible(l.factureReference) : "—"}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-foreground">{l.date}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-right text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(l.montant)}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-foreground">{l.statut}</td>
@@ -135,6 +139,7 @@ export default function ReglementDetail({ bordereauId, onClose, onChanged }: { b
                 ))}
               </tbody>
             </table>
+            <Pager p={pagLignes} />
             {bordereau.lignes.length === 0 && <div className="py-8 text-center text-muted-foreground text-sm">Aucune ligne</div>}
           </div>
         </div>

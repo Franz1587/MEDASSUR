@@ -1,3 +1,5 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useState } from "react";
 import { Smartphone, ArrowDownCircle, ArrowUpCircle, RefreshCw, X, Download } from "lucide-react";
 import { toast } from "sonner";
@@ -452,6 +454,7 @@ export default function EbillingView() {
   const totalFrais = txPayees.reduce((s, t) => s + (t.fraisBilling ?? 0), 0);
   const enAttente = transactions.filter((t) => t.statut === "pending").length;
 
+  const pagTransactions = usePagination(transactions);
   return (
     <div className="p-4 sm:p-6 space-y-5">
       <ModuleHeader
@@ -554,7 +557,7 @@ export default function EbillingView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {transactions.map((t) => {
+                {pagTransactions.pageItems.map((t) => {
                   const frais = t.fraisBilling ?? 0;
                   const net = frais > 0 ? t.montant - frais : null;
                   return (
@@ -598,6 +601,7 @@ export default function EbillingView() {
                 })}
               </tbody>
             </table>
+            <Pager p={pagTransactions} />
           </div>
         )}
       </div>

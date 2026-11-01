@@ -1,3 +1,5 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, FolderClock, Pill, FlaskConical, User, FileDown } from "lucide-react";
 import { Badge } from "@/components/shared/Badge";
@@ -62,6 +64,7 @@ export default function MedecinDossiersPatientsView() {
 
   const dossierOuvert = useMemo(() => dossiers.find((d) => d.assureId === patientId) ?? null, [dossiers, patientId]);
 
+  const pagDossiers = usePagination(dossiers);
   if (dossierOuvert) {
     // Groupement par année, années les plus récentes en premier — voir
     // demande utilisateur : "classés par date, par an".
@@ -168,7 +171,7 @@ export default function MedecinDossiersPatientsView() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
-            {dossiers.map((d) => (
+            {pagDossiers.pageItems.map((d) => (
               <tr key={d.assureId} className="hover:bg-secondary/25 cursor-pointer" onClick={() => setPatientId(d.assureId)}>
                 <td className="px-3 py-2 font-medium text-foreground">{d.assureNom}</td>
                 <td className="px-3 py-2 text-muted-foreground">{d.assureMatricule}</td>
@@ -185,6 +188,7 @@ export default function MedecinDossiersPatientsView() {
             )}
           </tbody>
         </table>
+        <Pager p={pagDossiers} />
       </div>
     </div>
   );

@@ -1,3 +1,5 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { Fragment, useEffect, useState } from "react";
 import { AlertTriangle, Printer, Search, FileSpreadsheet, FileText } from "lucide-react";
 import { toast } from "sonner";
@@ -66,6 +68,7 @@ export default function BordereauSinistresView() {
   const nbLignes = (payload?.groupes ?? []).reduce((s, g) => s + g.lignes.length, 0);
   const libelleColReglement = typeReglement === "comptable" ? "N° Chèque" : "N° Règlement";
 
+  const pagGroupes = usePagination(payload?.groupes ?? []);
   return (
     <div className="p-6">
       <ModuleHeader title="Bordereau Sinistres" subtitle="Factures et remboursements réglés, par compagnie ou par agence de traitement — pour réclamation du fonds de roulement" icon={AlertTriangle} />
@@ -163,7 +166,7 @@ export default function BordereauSinistresView() {
                 </tr>
               </thead>
               <tbody>
-                {payload.groupes.map((g) => (
+                {pagGroupes.pageItems.map((g) => (
                   <Fragment key={g.souscripteur}>
                     {g.lignes.map((l, i) => (
                       <tr key={`${g.souscripteur}-${i}`} className="border-b border-border/40 hover:bg-secondary/20">
@@ -201,6 +204,7 @@ export default function BordereauSinistresView() {
                 </tr>
               </tfoot>
             </table>
+            <Pager p={pagGroupes} />
           </div>
         )}
       </div>

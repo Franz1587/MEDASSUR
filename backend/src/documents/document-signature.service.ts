@@ -1,4 +1,5 @@
 import * as QRCode from "qrcode";
+import { referenceLisible } from "../factures/reference-facture.util";
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -106,7 +107,7 @@ export class DocumentSignatureService {
       } else {
         statut = "En saisie";
       }
-      return { reference: facture.referenceFacture, statut, details };
+      return { reference: referenceLisible(facture.referenceFacture), statut, details };
     }
 
     if (documentType === "Décompte de remboursement") {
@@ -129,7 +130,7 @@ export class DocumentSignatureService {
       } else {
         statut = "En attente de règlement";
       }
-      return { reference: facture.referenceFacture, statut, details };
+      return { reference: referenceLisible(facture.referenceFacture), statut, details };
     }
 
     if (documentType === "Certificat de prise en charge") {

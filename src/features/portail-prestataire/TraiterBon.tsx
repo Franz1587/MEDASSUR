@@ -1,3 +1,5 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ClipboardCheck, Search, User, ArrowLeft, CheckCircle2, Hash, History, FileDown, CheckCheck } from "lucide-react";
@@ -236,6 +238,7 @@ export default function TraiterBonView() {
   const voirFeuilleSoins = () => bon && openDocument(`/portail-prestataire/bons/${bon.prescriptionId}/feuille-soins`);
   const voirFeuilleExamen = () => bon && openDocument(`/portail-prestataire/bons/${bon.prescriptionId}/feuille-examen`);
 
+  const pagHistorique = usePagination(historique ?? []);
   if (type !== null && !modeExamen && !modeOrdonnance) {
     return (
       <div className="p-6">
@@ -366,7 +369,7 @@ export default function TraiterBonView() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/60">
-                    {historique.map((b) => (
+                    {pagHistorique.pageItems.map((b) => (
                       <tr key={b.prescriptionId} className="hover:bg-secondary/25 cursor-pointer" onClick={() => ouvrirBon(b)}>
                         <td className="px-3 py-2 font-medium text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{b.numero}</td>
                         <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{b.date}</td>
@@ -381,6 +384,7 @@ export default function TraiterBonView() {
                     ))}
                   </tbody>
                 </table>
+                <Pager p={pagHistorique} />
               </div>
             )}
           </div>

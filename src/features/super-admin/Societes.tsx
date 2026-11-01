@@ -1,3 +1,5 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useState } from "react";
 import { Building2, Plus, ShieldAlert, ShieldCheck, X, Search, Layers, LogIn } from "lucide-react";
 import { useNavigate } from "react-router";
@@ -304,6 +306,7 @@ export default function SuperAdminSocietesView() {
     }
   };
 
+  const pagSocietes = usePagination(filtered);
   return (
     <div className="p-6">
       <ModuleHeader
@@ -333,7 +336,7 @@ export default function SuperAdminSocietesView() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((s) => (
+              {pagSocietes.pageItems.map((s) => (
                 <tr key={s.id} onClick={() => openDetail(s.id)} className={`border-b border-border/50 cursor-pointer transition-colors ${selected?.id === s.id ? "bg-primary/8" : "hover:bg-secondary/30"}`}>
                   <td className="px-4 py-3">
                     <div className="font-semibold text-foreground text-sm">{s.nom}</div>
@@ -352,6 +355,7 @@ export default function SuperAdminSocietesView() {
               )}
             </tbody>
           </table>
+          <Pager p={pagSocietes} />
         </div>
 
         <div className="bg-card border border-border rounded-xl p-5">

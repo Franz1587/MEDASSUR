@@ -1,3 +1,4 @@
+import type { UsePaginationResult } from "@/hooks/usePagination";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 // Barre de pagination générique (2026-09) — voir usePagination.ts et
@@ -56,4 +57,9 @@ export function Pagination({ page, pageCount, pageSize, pageSizeOptions, total, 
       )}
     </div>
   );
+}
+
+// Raccourci : pagination branchée sur le résultat de usePagination.
+export function Pager({ p }: { p: UsePaginationResult<unknown> }) {
+  return <Pagination page={p.page} pageCount={p.pageCount} pageSize={p.pageSize} pageSizeOptions={p.pageSizeOptions} total={p.total} debut={p.debut} fin={p.fin} onPageChange={p.setPage} onPageSizeChange={p.setPageSize} />;
 }

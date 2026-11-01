@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { referenceLisible } from "@/lib/referenceFacture";
 import { Receipt, Printer, FileStack, ChevronRight, ChevronDown, Search } from "lucide-react";
 import { Btn } from "@/components/shared/Btn";
 import { Combobox } from "@/components/shared/Combobox";
@@ -136,7 +137,7 @@ export default function EtatTpsView() {
                               <tr key={`${cle}-${i}`} className="border-b border-border/40 last:border-0">
                                 <td className="px-3 py-1.5 whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{d.date}</td>
                                 <td className="px-3 py-1.5 whitespace-nowrap font-semibold text-foreground">{d.assureNom}</td>
-                                <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{d.factureReference}</td>
+                                <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{referenceLisible(d.factureReference)}</td>
                                 <td className="px-3 py-1.5 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(d.montant)}</td>
                                 <td className="px-3 py-1.5 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(d.baseRemboursement)}</td>
                                 <td className="px-3 py-1.5 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(d.montantTps)}</td>

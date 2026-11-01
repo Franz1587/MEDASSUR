@@ -1,4 +1,7 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useMemo, useState } from "react";
+import { referenceLisible } from "@/lib/referenceFacture";
 import { Plus, Trash2, Ban, CheckCircle2, X, Tag, Percent, XCircle, Printer, ListChecks, CircleDollarSign, FileWarning, Pencil, Hash } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/shared/Badge";
@@ -424,6 +427,7 @@ export default function FactureSaisie({ factureId, onClose, onChanged }: { factu
     onClose();
   };
 
+  const pagLignes = usePagination(facture?.lignes ?? []);
   if (!facture) return null;
   const estAnnulee = facture.statut === "Annulée";
 
@@ -432,7 +436,7 @@ export default function FactureSaisie({ factureId, onClose, onChanged }: { factu
       <div className="w-full max-w-6xl h-[92vh] bg-card border border-border rounded-xl shadow-2xl flex flex-col">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
           <div>
-            <h3 className="text-[15px] font-semibold text-foreground">{facture.referenceFacture} — {facture.prestataireNom}</h3>
+            <h3 className="text-[15px] font-semibold text-foreground">{referenceLisible(facture.referenceFacture)} — {facture.prestataireNom}</h3>
             <p className="text-[12px] text-muted-foreground">
               {facture.clientNom} · Réception {facture.dateReception} · <Badge variant={estAnnulee ? "danger" : facture.statut === "Payée" ? "gold" : facture.statut === "Soumise" ? "success" : "warning"}>{facture.statut}</Badge>
               {facture.bordereauNumero && <> · <Badge variant="info">Réglée — N° {facture.bordereauNumero}</Badge></>}
@@ -697,7 +701,7 @@ export default function FactureSaisie({ factureId, onClose, onChanged }: { factu
               </tr>
             </thead>
             <tbody>
-              {facture.lignes.map((l) => (
+              {pagLignes.pageItems.map((l) => (
                 <tr key={l.id} className={`border-b border-border/50 ${l.statut === "Rejeté" ? "opacity-50" : ""} ${editingLigneId === l.id ? "bg-primary/5" : ""}`}>
                   <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">{l.assureNom}</td>
                   <td className="px-3 py-2 text-foreground">{l.acteLibelle ?? (l.lettreCleCode ? `${l.lettreCleCode} (coef. ${l.coefficient ?? "—"})` : "—")}</td>
@@ -734,6 +738,7 @@ export default function FactureSaisie({ factureId, onClose, onChanged }: { factu
               )}
             </tbody>
           </table>
+          <Pager p={pagLignes} />
 
           {rejetLigneId && (
             <div className="mt-4 p-4 border border-amber-500/30 bg-amber-500/5 rounded-lg">

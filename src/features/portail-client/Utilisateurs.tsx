@@ -1,3 +1,5 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, KeyRound, X } from "lucide-react";
@@ -112,6 +114,7 @@ export default function PortailUtilisateursView() {
     }
   };
 
+  const pagUtilisateurs = usePagination(liste);
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-5">
@@ -133,7 +136,7 @@ export default function PortailUtilisateursView() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
-            {liste.map((u) => (
+            {pagUtilisateurs.pageItems.map((u) => (
               <tr key={u.id} className="hover:bg-secondary/25">
                 <td className="px-4 py-2.5 font-semibold text-foreground">
                   {u.nom} {u.id === currentUser?.id && <span className="text-[10.5px] font-normal text-muted-foreground">(vous)</span>}
@@ -155,6 +158,7 @@ export default function PortailUtilisateursView() {
             )}
           </tbody>
         </table>
+        <Pager p={pagUtilisateurs} />
       </div>
 
       {showCreate && (

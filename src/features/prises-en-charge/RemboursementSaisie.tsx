@@ -1,3 +1,5 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, Ban, CheckCircle2, X, Tag, Percent, XCircle, ListChecks, CircleDollarSign, FileWarning, Pencil, Hash, Building2 } from "lucide-react";
 import { toast } from "sonner";
@@ -338,6 +340,7 @@ export default function RemboursementSaisie({ remboursementId, onClose, onChange
     onClose();
   };
 
+  const pagLignes = usePagination(remboursement?.lignes ?? []);
   if (!remboursement) return null;
   const estAnnulee = remboursement.statut === "Annulée";
   const beneficiaireLabel = remboursement.beneficiaire === "AssurePrincipal" ? (remboursement.assurePrincipalNom ?? "Assuré principal") : remboursement.clientNom;
@@ -601,7 +604,7 @@ export default function RemboursementSaisie({ remboursementId, onClose, onChange
               </tr>
             </thead>
             <tbody>
-              {remboursement.lignes.map((l) => (
+              {pagLignes.pageItems.map((l) => (
                 <tr key={l.id} className={`border-b border-border/50 ${l.statut === "Rejeté" ? "opacity-50" : ""} ${editingLigneId === l.id ? "bg-primary/5" : ""}`}>
                   <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">{l.assureNom}</td>
                   <td className="px-3 py-2 text-muted-foreground whitespace-nowrap max-w-[160px] truncate" title={l.prestataireNom}>{l.prestataireNom}</td>
@@ -637,6 +640,7 @@ export default function RemboursementSaisie({ remboursementId, onClose, onChange
               )}
             </tbody>
           </table>
+          <Pager p={pagLignes} />
 
           {rejetLigneId && (
             <div className="mt-4 p-4 border border-amber-500/30 bg-amber-500/5 rounded-lg">

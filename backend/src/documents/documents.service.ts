@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import { referenceLisible } from "../factures/reference-facture.util";
 import * as path from "path";
 import { createHash, randomUUID } from "crypto";
 import { PDFDocument as PdfLib } from "pdf-lib";
@@ -213,23 +214,6 @@ function heureColon(d: Date): string {
 
 function heureVerbeuse(d: Date): string {
   return `${d.getHours()} H ${d.getMinutes()} Mn ${d.getSeconds()} S`;
-}
-
-// Référence de facture lisible (2026-09) — voir demande utilisateur :
-// "s'il est possible de déchiffrer ce code et le raccourcir, fais-le".
-// Les factures réellement télétransmises depuis le système externe d'un
-// prestataire portent une référence "MS-PRESTA-<uuid>-<horodatage
-// numérique>" (voir import.service.ts, REGEX_REFERENCE_TELETRANSMISE) —
-// illisible affichée telle quelle. L'UUID est un identifiant opaque, sans
-// rien à déchiffrer ; l'horodatage final, lui, encode une vraie date/heure
-// (AAAAMMJJHHmmssSSS) — c'est la seule partie réellement "déchiffrable",
-// affichée à la place du bloc complet. Le champ `referenceFacture` original
-// n'est jamais modifié en base, seul l'AFFICHAGE sur le document change.
-function referenceLisible(reference: string): string {
-  const m = reference.match(/^(MS-PRESTA)-[0-9a-f-]{36}-(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\d*$/i);
-  if (!m) return reference;
-  const [, prefixe, annee, mois, jour, heure, minute] = m;
-  return `${prefixe} · ${jour}/${mois}/${annee} ${heure}:${minute}`;
 }
 
 // Référence de quittance/police lisible, dérivée de façon stable de l'id
@@ -3483,7 +3467,7 @@ export class DocumentsService {
     if (!releve) throw new NotFoundException(`Relevé ${releveId} introuvable`);
     const lignes = releve.factures.map((f) => {
       const net = f.lignes.reduce((s, l) => s + (l.baseRemboursement !== null ? Number(l.baseRemboursement) : 0) - (l.montantTps !== null ? Number(l.montantTps) : 0), 0);
-      return { reference: f.referenceFacture, dateReception: f.dateReception, nbLignes: f.lignes.length, net };
+      return { reference: referenceLisible(f.referenceFacture), dateReception: f.dateReception, nbLignes: f.lignes.length, net };
     });
     const total = lignes.reduce((s, l) => s + l.net, 0);
     return { releve, lignes, total };
@@ -5724,7 +5708,7 @@ export class DocumentsService {
       const tps = l.montantTps !== null ? Number(l.montantTps) : 0;
       const net = base - tps;
       totalEngage += engage; totalBase += base; totalAssure += partAssure; totalNet += net;
-      const valeurs = [l.facture?.referenceFacture ?? "—", `${l.assure.nom} ${l.assure.prenom ?? ""}`.trim(), l.date, fmt(engage), fmt(base), fmt(partAssure), fmt(net)];
+      const valeurs = [l.facture ? referenceLisible(l.facture.referenceFacture) : "—", `${l.assure.nom} ${l.assure.prenom ?? ""}`.trim(), l.date, fmt(engage), fmt(base), fmt(partAssure), fmt(net)];
       let cx = left;
       for (let i = 0; i < valeurs.length; i++) {
         doc.text(valeurs[i], cx + 4, y + 4, { width: cols[i].w - 8, align: i < 3 ? "left" : "right" });

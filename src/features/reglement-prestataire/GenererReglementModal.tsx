@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { referenceLisible } from "@/lib/referenceFacture";
 import { Search, X, FileStack } from "lucide-react";
 import { toast } from "sonner";
 import { Btn } from "@/components/shared/Btn";
@@ -202,7 +203,7 @@ export default function GenererReglementModal({ onClose, onGenerated }: { onClos
                   {resultats.map((f) => (
                     <label key={f.id} className="flex items-center gap-3 px-3 py-2 text-[12px] cursor-pointer hover:bg-secondary/30">
                       <input type="checkbox" checked={selected.includes(f.id)} onChange={() => toggle(f.id)} className="w-3.5 h-3.5 accent-primary flex-shrink-0" />
-                      <span className="flex-1 font-semibold text-foreground">{f.referenceFacture}{f.numerosSupplementaires.length > 0 && <span className="text-muted-foreground font-normal"> +{f.numerosSupplementaires.length}</span>}</span>
+                      <span className="flex-1 font-semibold text-foreground">{referenceLisible(f.referenceFacture)}{f.numerosSupplementaires.length > 0 && <span className="text-muted-foreground font-normal"> +{f.numerosSupplementaires.length}</span>}</span>
                       <span className="w-40 text-muted-foreground truncate">{f.clientNom}</span>
                       <span className="w-32 text-muted-foreground truncate">{f.compagnieNom}</span>
                       <span className="w-24 text-muted-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{f.dateReception}</span>

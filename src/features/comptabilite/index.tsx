@@ -1,3 +1,5 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useState } from "react";
 import { BookOpen, Filter, Plus, Download, ArrowLeftRight, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
@@ -150,6 +152,7 @@ export default function ComptabiliteView() {
     }
   };
 
+  const pagJournal = usePagination(journalEntries);
   return (
     <div className="p-6 space-y-5">
       <ModuleHeader title="Comptabilité SYSCOHADA" subtitle="Journal général, grand livre et états financiers — Plan OHADA révisé" icon={BookOpen}
@@ -229,7 +232,7 @@ export default function ComptabiliteView() {
             </tr>
           </thead>
           <tbody>
-            {journalEntries.map((j, i) => (
+            {pagJournal.pageItems.map((j, i) => (
               <tr key={i} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
                 <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap med-num med-col-date">{j.date}</td>
                 <td className="px-4 py-3 text-xs text-primary font-semibold whitespace-nowrap med-num med-col-ref">{j.num}</td>
@@ -245,6 +248,7 @@ export default function ComptabiliteView() {
             ))}
           </tbody>
         </table>
+        <Pager p={pagJournal} />
       </div>
       </>
       )}

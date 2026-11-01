@@ -1,3 +1,5 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { parse, isValid } from "date-fns";
@@ -185,6 +187,7 @@ export default function PrestataireDevisView() {
     }
   };
 
+  const pagDevis = usePagination(listeFiltree);
   if (vue === "identification") {
     return (
       <div className="p-6 space-y-4">
@@ -414,7 +417,7 @@ export default function PrestataireDevisView() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
-            {listeFiltree.map((d) => (
+            {pagDevis.pageItems.map((d) => (
               <tr key={d.id} className="hover:bg-secondary/25 cursor-pointer" onClick={() => ouvrirDetail(d)}>
                 <td className="px-4 py-2.5 text-foreground font-medium">{d.id}</td>
                 <td className="px-4 py-2.5 text-foreground">{d.assure.nom} {d.assure.prenom ?? ""}</td>
@@ -433,6 +436,7 @@ export default function PrestataireDevisView() {
             )}
           </tbody>
         </table>
+        <Pager p={pagDevis} />
       </div>
     </div>
   );

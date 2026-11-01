@@ -22,8 +22,12 @@ export class FacturesController {
     @Query("prestataireId") prestataireId?: string, @Query("contratId") contratId?: string,
     @Query("clientId") clientId?: string, @Query("statut") statut?: string, @Query("reference") reference?: string,
     @Query("du") du?: string, @Query("au") au?: string, @Query("gestionnaireId") gestionnaireId?: string,
+    @Query("page") page?: string, @Query("taille") taille?: string,
   ) {
-    return this.service.findAll({ prestataireId, contratId, clientId, statut, reference, du, au, gestionnaireId });
+    const filtres = { prestataireId, contratId, clientId, statut, reference, du, au, gestionnaireId };
+    // `page` présent → pagination serveur ({ items, total }) ; sinon liste (compatibilité).
+    if (page) return this.service.findPage(filtres, Math.max(1, Number(page) || 1), Math.min(500, Math.max(1, Number(taille) || 20)));
+    return this.service.findAll(filtres);
   }
 
   // Déclarée avant ":id" pour que Nest ne capture pas "eligibles-reglement"

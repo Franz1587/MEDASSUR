@@ -1,3 +1,5 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -168,6 +170,7 @@ export default function PortailDemandesView() {
     }
   };
 
+  const pagDemandes = usePagination(demandes);
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-5">
@@ -190,7 +193,7 @@ export default function PortailDemandesView() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
-            {demandes.map((d) => (
+            {pagDemandes.pageItems.map((d) => (
               <tr key={d.id} className="hover:bg-secondary/25">
                 <td className="px-4 py-2.5 text-foreground flex items-center gap-1.5">
                   {d.type === "Incorporation" ? <UserPlus className="w-3.5 h-3.5 text-emerald-600" /> : <UserMinus className="w-3.5 h-3.5 text-amber-600" />}
@@ -212,6 +215,7 @@ export default function PortailDemandesView() {
             )}
           </tbody>
         </table>
+        <Pager p={pagDemandes} />
       </div>
 
       {showCreate && (

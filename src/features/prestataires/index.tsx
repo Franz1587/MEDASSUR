@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { referenceLisible } from "@/lib/referenceFacture";
 import { Building2, Star, Clock, ShieldOff, ShieldCheck, Stethoscope, Plus, Pencil, ReceiptText, Printer, ClipboardList, FileStack, TrendingUp, Search, X, MapPin, MapPinOff, Loader2, FileDown, UserPlus, Merge } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/shared/Badge";
@@ -531,7 +532,7 @@ export default function PrestatairesView() {
                                 <tr key={`${l.factureId}-${i}`} className="border-b border-border/50">
                                   <td className="px-3 py-1.5 whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{l.date}</td>
                                   <td className="px-3 py-1.5 font-semibold text-foreground whitespace-nowrap">{l.assureNom}</td>
-                                  <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{l.factureReference}</td>
+                                  <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{referenceLisible(l.factureReference)}</td>
                                   <td className="px-3 py-1.5 text-right whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(l.montant)}</td>
                                   <td className="px-3 py-1.5 text-right whitespace-nowrap text-green-500" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(l.montantRembourse)}</td>
                                   <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{l.statutReglement}</td>

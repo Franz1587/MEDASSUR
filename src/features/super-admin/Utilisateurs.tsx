@@ -1,3 +1,5 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Edit, Trash2, X, KeyRound, Lock, ShieldCheck, Building2, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -164,6 +166,7 @@ export default function SuperAdminUtilisateurs() {
     }
   };
 
+  const pagUtilisateurs = usePagination(usersFiltres);
   return (
     <div className="p-6 space-y-6">
       <ModuleHeader
@@ -185,7 +188,7 @@ export default function SuperAdminUtilisateurs() {
         {loading && <p className="text-[13px] text-muted-foreground text-center py-10">Chargement…</p>}
         {!loading && usersFiltres.length === 0 && <p className="text-[13px] text-muted-foreground text-center py-10">Aucun compte.</p>}
         {!loading && usersFiltres.length > 0 && (
-          <table className="w-full text-[13px]">
+          <><table className="w-full text-[13px]">
             <thead className="bg-secondary/40 text-[11.5px] uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="text-left px-4 py-2.5 font-semibold">Utilisateur</th>
@@ -196,7 +199,7 @@ export default function SuperAdminUtilisateurs() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {usersFiltres.map((u) => (
+              {pagUtilisateurs.pageItems.map((u) => (
                 <tr key={u.id} className="hover:bg-secondary/20">
                   <td className="px-4 py-2.5">
                     <p className="font-semibold text-foreground">{u.nom}</p>
@@ -220,6 +223,7 @@ export default function SuperAdminUtilisateurs() {
               ))}
             </tbody>
           </table>
+          <Pager p={pagUtilisateurs} /></>
         )}
       </div>
 

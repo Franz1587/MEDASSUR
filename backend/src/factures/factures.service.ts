@@ -82,6 +82,8 @@ function genererAcronymePrestataire(nom: string): string {
   return acronyme || "PRS";
 }
 
+type FiltresFactures = { prestataireId?: string; contratId?: string; clientId?: string; statut?: string; reference?: string; du?: string; au?: string; gestionnaireId?: string };
+
 @Injectable()
 export class FacturesService {
   constructor(private prisma: PrismaService, private sante: SanteService, private reglement: ReglementPrestataireService) {}
@@ -97,41 +99,61 @@ export class FacturesService {
   // une facture saisie par un prestataire sur la famille test ne doit
   // jamais apparaître dans la comptabilité/facturation réelle de la
   // société, quel que soit le filtre demandé par l'appelant.
-  async findAll(filtres?: { prestataireId?: string; contratId?: string; clientId?: string; statut?: string; reference?: string; du?: string; au?: string; gestionnaireId?: string }) {
-    // Sans filtre ciblé (prestataire/contrat/client), limiter à 200 factures
-    // récentes pour éviter de charger l'intégralité des 11 000+ factures +
-    // leurs lignes d'un coup (timeout). L'utilisateur doit utiliser les
-    // filtres pour affiner sa recherche au-delà.
-    const hasFiltreEtendu = filtres?.prestataireId || filtres?.contratId || filtres?.clientId || filtres?.reference;
+  private whereFactures(filtres?: FiltresFactures) {
+    return {
+      prestataireId: filtres?.prestataireId, contratId: filtres?.contratId, statut: filtres?.statut,
+      gestionnaireId: filtres?.gestionnaireId,
+      contrat: { estTest: false, ...(filtres?.clientId ? { clientId: filtres.clientId } : {}) },
+      // Recherche par référence — matche le numéro principal OU l'un des
+      // numéros supplémentaires (une déclaration peut regrouper plusieurs
+      // numéros de facture prestataire, voir schema.prisma NumeroFacture).
+      ...(filtres?.reference
+        ? { OR: [
+            { referenceFacture: { contains: filtres.reference, mode: "insensitive" as const } },
+            { numerosSupplementaires: { some: { numero: { contains: filtres.reference, mode: "insensitive" as const } } } },
+          ] }
+        : {}),
+    };
+  }
+
+  private dansPeriode(dateReception: string, filtres?: FiltresFactures) {
+    const du = parseDateFr(filtres?.du), au = parseDateFr(filtres?.au);
+    if (!du && !au) return true;
+    const d = parseDateFr(dateReception);
+    return !!d && !(du && d < du) && !(au && d > au);
+  }
+
+  async findAll(filtres?: FiltresFactures) {
+    // Sans filtre ciblé (prestataire/contrat/client/gestionnaire), limiter à
+    // 200 factures récentes (11 000+ factures avec leurs lignes = timeout).
+    // L'écran Factures passe par findPage (pagination serveur), jamais par ici.
+    const hasFiltreEtendu = filtres?.prestataireId || filtres?.contratId || filtres?.clientId || filtres?.reference || filtres?.gestionnaireId;
     const factures = await this.prisma.facture.findMany({
-      where: {
-        prestataireId: filtres?.prestataireId, contratId: filtres?.contratId, statut: filtres?.statut,
-        gestionnaireId: filtres?.gestionnaireId,
-        contrat: { estTest: false, ...(filtres?.clientId ? { clientId: filtres.clientId } : {}) },
-        // Recherche par référence — matche le numéro principal OU l'un des
-        // numéros supplémentaires (une déclaration peut regrouper plusieurs
-        // numéros de facture prestataire, voir schema.prisma NumeroFacture).
-        ...(filtres?.reference
-          ? { OR: [
-              { referenceFacture: { contains: filtres.reference, mode: "insensitive" } },
-              { numerosSupplementaires: { some: { numero: { contains: filtres.reference, mode: "insensitive" } } } },
-            ] }
-          : {}),
-      },
-      select: SELECT_FACTURE,
-      orderBy: { createdAt: "desc" },
+      where: this.whereFactures(filtres), select: SELECT_FACTURE, orderBy: { createdAt: "desc" },
       ...(hasFiltreEtendu ? {} : { take: 200 }),
     });
-    const du = parseDateFr(filtres?.du);
-    const au = parseDateFr(filtres?.au);
-    if (!du && !au) return factures;
-    return factures.filter((f) => {
-      const d = parseDateFr(f.dateReception);
-      if (!d) return false;
-      if (du && d < du) return false;
-      if (au && d > au) return false;
-      return true;
-    });
+    return factures.filter((f) => this.dansPeriode(f.dateReception, filtres));
+  }
+
+  // Pagination serveur (2026-11) — voir demande utilisateur : "l'onglet de
+  // facture n'a pas de pagination… lorsqu'il y a assez de données on puisse
+  // toutes les consulter". Toutes les factures restent accessibles page par
+  // page ; la période (dateReception, texte JJ/MM/AAAA) est filtrée AVANT le
+  // découpage, sur une lecture légère (id + date), jamais après une coupe.
+  async findPage(filtres: FiltresFactures, page: number, taille: number) {
+    const where = this.whereFactures(filtres);
+    const orderBy = { createdAt: "desc" as const };
+    if (!filtres.du && !filtres.au) {
+      const [total, items] = await Promise.all([
+        this.prisma.facture.count({ where }),
+        this.prisma.facture.findMany({ where, select: SELECT_FACTURE, orderBy, skip: (page - 1) * taille, take: taille }),
+      ]);
+      return { items, total, page, taille };
+    }
+    const legeres = await this.prisma.facture.findMany({ where, select: { id: true, dateReception: true }, orderBy });
+    const ids = legeres.filter((f) => this.dansPeriode(f.dateReception, filtres)).map((f) => f.id);
+    const items = await this.prisma.facture.findMany({ where: { id: { in: ids.slice((page - 1) * taille, page * taille) } }, select: SELECT_FACTURE, orderBy });
+    return { items, total: ids.length, page, taille };
   }
 
   // Factures éligibles à un nouveau règlement — écran de génération

@@ -1,3 +1,5 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useState } from "react";
 import { Eye } from "lucide-react";
 import { Badge, type BadgeVariant } from "@/components/shared/Badge";
@@ -25,6 +27,7 @@ export default function PortailContratsView() {
     getMesContrats().then(setContrats);
   }, []);
 
+  const pagContrats = usePagination(contrats);
   if (contratOuvert) {
     return <ContratDetail contrat={contratOuvert} onRetour={() => setContratOuvert(null)} />;
   }
@@ -49,7 +52,7 @@ export default function PortailContratsView() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
-            {contrats.map((c) => (
+            {pagContrats.pageItems.map((c) => (
               <tr key={c.id} className="hover:bg-secondary/25 cursor-pointer" onClick={() => setContratOuvert(c)}>
                 <td className="px-4 py-2.5 font-semibold text-foreground">{numeroPolice(c)}</td>
                 <td className="px-4 py-2.5 text-foreground">{c.branche}</td>
@@ -66,6 +69,7 @@ export default function PortailContratsView() {
             )}
           </tbody>
         </table>
+        <Pager p={pagContrats} />
       </div>
     </div>
   );

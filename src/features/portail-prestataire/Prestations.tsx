@@ -1,4 +1,7 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { referenceCorrespond, referenceLisible } from "@/lib/referenceFacture";
 import { toast } from "sonner";
 import { parse, isValid } from "date-fns";
 import { Plus, Trash2, Send, ArrowLeft, FileText, Search, RotateCcw, Pencil, Ban, History, X, Check, Stethoscope, FlaskConical } from "lucide-react";
@@ -159,7 +162,7 @@ export default function PrestatairePrestationsView() {
     const ref = filtre.ref.trim().toLowerCase();
     const nom = filtre.patient.trim().toLowerCase();
     return (prestations ?? []).filter((p) =>
-      p.referenceFacture.toLowerCase().includes(ref)
+      referenceCorrespond(p.referenceFacture, ref)
       && (nom === "" || p.lignes.some((l) => l.assureNom.toLowerCase().includes(nom)))
       && dansPeriode(p.dateReception, filtre.du, filtre.au));
   }, [prestations, filtre]);
@@ -588,6 +591,9 @@ export default function PrestatairePrestationsView() {
     }
   };
 
+  const pagHistorique = usePagination(historique ?? []);
+  const pagLignesDetail = usePagination(detail?.lignes ?? []);
+  const pagPrestations = usePagination(prestationsFiltrees);
   if (vue === "identification") {
     return (
       <div className="p-6 space-y-4">
@@ -806,7 +812,7 @@ export default function PrestatairePrestationsView() {
         </button>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-[1.2rem] font-bold text-foreground">Détails prestation : {detail.referenceFacture}</h1>
+            <h1 className="text-[1.2rem] font-bold text-foreground">Détails prestation : {referenceLisible(detail.referenceFacture)}</h1>
             <p className="text-[11.5px] text-muted-foreground mt-0.5">{detail.dateReception}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -836,7 +842,7 @@ export default function PrestatairePrestationsView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {detail.lignes.map((l) => {
+              {pagLignesDetail.pageItems.map((l) => {
                 const annulee = l.statut === "Annulé";
                 const enEdition = ligneEnEdition?.id === l.id;
                 if (enEdition) {
@@ -972,6 +978,7 @@ export default function PrestatairePrestationsView() {
               </tr>
             </tfoot>
           </table>
+          <Pager p={pagLignesDetail} />
           </div>
         </div>
 
@@ -1153,9 +1160,9 @@ export default function PrestatairePrestationsView() {
             ) : historique.length === 0 ? (
               <p className="px-4 py-6 text-center text-muted-foreground text-[12.5px]">Aucune modification enregistrée.</p>
             ) : (
-              <table className="w-full text-[12px]">
+              <><table className="w-full text-[12px]">
                 <tbody className="divide-y divide-border/60">
-                  {historique.map((h) => (
+                  {pagHistorique.pageItems.map((h) => (
                     <tr key={h.id}>
                       <td className="px-4 py-2 text-foreground font-medium whitespace-nowrap">{h.action}</td>
                       <td className="px-4 py-2 text-foreground">{h.utilisateurNom}</td>
@@ -1164,6 +1171,7 @@ export default function PrestatairePrestationsView() {
                   ))}
                 </tbody>
               </table>
+              <Pager p={pagHistorique} /></>
             )}
           </div>
         )}
@@ -1201,7 +1209,7 @@ export default function PrestatairePrestationsView() {
                 <p className="text-[13.5px] font-semibold text-foreground">Annuler cette facture</p>
                 <button type="button" onClick={() => setAnnulationFactureOuverte(false)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
               </div>
-              <p className="text-[12.5px] text-muted-foreground">{detail.referenceFacture} — toutes les lignes seront exclues des relevés et des règlements. Cette facture ne pourra plus être complétée.</p>
+              <p className="text-[12.5px] text-muted-foreground">{referenceLisible(detail.referenceFacture)} — toutes les lignes seront exclues des relevés et des règlements. Cette facture ne pourra plus être complétée.</p>
               <label className="block">
                 <div className="text-[12px] text-muted-foreground mb-1.5">Motif de l'annulation *</div>
                 <textarea
@@ -1269,9 +1277,9 @@ export default function PrestatairePrestationsView() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
-            {prestationsFiltrees.map((p) => (
+            {pagPrestations.pageItems.map((p) => (
               <tr key={p.id} className="hover:bg-secondary/25 cursor-pointer" onClick={() => ouvrirDetail(p.id)}>
-                <td className="px-4 py-2.5 text-foreground font-medium">{p.referenceFacture}</td>
+                <td className="px-4 py-2.5 text-foreground font-medium">{referenceLisible(p.referenceFacture)}</td>
                 <td className="px-4 py-2.5 text-muted-foreground">{[...new Set(p.lignes.map((l) => l.assureNom))].join(", ") || "—"}</td>
                 <td className="px-4 py-2.5 text-muted-foreground">{p.dateReception}</td>
                 <td className="px-4 py-2.5 text-right text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(p.lignes.reduce((s, l) => s + l.montant, 0))} FCFA</td>
@@ -1288,6 +1296,7 @@ export default function PrestatairePrestationsView() {
             )}
           </tbody>
         </table>
+        <Pager p={pagPrestations} />
       </div>
     </div>
   );

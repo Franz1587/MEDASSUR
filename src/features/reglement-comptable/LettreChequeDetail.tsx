@@ -1,3 +1,5 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useState } from "react";
 import { X, Printer } from "lucide-react";
 import { Badge } from "@/components/shared/Badge";
@@ -12,6 +14,7 @@ export default function LettreChequeDetail({ id, onClose }: { id: string; onClos
 
   useEffect(() => { getLettreCheque(id).then(setLettre); }, [id]);
 
+  const pagBordereaux = usePagination(lettre?.bordereaux ?? []);
   if (!lettre) return null;
 
   return (
@@ -59,7 +62,7 @@ export default function LettreChequeDetail({ id, onClose }: { id: string; onClos
                 </tr>
               </thead>
               <tbody>
-                {lettre.bordereaux.map((b) => (
+                {pagBordereaux.pageItems.map((b) => (
                   <tr key={b.id} className="border-b border-border/50">
                     <td className="px-3 py-2 whitespace-nowrap text-primary font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>{b.numero}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-foreground">{b.periode}</td>
@@ -70,6 +73,7 @@ export default function LettreChequeDetail({ id, onClose }: { id: string; onClos
                 ))}
               </tbody>
             </table>
+            <Pager p={pagBordereaux} />
             {lettre.bordereaux.length === 0 && <div className="py-8 text-center text-muted-foreground text-sm">Aucun règlement</div>}
           </div>
         </div>

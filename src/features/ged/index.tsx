@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { referenceLisible } from "@/lib/referenceFacture";
 import { Archive, FileSignature, Brain, CheckCircle, Trash2, RefreshCw, BarChart2, X, CheckCheck, AlertTriangle, Clock, Eye, Search, Pencil, Save, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Badge, type BadgeVariant } from "@/components/shared/Badge";
@@ -69,7 +70,7 @@ function RapportLiaisonModal({ docId, onClose }: { docId: string; onClose: () =>
             {rapport.facture ? (
               <div className="bg-secondary/30 rounded-xl p-3 space-y-1">
                 <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Facture liée</p>
-                <p className="text-sm text-foreground font-mono">{rapport.facture.referenceFacture}</p>
+                <p className="text-sm text-foreground font-mono">{referenceLisible(rapport.facture.referenceFacture)}</p>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
                   <span>Reçue le {rapport.facture.dateReception}</span>
                   <Badge variant={rapport.facture.statut === "Payée" ? "gold" : rapport.facture.statut === "Soumise" ? "success" : "neutral"}>{rapport.facture.statut}</Badge>
@@ -331,7 +332,7 @@ function DetailDocumentModal({ doc: docInitial, onClose, onRapport, onRapprocher
             {doc.facture && (
               <div>
                 <p className="text-xs text-muted-foreground mb-0.5">Facture liée</p>
-                <p className="text-sm text-foreground med-num">{doc.facture.referenceFacture}</p>
+                <p className="text-sm text-foreground med-num">{referenceLisible(doc.facture.referenceFacture)}</p>
               </div>
             )}
             <div>
@@ -420,7 +421,7 @@ function JournalAriana({ documents }: { documents: GedDocument[] }) {
                 <p>→ {doc.prestataire?.nom ?? doc.nomEmetteurExtrait}</p>
               )}
               {doc.facture && (
-                <p className="med-num">→ Rapprochement : Facture <strong className="text-foreground">{doc.facture.referenceFacture}</strong></p>
+                <p className="med-num">→ Rapprochement : Facture <strong className="text-foreground">{referenceLisible(doc.facture.referenceFacture)}</strong></p>
               )}
             </div>
           </div>

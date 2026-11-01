@@ -1,4 +1,7 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useState } from "react";
+import { referenceLisible } from "@/lib/referenceFacture";
 import { FileStack, Plus, CheckCircle, XCircle, Banknote, HandCoins, Printer, Search, History, Smartphone, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/shared/Badge";
@@ -203,6 +206,8 @@ export default function ReglementPrestataireView() {
     refresh();
   };
 
+  const pagBordereaux = usePagination(bordereaux);
+  const pagHistorique = usePagination(historique?.lignes ?? []);
   return (
     <div className="p-6">
       <ModuleHeader title="Règlement" subtitle="Paiement des factures aux prestataires et des remboursements aux assurés" icon={HandCoins}
@@ -287,7 +292,7 @@ export default function ReglementPrestataireView() {
                         </tr>
                       </thead>
                       <tbody>
-                        {historique.lignes.map((l) => (
+                        {pagHistorique.pageItems.map((l) => (
                           <tr
                             key={l.id}
                             onClick={() => l.bordereauId && setBordereauOuvert(l.bordereauId)}
@@ -297,7 +302,7 @@ export default function ReglementPrestataireView() {
                             <td className="px-3 py-1.5 whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{l.date}</td>
                             <td className="px-3 py-1.5 whitespace-nowrap font-semibold text-foreground">{l.assureNom}</td>
                             <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{l.prestataireNom}</td>
-                            <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{l.factureReference ?? "—"}</td>
+                            <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{l.factureReference ? referenceLisible(l.factureReference) : "—"}</td>
                             <td className="px-3 py-1.5 whitespace-nowrap text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{l.decompteNumero ?? "—"}</td>
                             <td className="px-3 py-1.5 whitespace-nowrap text-primary font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>{l.bordereauNumero ?? "—"}</td>
                             <td className="px-3 py-1.5 whitespace-nowrap">
@@ -316,6 +321,7 @@ export default function ReglementPrestataireView() {
                         ))}
                       </tbody>
                     </table>
+                    <Pager p={pagHistorique} />
                     {historique.lignes.length === 0 && <div className="py-8 text-center text-muted-foreground text-sm">Aucune ligne pour ces critères.</div>}
                   </div>
                 </div>
@@ -338,7 +344,7 @@ export default function ReglementPrestataireView() {
               </tr>
             </thead>
             <tbody>
-              {bordereaux.map((b) => (
+              {pagBordereaux.pageItems.map((b) => (
                 <tr key={b.id} onClick={() => setBordereauOuvert(b.id)} className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer">
                   <td className="px-4 py-3 text-xs font-semibold text-primary whitespace-nowrap" style={{ fontFamily: "'DM Mono', monospace" }} title={b.id}>{b.numero}</td>
                   <td className="px-4 py-3 font-semibold text-foreground whitespace-nowrap">{b.prestataireNom}</td>
@@ -386,6 +392,7 @@ export default function ReglementPrestataireView() {
               ))}
             </tbody>
           </table>
+          <Pager p={pagBordereaux} />
           {bordereaux.length === 0 && <div className="py-12 text-center text-muted-foreground text-sm">Aucun règlement</div>}
         </div>
 

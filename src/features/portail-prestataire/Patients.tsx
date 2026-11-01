@@ -1,3 +1,5 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ArrowLeft, Search, RotateCcw, User } from "lucide-react";
@@ -58,6 +60,7 @@ export default function PrestatairePatientsView() {
     setVue("identification");
   };
 
+  const pagPatients = usePagination(patientsFiltres);
   if (vue === "identification") {
     return (
       <div className="p-6 space-y-4">
@@ -108,7 +111,7 @@ export default function PrestatairePatientsView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {patientsFiltres.map((p) => (
+              {pagPatients.pageItems.map((p) => (
                 <tr key={p.id} className="hover:bg-secondary/25 cursor-pointer" onClick={() => ouvrirPourPrestation(p)}>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
@@ -132,6 +135,7 @@ export default function PrestatairePatientsView() {
               )}
             </tbody>
           </table>
+          <Pager p={pagPatients} />
         </div>
       </div>
     </div>

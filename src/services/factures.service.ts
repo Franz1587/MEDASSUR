@@ -153,6 +153,16 @@ export async function getFactures(filtre?: FacturesFiltre): Promise<Facture[]> {
   return data.map(mapFacture);
 }
 
+// Pagination serveur (2026-11) : une page et le nombre total de factures
+// correspondant aux filtres — toutes les factures restent consultables.
+export async function getFacturesPage(filtre: FacturesFiltre, page: number, taille: number): Promise<{ items: Facture[]; total: number }> {
+  const params = new URLSearchParams(Object.entries(filtre).filter(([, v]) => v) as [string, string][]);
+  params.set("page", String(page));
+  params.set("taille", String(taille));
+  const data = await http.get<{ items: ApiFacture[]; total: number }>(`/factures?${params.toString()}`);
+  return { items: data.items.map(mapFacture), total: data.total };
+}
+
 export async function getFacture(id: string): Promise<Facture> {
   const data = await http.get<ApiFacture>(`/factures/${id}`);
   return mapFacture(data);

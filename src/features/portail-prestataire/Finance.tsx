@@ -1,4 +1,7 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useMemo, useState } from "react";
+import { referenceCorrespond, referenceLisible } from "@/lib/referenceFacture";
 import { toast } from "sonner";
 import { parse, isValid } from "date-fns";
 import { ArrowLeft, Eye, FileDown, Plus, Search, RotateCcw, X } from "lucide-react";
@@ -141,7 +144,7 @@ export default function PrestataireFinanceView() {
   const rechercheRelevesActive = filtreReleves.reference || filtreReleves.souscripteur || filtreReleves.du || filtreReleves.au;
 
   const facturesFiltrees = useMemo(() => (factures ?? []).filter((f) =>
-    f.referenceFacture.toLowerCase().includes(filtreFactures.reference.trim().toLowerCase())
+    referenceCorrespond(f.referenceFacture, filtreFactures.reference)
     && (filtreFactures.nom.trim() === "" || f.lignes.some((l) => l.assureNom.toLowerCase().includes(filtreFactures.nom.trim().toLowerCase())))
     && dansPeriode(f.dateReception, filtreFactures.du, filtreFactures.au)), [factures, filtreFactures]);
   const lancerRechercheFactures = () => setFiltreFactures({ reference: facturesReference, nom: facturesNom, du: facturesDu, au: facturesAu });
@@ -231,6 +234,9 @@ export default function PrestataireFinanceView() {
     }
   };
 
+  const pagEligibles = usePagination(eligibles ?? []);
+  const pagFactures = usePagination(facturesFiltrees);
+  const pagReleves = usePagination(relevesFiltres);
   if (detailReleve) {
     // Une ligne par facture, pas par acte (2026-08) — voir demande
     // utilisateur : "il n'est pas nécessaire d'éclater une facture dans un
@@ -288,7 +294,7 @@ export default function PrestataireFinanceView() {
             <tbody className="divide-y divide-border/60">
               {factures.map((f) => (
                 <tr key={f.id}>
-                  <td className="px-3 py-2 text-foreground font-medium">{f.referenceFacture}</td>
+                  <td className="px-3 py-2 text-foreground font-medium">{referenceLisible(f.referenceFacture)}</td>
                   <td className="px-3 py-2 text-muted-foreground">{f.date}</td>
                   <td className="px-3 py-2 text-foreground">{f.assureNom}</td>
                   <td className="px-3 py-2 text-right text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(f.montant)}</td>
@@ -331,11 +337,11 @@ export default function PrestataireFinanceView() {
             ) : eligibles.length === 0 ? (
               <p className="px-4 py-6 text-center text-muted-foreground text-[12.5px]">Aucune facture éligible pour l'instant.</p>
             ) : (
-              <table className="w-full text-[12.5px]">
+              <><table className="w-full text-[12.5px]">
                 <tbody className="divide-y divide-border/60">
-                  {eligibles.map((f) => (
+                  {pagEligibles.pageItems.map((f) => (
                     <tr key={f.id}>
-                      <td className="px-4 py-2 text-foreground font-medium">{f.referenceFacture}</td>
+                      <td className="px-4 py-2 text-foreground font-medium">{referenceLisible(f.referenceFacture)}</td>
                       <td className="px-4 py-2 text-muted-foreground">{f.dateReception}</td>
                       <td className="px-4 py-2 text-right text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(f.montant)} FCFA</td>
                       <td className="px-4 py-2 text-right">
@@ -350,6 +356,7 @@ export default function PrestataireFinanceView() {
                   ))}
                 </tbody>
               </table>
+              <Pager p={pagEligibles} /></>
             )}
           </div>
         )}
@@ -426,7 +433,7 @@ export default function PrestataireFinanceView() {
                   <tbody className="divide-y divide-border/60">
                     {l.lignes.map((x) => (
                       <tr key={x.id}>
-                        <td className="px-4 py-2 text-foreground font-medium">{x.referenceFacture}</td>
+                        <td className="px-4 py-2 text-foreground font-medium">{referenceLisible(x.referenceFacture)}</td>
                         <td className="px-4 py-2 text-muted-foreground">{x.date}</td>
                         <td className="px-4 py-2 text-foreground">{x.assureNom}</td>
                         <td className="px-4 py-2 text-right text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(x.montant)}</td>
@@ -504,7 +511,7 @@ export default function PrestataireFinanceView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {relevesFiltres.map((r) => (
+                {pagReleves.pageItems.map((r) => (
                   <tr key={r.id} className="hover:bg-secondary/25 cursor-pointer" onClick={() => ouvrirDetail(r.id)}>
                     <td className="px-4 py-2.5 text-foreground font-medium">{r.numero}</td>
                     <td className="px-4 py-2.5 text-muted-foreground">{r.client.nom}</td>
@@ -544,6 +551,7 @@ export default function PrestataireFinanceView() {
                 )}
               </tbody>
             </table>
+            <Pager p={pagReleves} />
           </div>
         </div>
       )}
@@ -579,9 +587,9 @@ export default function PrestataireFinanceView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {facturesFiltrees.map((f) => (
+                {pagFactures.pageItems.map((f) => (
                   <tr key={f.id} className="hover:bg-secondary/25">
-                    <td className="px-4 py-2.5 text-foreground font-medium">{f.referenceFacture}</td>
+                    <td className="px-4 py-2.5 text-foreground font-medium">{referenceLisible(f.referenceFacture)}</td>
                     <td className="px-4 py-2.5 text-muted-foreground">{[...new Set(f.lignes.map((l) => l.assureNom))].join(", ") || "—"}</td>
                     <td className="px-4 py-2.5 text-muted-foreground">{f.dateReception}</td>
                     <td className="px-4 py-2.5 text-right text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(f.lignes.reduce((s, l) => s + l.montant, 0))} FCFA</td>
@@ -605,6 +613,7 @@ export default function PrestataireFinanceView() {
                 )}
               </tbody>
             </table>
+            <Pager p={pagFactures} />
           </div>
         </div>
       )}

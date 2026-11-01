@@ -1,3 +1,5 @@
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useState } from "react";
 import { ClipboardCheck, Download, FileCheck2, Hourglass } from "lucide-react";
 import { toast } from "sonner";
@@ -36,6 +38,7 @@ export default function PrisesEnChargeTab({ contrat }: Props) {
     openAccordPrealableExport(contrat.id, format).catch(() => toast.error(`Export ${format.toUpperCase()} impossible.`));
   };
 
+  const pagAccords = usePagination(accords);
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -66,7 +69,7 @@ export default function PrisesEnChargeTab({ contrat }: Props) {
             {accords.length === 0 ? (
               <p className="text-[12px] text-muted-foreground text-center py-4">Aucun dossier d'entente préalable sur ce contrat.</p>
             ) : (
-              <table className="w-full text-[12px]">
+              <><table className="w-full text-[12px]">
                 <thead className="bg-secondary/30">
                   <tr className="text-[10px] text-muted-foreground uppercase">
                     <th className="text-left px-3 py-2">Dossier</th>
@@ -79,7 +82,7 @@ export default function PrisesEnChargeTab({ contrat }: Props) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
-                  {accords.map((a) => (
+                  {pagAccords.pageItems.map((a) => (
                     <tr key={a.id}>
                       <td className="px-3 py-2 text-primary font-semibold med-num">{a.id}</td>
                       <td className="px-3 py-2 text-foreground">{a.assureNom}</td>
@@ -92,6 +95,7 @@ export default function PrisesEnChargeTab({ contrat }: Props) {
                   ))}
                 </tbody>
               </table>
+              <Pager p={pagAccords} /></>
             )}
           </div>
         </>
