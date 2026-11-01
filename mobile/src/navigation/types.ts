@@ -41,6 +41,23 @@ export type RootStackParamList = {
   // web. `path` : chemin API relatif (ex. cheminFeuilleSoins(id)) déjà
   // authentifié via le token — voir DocumentViewerScreen.
   DocumentViewer: { path: string; titre: string };
+
+  // Suivi de santé (2026-11) : conversion d'un bon papier, rendez-vous,
+  // constantes, accès au dossier ; dossier patient côté médecin.
+  ConvertirBon: { documentId: string; assureId: string };
+  RendezVous: undefined;
+  RendezVousNouveau: { prestataireId?: string };
+  SuiviSante: undefined;
+  AccesDossier: undefined;
+  MedecinDossier: { assureId: string; nom: string };
+};
+
+// Onglets de l'espace médecin (compte medecin_prescripteur).
+export type MedecinTabParamList = {
+  MedecinAccueil: undefined;
+  MedecinRendezVous: undefined;
+  MedecinPatients: undefined;
+  MedecinPlus: undefined;
 };
 
 // MainTabs — barre du bas à 5 onglets max, les rubriques

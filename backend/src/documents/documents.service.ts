@@ -2783,6 +2783,23 @@ export class DocumentsService {
   // fourni uniquement quand CE prestataire imprime son propre bon d'examen
   // pendant son traitement, jamais pour le médecin/l'assuré (voir demande
   // utilisateur citée plus haut).
+  // Bon / ordonnance numérisé par l'assuré (2026-11) : pas de feuille issue
+  // d'une consultation, le document de référence est l'original photographié
+  // (PDF du carnet de santé).
+  async renderOriginalNumerise(prescriptionId: string, res: Response) {
+    const prescription = await this.prisma.prescription.findUnique({ where: { id: prescriptionId }, select: { carnetDocumentId: true, numeroOrdonnance: true, numeroBonExamen: true } });
+    const document = prescription?.carnetDocumentId ? await this.prisma.carnetSanteDocument.findUnique({ where: { id: prescription.carnetDocumentId } }) : null;
+    if (!document) throw new NotFoundException("Original du bon numérisé introuvable.");
+    const pdf = this.storage.actif
+      ? await this.storage.download("carnet-sante", document.fichier)
+      : await fs.promises.readFile(path.join(UPLOADS_ROOT, "carnet-sante", document.fichier)).catch(() => null);
+    if (!pdf) throw new NotFoundException("Fichier original introuvable sur le serveur.");
+    const numero = (prescription!.numeroOrdonnance ?? prescription!.numeroBonExamen ?? "bon").replace(/[^\w-]+/g, "-");
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="Original-${numero}.pdf"`);
+    res.end(pdf);
+  }
+
   async renderFeuilleExamenPrescription(prescriptionId: string, res: Response, utilisateur: { id: string | null; nom: string; roleId: string; masquerPrixPharmacie?: boolean }, prestataireFiltre?: { id: string; nom: string; secteur?: string | null }) {
     const prescription = await this.prisma.prescription.findUnique({
       where: { id: prescriptionId },
@@ -2793,6 +2810,7 @@ export class DocumentsService {
       },
     });
     if (!prescription) throw new NotFoundException(`Prescription ${prescriptionId} introuvable`);
+    if (!prescription.priseEnCharge) return this.renderOriginalNumerise(prescriptionId, res);
     if (!prescription.numeroBonExamen) throw new BadRequestException("Cette prescription ne comporte aucun examen.");
 
     const lignesSource = prestataireFiltre
@@ -2817,7 +2835,7 @@ export class DocumentsService {
       prestataireRef: prescription.priseEnCharge.prestataireRef,
       // Pas de section pharmacie sur la Feuille d'Examen — tableau vide,
       // jamais utilisé par genererFormulaire côté "examen".
-      prescriptionOrigine: { medecin: prescription.medecin, numeroBonExamen: prescription.numeroBonExamen, medicaments: [] },
+      prescriptionOrigine: { medecin: prescription.medecin!, numeroBonExamen: prescription.numeroBonExamen, medicaments: [] },
     };
     await this.genererFormulaire("examen", prescription.numeroBonExamen, pec, lignes, res, prescriptionId, utilisateur, prestataireFiltre);
   }

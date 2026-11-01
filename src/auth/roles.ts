@@ -99,7 +99,7 @@ export const roles: Record<RoleId, RoleDefinition> = {
   // au rôle medecin_prescripteur ci-dessous.
   prestataire_sante: {
     id: "prestataire_sante", label: "Prestataire de Santé", family: "externe", shell: "provider-portal",
-    allowedModules: ["prestataireDashboard", "prestatairePatients", "prestatairePrestations", "prestataireTraiterBon", "prestataireOrdonnances", "prestataireContacts", "prestataireDevis", "prestataireFinance", "prestataireLogistique", "messagerie"],
+    allowedModules: ["prestataireDashboard", "prestatairePatients", "prestatairePrestations", "prestataireTraiterBon", "prestataireOrdonnances", "prestataireContacts", "prestataireDevis", "prestataireFinance", "prestataireLogistique", "prestataireRendezVous", "messagerie"],
   },
   expert_sinistres: {
     id: "expert_sinistres", label: "Expert Sinistres", family: "externe", shell: "expert-portal",
@@ -126,7 +126,7 @@ export const roles: Record<RoleId, RoleDefinition> = {
   // portails. membreDashboard reste TOUJOURS en premier dans la liste.
   assure_principal: {
     id: "assure_principal", label: "Assuré Principal", family: "externe", shell: "member-portal",
-    allowedModules: ["membreDashboard", "membreCarte", "membreGaranties", "membrePriseEnCharge", "membreRemboursement", "membreReseauSoins", "membreCarnetSante", "membreHistorique", "membreFamille", "membreDelegations", "messagerie"],
+    allowedModules: ["membreDashboard", "membreCarte", "membreGaranties", "membrePriseEnCharge", "membreRemboursement", "membreReseauSoins", "membreCarnetSante", "membreHistorique", "membreRendezVous", "membreSuiviSante", "membreAccesDossier", "membreFamille", "membreDelegations", "messagerie"],
   },
   // Portail médecin (2026-08) — voir demande utilisateur : "le médecin doit
   // avoir ses accès différents de ceux de la clinique ou l'hôpital... il
@@ -141,7 +141,7 @@ export const roles: Record<RoleId, RoleDefinition> = {
     id: "medecin_prescripteur", label: "Médecin Prescripteur", family: "externe", shell: "medecin-portal",
     allowedModules: [
       "medecinDashboard", "medecinFileAttente", "prestataireMedecinPrescripteur",
-      "medecinDossiersPatients", "medecinHistoriquePrestations", "messagerie",
+      "medecinRendezVous", "medecinDossiersPatients", "medecinHistoriquePrestations", "messagerie",
     ],
   },
 };

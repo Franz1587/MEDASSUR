@@ -2195,6 +2195,10 @@ model AssureSante {
 
   contrat           Contrat             @relation(fields: [contratId], references: [id])
   prisesEnCharge    PriseEnCharge[]
+  rendezVous        RendezVous[]
+  accesDossiers     AccesDossierMedical[]
+  mesuresSante      MesureSante[]
+  prescriptionsNumerisees Prescription[] @relation("PrescriptionNumeriseeAssure")
   remboursementsBeneficiaire Remboursement[]
   accordsPrealables AccordPrealable[]
   // Compte du portail assuré (2026-08) — remplace l'ancien CompteAssureMobile
@@ -2380,6 +2384,7 @@ model Prestataire {
   // MedecinPrestataire ci-dessous (nouveau module "Professionnel de
   // santé", rubrique Système).
   medecins MedecinPrestataire[]
+  rendezVous RendezVous[]
   gedDocuments GedDocument[]
 
   // Visibilité du portail prestataire (2026-08) — voir demande utilisateur :
@@ -2537,6 +2542,8 @@ model Medecin {
   // Prescriptions rédigées en tant que médecin prescripteur (2026-08) —
   // voir model Prescription ci-dessous.
   prescriptions Prescription[]
+  rendezVous    RendezVous[]
+  accesDossiers AccesDossierMedical[]
   // Consultations assignées par l'accueil (2026-09) — voir
   // PriseEnCharge.medecinId ci-dessus.
   prisesEnCharge PriseEnCharge[]
@@ -2583,10 +2590,21 @@ model Prescription {
   // Conversation ci-dessus pour le détail du mécanisme.
   societeId String?
   societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
-  priseEnChargeId   String   @unique
-  priseEnCharge     PriseEnCharge @relation("PrescriptionOrigine", fields: [priseEnChargeId], references: [id])
-  medecinId         String
-  medecin           Medecin  @relation(fields: [medecinId], references: [id])
+  priseEnChargeId   String?  @unique
+  priseEnCharge     PriseEnCharge? @relation("PrescriptionOrigine", fields: [priseEnChargeId], references: [id])
+  medecinId         String?
+  medecin           Medecin? @relation(fields: [medecinId], references: [id])
+  // Ordonnance / bon d'examen papier numérisé par l'assuré (2026-11) : pas
+  // de consultation ni de médecin du réseau, l'assuré et l'original sont
+  // portés directement ; délivrable comme une prescription électronique.
+  origine           String   @default("Consultation") // Consultation | Numérisée
+  assureId          String?
+  assure            AssureSante? @relation("PrescriptionNumeriseeAssure", fields: [assureId], references: [id])
+  numeroOrdonnance  String?  @unique
+  prescripteurNom   String?
+  structureNom      String?
+  dateOrdonnance    String?
+  carnetDocumentId  String?
   // Motifs de consultation (2026-08) — voir demande utilisateur :
   // "l'application doit pouvoir faire remonter une liste des motifs, avec
   // la possibilité d'en ajouter plusieurs" — plusieurs motifs par
@@ -4255,4 +4273,68 @@ model Transaction {
 
   @@index([societeId])
   @@index([statut])
+}
+
+// Suivi de santé (2026-11) — rendez-vous en ligne entre un assuré (ou un
+// ayant droit) et un médecin et/ou une structure du réseau.
+model RendezVous {
+  id            String       @id @default(cuid())
+  societeId     String?
+  assureId      String
+  assure        AssureSante  @relation(fields: [assureId], references: [id])
+  medecinId     String?
+  medecin       Medecin?     @relation(fields: [medecinId], references: [id])
+  prestataireId String?
+  prestataire   Prestataire? @relation(fields: [prestataireId], references: [id])
+  type          String       // Consultation | Contrôle | Examen
+  motif         String?
+  dateHeure     DateTime
+  dureeMinutes  Int          @default(30)
+  statut        String       @default("Demandé") // Demandé | Confirmé | Refusé | Annulé | Honoré | Absent
+  reponse       String?      // message du professionnel (confirmation, refus, nouvel horaire…)
+  demandeParUserId String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([societeId])
+  @@index([assureId])
+  @@index([medecinId])
+  @@index([prestataireId])
+}
+
+// Accès d'un médecin au dossier médical d'un assuré, ouvert et fermé par
+// l'assuré lui-même depuis son portail (historique conservé).
+model AccesDossierMedical {
+  id        String      @id @default(cuid())
+  societeId String?
+  assureId  String
+  assure    AssureSante @relation(fields: [assureId], references: [id])
+  medecinId String
+  medecin   Medecin     @relation(fields: [medecinId], references: [id])
+  actif     Boolean     @default(true)
+  ouvertLe  DateTime    @default(now())
+  fermeLe   DateTime?
+
+  @@unique([assureId, medecinId])
+  @@index([societeId])
+  @@index([medecinId])
+}
+
+// Contrôles de santé : constantes relevées par l'assuré ou par un médecin
+// ayant accès au dossier (tension, glycémie, poids…).
+model MesureSante {
+  id         String      @id @default(cuid())
+  societeId  String?
+  assureId   String
+  assure     AssureSante @relation(fields: [assureId], references: [id])
+  type       String      // Tension | Glycémie | Poids | Température | Fréquence cardiaque | Saturation | Autre
+  valeur     String
+  unite      String?
+  dateMesure DateTime
+  note       String?
+  medecinId  String?     // renseigné quand la mesure est saisie par un médecin
+  createdAt  DateTime    @default(now())
+
+  @@index([societeId])
+  @@index([assureId])
 }

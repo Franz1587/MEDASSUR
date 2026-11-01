@@ -64,6 +64,7 @@ import { PortailClientUtilisateursModule } from "./portail-client-utilisateurs/p
 import { BordereauxModule } from "./bordereaux/bordereaux.module";
 import { EncaissementsModule } from "./encaissements/encaissements.module";
 import { PortailMembreModule } from "./portail-membre/portail-membre.module";
+import { SuiviSanteModule } from "./suivi-sante/suivi-sante.module";
 import { PortailPrestataireModule } from "./portail-prestataire/portail-prestataire.module";
 import { MedecinsModule } from "./medecins/medecins.module";
 import { PortailMedecinModule } from "./portail-medecin/portail-medecin.module";
@@ -139,6 +140,7 @@ import { ImportLibreModule } from "./import-libre/import-libre.module";
     BordereauxModule,
     EncaissementsModule,
     PortailMembreModule,
+    SuiviSanteModule,
     PortailPrestataireModule,
     MedecinsModule,
     PortailMedecinModule,

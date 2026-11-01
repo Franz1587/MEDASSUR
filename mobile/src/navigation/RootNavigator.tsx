@@ -4,7 +4,7 @@ import { ActivityIndicator, View } from "react-native";
 import { useAuth } from "../auth/AuthContext";
 import { colors } from "../theme/colors";
 import type { RootStackParamList } from "./types";
-import { MainTabs } from "./MainTabs";
+import { MainTabs, MedecinTabs } from "./MainTabs";
 import { LoginScreen } from "../screens/auth/LoginScreen";
 import { CarteScreen } from "../screens/carte/CarteScreen";
 import { GarantiesScreen } from "../screens/garanties/GarantiesScreen";
@@ -27,6 +27,8 @@ import { MonProfilScreen } from "../screens/profil/MonProfilScreen";
 import { DocumentViewerScreen } from "../screens/documents/DocumentViewerScreen";
 import { ChangementMotDePasseObligatoireScreen } from "../screens/auth/ChangementMotDePasseObligatoireScreen";
 import { ConsentementScreen } from "../screens/consentement/ConsentementScreen";
+import { AccesDossierScreen, ConvertirBonScreen, RendezVousNouveauScreen, RendezVousScreen, SuiviSanteScreen } from "../screens/suiviSante/SuiviSanteScreens";
+import { MedecinDossierScreen } from "../screens/medecin/MedecinScreens";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -58,7 +60,13 @@ export function RootNavigator() {
         <Stack.Screen name="Consentement" component={ConsentementScreen} options={{ headerShown: false }} />
       ) : (
         <>
-          <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
+          <Stack.Screen name="Main" component={currentUser.roleId === "medecin_prescripteur" ? MedecinTabs : MainTabs} options={{ headerShown: false }} />
+          <Stack.Screen name="ConvertirBon" component={ConvertirBonScreen} options={{ title: "Bon électronique" }} />
+          <Stack.Screen name="RendezVous" component={RendezVousScreen} options={{ title: "Rendez-vous" }} />
+          <Stack.Screen name="RendezVousNouveau" component={RendezVousNouveauScreen} options={{ title: "Prendre rendez-vous" }} />
+          <Stack.Screen name="SuiviSante" component={SuiviSanteScreen} options={{ title: "Suivi de santé" }} />
+          <Stack.Screen name="AccesDossier" component={AccesDossierScreen} options={{ title: "Accès à mon dossier" }} />
+          <Stack.Screen name="MedecinDossier" component={MedecinDossierScreen} options={({ route }) => ({ title: route.params.nom })} />
           <Stack.Screen name="CarteMembre" component={CarteScreen} options={{ title: "Ma carte" }} />
           <Stack.Screen name="Garanties" component={GarantiesScreen} options={{ title: "Mes garanties" }} />
           <Stack.Screen name="AccordDetail" component={PriseEnChargeDetailScreen} options={{ title: "Détail de la demande" }} />

@@ -7,9 +7,10 @@ import { MessagerieModule } from "../messagerie/messagerie.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { DelegationsFamilleService } from "./delegations-famille.service";
 import { CarnetSanteService } from "./carnet-sante.service";
+import { PrescriptionsModule } from "../prescriptions/prescriptions.module";
 
 @Module({
-  imports: [SanteModule, AccordPrealableModule, DocumentsModule, MessagerieModule, NotificationsModule],
+  imports: [SanteModule, AccordPrealableModule, DocumentsModule, MessagerieModule, NotificationsModule, PrescriptionsModule],
   controllers: [PortailMembreController],
   providers: [DelegationsFamilleService, CarnetSanteService],
 })

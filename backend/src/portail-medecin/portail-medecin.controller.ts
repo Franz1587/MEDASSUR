@@ -82,6 +82,7 @@ export class PortailMedecinController {
     // Prix des médicaments/quote-part JAMAIS visibles côté médecin
     // prescripteur (2026-09) — voir demande utilisateur : "le médecin n'est
     // pas censé connaître les prix des médicaments de la pharmacie".
+    if (!prescription.priseEnChargeId) return this.documents.renderOriginalNumerise(id, res);
     return this.documents.renderFeuilleSoinsLigne(prescription.priseEnChargeId, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId, masquerPrixPharmacie: true });
   }
 

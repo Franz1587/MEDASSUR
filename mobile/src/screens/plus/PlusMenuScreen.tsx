@@ -34,6 +34,9 @@ export function PlusMenuScreen() {
 
       <Card style={{ padding: 0, marginTop: 4 }}>
         <View style={{ paddingHorizontal: 16 }}>
+          <ListRow icon="calendar-outline" label="Rendez-vous" onPress={() => navigation.navigate("RendezVous")} />
+          <ListRow icon="pulse-outline" label="Suivi de santé" onPress={() => navigation.navigate("SuiviSante")} />
+          <ListRow icon="lock-open-outline" label="Accès à mon dossier" onPress={() => navigation.navigate("AccesDossier")} />
           <ListRow icon="map-outline" label="Réseau de soins" onPress={() => navigation.navigate("ReseauSoins")} />
           <ListRow icon="time-outline" label="Historique de soins" onPress={() => navigation.navigate("Historique")} />
           <ListRow icon="people-outline" label="Ma famille" onPress={() => navigation.navigate("Famille")} />

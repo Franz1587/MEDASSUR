@@ -17,6 +17,7 @@ import {
   type MembreIdentite, type RubriqueCarnetSante, type CarnetSanteDocument,
 } from "../../api/portailMembre";
 import { messageErreur, type RnFilePart } from "../../api/http";
+import { EditeurImage } from "../../components/EditeurImage";
 
 // E-carnet Santé — MÊME logique que src/features/portail-membre/CarnetSante.tsx
 // + InformationsMedicalesCard.tsx (web) : bloc "informations médicales"
@@ -95,6 +96,8 @@ export function CarnetSanteScreen() {
   const [ajoutOuvert, setAjoutOuvert] = useState(false);
   const [libelle, setLibelle] = useState("");
   const [envoi, setEnvoi] = useState(false);
+  // Photo à rogner / pivoter avant envoi.
+  const [aEditer, setAEditer] = useState<RnFilePart | null>(null);
 
   const chargerDepuis = (m: MembreIdentite) => {
     setMoi(m);
@@ -169,14 +172,14 @@ export function CarnetSanteScreen() {
     }
   };
 
-  const envoyerAsset = async (asset: ImagePicker.ImagePickerAsset) => {
+  const envoyerAsset = (asset: ImagePicker.ImagePickerAsset) => {
+    setAEditer({ uri: asset.uri, name: asset.fileName ?? `carnet-${Date.now()}.jpg`, type: asset.mimeType ?? "image/jpeg" });
+  };
+
+  const envoyerFichier = async (file: RnFilePart) => {
+    setAEditer(null);
     setEnvoi(true);
     try {
-      const file: RnFilePart = {
-        uri: asset.uri,
-        name: asset.fileName ?? `carnet-${Date.now()}.jpg`,
-        type: asset.mimeType ?? "image/jpeg",
-      };
       await ajouterCarnetSante(rubrique, file, { assureId: beneficiaireId ?? undefined, libelle: libelle.trim() || undefined });
       setLibelle("");
       setAjoutOuvert(false);
@@ -243,7 +246,10 @@ export function CarnetSanteScreen() {
       if (d.fichier) navigation.navigate("DocumentViewer", { path: urlCarnetSante(d.fichier), titre: d.numero ?? "Document" });
       return;
     }
-    if (d.rubrique === "Ordonnance" && d.priseEnChargeId) {
+    // Bon papier numérisé : l'original photographié (servi par la route du bon).
+    if (d.numerise && d.prescriptionId) {
+      navigation.navigate("DocumentViewer", { path: cheminFeuilleExamenBon(d.prescriptionId), titre: d.numero ?? "Bon numérisé" });
+    } else if (d.rubrique === "Ordonnance" && d.priseEnChargeId) {
       navigation.navigate("DocumentViewer", { path: cheminFeuilleSoins(d.priseEnChargeId), titre: d.numero ?? "Ordonnance" });
     } else if (d.prescriptionId) {
       navigation.navigate("DocumentViewer", { path: cheminFeuilleExamenBon(d.prescriptionId), titre: d.numero ?? "Examen" });
@@ -372,10 +378,16 @@ export function CarnetSanteScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.docTitle} numberOfLines={1}>{d.libelle || "Document"}</Text>
               {d.source === "feuille" ? (
-                <Text style={styles.docSubtitle}>{d.numero} · {d.dateSoins} · {d.assureNom}</Text>
+                <Text style={styles.docSubtitle}>{d.numero} · {d.dateSoins ?? "—"} · {d.assureNom}{d.numerise ? " · numérisé" : ""}</Text>
               ) : (
-                <Text style={styles.docSubtitle}>{d.assureNom} · {formatDate(d.dateAjout)}</Text>
+                <Text style={styles.docSubtitle}>{d.assureNom} · {formatDate(d.dateAjout)}{d.convertiEn ? ` · converti en ${d.convertiEn}` : ""}</Text>
               )}
+              {d.source === "upload" && !d.convertiEn ? (
+                <Pressable onPress={() => navigation.navigate("ConvertirBon", { documentId: d.id, assureId: d.assureId })} style={styles.convertir} hitSlop={6}>
+                  <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
+                  <Text style={styles.convertirTexte}>Convertir en électronique</Text>
+                </Pressable>
+              ) : null}
             </View>
             {d.statut ? <Badge label={d.statut === "NonTraite" ? "Non traité" : d.statut === "PartiellementTraite" ? "Partiel" : "Traité"} variant={statutVariant(d.statut)} /> : null}
             <Pressable onPress={() => ouvrir(d)} hitSlop={8} style={styles.docAction}>
@@ -391,6 +403,7 @@ export function CarnetSanteScreen() {
       )}
     </ScrollView>
 
+      <EditeurImage fichier={aEditer} onAnnuler={() => setAEditer(null)} onValider={envoyerFichier} />
       <Pressable onPress={() => setAjoutOuvert((v) => !v)} style={styles.fab}>
         <Ionicons name={ajoutOuvert ? "close" : "add"} size={26} color="#fff" />
       </Pressable>
@@ -399,6 +412,8 @@ export function CarnetSanteScreen() {
 }
 
 const styles = StyleSheet.create({
+  convertir: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4, alignSelf: "flex-start" },
+  convertirTexte: { fontSize: 12, fontWeight: "600", color: colors.primary },
   screen: { flex: 1, backgroundColor: colors.background },
   scrollContent: { padding: spacing.lg, paddingBottom: spacing.xxl * 2 },
   emergencyCard: {

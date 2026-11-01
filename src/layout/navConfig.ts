@@ -6,6 +6,7 @@ import {
   ClipboardList, Receipt, Landmark, Hash, History, Gauge, FileSpreadsheet, Mail, PieChart,
   ScrollText, MapPinned, KeyRound, TrendingUp, Coins, Home, Users2, Briefcase, MessageCircle, Syringe,
   ListOrdered, FolderClock, Send, Banknote, UploadCloud, Layers, Sparkles, Smartphone,
+  CalendarClock, Activity,
 } from "lucide-react";
 
 export type View =
@@ -86,6 +87,8 @@ export type View =
   | "membreDashboard" | "membreCarte" | "membreGaranties" | "membrePriseEnCharge"
   | "membreRemboursement" | "membreReseauSoins" | "membreCarnetSante" | "membreHistorique" | "membreFamille"
   | "membreDelegations"
+  // Suivi de santé (2026-11) : rendez-vous, constantes, accès au dossier médical.
+  | "membreRendezVous" | "membreSuiviSante" | "membreAccesDossier" | "medecinRendezVous" | "prestataireRendezVous"
   // Portail prestataire (2026-08) — écran externe dédié au prestataire
   // médical (User.prestataireId), modelé sur des captures de référence (voir
   // demande utilisateur : captures fournies à dupliquer). prestataireDashboard reste
@@ -214,6 +217,11 @@ export const viewIcons: Record<View, React.ElementType> = {
   membreHistorique: History,
   membreFamille: Users2,
   membreDelegations: KeyRound,
+  membreRendezVous: CalendarClock,
+  membreSuiviSante: Activity,
+  membreAccesDossier: ShieldCheck,
+  medecinRendezVous: CalendarClock,
+  prestataireRendezVous: CalendarClock,
   prestataireDashboard: Home,
   prestatairePatients: Users2,
   prestatairePrestations: Building2,
@@ -299,6 +307,11 @@ export const viewLabels: Record<View, string> = {
   membreHistorique: "Historique de soins",
   membreFamille: "Ma famille",
   membreDelegations: "Accès famille",
+  membreRendezVous: "Rendez-vous",
+  membreSuiviSante: "Suivi de santé",
+  membreAccesDossier: "Accès à mon dossier",
+  medecinRendezVous: "Rendez-vous",
+  prestataireRendezVous: "Rendez-vous",
   prestataireDashboard: "Accueil",
   prestatairePatients: "Patients",
   prestatairePrestations: "Prestations",

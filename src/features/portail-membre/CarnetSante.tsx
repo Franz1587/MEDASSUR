@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, FileText, Trash2, Upload } from "lucide-react";
+import { Camera, FileText, Sparkles, Trash2, Upload } from "lucide-react";
+import { EditeurImage } from "@/components/shared/EditeurImage";
+import { ConvertirBon } from "./ConvertirBon";
 import { toast } from "sonner";
 import { Combobox } from "@/components/shared/Combobox";
 import { Badge } from "@/components/shared/Badge";
@@ -43,6 +45,9 @@ export default function MembreCarnetSanteView() {
   const [libelle, setLibelle] = useState("");
   const [envoi, setEnvoi] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Photo à rogner / pivoter avant envoi, et document à convertir en bon électronique.
+  const [aEditer, setAEditer] = useState<File | null>(null);
+  const [aConvertir, setAConvertir] = useState<CarnetSanteDocument | null>(null);
 
   const rafraichir = () => {
     setErreurChargement(false);
@@ -97,6 +102,8 @@ export default function MembreCarnetSanteView() {
 
   return (
     <div className="p-6 space-y-4">
+      {aEditer && <EditeurImage fichier={aEditer} onAnnuler={() => setAEditer(null)} onValider={(f) => { setAEditer(null); envoyerPhoto(f); }} />}
+      {aConvertir && <ConvertirBon documentId={aConvertir.id} assureId={aConvertir.assureId} onFermer={() => setAConvertir(null)} onConverti={() => { setAConvertir(null); rafraichir(); }} />}
       <div>
         <h1 className="text-[1.2rem] font-bold text-foreground">E-carnet Santé</h1>
         <p className="text-[12.5px] text-muted-foreground mt-0.5">
@@ -139,7 +146,7 @@ export default function MembreCarnetSanteView() {
         />
         <input
           ref={inputRef} type="file" accept="image/*" capture="environment" className="hidden"
-          onChange={(e) => envoyerPhoto(e.target.files?.[0])}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) setAEditer(f); e.target.value = ""; }}
         />
         <button
           type="button" onClick={choisirPhoto} disabled={envoi}
@@ -174,10 +181,10 @@ export default function MembreCarnetSanteView() {
                     concernée... et le statut du bon". */}
                 {d.source === "feuille" ? (
                   <p className="text-[11.5px] text-muted-foreground">
-                    <span style={{ fontFamily: "'DM Mono', monospace" }}>{d.numero}</span> · {d.dateSoins} · {d.assureNom}
+                    <span className="text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{d.numero}</span> · {d.dateSoins ?? "—"} · {d.assureNom}{d.numerise && " · numérisé"}
                   </p>
                 ) : (
-                  <p className="text-[11.5px] text-muted-foreground">{d.assureNom} · {new Date(d.dateAjout).toLocaleDateString("fr-FR")}</p>
+                  <p className="text-[11.5px] text-muted-foreground">{d.assureNom} · {new Date(d.dateAjout).toLocaleDateString("fr-FR")}{d.convertiEn && <> · converti en <span className="text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{d.convertiEn}</span></>}</p>
                 )}
               </div>
               {d.statut && <Badge variant={VARIANT_STATUT_BON[d.statut]}>{LABEL_STATUT_BON[d.statut]}</Badge>}
@@ -191,10 +198,16 @@ export default function MembreCarnetSanteView() {
               ) : (
                 <button
                   type="button"
-                  onClick={() => (d.rubrique === "Ordonnance" ? openFeuilleSoinsDe(d.priseEnChargeId!) : openFeuilleExamenBonDe(d.prescriptionId!))}
+                  // Bon numérisé : l'original photographié (servi par la route du bon).
+                  onClick={() => (d.rubrique === "Ordonnance" && !d.numerise ? openFeuilleSoinsDe(d.priseEnChargeId!) : openFeuilleExamenBonDe(d.prescriptionId!))}
                   className="text-[11.5px] font-medium text-primary hover:underline flex-shrink-0"
                 >
                   Voir
+                </button>
+              )}
+              {d.source === "upload" && !d.convertiEn && (
+                <button type="button" onClick={() => setAConvertir(d)} className="h-8 px-2.5 rounded-lg border border-primary/40 text-[11.5px] font-medium text-primary inline-flex items-center gap-1.5 hover:bg-primary/10 flex-shrink-0">
+                  <Sparkles className="w-3.5 h-3.5" /><span className="hidden sm:inline">Convertir en électronique</span><span className="sm:hidden">Convertir</span>
                 </button>
               )}
               {d.source === "upload" && (

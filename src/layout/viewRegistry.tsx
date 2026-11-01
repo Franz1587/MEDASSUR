@@ -70,6 +70,11 @@ const MembrePriseEnChargeView = lazy(() => import("@/features/portail-membre/Pri
 const MembreRemboursementView = lazy(() => import("@/features/portail-membre/Remboursement"));
 const MembreReseauSoinsView = lazy(() => import("@/features/portail-membre/ReseauSoins"));
 const MembreCarnetSanteView = lazy(() => import("@/features/portail-membre/CarnetSante"));
+const MembreRendezVousView = lazy(() => import("@/features/suivi-sante/RendezVousMembre"));
+const MembreSuiviSanteView = lazy(() => import("@/features/suivi-sante/SuiviSanteMembre"));
+const MembreAccesDossierView = lazy(() => import("@/features/suivi-sante/AccesDossierMembre"));
+const MedecinRendezVousView = lazy(() => import("@/features/suivi-sante/RendezVousPro").then((m) => ({ default: m.MedecinRendezVousView })));
+const PrestataireRendezVousView = lazy(() => import("@/features/suivi-sante/RendezVousPro").then((m) => ({ default: m.PrestataireRendezVousView })));
 const MembreHistoriqueView = lazy(() => import("@/features/portail-membre/Historique"));
 const MembreFamilleView = lazy(() => import("@/features/portail-membre/Famille"));
 const MembreDelegationsView = lazy(() => import("@/features/portail-membre/Delegations"));
@@ -168,6 +173,11 @@ export const viewRegistry: Record<View, React.ComponentType<any>> = {
   membreRemboursement: MembreRemboursementView,
   membreReseauSoins: MembreReseauSoinsView,
   membreCarnetSante: MembreCarnetSanteView,
+  membreRendezVous: MembreRendezVousView,
+  membreSuiviSante: MembreSuiviSanteView,
+  membreAccesDossier: MembreAccesDossierView,
+  medecinRendezVous: MedecinRendezVousView,
+  prestataireRendezVous: PrestataireRendezVousView,
   membreHistorique: MembreHistoriqueView,
   membreFamille: MembreFamilleView,
   membreDelegations: MembreDelegationsView,

@@ -32,6 +32,9 @@ type PortailMembreRequest = Request & { user: { userId: string; nom: string; rol
 // (User.assureSanteId, voir schema.prisma) — jamais aux données d'un autre
 // assuré/famille. Même patron que PortailClientController (façade fine,
 // aucune logique métier dupliquée, délègue aux services internes existants).
+import { PrescriptionsService } from "../prescriptions/prescriptions.service";
+import { ValiderBonNumeriseDto } from "../prescriptions/dto/bon-numerise.dto";
+import { idsFamilleDe } from "./famille.util";
 @Controller("portail-membre")
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("assure_principal")
@@ -45,6 +48,7 @@ export class PortailMembreController {
     private readonly carnetSante: CarnetSanteService,
     private readonly agentIa: MessagerieAgentIaService,
     private readonly pushNotifications: PushNotificationsService,
+    private readonly prescriptions: PrescriptionsService,
   ) {}
 
   private assureSanteIdDe(req: PortailMembreRequest): string {
@@ -52,21 +56,8 @@ export class PortailMembreController {
     return req.user.assureSanteId;
   }
 
-  private async idsFamilleDe(assureSanteId: string): Promise<string[]> {
-    const selection = await this.prisma.assureSante.findMany({
-      where: { OR: [{ id: assureSanteId }, { familleId: assureSanteId }] },
-      select: { id: true, familleId: true, identiteId: true },
-    });
-    const identiteIds = selection.map((a) => a.identiteId).filter((id): id is string => !!id);
-    const affiliations = identiteIds.length > 0
-      ? await this.prisma.assureSante.findMany({ where: { identiteId: { in: identiteIds } }, select: { id: true, familleId: true } })
-      : selection;
-    const racineIds = [...new Set(affiliations.map((a) => a.familleId ?? a.id))];
-    const familleEtendue = await this.prisma.assureSante.findMany({
-      where: { OR: [{ id: { in: racineIds } }, { familleId: { in: racineIds } }] },
-      select: { id: true },
-    });
-    return [...new Set(familleEtendue.map((a) => a.id))];
+  private idsFamilleDe(assureSanteId: string): Promise<string[]> {
+    return idsFamilleDe(this.prisma, assureSanteId);
   }
 
   // Abonnement individuel (2026-10) — migration DB non encore appliquée en
@@ -384,7 +375,8 @@ export class PortailMembreController {
   async feuilleExamenBon(@Param("prescriptionId") prescriptionId: string, @Req() req: PortailMembreRequest, @Res() res: Response) {
     const idsFamille = await this.idsFamilleDe(this.assureSanteIdDe(req));
     const prescription = await this.prisma.prescription.findUnique({ where: { id: prescriptionId }, include: { priseEnCharge: true } });
-    if (!prescription || !idsFamille.includes(prescription.priseEnCharge.assureId)) throw new ForbiddenException(`Bon ${prescriptionId} inaccessible`);
+    const patient = prescription?.priseEnCharge?.assureId ?? prescription?.assureId;
+    if (!prescription || !patient || !idsFamille.includes(patient)) throw new ForbiddenException(`Bon ${prescriptionId} inaccessible`);
     return this.documents.renderFeuilleExamenPrescription(prescriptionId, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId });
   }
 
@@ -550,6 +542,23 @@ export class PortailMembreController {
   async listeCarnetSante(@Query("rubrique") rubrique: string | undefined, @Req() req: PortailMembreRequest) {
     const idsFamille = await this.idsFamilleDe(this.assureSanteIdDe(req));
     return this.carnetSante.liste(idsFamille, rubrique);
+  }
+
+  // Conversion d'un document papier du carnet en ordonnance / bon d'examen
+  // électronique (2026-11) : ARIANA lit le document, l'assuré relit puis valide.
+  @Post("carnet-sante/:id/lire")
+  async lireBonPapier(@Param("id") id: string, @Req() req: PortailMembreRequest) {
+    const idsFamille = await this.idsFamilleDe(this.assureSanteIdDe(req));
+    const { doc, pdf } = await this.carnetSante.document(id, idsFamille);
+    return { assureId: doc.assureId, ...(await this.prescriptions.lireBonPapier(pdf)) };
+  }
+
+  @Post("carnet-sante/:id/convertir")
+  async convertirBonPapier(@Param("id") id: string, @Body() dto: ValiderBonNumeriseDto, @Req() req: PortailMembreRequest) {
+    const idsFamille = await this.idsFamilleDe(this.assureSanteIdDe(req));
+    await this.carnetSante.document(id, idsFamille);
+    if (!idsFamille.includes(dto.assureId)) throw new ForbiddenException(`Assuré ${dto.assureId} inaccessible`);
+    return this.prescriptions.creerNumerise(id, dto);
   }
 
   @Delete("carnet-sante/:id")

@@ -3,7 +3,8 @@ import { AppState } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import type { MainTabParamList } from "./types";
+import type { MainTabParamList, MedecinTabParamList } from "./types";
+import { MedecinAccueilScreen, MedecinPatientsScreen, MedecinPlusScreen, MedecinRendezVousScreen } from "../screens/medecin/MedecinScreens";
 import { colors } from "../theme/colors";
 import { DashboardScreen } from "../screens/dashboard/DashboardScreen";
 import { PriseEnChargeListScreen } from "../screens/priseEnCharge/PriseEnChargeListScreen";
@@ -115,5 +116,37 @@ export function MainTabs() {
       <Tab.Screen name="Carnet" component={CarnetSanteScreen} />
       <Tab.Screen name="Plus" component={PlusMenuScreen} options={{ tabBarBadge: messagesNonLus > 0 ? messagesNonLus : undefined }} />
     </Tab.Navigator>
+  );
+}
+
+// Espace médecin (2026-11) — compte medecin_prescripteur : accueil (demandes
+// et rendez-vous du jour), rendez-vous, dossiers partagés, plus.
+const OngletsMedecin = createBottomTabNavigator<MedecinTabParamList>();
+const ICONES_MEDECIN: Record<keyof MedecinTabParamList, [keyof typeof Ionicons.glyphMap, string]> = {
+  MedecinAccueil: ["home-outline", "Accueil"],
+  MedecinRendezVous: ["calendar-outline", "Rendez-vous"],
+  MedecinPatients: ["folder-open-outline", "Patients"],
+  MedecinPlus: ["grid-outline", "Plus"],
+};
+
+export function MedecinTabs() {
+  const insets = useSafeAreaInsets();
+  return (
+    <OngletsMedecin.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textSubtle,
+        tabBarLabelStyle: { fontSize: 10.5, fontWeight: "600" },
+        tabBarStyle: { height: 60 + insets.bottom, paddingBottom: Math.max(8, insets.bottom), paddingTop: 6 },
+        tabBarIcon: ({ color, size }) => <Ionicons name={ICONES_MEDECIN[route.name][0]} size={size ?? 20} color={color} />,
+        tabBarLabel: ICONES_MEDECIN[route.name][1],
+      })}
+    >
+      <OngletsMedecin.Screen name="MedecinAccueil" component={MedecinAccueilScreen} />
+      <OngletsMedecin.Screen name="MedecinRendezVous" component={MedecinRendezVousScreen} />
+      <OngletsMedecin.Screen name="MedecinPatients" component={MedecinPatientsScreen} />
+      <OngletsMedecin.Screen name="MedecinPlus" component={MedecinPlusScreen} />
+    </OngletsMedecin.Navigator>
   );
 }

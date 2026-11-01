@@ -14,7 +14,7 @@ import { http } from "../api/http";
 // prise en charge, nouveau message...). Jamais bloquant pour le reste de
 // l'app : un refus de permission ou un échec réseau ne doit jamais empêcher
 // l'utilisateur de se connecter/utiliser l'application normalement.
-export async function enregistrerPushToken(): Promise<void> {
+export async function enregistrerPushToken(roleId?: string): Promise<void> {
   try {
     if (!Device.isDevice) return; // simulateur/émulateur : pas de vrai jeton push
     const { status: statutExistant } = await Notifications.getPermissionsAsync();
@@ -44,7 +44,9 @@ export async function enregistrerPushToken(): Promise<void> {
       projectId ? { projectId } : undefined,
     );
 
-    await http.post("/portail-membre/push-token", { token: expoPushToken, plateforme: Platform.OS });
+    // Médecin (2026-11) : alertes de rendez-vous et d'accès aux dossiers.
+    const route = roleId === "medecin_prescripteur" ? "/portail-medecin/suivi/push-token" : "/portail-membre/push-token";
+    await http.post(route, { token: expoPushToken, plateforme: Platform.OS });
   } catch {
     // Jamais bloquant — voir commentaire ci-dessus.
   }

@@ -60,7 +60,7 @@ export const ROLE_MODULES: Record<RoleId, string[]> = {
   // la clinique ou l'hôpital... c'est sensible" — cet écran est désormais
   // exclusif au rôle medecin_prescripteur ci-dessous, jamais accessible
   // depuis le compte de la structure elle-même.
-  prestataire_sante: ["prestataireDashboard", "prestatairePatients", "prestatairePrestations", "prestataireTraiterBon", "prestataireOrdonnances", "prestataireContacts", "prestataireDevis", "prestataireFinance", "prestataireLogistique", "messagerie"],
+  prestataire_sante: ["prestataireDashboard", "prestatairePatients", "prestatairePrestations", "prestataireTraiterBon", "prestataireOrdonnances", "prestataireContacts", "prestataireDevis", "prestataireFinance", "prestataireLogistique", "prestataireRendezVous", "messagerie"],
   expert_sinistres: [...dashboard, "sinistres", "messagerie"],
   // Portail client (2026-08) — écrans dédiés et cloisonnés au Client
   // rattaché (User.clientId), distincts des vues internes "contrats"/
@@ -77,7 +77,7 @@ export const ROLE_MODULES: Record<RoleId, string[]> = {
   // famille". Réservé à l'assuré principal racine : jamais accordable à un
   // ayant droit délégué (voir DelegationsFamilleService.MODULES_DELEGABLES,
   // qui l'exclut explicitement de la liste des rubriques accordables).
-  assure_principal: ["membreDashboard", "membreCarte", "membreGaranties", "membrePriseEnCharge", "membreRemboursement", "membreReseauSoins", "membreCarnetSante", "membreHistorique", "membreFamille", "membreDelegations", "messagerie"],
+  assure_principal: ["membreDashboard", "membreCarte", "membreGaranties", "membrePriseEnCharge", "membreRemboursement", "membreReseauSoins", "membreCarnetSante", "membreHistorique", "membreRendezVous", "membreSuiviSante", "membreAccesDossier", "membreFamille", "membreDelegations", "messagerie"],
   // Portail médecin (2026-08) — voir demande utilisateur : "le médecin doit
   // avoir ses accès différents de ceux de la clinique ou l'hôpital... il
   // n'a pas besoin d'identifier un assuré, il doit voir la liste des
@@ -88,7 +88,7 @@ export const ROLE_MODULES: Record<RoleId, string[]> = {
   // tableau de bord avec des statistiques".
   medecin_prescripteur: [
     "medecinDashboard", "medecinFileAttente", "prestataireMedecinPrescripteur",
-    "medecinDossiersPatients", "medecinHistoriquePrestations", "messagerie",
+    "medecinRendezVous", "medecinDossiersPatients", "medecinHistoriquePrestations", "messagerie",
   ],
   // Super Admin (2026-09) — voir src/auth/role.enum.ts. superAdminDashboard
   // reste TOUJOURS en premier (page d'accueil).

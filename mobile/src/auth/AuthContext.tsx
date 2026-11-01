@@ -92,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // fraîche OU session restaurée au démarrage) — le backend écrase
   // simplement l'ancien jeton s'il a déjà été enregistré, jamais bloquant.
   useEffect(() => {
-    if (user) enregistrerPushToken();
+    if (user) enregistrerPushToken(user.roleId);
   }, [user?.id]);
 
   // Mode hors-ligne (2026-09) — voir utils/syncManager.ts. Démarre une seule

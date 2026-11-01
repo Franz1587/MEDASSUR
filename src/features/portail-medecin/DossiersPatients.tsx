@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, FolderClock, Pill, FlaskConical, User, FileDown } from "lucide-react";
 import { Badge } from "@/components/shared/Badge";
+import { DossiersPartages } from "@/features/suivi-sante/DossiersPartages";
 import { Combobox } from "@/components/shared/Combobox";
 import {
   getMesPrescriptions, ouvrirFeuilleSoinsPrescription, ouvrirFeuilleExamenPrescription,
@@ -144,6 +145,8 @@ export default function MedecinDossiersPatientsView() {
         <h1 className="text-[1.2rem] font-bold text-foreground flex items-center gap-2"><FolderClock className="w-5 h-5 text-primary" />Mes Dossiers Patients</h1>
         <p className="text-[12.5px] text-muted-foreground mt-0.5">Recherchez un patient déjà reçu pour consulter son dossier médical.</p>
       </div>
+
+      <DossiersPartages />
 
       <Combobox
         options={dossiers}

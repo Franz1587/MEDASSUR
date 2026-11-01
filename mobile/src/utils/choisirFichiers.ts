@@ -26,7 +26,8 @@ export function choisirFichiers(): Promise<RnFilePart[]> {
           onPress: async () => {
             const perm = await ImagePicker.requestCameraPermissionsAsync();
             if (!perm.granted) { resolve([]); return; }
-            const res = await ImagePicker.launchCameraAsync({ quality: 0.7 });
+            // Recadrage / rotation de l'appareil avant l'envoi (demande utilisateur : « quand on filme on peut rogner, changer l'orientation »).
+            const res = await ImagePicker.launchCameraAsync({ quality: 0.7, allowsEditing: true });
             if (res.canceled || !res.assets?.[0]) { resolve([]); return; }
             const a = res.assets[0];
             resolve([{ uri: a.uri, name: a.fileName ?? `photo-${Date.now()}.jpg`, type: a.mimeType ?? "image/jpeg" }]);

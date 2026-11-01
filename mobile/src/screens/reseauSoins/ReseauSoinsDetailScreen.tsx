@@ -130,6 +130,12 @@ export function ReseauSoinsDetailScreen() {
         </Card>
       ) : null}
 
+      {/* Rendez-vous en ligne dans cet établissement (2026-11). */}
+      <Pressable style={[styles.itineraireBtn, { marginBottom: 12 }]} onPress={() => navigation.navigate("RendezVousNouveau", { prestataireId: detail.id })}>
+        <Ionicons name="calendar" size={16} color="#fff" />
+        <Text style={styles.itineraireBtnText}>Prendre rendez-vous ici</Text>
+      </Pressable>
+
       {detail.medecins.length > 0 ? (
         <>
           <SectionTitle>Médecins ({detail.medecins.length})</SectionTitle>

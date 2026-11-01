@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { FacturesService } from "../factures/factures.service";
 import { DocumentsService } from "../documents/documents.service";
@@ -8,6 +8,7 @@ import { GROUPES_ACTES, groupeDeFamille } from "../actes-medicaux/groupes-actes.
 import { calculerAgeAns } from "../mouvements/age-limite.util";
 import { CreatePrescriptionDto } from "./dto/create-prescription.dto";
 import { TraiterBonDto } from "./dto/traiter-bon.dto";
+import { ValiderBonNumeriseDto } from "./dto/bon-numerise.dto";
 
 // Types de structure habilités à traiter un bon (2026-08) — voir demande
 // utilisateur : "soit la clinique d'origine, soit une autre clinique ou
@@ -39,6 +40,89 @@ function statutBonDe(lignes: { statut: string }[]): StatutBon {
 // traitables ensuite par n'importe quel prestataire habilité. Traitement
 // ATOMIQUE ligne par ligne : "lorsqu'une ligne... a déjà été traitée par
 // un prestataire... ce dernier ne verra que ce qui n'a pas été traité".
+interface LectureBonPapier {
+  lisible: boolean; typeDocument: string; prescripteur: string; structure: string; date: string; patient: string; remarques: string;
+  lignes: { type: "Medicament" | "Examen"; libelle: string; quantite: number; posologie: string }[];
+}
+
+const CONSIGNES_BON_PAPIER = `Tu es ARIANA, assistante d'un gestionnaire d'assurance santé au Gabon.
+On te donne la photo (en PDF) d'une ORDONNANCE ou d'un BON D'EXAMEN papier, souvent manuscrit.
+Relève fidèlement :
+- typeDocument : "Ordonnance" (médicaments), "Examen" (analyses, imagerie…), "Mixte" (les deux) ou "Autre" (ce n'est pas une prescription) ;
+- prescripteur : nom du médecin prescripteur tel qu'écrit (cachet ou signature), "" si illisible ;
+- structure : établissement (cachet, en-tête), "" si absent ;
+- date : date de la prescription au format JJ/MM/AAAA, "" si absente ;
+- patient : nom du patient tel qu'écrit, "" si absent ;
+- lignes : une ligne par médicament (type "Medicament" : nom commercial ou DCI avec dosage et forme, quantité = nombre de boîtes ou d'unités prescrites, posologie telle qu'écrite) ou par examen (type "Examen" : libellé de l'examen tel qu'un laboratoire le comprend, quantité 1, posologie "").
+N'invente jamais un médicament ou un examen illisible : signale-le dans remarques. lisible = false si le document est trop flou pour être exploité.
+Réponds uniquement avec le JSON demandé.`;
+
+const SCHEMA_BON_PAPIER = {
+  type: "object", additionalProperties: false,
+  required: ["lisible", "typeDocument", "prescripteur", "structure", "date", "patient", "lignes", "remarques"],
+  properties: {
+    lisible: { type: "boolean" },
+    typeDocument: { type: "string", enum: ["Ordonnance", "Examen", "Mixte", "Autre"] },
+    prescripteur: { type: "string" }, structure: { type: "string" }, date: { type: "string" }, patient: { type: "string" },
+    remarques: { type: "string" },
+    lignes: {
+      type: "array",
+      items: {
+        type: "object", additionalProperties: false, required: ["type", "libelle", "quantite", "posologie"],
+        properties: { type: { type: "string", enum: ["Medicament", "Examen"] }, libelle: { type: "string" }, quantite: { type: "integer" }, posologie: { type: "string" } },
+      },
+    },
+  },
+};
+
+// Acte du catalogue le plus proche d'un libellé lu (mots communs, accents et
+// casse ignorés) ; null sous le seuil : mieux vaut une ligne libre qu'un
+// mauvais acte (et donc un mauvais prix) proposé au prestataire.
+// Mots de forme ou de conditionnement : communs \u00e0 des produits diff\u00e9rents,
+// ils ne prouvent jamais qu'il s'agit du m\u00eame acte.
+const MOTS_NEUTRES = new Set(["comprime", "comprimes", "gelule", "gelules", "boite", "boites", "sirop", "flacon", "ampoule", "ampoules", "injectable", "solution", "suspension", "creme", "pommade", "sachet", "sachets", "buvable", "forme", "examen", "dosage", "taux", "les", "des", "pour", "avec"]);
+const motsDe = (s: string) => new Set(s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/[^a-z0-9]+/).filter((m) => m.length >= 3 && !MOTS_NEUTRES.has(m)));
+export function meilleurActe<T extends { libelle: string }>(libelle: string, catalogue: T[]): T | null {
+  const lu = motsDe(libelle);
+  if (!lu.size) return null;
+  let meilleur: T | null = null, score = 0;
+  for (const acte of catalogue) {
+    const mots = motsDe(acte.libelle);
+    if (!mots.size) continue;
+    const communs = [...lu].filter((m) => mots.has(m)).length;
+    const note = communs / Math.max(lu.size, mots.size);
+    if (note > score) { score = note; meilleur = acte; }
+  }
+  return score >= 0.5 ? meilleur : null;
+}
+
+type AssureBon = { id: string; nom: string; prenom: string | null; matricule: string };
+type SourceBon = {
+  numeroBonExamen: string | null; numeroOrdonnance: string | null; dateOrdonnance: string | null; createdAt: Date;
+  origine: string; prescripteurNom: string | null; structureNom: string | null;
+  medecin: unknown; assure?: AssureBon | null;
+  priseEnCharge?: { numeroFeuilleSoins: string | null; date: string; assure: AssureBon } | null;
+};
+
+// Numéro, date, patient et prescripteur d'un bon (2026-11) : consultation
+// d'origine, ou ordonnance / bon papier numérisé par l'assuré (sans
+// consultation ni médecin du réseau, voir Prescription.origine).
+export function vueBon(p: SourceBon, type: "Examen" | "Ordonnance") {
+  const assure = (p.priseEnCharge?.assure ?? p.assure)!;
+  const numerise = p.origine === "Numérisée";
+  return {
+    numero: (type === "Ordonnance" ? p.priseEnCharge?.numeroFeuilleSoins ?? p.numeroOrdonnance : p.numeroBonExamen) ?? "—",
+    date: p.priseEnCharge?.date ?? p.dateOrdonnance ?? p.createdAt.toLocaleDateString("fr-FR"),
+    // Bon numérisé : prescripteur tel que lu sur l'original (médecin hors réseau possible).
+    medecin: p.medecin ?? (numerise ? { id: null, nom: p.prescripteurNom ?? "Prescripteur (bon numérisé)", prenom: null, titre: null, specialite: p.structureNom } : null),
+    origine: p.origine,
+    assure: { id: assure.id, nom: assure.nom, prenom: assure.prenom, matricule: assure.matricule },
+  };
+}
+
+// Toutes les prescriptions d'un patient : consultation OU numérisation.
+const DU_PATIENT = (assureId: string) => ({ OR: [{ priseEnCharge: { assureId } }, { assureId }] });
+
 @Injectable()
 export class PrescriptionsService {
   private readonly logger = new Logger(PrescriptionsService.name);
@@ -198,11 +282,11 @@ export class PrescriptionsService {
     // PrescriptionsService.rechercherBon plus bas — recherche justement PAR
     // ce numéro). Toujours au téléphone de l'assuré réel (racine de
     // famille si l'assuré est un CJ/EF, jamais un compte portail requis).
-    const assure = creee.priseEnCharge.assure;
+    const assure = creee.priseEnCharge!.assure;
     const telephone = assure.telephone
       ?? (assure.familleId ? (await this.prisma.assureSante.findUnique({ where: { id: assure.familleId }, select: { telephone: true } }))?.telephone : null);
     const references: string[] = [];
-    if (creee.priseEnCharge.numeroFeuilleSoins) references.push(`Ordonnance N° ${creee.priseEnCharge.numeroFeuilleSoins}`);
+    if (creee.priseEnCharge!.numeroFeuilleSoins) references.push(`Ordonnance N° ${creee.priseEnCharge!.numeroFeuilleSoins}`);
     if (creee.numeroBonExamen) references.push(`Bon d'examen N° ${creee.numeroBonExamen}`);
     if (references.length > 0) {
       await this.messaging.envoyer(telephone, `${references.join(" / ")} — présentez cette référence au prestataire de votre choix pour la faire traiter.`);
@@ -239,135 +323,85 @@ export class PrescriptionsService {
   // sélection des lignes déjà entièrement traitées.
   async rechercherBon(prestataireId: string, params: { type: "Examen" | "Ordonnance"; numero: string; assureId?: string }) {
     const prestataire = await this.prisma.prestataire.findUniqueOrThrow({ where: { id: prestataireId } });
-
-    if (params.type === "Ordonnance") {
-      if (!TYPES_TRAITANT_ORDONNANCE.includes(prestataire.type ?? "")) {
-        throw new ForbiddenException("Ce type d'établissement ne peut pas traiter d'ordonnance.");
-      }
-      const ligne = await this.prisma.priseEnCharge.findUnique({
-        where: { numeroFeuilleSoins: params.numero },
-        include: {
-          assure: true,
-          prescriptionOrigine: {
-            include: { lignes: { where: { type: "Medicament" }, include: { acteMedical: true } }, medecin: true },
-          },
-        },
-      });
-      if (!ligne || !ligne.prescriptionOrigine) throw new NotFoundException("Aucune ordonnance ne correspond à ce numéro.");
-      if (params.assureId && ligne.assureId !== params.assureId) throw new ForbiddenException("Ce bon ne correspond pas à ce patient.");
-      // Pas de filtrage de profil pour les ordonnances (2026-08) — voir
-      // demande utilisateur : "les pharmacies et les dépôts pharmaceutiques
-      // pourront voir toutes les ordonnances disponibles".
-      return {
-        prescriptionId: ligne.prescriptionOrigine.id, numero: params.numero, date: ligne.date,
-        medecin: ligne.prescriptionOrigine.medecin, lignes: ligne.prescriptionOrigine.lignes,
-        statut: statutBonDe(ligne.prescriptionOrigine.lignes),
-        assure: { id: ligne.assure.id, nom: ligne.assure.nom, prenom: ligne.assure.prenom, matricule: ligne.assure.matricule },
-      };
+    const typeLigne = params.type === "Ordonnance" ? "Medicament" : "Examen";
+    if (params.type === "Ordonnance" && !TYPES_TRAITANT_ORDONNANCE.includes(prestataire.type ?? "")) {
+      throw new ForbiddenException("Ce type d'établissement ne peut pas traiter d'ordonnance.");
     }
-
-    if (!TYPES_TRAITANT_EXAMEN.includes(prestataire.type ?? "")) {
+    if (params.type === "Examen" && !TYPES_TRAITANT_EXAMEN.includes(prestataire.type ?? "")) {
       throw new ForbiddenException("Ce type d'établissement ne peut pas traiter de bon d'examen.");
     }
-    const prescription = await this.prisma.prescription.findUnique({
-      where: { numeroBonExamen: params.numero },
-      include: {
-        lignes: { where: { type: "Examen" }, include: { acteMedical: true } },
-        medecin: true, priseEnCharge: { include: { assure: true } },
-      },
-    });
-    if (!prescription) throw new NotFoundException("Aucun bon d'examen ne correspond à ce numéro.");
-    if (params.assureId && prescription.priseEnCharge.assureId !== params.assureId) throw new ForbiddenException("Ce bon ne correspond pas à ce patient.");
-    // Visibilité selon le profil (2026-08) — voir demande utilisateur : "il
-    // pourra voir les bons d'examens avec des examens dont ils ont accès
-    // selon leur profil" (Prestataire.categoriesActesVisibles, vide = tout,
-    // même convention qu'ailleurs dans l'application).
-    const lignesVisibles = prestataire.categoriesActesVisibles.length === 0
-      ? prescription.lignes
-      : prescription.lignes.filter((l) => prestataire.categoriesActesVisibles.includes(groupeDeFamille(l.acteMedical?.famille) ?? ""));
-    const { assure } = prescription.priseEnCharge;
-    return {
-      prescriptionId: prescription.id, numero: params.numero, date: prescription.priseEnCharge.date,
-      medecin: prescription.medecin, lignes: lignesVisibles, statut: statutBonDe(lignesVisibles),
-      assure: { id: assure.id, nom: assure.nom, prenom: assure.prenom, matricule: assure.matricule },
-    };
+    const include = {
+      assure: true, medecin: true, priseEnCharge: { include: { assure: true } },
+      lignes: { where: { type: typeLigne }, include: { acteMedical: true } },
+    } as const;
+    // Ordonnance : numéro de feuille de soins de la consultation, ou numéro
+    // propre d'une ordonnance numérisée par l'assuré. Bon d'examen : même
+    // numérotation FE quelle que soit l'origine.
+    const prescription = params.type === "Ordonnance"
+      ? (await this.prisma.priseEnCharge.findUnique({ where: { numeroFeuilleSoins: params.numero }, select: { prescriptionOrigine: { include } } }))?.prescriptionOrigine
+        ?? await this.prisma.prescription.findUnique({ where: { numeroOrdonnance: params.numero }, include })
+      : await this.prisma.prescription.findUnique({ where: { numeroBonExamen: params.numero }, include });
+    if (!prescription) throw new NotFoundException(params.type === "Ordonnance" ? "Aucune ordonnance ne correspond à ce numéro." : "Aucun bon d'examen ne correspond à ce numéro.");
+    const vue = vueBon(prescription, params.type);
+    if (params.assureId && vue.assure.id !== params.assureId) throw new ForbiddenException("Ce bon ne correspond pas à ce patient.");
+    // Pas de filtrage de profil pour les ordonnances (2026-08) — voir
+    // demande utilisateur : "les pharmacies et les dépôts pharmaceutiques
+    // pourront voir toutes les ordonnances disponibles". Bons d'examen :
+    // visibilité selon le profil (Prestataire.categoriesActesVisibles, vide
+    // = tout, même convention qu'ailleurs dans l'application).
+    const lignes = params.type === "Ordonnance" ? prescription.lignes : this.lignesVisibles(prestataire, prescription.lignes);
+    return { prescriptionId: prescription.id, ...vue, lignes, statut: statutBonDe(lignes) };
+  }
+
+  private lignesVisibles<T extends { acteMedical: { famille: string } | null }>(prestataire: { categoriesActesVisibles: string[] }, lignes: T[]): T[] {
+    return prestataire.categoriesActesVisibles.length === 0
+      ? lignes
+      // Ligne d'un bon numérisé sans acte du catalogue : toujours visible
+      // (le laboratoire juge lui-même à partir de l'original).
+      : lignes.filter((l) => !l.acteMedical || prestataire.categoriesActesVisibles.includes(groupeDeFamille(l.acteMedical.famille) ?? ""));
   }
 
   // Bons en attente d'un patient (2026-08) — voir demande utilisateur :
   // "rechercher un assuré et en le sélectionnant, on doit voir le bon qui
   // est en attente de traitement." Toujours filtré sur un patient déjà
-  // identifié — jamais listé sans recherche (voir demande utilisateur,
-  // correction : "il faut que le prestataire recherche le patient et là le
-  // bon en attente peut s'afficher" — le zoom "historique" par défaut de
-  // l'écran montre les bons déjà TRAITÉS par CE prestataire, voir
-  // bonsTraitesPar ci-dessous, pas la file de tous les bons en attente de
-  // tout le monde). Renvoie TOUTES les lignes du type demandé (voir
-  // rechercherBon) — le frontend affiche "déjà servi" pour celles déjà
-  // entièrement traitées par un autre prestataire.
+  // identifié — jamais listé sans recherche. Renvoie TOUTES les lignes du
+  // type demandé (voir rechercherBon) — le frontend affiche "déjà servi"
+  // pour celles déjà entièrement traitées par un autre prestataire. Inclut
+  // les bons numérisés par l'assuré (2026-11).
   async bonsEnAttente(prestataireId: string, params: { type: "Examen" | "Ordonnance"; assureId: string }) {
     const prestataire = await this.prisma.prestataire.findUniqueOrThrow({ where: { id: prestataireId } });
-
-    if (params.type === "Ordonnance") {
-      if (!TYPES_TRAITANT_ORDONNANCE.includes(prestataire.type ?? "")) {
-        throw new ForbiddenException("Ce type d'établissement ne peut pas traiter d'ordonnance.");
-      }
-      const prescriptions = await this.prisma.prescription.findMany({
-        where: {
-          priseEnCharge: { assureId: params.assureId },
-          lignes: { some: { type: "Medicament", statut: { not: "Traite" } } },
-        },
-        include: {
-          medecin: true, priseEnCharge: { include: { assure: true } },
-          lignes: { where: { type: "Medicament" }, include: { acteMedical: true } },
-        },
-        orderBy: { createdAt: "desc" }, take: 100,
-      });
-      return prescriptions.map((p) => ({
-        prescriptionId: p.id, numero: p.priseEnCharge.numeroFeuilleSoins ?? "—", date: p.priseEnCharge.date,
-        medecin: p.medecin, lignes: p.lignes, statut: statutBonDe(p.lignes),
-        assure: { id: p.priseEnCharge.assure.id, nom: p.priseEnCharge.assure.nom, prenom: p.priseEnCharge.assure.prenom, matricule: p.priseEnCharge.assure.matricule },
-      }));
+    const typeLigne = params.type === "Ordonnance" ? "Medicament" : "Examen";
+    if (params.type === "Ordonnance" && !TYPES_TRAITANT_ORDONNANCE.includes(prestataire.type ?? "")) {
+      throw new ForbiddenException("Ce type d'établissement ne peut pas traiter d'ordonnance.");
     }
-
-    if (!TYPES_TRAITANT_EXAMEN.includes(prestataire.type ?? "")) {
+    if (params.type === "Examen" && !TYPES_TRAITANT_EXAMEN.includes(prestataire.type ?? "")) {
       throw new ForbiddenException("Ce type d'établissement ne peut pas traiter de bon d'examen.");
     }
     const prescriptions = await this.prisma.prescription.findMany({
       where: {
-        priseEnCharge: { assureId: params.assureId },
-        numeroBonExamen: { not: null }, lignes: { some: { type: "Examen", statut: { not: "Traite" } } },
+        ...DU_PATIENT(params.assureId),
+        ...(params.type === "Examen" ? { numeroBonExamen: { not: null } } : {}),
+        lignes: { some: { type: typeLigne, statut: { not: "Traite" } } },
       },
       include: {
-        medecin: true, priseEnCharge: { include: { assure: true } },
-        lignes: { where: { type: "Examen" }, include: { acteMedical: true } },
+        assure: true, medecin: true, priseEnCharge: { include: { assure: true } },
+        lignes: { where: { type: typeLigne }, include: { acteMedical: true } },
       },
       orderBy: { createdAt: "desc" }, take: 100,
     });
     return prescriptions
       .map((p) => {
-        const lignesVisibles = prestataire.categoriesActesVisibles.length === 0
-          ? p.lignes
-          : p.lignes.filter((l) => prestataire.categoriesActesVisibles.includes(groupeDeFamille(l.acteMedical?.famille) ?? ""));
-        return {
-          prescriptionId: p.id, numero: p.numeroBonExamen ?? "—", date: p.priseEnCharge.date, medecin: p.medecin,
-          lignes: lignesVisibles, statut: statutBonDe(lignesVisibles),
-          assure: { id: p.priseEnCharge.assure.id, nom: p.priseEnCharge.assure.nom, prenom: p.priseEnCharge.assure.prenom, matricule: p.priseEnCharge.assure.matricule },
-        };
+        const lignes = params.type === "Ordonnance" ? p.lignes : this.lignesVisibles(prestataire, p.lignes);
+        return { prescriptionId: p.id, ...vueBon(p, params.type), lignes, statut: statutBonDe(lignes) };
       })
       // Le filtrage profil peut vider un bon entièrement (examens visibles
       // par d'autres spécialités uniquement) — on ne le liste pas alors.
       .filter((b) => b.lignes.length > 0);
   }
 
-  // Historique des bons déjà traités PAR CE prestataire (2026-08) — voir
-  // demande utilisateur (correction) : "ne doivent apparaître ici que les
-  // bons qui ont déjà été traités par la pharmacie... ça ne doit [pas]
-  // directement apparaître comme ça chez tous les prestataires" — remplace
-  // l'ancien affichage par défaut (tous les bons en attente, tous patients
-  // confondus). Un bon apparaît dès que ce prestataire a contribué à au
-  // moins une ligne (même partiellement) — statut affiché = statut GLOBAL
-  // du bon (peut rester "Partiellement traité" si un autre prestataire doit
-  // encore compléter le reste).
+  // Historique des bons déjà traités PAR CE prestataire (2026-08) — un bon
+  // apparaît dès que ce prestataire a contribué à au moins une ligne (même
+  // partiellement) — statut affiché = statut GLOBAL du bon.
   async bonsTraitesPar(prestataireId: string, params: { type: "Examen" | "Ordonnance" }) {
     const typeLigne = params.type === "Ordonnance" ? "Medicament" : "Examen";
     const prescriptions = await this.prisma.prescription.findMany({
@@ -376,17 +410,80 @@ export class PrescriptionsService {
         ...(params.type === "Examen" ? { numeroBonExamen: { not: null } } : {}),
       },
       include: {
-        medecin: true, priseEnCharge: { include: { assure: true } },
+        assure: true, medecin: true, priseEnCharge: { include: { assure: true } },
         lignes: { where: { type: typeLigne }, include: { acteMedical: true } },
       },
       orderBy: { createdAt: "desc" }, take: 100,
     });
-    return prescriptions.map((p) => ({
-      prescriptionId: p.id,
-      numero: (params.type === "Ordonnance" ? p.priseEnCharge.numeroFeuilleSoins : p.numeroBonExamen) ?? "—",
-      date: p.priseEnCharge.date, medecin: p.medecin, lignes: p.lignes, statut: statutBonDe(p.lignes),
-      assure: { id: p.priseEnCharge.assure.id, nom: p.priseEnCharge.assure.nom, prenom: p.priseEnCharge.assure.prenom, matricule: p.priseEnCharge.assure.matricule },
-    }));
+    return prescriptions.map((p) => ({ prescriptionId: p.id, ...vueBon(p, params.type), lignes: p.lignes, statut: statutBonDe(p.lignes) }));
+  }
+
+  // Lecture d'une ordonnance / d'un bon d'examen PAPIER par ARIANA
+  // (2026-11) — voir demande utilisateur : "dans e-carnet transformer un bon
+  // d'examen (feuille d'examen) ou une ordonnance (feuille de soins) en bon
+  // d'examen ou ordonnance électronique". Proposition seulement : l'assuré
+  // relit et corrige chaque ligne avant de valider (creerNumerise).
+  async lireBonPapier(pdf: Buffer) {
+    const client = this.getClient();
+    if (!client) throw new ServiceUnavailableException("ARIANA n'est pas configurée sur ce serveur.");
+    let reponse;
+    try {
+      reponse = await client.beta.messages.stream({
+        model: "claude-opus-5-5",
+        max_tokens: 8000,
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        output_config: { effort: "high", format: { type: "json_schema", schema: SCHEMA_BON_PAPIER } },
+        system: CONSIGNES_BON_PAPIER,
+        messages: [{ role: "user", content: [
+          { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdf.toString("base64") } },
+          { type: "text", text: "Lis ce document médical et renvoie le JSON demandé." },
+        ] }],
+      }).finalMessage();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Lecture d'un bon papier impossible : ${message}`);
+      if (/credit balance/i.test(message)) throw new ServiceUnavailableException("Crédit ARIANA épuisé : la lecture automatique est indisponible, saisissez les lignes à la main.");
+      throw new ServiceUnavailableException("ARIANA n'a pas pu lire ce document. Réessayez ou saisissez les lignes à la main.");
+    }
+    if (reponse.stop_reason === "refusal") throw new ServiceUnavailableException("ARIANA n'a pas pu traiter ce document. Saisissez les lignes à la main.");
+    const lu = JSON.parse(reponse.content.map((b) => (b.type === "text" ? b.text : "")).join("")) as LectureBonPapier;
+    // Rapprochement avec le catalogue des actes (prix proposé au prestataire
+    // qui délivrera le bon) ; sans correspondance sûre, la ligne reste libre.
+    const catalogue = await this.prisma.acteMedical.findMany({ select: { id: true, libelle: true } });
+    const lignes = lu.lignes.filter((l) => l.libelle.trim()).map((l) => {
+      const acte = meilleurActe(l.libelle, catalogue);
+      return { ...l, quantite: l.quantite > 0 ? l.quantite : 1, acteMedicalId: acte?.id ?? null, acteLibelle: acte?.libelle ?? null };
+    });
+    return { ...lu, lignes };
+  }
+
+  // Bon numérisé validé par l'assuré : même objet qu'une prescription de
+  // consultation (lignes délivrables, traitement partiel, statuts), sans
+  // consultation ni médecin du réseau ; mêmes numérotations FS / FE et même
+  // envoi des références par SMS que creer().
+  async creerNumerise(carnetDocumentId: string, dto: ValiderBonNumeriseDto) {
+    const deja = await this.prisma.prescription.findFirst({ where: { carnetDocumentId }, select: { numeroOrdonnance: true, numeroBonExamen: true } });
+    if (deja) throw new BadRequestException(`Ce document a déjà été converti (${[deja.numeroOrdonnance, deja.numeroBonExamen].filter(Boolean).join(" / ")}).`);
+    const lignes = dto.lignes.filter((l) => l.libelle.trim());
+    if (!lignes.length) throw new BadRequestException("Ajoutez au moins une ligne (médicament ou examen).");
+    const numeroOrdonnance = lignes.some((l) => l.type === "Medicament") ? await this.documents.prochainNumeroFormulaire("feuille-soins") : undefined;
+    const numeroBonExamen = lignes.some((l) => l.type === "Examen") ? await this.documents.prochainNumeroFormulaire("feuille-examen") : undefined;
+    const creee = await this.prisma.prescription.create({
+      data: {
+        origine: "Numérisée", assureId: dto.assureId, carnetDocumentId, motifsConsultation: [],
+        prescripteurNom: dto.prescripteurNom?.trim() || null, structureNom: dto.structureNom?.trim() || null,
+        dateOrdonnance: dto.dateOrdonnance?.trim() || null, numeroOrdonnance, numeroBonExamen,
+        lignes: { create: lignes.map((l) => ({ type: l.type, acteMedicalId: l.acteMedicalId || null, libelle: l.libelle.trim(), quantite: l.quantite ?? 1, posologie: l.posologie?.trim() || null })) },
+      },
+      include: { lignes: true, assure: true },
+    });
+    const assure = creee.assure!;
+    const telephone = assure.telephone
+      ?? (assure.familleId ? (await this.prisma.assureSante.findUnique({ where: { id: assure.familleId }, select: { telephone: true } }))?.telephone : null);
+    const references = [numeroOrdonnance && `Ordonnance N° ${numeroOrdonnance}`, numeroBonExamen && `Bon d'examen N° ${numeroBonExamen}`].filter(Boolean);
+    await this.messaging.envoyer(telephone, `${references.join(" / ")} — présentez cette référence au prestataire de votre choix pour la faire traiter.`);
+    return creee;
   }
 
   // Traitement d'un bon (2026-08) — crée une VRAIE Facture/PriseEnCharge par

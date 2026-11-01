@@ -661,6 +661,7 @@ export class PortailPrestataireController {
     if (!TYPES_TRAITANT_ORDONNANCE.includes(prestataire.type ?? "")) throw new ForbiddenException("Ce type d'établissement ne peut pas traiter d'ordonnance.");
     const prescription = await this.prisma.prescription.findUnique({ where: { id: prescriptionId }, select: { priseEnChargeId: true } });
     if (!prescription) throw new NotFoundException(`Bon ${prescriptionId} introuvable`);
+    if (!prescription.priseEnChargeId) return this.documents.renderOriginalNumerise(prescriptionId, res);
     // Prix visibles ici : cette route est déjà réservée aux établissements
     // de type Pharmacie/Dépôt pharmaceutique (garde ci-dessus) — ce sont
     // eux qui délivrent réellement l'ordonnance et doivent en connaître le

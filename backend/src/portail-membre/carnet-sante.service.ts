@@ -39,6 +39,11 @@ export interface CarnetSanteDocument {
   statut: StatutBonCarnet | null;
   libelle: string | null;
   dateAjout: Date;
+  // Bon papier converti en électronique par l'assuré (2026-11) : le bon
+  // porte `numerise`, le document photographié porte `convertiEn` (ses
+  // numéros électroniques) pour ne pas être converti deux fois.
+  numerise?: boolean;
+  convertiEn?: string | null;
 }
 
 // E-carnet Santé (2026-08) — voir demande utilisateur : "Si les informations
@@ -126,8 +131,9 @@ export class CarnetSanteService {
         include: { assure: { select: { nom: true, prenom: true } } },
       }),
       this.prisma.prescription.findMany({
-        where: { priseEnCharge: { assureId: { in: idsFamille } } },
+        where: { OR: [{ priseEnCharge: { assureId: { in: idsFamille } } }, { assureId: { in: idsFamille } }] },
         include: {
+          assure: { select: { nom: true, prenom: true } },
           priseEnCharge: { include: { assure: { select: { nom: true, prenom: true } } } },
           lignes: { select: { type: true, statut: true } },
         },
@@ -135,30 +141,31 @@ export class CarnetSanteService {
       }),
     ]);
 
+    const convertis = new Map(prescriptions.filter((p) => p.carnetDocumentId).map((p) => [p.carnetDocumentId!, [p.numeroOrdonnance, p.numeroBonExamen].filter(Boolean).join(" / ")]));
     const documentsUpload: CarnetSanteDocument[] = uploads.map((d) => ({
       id: d.id, source: "upload",
       assureId: d.assureId, assureNom: `${d.assure.nom} ${d.assure.prenom ?? ""}`.trim(),
       rubrique: d.rubrique as RubriqueCarnetSante, fichier: d.fichier, priseEnChargeId: null,
       prescriptionId: null, numero: null, dateSoins: null, statut: null,
-      libelle: d.libelle, dateAjout: d.dateAjout,
+      libelle: d.libelle, dateAjout: d.dateAjout, convertiEn: convertis.get(d.id) ?? null,
     }));
 
     const documentsBons: CarnetSanteDocument[] = [];
     for (const p of prescriptions) {
       const branches: { cle: "Ordonnance" | "Examens"; type: "Medicament" | "Examen"; numero: string | null }[] = [
-        { cle: "Ordonnance", type: "Medicament", numero: p.priseEnCharge.numeroFeuilleSoins },
+        { cle: "Ordonnance", type: "Medicament", numero: p.priseEnCharge?.numeroFeuilleSoins ?? p.numeroOrdonnance },
         { cle: "Examens", type: "Examen", numero: p.numeroBonExamen },
       ];
       for (const b of branches) {
         if (rubrique && rubrique !== b.cle) continue;
         const lignesType = p.lignes.filter((l) => l.type === b.type);
         if (lignesType.length === 0) continue;
-        const assure = p.priseEnCharge.assure;
+        const assure = (p.priseEnCharge?.assure ?? p.assure)!;
         documentsBons.push({
-          id: `bon-${p.id}-${b.cle}`, source: "feuille",
-          assureId: p.priseEnCharge.assureId, assureNom: `${assure.nom} ${assure.prenom ?? ""}`.trim(),
+          id: `bon-${p.id}-${b.cle}`, source: "feuille", numerise: p.origine === "Numérisée",
+          assureId: (p.priseEnCharge?.assureId ?? p.assureId)!, assureNom: `${assure.nom} ${assure.prenom ?? ""}`.trim(),
           rubrique: b.cle, fichier: null, priseEnChargeId: p.priseEnChargeId,
-          prescriptionId: p.id, numero: b.numero ?? "—", dateSoins: p.priseEnCharge.date, statut: statutBon(lignesType),
+          prescriptionId: p.id, numero: b.numero ?? "—", dateSoins: p.priseEnCharge?.date ?? p.dateOrdonnance ?? null, statut: statutBon(lignesType),
           libelle: `${b.cle === "Ordonnance" ? "Ordonnance" : "Bon d'examen"} — ${lignesType.length} ligne${lignesType.length > 1 ? "s" : ""}`,
           dateAjout: p.createdAt,
         });
@@ -174,6 +181,16 @@ export class CarnetSanteService {
     await this.prisma.carnetSanteDocument.delete({ where: { id } });
     if (this.storage.actif) await this.storage.delete("carnet-sante", doc.fichier);
     else await fs.promises.unlink(path.join(UPLOADS_CARNET_DIR, doc.fichier)).catch(() => undefined);
+  }
+
+  async document(id: string, idsFamille: string[]) {
+    const doc = await this.prisma.carnetSanteDocument.findUnique({ where: { id } });
+    if (!doc || !idsFamille.includes(doc.assureId)) throw new NotFoundException(`Document ${id} introuvable`);
+    const pdf = this.storage.actif
+      ? await this.storage.download("carnet-sante", doc.fichier)
+      : await fs.promises.readFile(path.join(UPLOADS_CARNET_DIR, doc.fichier)).catch(() => null);
+    if (!pdf) throw new NotFoundException("Fichier du document introuvable sur le serveur.");
+    return { doc, pdf };
   }
 
   cheminFichier(filename: string): string {

@@ -310,6 +310,9 @@ export interface CarnetSanteDocument {
   statut: StatutBonCarnet | null;
   libelle: string | null;
   dateAjout: string;
+  // Bon papier converti en électronique (2026-11).
+  numerise?: boolean;
+  convertiEn?: string | null;
 }
 
 export async function getCarnetSante(rubrique?: RubriqueCarnetSante): Promise<CarnetSanteDocument[]> {
