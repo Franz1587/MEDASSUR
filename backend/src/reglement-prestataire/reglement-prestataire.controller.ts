@@ -11,8 +11,8 @@ export class ReglementPrestataireController {
   constructor(private readonly service: ReglementPrestataireService) {}
 
   @Get()
-  findAll() {
-    return this.service.findAll();
+  findAll(@Query("page") page?: string, @Query("taille") taille?: string) {
+    return this.service.findAll(page ? Math.max(1, Number(page) || 1) : undefined, Math.min(200, Math.max(1, Number(taille) || 25)));
   }
 
   // Déclarée avant ":id" pour que Nest ne capture pas "etat-tps" comme une
@@ -45,8 +45,10 @@ export class ReglementPrestataireController {
     @Query("referenceDecompte") referenceDecompte?: string,
     @Query("assure") assure?: string,
     @Query("referenceReglementComptable") referenceReglementComptable?: string,
+    @Query("page") page?: string, @Query("taille") taille?: string,
   ) {
-    return this.service.historique({ prestataireId, du, au, numeroReglement, referenceDecompte, assure, referenceReglementComptable });
+    return this.service.historique({ prestataireId, du, au, numeroReglement, referenceDecompte, assure, referenceReglementComptable },
+      page ? Math.max(1, Number(page) || 1) : undefined, Math.min(500, Math.max(1, Number(taille) || 25)));
   }
 
   @Get(":id")

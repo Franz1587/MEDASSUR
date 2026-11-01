@@ -1,3 +1,5 @@
+import { TenantContext } from "../tenant/tenant-context";
+import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
@@ -19,18 +21,28 @@ export class ReglementPrestataireService {
   // directement, sans recherche, la référence de chèque ET la banque si ce
   // règlement a déjà été payé par chèque (voir demande utilisateur, écran
   // src/features/reglement-prestataire).
-  findAll() {
-    return this.prisma.bordereauReglement.findMany({
-      include: {
-        prestataire: true,
-        medecin: true,
-        prisesEnCharge: true,
-        lettreCheque: { include: { banque: true } },
-        // Mobile Money (2026-10) — référence et statut de la Transaction liée
+  // Liste allégée et paginée (2026-11, mesuré en prod : 8 237 règlements
+  // renvoyés AVEC toutes leurs lignes = 3 Mo compressés, 7 s) — l'écran
+  // n'affiche que nbPrisesEnCharge, jamais les lignes elles-mêmes.
+  async findAll(page?: number, taille = 25) {
+    const args = {
+      select: {
+        id: true, numero: true, prestataireId: true, periode: true, nbPrisesEnCharge: true, montantTotal: true, montantValide: true,
+        statut: true, dateReception: true, datePaiement: true, referenceVirement: true, medecinId: true, transactionEbillingId: true,
+        prestataire: { select: { nom: true, telephone: true } },
+        medecin: { select: { nom: true, prenom: true, titre: true } },
+        lettreCheque: { select: { numero: true, numeroCheque: true, banque: { select: { nom: true } } } },
+        // Mobile Money (2026-10) — référence de la Transaction liée
         transactionEbilling: { select: { reference: true } },
       },
-      orderBy: { dateReception: "desc" },
-    });
+      orderBy: { dateReception: "desc" as const },
+    };
+    if (!page) return this.prisma.bordereauReglement.findMany(args);
+    const [items, total] = await Promise.all([
+      this.prisma.bordereauReglement.findMany({ ...args, skip: (page - 1) * taille, take: taille }),
+      this.prisma.bordereauReglement.count(),
+    ]);
+    return { items, total, page, taille };
   }
 
   // Détail complet — écran de consultation d'un règlement (voir
@@ -328,52 +340,67 @@ export class ReglementPrestataireService {
   // Toujours ligne par ligne (assuré, date de soin, frais réel, montant
   // remboursé) plutôt qu'un total agrégé, voir feedback utilisateur
   // "Facture égale détails".
+  // `page` (2026-11) : l'écran ne reçoit que la page affichée (mesuré en
+  // prod : 35 076 lignes = 22 Mo de JSON à décoder dans le navigateur) ;
+  // les totaux par exercice restent calculés sur toutes les lignes. Sans
+  // page (export PDF/Excel), toutes les lignes comme avant.
   async historique(filtres: {
     prestataireId?: string; du?: string; au?: string;
     numeroReglement?: string; referenceDecompte?: string; assure?: string;
     referenceReglementComptable?: string;
-  }) {
-    const lignesBrutes = await this.prisma.priseEnCharge.findMany({
-      where: {
-        bordereauId: { not: null },
-        prestataireId: filtres.prestataireId,
-        ...(filtres.assure ? {
-          assure: {
-            OR: [
-              { nom: { contains: filtres.assure, mode: "insensitive" } },
-              { prenom: { contains: filtres.assure, mode: "insensitive" } },
-              { matricule: { contains: filtres.assure, mode: "insensitive" } },
-            ],
-          },
-        } : {}),
+  }, page?: number, taille = 25) {
+    // Une seule requête SQL à plat (2026-11, mesuré : ~35 000 lignes = 10 s
+    // d'hydratation d'objets imbriqués par Prisma, la requête elle-même étant
+    // rapide). Filtre société explicite : le SQL brut contourne le middleware.
+    const societeId = TenantContext.getSocieteId();
+    const motifAssure = filtres.assure ? `%${filtres.assure}%` : null;
+    const brutes = await this.prisma.$queryRaw<{
+      id: string; date: string; assureId: string; factureId: string | null; montant: number; baseRemboursement: number | null; statut: string;
+      bordereauId: string; prestataireId: string | null; prestataire: string; assureNom: string; assurePrenom: string | null;
+      dateReception: string | null; referenceFacture: string | null; bordereauNumero: string; bordereauStatut: string;
+      lcNumero: string | null; lcNumeroCheque: number | null; banqueNom: string | null; prestataireNom: string | null;
+    }[]>(Prisma.sql`
+      SELECT p.id, p.date, p."assureId", p."factureId", p.montant::float8 AS montant, p."baseRemboursement"::float8 AS "baseRemboursement", p.statut,
+             p."bordereauId", p."prestataireId", p.prestataire, a.nom AS "assureNom", a.prenom AS "assurePrenom",
+             f."dateReception", f."referenceFacture", b.numero AS "bordereauNumero", b.statut AS "bordereauStatut",
+             lc.numero AS "lcNumero", lc."numeroCheque" AS "lcNumeroCheque", bq.nom AS "banqueNom", pr.nom AS "prestataireNom"
+      FROM "PriseEnCharge" p
+      JOIN "AssureSante" a ON a.id = p."assureId"
+      JOIN "BordereauReglement" b ON b.id = p."bordereauId"
+      LEFT JOIN "Facture" f ON f.id = p."factureId"
+      LEFT JOIN "LettreCheque" lc ON lc.id = b."lettreChequeId"
+      LEFT JOIN "Banque" bq ON bq.id = lc."banqueId"
+      LEFT JOIN "Prestataire" pr ON pr.id = p."prestataireId"
+      WHERE p."bordereauId" IS NOT NULL
+        ${societeId ? Prisma.sql`AND p."societeId" = ${societeId}` : Prisma.empty}
+        ${filtres.prestataireId ? Prisma.sql`AND p."prestataireId" = ${filtres.prestataireId}` : Prisma.empty}
+        ${motifAssure ? Prisma.sql`AND (a.nom ILIKE ${motifAssure} OR a.prenom ILIKE ${motifAssure} OR a.matricule ILIKE ${motifAssure})` : Prisma.empty}
+      ORDER BY p.date DESC, p.id`);
+    const lignesBrutes = brutes.map((l) => ({
+      ...l,
+      assure: { nom: l.assureNom, prenom: l.assurePrenom },
+      facture: l.dateReception !== null ? { dateReception: l.dateReception, referenceFacture: l.referenceFacture! } : null,
+      bordereau: {
+        numero: l.bordereauNumero, statut: l.bordereauStatut,
+        lettreCheque: l.lcNumero !== null ? { numero: l.lcNumero, numeroCheque: l.lcNumeroCheque!, banque: { nom: l.banqueNom ?? "" } } : null,
       },
-      // bordereau.lettreCheque.banque — pour signaler si ce règlement a
-      // lui-même déjà été rattaché à un règlement comptable (lettre
-      // chèque), avec la référence de chèque ET la banque (voir demande
-      // utilisateur : "voir dans l'historique les règlements qui ont un
-      // règlement comptable et ceux qui n'en ont pas").
-      // Champs réellement imprimés seulement (l'historique complet compte
-      // ~100 000 lignes : charger factures et assurés entiers saturait la mémoire).
-      select: {
-        id: true, date: true, assureId: true, factureId: true, montant: true, baseRemboursement: true, statut: true,
-        bordereauId: true, prestataireId: true, prestataire: true,
-        assure: { select: { nom: true, prenom: true } },
-        facture: { select: { dateReception: true, referenceFacture: true } },
-        bordereau: { select: { numero: true, statut: true, lettreCheque: { select: { numero: true, numeroCheque: true, banque: { select: { nom: true } } } } } },
-        prestataireRef: { select: { nom: true } },
-      },
-      orderBy: { date: "desc" },
-    });
+      prestataireRef: l.prestataireNom !== null ? { nom: l.prestataireNom } : null,
+    }));
 
     // Décomptes chargés par facture (lots de 5 000) puis appariés en mémoire :
     // un OR (facture, assuré) par ligne dépassait la limite PostgreSQL de
     // 32 767 paramètres sur un gros historique (erreur 500).
-    const factureIds = [...new Set(lignesBrutes.map((l) => l.factureId).filter((id): id is string => !!id))];
-    const decomptes = [];
-    for (let i = 0; i < factureIds.length; i += 5000) {
-      decomptes.push(...await this.prisma.decompte.findMany({ where: { factureId: { in: factureIds.slice(i, i + 5000) } } }));
-    }
-    const decompteParPaire = new Map(decomptes.map((d) => [`${d.factureId}::${d.assureId}`, d]));
+    const chargerDecomptes = async (lignesVisees: { factureId: string | null }[]) => {
+      const factureIds = [...new Set(lignesVisees.map((l) => l.factureId).filter((id): id is string => !!id))];
+      const decomptes = [];
+      for (let i = 0; i < factureIds.length; i += 5000) {
+        decomptes.push(...await this.prisma.decompte.findMany({ where: { factureId: { in: factureIds.slice(i, i + 5000) } }, select: { factureId: true, assureId: true, numero: true, numeroSinistre: true } }));
+      }
+      return new Map(decomptes.map((d) => [`${d.factureId}::${d.assureId}`, d]));
+    };
+    // Décomptes de toutes les lignes seulement si on filtre dessus ; sinon
+    // ceux de la page affichée suffisent (voir plus bas).
+    const decompteParPaire = filtres.referenceDecompte || !page ? await chargerDecomptes(lignesBrutes) : new Map<string, { numero: string; numeroSinistre: string | null }>();
 
     const du = parseDateFr(filtres.du);
     const au = parseDateFr(filtres.au);
@@ -444,9 +471,17 @@ export class ReglementPrestataireService {
       exercicesMap.set(l.exercice, e);
     }
 
-    return {
-      lignes,
-      exercices: [...exercicesMap.values()].sort((a, b) => b.annee.localeCompare(a.annee)),
-    };
+    const exercices = [...exercicesMap.values()].sort((a, b) => b.annee.localeCompare(a.annee));
+    if (!page) return { lignes, exercices };
+    const pageLignes = lignes.slice((page - 1) * taille, page * taille);
+    if (!filtres.referenceDecompte) {
+      const parPaire = await chargerDecomptes(pageLignes);
+      for (const l of pageLignes) {
+        const d = l.factureId ? parPaire.get(`${l.factureId}::${l.assureId}`) : undefined;
+        l.decompteNumero = d?.numero ?? null;
+        l.numeroSinistre = d?.numeroSinistre ?? null;
+      }
+    }
+    return { lignes: pageLignes, exercices, total: lignes.length, page, taille };
   }
 }

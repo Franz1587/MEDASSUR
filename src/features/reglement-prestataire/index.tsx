@@ -1,5 +1,5 @@
-import { Pager } from "@/components/shared/Pagination";
-import { usePagination } from "@/hooks/usePagination";
+import { Pagination } from "@/components/shared/Pagination";
+import { optionsTaillePage } from "@/hooks/usePagination";
 import { useEffect, useState } from "react";
 import { referenceLisible } from "@/lib/referenceFacture";
 import { FileStack, Plus, CheckCircle, XCircle, Banknote, HandCoins, Printer, Search, History, Smartphone, X } from "lucide-react";
@@ -163,10 +163,18 @@ export default function ReglementPrestataireView() {
   const [histReferenceDecompte, setHistReferenceDecompte] = useState("");
   const [histAssure, setHistAssure] = useState("");
   const [histReferenceReglementComptable, setHistReferenceReglementComptable] = useState("");
-  const [historique, setHistorique] = useState<HistoriqueReglementResultat | null>(null);
+  const [historique, setHistorique] = useState<(HistoriqueReglementResultat & { total: number }) | null>(null);
+  const [pageHist, setPageHist] = useState(1);
+  const [tailleHist, setTailleHist] = useState(25);
+  const [pageBdx, setPageBdx] = useState(1);
+  const [tailleBdx, setTailleBdx] = useState(25);
+  const [totalBdx, setTotalBdx] = useState(0);
   const [recherchant, setRecherchant] = useState(false);
 
-  const refresh = async () => setBordereaux(await getBordereaux());
+  const refresh = async (page = pageBdx, taille = tailleBdx) => {
+    const r = await getBordereaux(page, taille);
+    setBordereaux(r.items); setTotalBdx(r.total); setPageBdx(page); setTailleBdx(taille);
+  };
 
   useEffect(() => { refresh(); getPrestataires().then(setPrestataires); }, []);
 
@@ -180,10 +188,11 @@ export default function ReglementPrestataireView() {
     referenceReglementComptable: histReferenceReglementComptable || undefined,
   };
 
-  const handleRechercherHistorique = async () => {
+  const handleRechercherHistorique = async (page = 1, taille = tailleHist) => {
     setRecherchant(true);
     try {
-      setHistorique(await getHistoriqueReglements(filtresHistorique));
+      setHistorique(await getHistoriqueReglements(filtresHistorique, page, taille));
+      setPageHist(page); setTailleHist(taille);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Recherche impossible.");
     } finally {
@@ -206,8 +215,6 @@ export default function ReglementPrestataireView() {
     refresh();
   };
 
-  const pagBordereaux = usePagination(bordereaux);
-  const pagHistorique = usePagination(historique?.lignes ?? []);
   return (
     <div className="p-6">
       <ModuleHeader title="Règlement" subtitle="Paiement des factures aux prestataires et des remboursements aux assurés" icon={HandCoins}
@@ -257,7 +264,7 @@ export default function ReglementPrestataireView() {
               </label>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <Btn variant="primary" onClick={handleRechercherHistorique} disabled={recherchant}>
+              <Btn variant="primary" onClick={() => handleRechercherHistorique()} disabled={recherchant}>
                 <Search className="w-4 h-4" />{recherchant ? "Recherche…" : "Rechercher"}
               </Btn>
               {historique && (
@@ -292,7 +299,7 @@ export default function ReglementPrestataireView() {
                         </tr>
                       </thead>
                       <tbody>
-                        {pagHistorique.pageItems.map((l) => (
+                        {historique.lignes.map((l) => (
                           <tr
                             key={l.id}
                             onClick={() => l.bordereauId && setBordereauOuvert(l.bordereauId)}
@@ -321,7 +328,12 @@ export default function ReglementPrestataireView() {
                         ))}
                       </tbody>
                     </table>
-                    <Pager p={pagHistorique} />
+                    <Pagination
+                      page={pageHist} pageCount={Math.max(1, Math.ceil(historique.total / tailleHist))} pageSize={tailleHist}
+                      pageSizeOptions={optionsTaillePage(historique.total)} total={historique.total}
+                      debut={historique.total ? (pageHist - 1) * tailleHist + 1 : 0} fin={Math.min(historique.total, pageHist * tailleHist)}
+                      onPageChange={(p) => handleRechercherHistorique(p)} onPageSizeChange={(t) => handleRechercherHistorique(1, t)}
+                    />
                     {historique.lignes.length === 0 && <div className="py-8 text-center text-muted-foreground text-sm">Aucune ligne pour ces critères.</div>}
                   </div>
                 </div>
@@ -333,7 +345,7 @@ export default function ReglementPrestataireView() {
         <div className="bg-card border border-border rounded-xl overflow-x-auto">
           <div className="px-4 py-3 border-b border-border flex items-center gap-2">
             <FileStack className="w-4 h-4 text-primary" />
-            <h3 className="font-semibold text-foreground text-sm">Règlements établis ({bordereaux.length})</h3>
+            <h3 className="font-semibold text-foreground text-sm">Règlements établis ({totalBdx.toLocaleString("fr-FR")})</h3>
           </div>
           <table className="w-full text-sm">
             <thead>
@@ -344,7 +356,7 @@ export default function ReglementPrestataireView() {
               </tr>
             </thead>
             <tbody>
-              {pagBordereaux.pageItems.map((b) => (
+              {bordereaux.map((b) => (
                 <tr key={b.id} onClick={() => setBordereauOuvert(b.id)} className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer">
                   <td className="px-4 py-3 text-xs font-semibold text-primary whitespace-nowrap" style={{ fontFamily: "'DM Mono', monospace" }} title={b.id}>{b.numero}</td>
                   <td className="px-4 py-3 font-semibold text-foreground whitespace-nowrap">{b.prestataireNom}</td>
@@ -392,23 +404,28 @@ export default function ReglementPrestataireView() {
               ))}
             </tbody>
           </table>
-          <Pager p={pagBordereaux} />
+          <Pagination
+            page={pageBdx} pageCount={Math.max(1, Math.ceil(totalBdx / tailleBdx))} pageSize={tailleBdx}
+            pageSizeOptions={optionsTaillePage(totalBdx)} total={totalBdx}
+            debut={totalBdx ? (pageBdx - 1) * tailleBdx + 1 : 0} fin={Math.min(totalBdx, pageBdx * tailleBdx)}
+            onPageChange={(p) => refresh(p)} onPageSizeChange={(t) => refresh(1, t)}
+          />
           {bordereaux.length === 0 && <div className="py-12 text-center text-muted-foreground text-sm">Aucun règlement</div>}
         </div>
 
       </div>
 
       {showGenerer && (
-        <GenererReglementModal onClose={() => setShowGenerer(false)} onGenerated={refresh} />
+        <GenererReglementModal onClose={() => setShowGenerer(false)} onGenerated={() => refresh()} />
       )}
       {bordereauOuvert && (
-        <ReglementDetail bordereauId={bordereauOuvert} onClose={() => setBordereauOuvert(null)} onChanged={refresh} />
+        <ReglementDetail bordereauId={bordereauOuvert} onClose={() => setBordereauOuvert(null)} onChanged={() => refresh()} />
       )}
       {bordereauMM && (
         <PayerMobileMoneyModal
           bordereau={bordereauMM}
           onClose={() => setBordereauMM(null)}
-          onSuccess={refresh}
+          onSuccess={() => refresh()}
         />
       )}
     </div>

@@ -49,6 +49,24 @@ export function ecartsCorrection(e: LigneExistante, s: LigneSource, acteGeneriqu
   return data;
 }
 
+// Retire des copies d'imports précédents : supprimées si rien n'en dépend
+// (bordereau, remboursement, prescription), sinon annulées (jamais une ligne
+// déjà réglée). Voir aussi NettoyageDoublonsService.
+export async function retirerCopies(prisma: PrismaService, ids: string[]): Promise<number> {
+  let retirees = 0;
+  for (let i = 0; i < ids.length; i += 5000) {
+    const lot = await prisma.priseEnCharge.findMany({
+      where: { id: { in: ids.slice(i, i + 5000) } },
+      select: { id: true, bordereauId: true, remboursementId: true, bordereau: { select: { statut: true } }, prescriptionOrigine: { select: { id: true } }, prescriptionLigneTraitement: { select: { id: true } } },
+    });
+    const libres = lot.filter((l) => !l.bordereauId && !l.remboursementId && !l.prescriptionOrigine && !l.prescriptionLigneTraitement).map((l) => l.id);
+    const liees = lot.filter((l) => !libres.includes(l.id) && l.bordereau?.statut !== "Payé").map((l) => l.id);
+    if (libres.length) retirees += (await prisma.priseEnCharge.deleteMany({ where: { id: { in: libres } } })).count;
+    if (liees.length) retirees += (await prisma.priseEnCharge.updateMany({ where: { id: { in: liees } }, data: { statut: "Annulé", motifAnnulation: MOTIF_DOUBLON } })).count;
+  }
+  return retirees;
+}
+
 // Rapprochement ligne par ligne (imports traités une ligne à la fois).
 // `pris` = lignes existantes déjà associées à une ligne du fichier pendant
 // cet import ; `vues` = clés rencontrées, pour annuler les copies ensuite.
@@ -90,8 +108,7 @@ export class RapprochementReprise {
         where: { assureId: { in: cle.assureIds }, date: cle.date, montant: cle.montant, statut: { not: "Annulé" }, facture: { prestataireId: cle.prestataireId, referenceFacture: cle.referenceFacture }, id: { notIn: [...this.pris] } },
         select: { id: true, bordereau: { select: { statut: true } } },
       });
-      const aAnnuler = copies.filter((c) => c.bordereau?.statut !== "Payé").map((c) => c.id);
-      if (aAnnuler.length) annulees += (await this.prisma.priseEnCharge.updateMany({ where: { id: { in: aAnnuler } }, data: { statut: "Annulé", motifAnnulation: MOTIF_DOUBLON } })).count;
+      annulees += await retirerCopies(this.prisma, copies.filter((c) => c.bordereau?.statut !== "Payé").map((c) => c.id));
     }
     return annulees;
   }

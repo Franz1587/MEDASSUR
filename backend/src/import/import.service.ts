@@ -17,7 +17,7 @@ import { normaliserDateImport } from "../lib/date-import.util";
 import { texteBrutDeCellule } from "../lib/excel-cell.util";
 import { resoudreDesignations } from "../actes-medicaux/resolution-designation.util";
 import { beneficiaireReel, chargerFamilles } from "./beneficiaire.util";
-import { ecartsCorrection, MOTIF_DOUBLON, ordreConservation, RapprochementReprise, SELECT_EXISTANTE, type LigneExistante } from "./reprise-correction.util";
+import { ecartsCorrection, ordreConservation, RapprochementReprise, retirerCopies, SELECT_EXISTANTE, type LigneExistante } from "./reprise-correction.util";
 
 // Onglet Import (Système) — 2026-08 — voir demande utilisateur : "pour
 // permettre aux sociétés d'assurance qui voudraient changer de logiciel
@@ -1032,9 +1032,7 @@ export class ImportService {
     // Copies en trop des lignes du fichier (jamais une ligne réglée).
     const copies = [...clesVues].flatMap(([cle, assures]) => (existantesParCle.get(cle) ?? [])
       .filter((e) => assures.has(e.assureId) && !pris.has(e.id) && e.bordereau?.statut !== "Payé").map((e) => e.id));
-    const doublonsAnnules = copies.length
-      ? (await this.prisma.priseEnCharge.updateMany({ where: { id: { in: copies } }, data: { statut: "Annulé", motifAnnulation: MOTIF_DOUBLON } })).count
-      : 0;
+    const doublonsAnnules = await retirerCopies(this.prisma, copies);
     return { total: lignes.length, crees, corrigees: aCorriger.length, doublonsAnnules, enAttente: aMettreEnAttente.length, rejets };
   }
 

@@ -1,4 +1,7 @@
 import { BadRequestException, Body, Controller, Post, Get, Query, Res, UploadedFile, UploadedFiles, UseGuards, UseInterceptors } from "@nestjs/common";
+import { RolesGuard } from "../auth/roles.guard";
+import { Roles } from "../auth/roles.decorator";
+import { NettoyageDoublonsService } from "./nettoyage-doublons.service";
 import { FileInterceptor, FilesInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import type { Response } from "express";
@@ -27,7 +30,22 @@ const LIMITE_PHOTOS = 2000; // dossier complet en une fois — voir demande util
 @Controller("import")
 @UseGuards(JwtAuthGuard)
 export class ImportController {
-  constructor(private readonly importService: ImportService) {}
+  constructor(private readonly importService: ImportService, private readonly nettoyage: NettoyageDoublonsService) {}
+
+  // Doublons d'import (voir NettoyageDoublonsService) : aperçu chiffré, puis suppression.
+  @Get("doublons")
+  @UseGuards(RolesGuard)
+  @Roles("administrateur", "direction_generale")
+  apercuDoublons() {
+    return this.nettoyage.analyser(false);
+  }
+
+  @Post("doublons/nettoyer")
+  @UseGuards(RolesGuard)
+  @Roles("administrateur", "direction_generale")
+  nettoyerDoublons() {
+    return this.nettoyage.analyser(true);
+  }
 
   // ── Factures ─────────────────────────────────────────────────────
   // Le MODÈLE reste léger, indépendant du contrat (2026-08 — voir demande

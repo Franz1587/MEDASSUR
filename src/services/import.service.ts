@@ -144,3 +144,11 @@ export async function importerPhotosEnMasse(fichiers: File[]): Promise<{ importe
   if (!res.ok) throw new Error(`POST /import/photos failed (${res.status}): ${await res.text()}`);
   return res.json();
 }
+
+// Doublons d'import (voir backend NettoyageDoublonsService).
+export interface BilanDoublons {
+  groupes: number; lignesASupprimer: number; montantASupprimer: number; lignesBloquees: number; facturesVidees: number;
+  exemples: { prestataire: string; reference: string; date: string; montant: number; exemplaires: number; gardees: number }[];
+}
+export const analyserDoublons = () => http.get<BilanDoublons>("/import/doublons");
+export const nettoyerDoublons = () => http.post<BilanDoublons & { lignesSupprimees: number; facturesSupprimees: number }>("/import/doublons/nettoyer", {});

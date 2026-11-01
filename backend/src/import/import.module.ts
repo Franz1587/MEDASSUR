@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ImportService } from "./import.service";
+import { NettoyageDoublonsService } from "./nettoyage-doublons.service";
 import { ImportController } from "./import.controller";
 import { SanteModule } from "../sante/sante.module";
 import { FacturesModule } from "../factures/factures.module";
@@ -14,7 +15,7 @@ import { PrestatairesModule } from "../prestataires/prestataires.module";
 // métier.
 @Module({
   imports: [SanteModule, FacturesModule, AccordPrealableModule, PrestatairesModule],
-  providers: [ImportService],
+  providers: [ImportService, NettoyageDoublonsService],
   controllers: [ImportController],
 })
 export class ImportModule {}

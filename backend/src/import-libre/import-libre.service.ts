@@ -1067,7 +1067,17 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
     // est traitée, y compris celles déjà importées — elles corrigent la
     // ligne existante (bénéficiaire, acte, net à payer) au lieu d'être
     // ignorées, et les copies d'imports précédents sont annulées.
-    const lignesValides = lignes.filter((l) => l.assureId && l.contratId && !l.erreur);
+    // Lignes strictement identiques dans le fichier (même facture, assuré, date,
+    // désignation, montants) : une seule — sinon le nettoyage des doublons
+    // retirerait ce que chaque ré-import recréerait.
+    const vues = new Set<string>();
+    const lignesValides = lignes.filter((l) => {
+      if (!l.assureId || !l.contratId || l.erreur) return false;
+      const cle = [l.prestataireNom, l.referenceFacture, l.assureId, l.datePrestation, l.designation, l.montantTotal, l.partFinanceur].join("|");
+      if (vues.has(cle)) return false;
+      vues.add(cle);
+      return true;
+    });
     let importees = 0;
     let ignorees = lignes.length - lignesValides.length;
 

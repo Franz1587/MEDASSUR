@@ -50,9 +50,10 @@ function mapBordereau(b: ApiBordereau): BordereauReglement {
   };
 }
 
-export async function getBordereaux(): Promise<BordereauReglement[]> {
-  const data = await http.get<ApiBordereau[]>("/reglement-prestataire");
-  return data.map(mapBordereau);
+// Paginé côté serveur (2026-11) : la liste complète pesait 3 Mo et 7 s.
+export async function getBordereaux(page: number, taille: number): Promise<{ items: BordereauReglement[]; total: number }> {
+  const data = await http.get<{ items: ApiBordereau[]; total: number }>(`/reglement-prestataire?page=${page}&taille=${taille}`);
+  return { items: data.items.map(mapBordereau), total: data.total };
 }
 
 interface ApiBordereauLigne {
@@ -196,10 +197,13 @@ function historiqueParams(filtres: HistoriqueReglementFiltres): URLSearchParams 
   return params;
 }
 
-export async function getHistoriqueReglements(filtres: HistoriqueReglementFiltres): Promise<HistoriqueReglementResultat> {
-  const qs = historiqueParams(filtres).toString();
-  const data = await http.get<ApiHistoriqueResultat>(`/reglement-prestataire/historique${qs ? `?${qs}` : ""}`);
-  return { lignes: data.lignes.map(mapHistoriqueLigne), exercices: data.exercices.map(mapHistoriqueExercice) };
+// Seule la page affichée est transférée (2026-11 : 35 000 lignes = 22 Mo) ;
+// les totaux par exercice portent sur toutes les lignes.
+export async function getHistoriqueReglements(filtres: HistoriqueReglementFiltres, page: number, taille: number): Promise<HistoriqueReglementResultat & { total: number }> {
+  const params = historiqueParams(filtres);
+  params.set("page", String(page)); params.set("taille", String(taille));
+  const data = await http.get<ApiHistoriqueResultat & { total: number }>(`/reglement-prestataire/historique?${params.toString()}`);
+  return { lignes: data.lignes.map(mapHistoriqueLigne), exercices: data.exercices.map(mapHistoriqueExercice), total: data.total };
 }
 
 export async function getFacturesEligiblesReglement(filtres: {

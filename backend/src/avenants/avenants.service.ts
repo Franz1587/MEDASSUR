@@ -41,8 +41,12 @@ function veille(dateStr: string): string {
 export class AvenantsService {
   constructor(private prisma: PrismaService) {}
 
+  // Liste allégée (2026-11, mesuré en prod : 684 avenants = 5 Mo, le contrat
+  // complet recopié dans chacun) — la liste n'affiche que la police et le souscripteur.
   findAll() {
-    return this.prisma.avenant.findMany({ include: INCLUDE });
+    return this.prisma.avenant.findMany({
+      include: { contrat: { select: { numeroPolice: true, client: { select: { nom: true } }, compagnie: { select: { nom: true } } } }, avenantAssures: true },
+    });
   }
 
   // Portail client (2026-08) — voir demande utilisateur : page dédiée au
