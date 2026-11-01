@@ -12,6 +12,7 @@ import { CreateAccordPrealableDto } from "./dto/create-accord-prealable.dto";
 import { DecisionAccordPrealableDto } from "./dto/decision-accord-prealable.dto";
 import { UpdateAccordPrealableDto } from "./dto/update-accord-prealable.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { EN_TETE_SIGNATURE } from "../documents/signature-pdf.middleware";
 
 @Controller("accord-prealable")
 @UseGuards(JwtAuthGuard)
@@ -103,6 +104,7 @@ export class AccordPrealableController {
     const filePath = path.join(UPLOADS_ROOT, "accords-prealables", fichier);
     if (!fs.existsSync(filePath)) return res.status(404).json({ message: "Fichier introuvable sur le serveur." });
     res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(EN_TETE_SIGNATURE, "aucune"); // scan déposé, non produit par l'application
     res.setHeader("Content-Disposition", `inline; filename="${fichier}"`);
     fs.createReadStream(filePath).pipe(res);
   }

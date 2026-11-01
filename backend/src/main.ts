@@ -10,6 +10,8 @@ import { AppModule } from "./app.module";
 import { UPLOADS_ROOT } from "./uploads-dir.util";
 import { StorageService } from "./storage/storage.service";
 import { buildOpenApiDocument, protegerSwagger } from "./swagger.util";
+import { signatureDesPdf } from "./documents/signature-pdf.middleware";
+import { DocumentSignatureService } from "./documents/document-signature.service";
 
 const MIME_PAR_EXTENSION: Record<string, string> = {
   ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
@@ -19,6 +21,8 @@ const MIME_PAR_EXTENSION: Record<string, string> = {
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   app.use(compression());
+  // QR de signature électronique sur tout PDF émis (voir signature-pdf.middleware).
+  app.use(signatureDesPdf(app.get(DocumentSignatureService)));
   // Requêtes lentes journalisées (route, statut, durée) : on optimise ce qui
   // est réellement lent en production, mesuré, jamais deviné.
   app.use((req: Request, res: Response, next: NextFunction) => {

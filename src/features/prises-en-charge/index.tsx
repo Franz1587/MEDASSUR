@@ -427,8 +427,8 @@ export default function PrisesEnChargeView() {
                   <DateInput value={filtreAu} onChange={setFiltreAu} className={fieldCls} />
                 </label>
                 <label className="block">
-                  <div className={labelCls}>Référence ou n° facture</div>
-                  <input value={filtreReference} onChange={(e) => setFiltreReference(e.target.value)} placeholder="ex. FAC-2026-000123" className={fieldCls} />
+                  <div className={labelCls}>Référence, bénéficiaire ou prestataire</div>
+                  <input value={filtreReference} onChange={(e) => setFiltreReference(e.target.value)} placeholder="n° facture, nom, prénom ou matricule du patient…" className={fieldCls} />
                 </label>
               </div>
               <Btn variant="primary" onClick={() => refreshFactures(1)} disabled={recherchant}>

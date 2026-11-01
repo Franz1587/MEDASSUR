@@ -42,6 +42,7 @@ import { genererCorpsOffre, assemblerOffre, pdfVersBuffer, versPng, logoModeleCo
 import { contenuDepuisCotation, type ContenuOffre, type ParametresOffre } from "../cotation/contenu-offre";
 import type { Prisma, ParametresEntreprise, Cotation, Compagnie, CotationGarantieLigne } from "@prisma/client";
 import { numeroPolice, policePourNomFichier } from "../lib/police.util";
+import { EN_TETE_SIGNATURE } from "./signature-pdf.middleware";
 
 // Groupes d'actes considérés "Examen" (bon d'examen) — le reste (Consultation,
 // Pharmacie, Dentaire, Kinésithérapie, Hospitalisation, Actes de Spécialités)
@@ -2173,6 +2174,7 @@ export class DocumentsService {
     // inchangé.
     const doc = new PDFDocument({ size: "A4", margins: { top: 28, left: 28, right: 28, bottom: 0 } });
     res.setHeader("Content-Type", "application/pdf");
+    if (utilisateur && documentRef) res.setHeader(EN_TETE_SIGNATURE, "integree"); // QR dessiné par le document lui-même
     res.setHeader("Content-Disposition", `inline; filename="${kind === "soins" ? "Feuille-Soins" : "Feuille-Examen"}-${numero.replace(/\//g, "-")}.pdf"`);
     doc.pipe(res);
 
@@ -3218,6 +3220,7 @@ export class DocumentsService {
     // longueur des données réelles.
     const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 21 });
     res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(EN_TETE_SIGNATURE, "integree"); // QR dessiné par le document lui-même
     res.setHeader("Content-Disposition", `inline; filename="Decompte-${facture.id}.pdf"`);
     doc.pipe(res);
 
@@ -5815,6 +5818,7 @@ export class DocumentsService {
     // page portrait 595,32 × 841,92 pt — identique à ce document).
     const doc = new PDFDocument({ size: "A4", margin: 21 });
     res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(EN_TETE_SIGNATURE, "integree"); // QR dessiné par le document lui-même
     res.setHeader("Content-Disposition", `inline; filename="Reglement-${b.numero}.pdf"`);
     doc.pipe(res);
 

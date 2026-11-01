@@ -7,6 +7,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { idsFamilleDe } from "../portail-membre/famille.util";
 import { SuiviSanteService } from "./suivi-sante.service";
 import { AjouterMesureDto, CreerRendezVousDto, RepondreRendezVousDto } from "./suivi-sante.dto";
+import { EN_TETE_SIGNATURE } from "../documents/signature-pdf.middleware";
 
 type Utilisateur = { userId: string; nom: string; roleId: string; assureSanteId: string | null; medecinId: string | null; prestataireId: string | null };
 type RequeteSuivi = Request & { user: Utilisateur };
@@ -129,6 +130,7 @@ export class SuiviSanteMedecinController {
   async document(@Param("assureId") assureId: string, @Param("documentId") documentId: string, @Req() req: RequeteSuivi, @Res() res: Response) {
     const pdf = await this.suivi.documentPatient(this.medecinId(req), assureId, documentId);
     res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(EN_TETE_SIGNATURE, "aucune"); // document déposé par le patient
     res.setHeader("Content-Disposition", `inline; filename="Document-${documentId}.pdf"`);
     res.end(pdf);
   }

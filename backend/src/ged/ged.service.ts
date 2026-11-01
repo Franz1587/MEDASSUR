@@ -7,6 +7,7 @@ import { StorageService } from "../storage/storage.service";
 import { FacturesService } from "../factures/factures.service";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { GedAnalyseService } from "./ged-analyse.service";
+import { EN_TETE_SIGNATURE } from "../documents/signature-pdf.middleware";
 
 const UPLOADS_GED_DIR = path.join(UPLOADS_ROOT, "ged");
 const CATEGORIE_STORAGE = "ged";
@@ -162,6 +163,7 @@ export class GedService {
     if (!doc || !doc.fichier) throw new NotFoundException(`Document ${id} introuvable`);
     const filePath = path.join(UPLOADS_GED_DIR, doc.fichier);
     res.setHeader("Content-Disposition", `inline; filename="${doc.nom}"`);
+    res.setHeader(EN_TETE_SIGNATURE, "aucune"); // document reçu et numérisé, non produit par l'application
     res.sendFile(filePath);
   }
 

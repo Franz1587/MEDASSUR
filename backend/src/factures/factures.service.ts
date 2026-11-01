@@ -107,10 +107,23 @@ export class FacturesService {
       // Recherche par référence — matche le numéro principal OU l'un des
       // numéros supplémentaires (une déclaration peut regrouper plusieurs
       // numéros de facture prestataire, voir schema.prisma NumeroFacture).
+      // Recherche aussi par la personne soignée (2026-11 — voir demande
+      // utilisateur : "retrouver une facture en recherchant par le nom
+      // complet, le nom ou le prénom de celui qui a bénéficié des soins") :
+      // chaque mot doit figurer dans le nom, le prénom ou le matricule d'un
+      // bénéficiaire de la facture ; ou par le nom du prestataire.
       ...(filtres?.reference
         ? { OR: [
             { referenceFacture: { contains: filtres.reference, mode: "insensitive" as const } },
             { numerosSupplementaires: { some: { numero: { contains: filtres.reference, mode: "insensitive" as const } } } },
+            { prestataire: { nom: { contains: filtres.reference, mode: "insensitive" as const } } },
+            { AND: filtres.reference.split(/\s+/).filter(Boolean).map((mot) => ({
+              lignes: { some: { assure: { OR: [
+                { nom: { contains: mot, mode: "insensitive" as const } },
+                { prenom: { contains: mot, mode: "insensitive" as const } },
+                { matricule: { contains: mot, mode: "insensitive" as const } },
+              ] } } },
+            })) },
           ] }
         : {}),
     };

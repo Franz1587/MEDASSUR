@@ -4,6 +4,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { ASSETS_ROOT } from "../uploads-dir.util";
+import { EN_TETE_SIGNATURE } from "../documents/signature-pdf.middleware";
 
 const PRESENTATIONS_DIR = path.join(ASSETS_ROOT, "presentations");
 
@@ -43,6 +44,7 @@ export class PresentationsController {
       return;
     }
     res.setHeader("Content-Type", meta.mime);
+    res.setHeader(EN_TETE_SIGNATURE, "aucune"); // plaquette commerciale, pas un document de gestion
     res.setHeader("Content-Disposition", `attachment; filename="${meta.nom}"`);
     res.setHeader("Content-Length", fs.statSync(filePath).size);
     fs.createReadStream(filePath).pipe(res);
