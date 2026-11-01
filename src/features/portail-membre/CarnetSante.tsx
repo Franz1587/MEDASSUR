@@ -191,12 +191,16 @@ export default function MembreCarnetSanteView() {
               </div>
               {d.statut && <Badge variant={VARIANT_STATUT_BON[d.statut]}>{LABEL_STATUT_BON[d.statut]}</Badge>}
               {d.source === "upload" ? (
-                <a
-                  href={urlCarnetSante(d.fichier!)} target="_blank" rel="noreferrer"
-                  className="text-[11.5px] font-medium text-primary hover:underline flex-shrink-0"
-                >
-                  Voir
-                </a>
+                d.prescriptionId ? (
+                  <button type="button"
+                    onClick={() => openFeuilleExamenBonDe(d.prescriptionId!)}
+                    className="text-[11.5px] font-medium text-primary hover:underline flex-shrink-0"
+                  >Voir</button>
+                ) : (
+                  <a href={urlCarnetSante(d.fichier!)} target="_blank" rel="noreferrer"
+                    className="text-[11.5px] font-medium text-primary hover:underline flex-shrink-0"
+                  >Voir</a>
+                )
               ) : (
                 <button
                   type="button"

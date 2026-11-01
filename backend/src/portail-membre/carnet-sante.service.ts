@@ -141,13 +141,13 @@ export class CarnetSanteService {
       }),
     ]);
 
-    const convertis = new Map(prescriptions.filter((p) => p.carnetDocumentId).map((p) => [p.carnetDocumentId!, [p.numeroOrdonnance, p.numeroBonExamen].filter(Boolean).join(" / ")]));
+    const convertis = new Map(prescriptions.filter((p) => p.carnetDocumentId).map((p) => [p.carnetDocumentId!, { id: p.id, numero: [p.numeroOrdonnance, p.numeroBonExamen].filter(Boolean).join(" / ") }]));
     const documentsUpload: CarnetSanteDocument[] = uploads.map((d) => ({
       id: d.id, source: "upload",
       assureId: d.assureId, assureNom: `${d.assure.nom} ${d.assure.prenom ?? ""}`.trim(),
       rubrique: d.rubrique as RubriqueCarnetSante, fichier: d.fichier, priseEnChargeId: null,
-      prescriptionId: null, numero: null, dateSoins: null, statut: null,
-      libelle: d.libelle, dateAjout: d.dateAjout, convertiEn: convertis.get(d.id) ?? null,
+      prescriptionId: convertis.get(d.id)?.id ?? null, numero: null, dateSoins: null, statut: null,
+      libelle: d.libelle, dateAjout: d.dateAjout, convertiEn: convertis.get(d.id)?.numero ?? null,
     }));
 
     const documentsBons: CarnetSanteDocument[] = [];

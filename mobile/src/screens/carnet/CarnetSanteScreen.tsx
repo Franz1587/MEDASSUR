@@ -244,6 +244,8 @@ export function CarnetSanteScreen() {
   // visionneuse intégrée plutôt que de télécharger/partager systématiquement.
   const ouvrir = (d: CarnetSanteDocument) => {
     if (d.source === "upload") {
+      // Converti → ouvrir le bon électronique, pas la photo originale.
+      if (d.prescriptionId) { navigation.navigate("DocumentViewer", { path: cheminFeuilleExamenBon(d.prescriptionId), titre: d.convertiEn ?? "Bon électronique" }); return; }
       if (d.fichier) navigation.navigate("DocumentViewer", { path: urlCarnetSante(d.fichier), titre: d.numero ?? "Document" });
       return;
     }
