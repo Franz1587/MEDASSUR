@@ -17,6 +17,7 @@ import { normaliserDateImport } from "../lib/date-import.util";
 import { texteBrutDeCellule } from "../lib/excel-cell.util";
 import { resoudreDesignations } from "../actes-medicaux/resolution-designation.util";
 import { beneficiaireReel, chargerFamilles } from "./beneficiaire.util";
+import { ecartsCorrection, MOTIF_DOUBLON, ordreConservation, RapprochementReprise, SELECT_EXISTANTE, type LigneExistante } from "./reprise-correction.util";
 
 // Onglet Import (Système) — 2026-08 — voir demande utilisateur : "pour
 // permettre aux sociétés d'assurance qui voudraient changer de logiciel
@@ -637,17 +638,9 @@ export class ImportService {
         // SEULE (voir resoudrePrestataireLectureSeule) : un prestataire
         // encore inconnu ne peut, par construction, avoir aucune ligne
         // existante à comparer.
-        const prestataireExistant = await this.resoudrePrestataireLectureSeule(prestataire);
-        if (prestataireExistant) {
-          const datePrestationNorm = datePrestationParsed;
-          const existanteApercu = await this.ligneFactureExisteDeja(prestataireExistant.id, referenceFacture, resAssure.assure.id, datePrestationNorm, typePrestation);
-          // Même montant → vraie ligne identique déjà connue, on ignore.
-          // Montant différent → sera corrigée à la confirmation (importerFactures).
-          if (existanteApercu !== null && Math.round(existanteApercu.montant.toNumber()) === Math.round(Number(montant))) {
-            rejets.push({ ligne: r, motif: `Déjà importée — une ligne identique existe pour ${resAssure.assure.nom} ${resAssure.assure.prenom ?? ""} chez "${prestataire}" (facture ${referenceFacture}, ${datePrestationNorm}, ${montant} FCFA). Ignorée automatiquement.` });
-            continue;
-          }
-        }
+        // Ré-import correctif (2026-11) : une ligne déjà importée n'est plus
+        // écartée ici — à la confirmation elle corrige la ligne existante
+        // (voir RapprochementReprise) au lieu d'être ignorée.
         lignes.push({
           matricule, nom, prenom: v("prenom"), prestataire, referenceFacture, dateReception, typePrestation, datePrestation: datePrestationParsed,
           acteMedical, montant, quantite: v("quantite"), statut: v("statut"), motifRejet: v("motifRejet"),
@@ -666,9 +659,10 @@ export class ImportService {
   // contrat, voir schema.prisma Facture) ; une ligne suivante du même
   // groupe dont l'assuré serait sur un AUTRE contrat est rejetée plutôt que
   // silencieusement rattachée au mauvais contrat.
-  async importerFactures(contratId: string, rows: ImportFactureRowDto[]): Promise<{ crees: number; rejets: Rejet[] }> {
+  async importerFactures(contratId: string, rows: ImportFactureRowDto[]): Promise<{ crees: number; corrigees: number; doublonsAnnules: number; rejets: Rejet[] }> {
     let crees = 0;
     const rejets: Rejet[] = [];
+    const rapprochement = new RapprochementReprise(this.prisma, (await this.acteGenerique())?.id);
     const facturesParGroupe = new Map<string, string>(); // "prestataireId|referenceFacture" -> factureId
 
     for (let i = 0; i < rows.length; i++) {
@@ -706,6 +700,17 @@ export class ImportService {
       // montant importé est déjà le net à payer (comportement historique).
       const partAssurance = ligne.partAssurance ? Number(ligne.partAssurance) : montant;
 
+      // Ligne déjà importée (même facture, date, montant) : elle reçoit les
+      // données du fichier (acte, net à payer, quantité) au lieu d'être ignorée.
+      const acteFichier = await this.resoudreActe(ligne.acteMedical, ligne.typePrestation);
+      const rapprochee = await rapprochement.rapprocher(
+        { prestataireId: prestataireRow.id, referenceFacture: ligne.referenceFacture, date: datePrestation, montant, assureIds: [resAssure.assure.id] },
+        { assureId: resAssure.assure.id, contratId: resAssure.assure.contratId, acteMedicalId: acteFichier?.id, baseRemboursement: ligne.statut === "Rejeté" ? undefined : partAssurance, quantite: ligne.quantite ? Number(ligne.quantite) : undefined },
+      );
+      if (rapprochee) {
+        if (rapprochee === "identique") rejets.push({ ligne: i + 1, motif: `Déjà importée — ligne identique pour ${resAssure.assure.nom} ${resAssure.assure.prenom ?? ""} chez "${prestataireRow.nom}" (facture ${ligne.referenceFacture}, ${datePrestation}, ${ligne.montant} FCFA). Rien à corriger.` });
+        continue;
+      }
       const existante = await this.ligneFactureExisteDeja(prestataireRow.id, ligne.referenceFacture, resAssure.assure.id, datePrestation, ligne.typePrestation);
       if (existante) {
         if (Math.round(existante.montant.toNumber()) === Math.round(montant)) {
@@ -751,7 +756,7 @@ export class ImportService {
       if (statutInitial === "Rejeté" && !ligne.motifRejet) { rejets.push({ ligne: i + 1, motif: "Motif de rejet obligatoire pour une ligne Rejetée." }); continue; }
 
       try {
-        await this.factures.ajouterLigne(factureId, {
+        const creee = await this.factures.ajouterLigne(factureId, {
           assureId: resAssure.assure.id, typePrestation: normaliserTypePrestation(ligne.typePrestation), datePrestation,
           acteMedicalId: acte.id, montant, quantite: ligne.quantite ? Number(ligne.quantite) : undefined,
           statutInitial, motifRejet: ligne.motifRejet,
@@ -765,12 +770,14 @@ export class ImportService {
           baseRemboursementImpose: statutInitial === "Rejeté" ? 0 : partAssurance,
           ignorerRetrait: true,
         });
+        rapprochement.pris.add(creee.id); // ligne du fichier, jamais une copie
         crees++;
       } catch (err) {
         rejets.push({ ligne: i + 1, motif: err instanceof Error ? err.message : "Erreur inattendue lors de la création de la ligne." });
       }
     }
-    return { crees, rejets };
+    const doublonsAnnules = await rapprochement.annulerCopies();
+    return { crees, corrigees: rapprochement.corrigees, doublonsAnnules, rejets };
   }
 
   // ══════════════════════════════════════════════════════════════════
@@ -814,7 +821,7 @@ export class ImportService {
     }], this.COLONNES_NUMERIQUES_FACTURE_GLOBALE);
   }
 
-  async importerFacturesGlobal(buffer: Buffer): Promise<{ total: number; crees: number; corrigees: number; enAttente: number; rejets: Rejet[] }> {
+  async importerFacturesGlobal(buffer: Buffer): Promise<{ total: number; crees: number; corrigees: number; doublonsAnnules: number; enAttente: number; rejets: Rejet[] }> {
     const { feuille, indexParCle } = await this.chargerFeuille(buffer, this.COLONNES_FACTURE_GLOBALE, [
       "matricule", "prestataire", "referenceFacture", "dateReception", "typePrestation", "datePrestation", "montant",
     ]);
@@ -864,7 +871,7 @@ export class ImportService {
         acteMedical, montant, quantite: quantiteBrut ? Number(quantiteBrut) : undefined, statut, motifRejet,
       });
     }
-    if (lignes.length === 0) return { total: 0, crees: 0, corrigees: 0, enAttente: 0, rejets };
+    if (lignes.length === 0) return { total: 0, crees: 0, corrigees: 0, doublonsAnnules: 0, enAttente: 0, rejets };
 
     // ── Passe 2 : résolution EN LOTS — matricule/prestataire/acte médical,
     // une requête chacun pour TOUT le fichier (voir demande utilisateur :
@@ -944,7 +951,7 @@ export class ImportService {
       : [];
     const factureExistanteParId = new Map(facturesExistantesDuLot.map((f) => [f.id, f]));
     const lignesExistantesDuLot = facturesExistantesDuLot.length > 0
-      ? await this.prisma.priseEnCharge.findMany({ where: { factureId: { in: facturesExistantesDuLot.map((f) => f.id) } }, select: { id: true, factureId: true, assureId: true, date: true, montant: true, acteMedicalId: true } })
+      ? await this.prisma.priseEnCharge.findMany({ where: { factureId: { in: facturesExistantesDuLot.map((f) => f.id) }, statut: { not: "Annulé" } }, select: { ...SELECT_EXISTANTE, factureId: true, date: true } })
       : [];
     // Ligne déjà importée = même facture, date et montant pour l'assuré (ou
     // le titulaire, si elle avait été rattachée à lui). Jamais le type : il
@@ -956,7 +963,12 @@ export class ImportService {
       const liste = existantesParCle.get(cle);
       if (liste) liste.push(l); else existantesParCle.set(cle, [l]);
     }
-    const aCorriger: { id: string; assureId: string; contratId: string; acteMedicalId?: string }[] = [];
+    // Ré-import correctif (voir reprise-correction.util) : chaque ligne du
+    // fichier corrige UNE ligne existante ; les copies restantes des mêmes
+    // clés sont des doublons d'imports précédents, annulés à la fin.
+    const aCorriger: { id: string; data: Record<string, unknown> }[] = [];
+    const pris = new Set<string>();
+    const clesVues = new Map<string, Set<string>>(); // clé → assurés concernés
 
     // ── Répartition (2026-08 — voir demande utilisateur : "seulement faire
     // remonter les factures des matricules trouvés et mettre les autres en
@@ -975,14 +987,20 @@ export class ImportService {
       const assure = beneficiaireReel(candidatsEligibles[0], l.beneficiaire, familles);
       const acte = (l.acteMedical ? acteParLibelle.get(l.acteMedical.trim().toLowerCase()) : undefined) ?? acteGenerique ?? undefined;
       const memes = existantesParCle.get(`${prestataireRow.id}|${l.referenceFacture.trim()}|${l.datePrestation}|${l.montant}`) ?? [];
-      const existante = memes.find((e) => e.assureId === assure.id) ?? memes.find((e) => e.assureId === candidatsEligibles[0].id);
+      const assuresCle = [assure.id, candidatsEligibles[0].id];
+      const cleLigne = `${prestataireRow.id}|${l.referenceFacture.trim()}|${l.datePrestation}|${l.montant}`;
+      const vus = clesVues.get(cleLigne) ?? new Set<string>(); assuresCle.forEach((id) => vus.add(id)); clesVues.set(cleLigne, vus);
+      const existante = memes
+        .filter((e) => assuresCle.includes(e.assureId) && !pris.has(e.id))
+        .sort((a, b) => Number(b.assureId === assure.id) - Number(a.assureId === assure.id) || ordreConservation(a as LigneExistante, b as LigneExistante))[0];
       if (existante) {
-        memes.splice(memes.indexOf(existante), 1);
-        // Déjà importée sans la vraie désignation ou au nom du titulaire :
-        // la ligne existante est corrigée au lieu d'être ignorée.
-        const acteARendre = acte && acte.id !== acteGenerique?.id && existante.acteMedicalId !== acte.id && (!existante.acteMedicalId || existante.acteMedicalId === acteGenerique?.id);
-        if (acteARendre || existante.assureId !== assure.id) {
-          aCorriger.push({ id: existante.id, assureId: assure.id, contratId: assure.contratId, ...(acteARendre ? { acteMedicalId: acte!.id } : {}) });
+        pris.add(existante.id);
+        const data = ecartsCorrection(existante as LigneExistante, {
+          assureId: assure.id, contratId: assure.contratId, acteMedicalId: acte?.id,
+          baseRemboursement: l.statut === "Rejeté" ? undefined : l.montant, quantite: l.quantite,
+        }, acteGenerique?.id);
+        if (Object.keys(data).length) {
+          aCorriger.push({ id: existante.id, data });
         } else {
           rejets.push({ ligne: l.r, motif: `Déjà importée — une ligne identique existe pour le matricule "${l.matricule}" chez "${l.prestataire}" (facture ${l.referenceFacture}, ${l.datePrestation}, ${l.montant} FCFA). Ignorée automatiquement.` });
         }
@@ -1010,10 +1028,14 @@ export class ImportService {
     }
 
     const crees = await this.creerFacturesDepuisLignesResolues(aCreer, rejets);
-    for (const c of aCorriger) {
-      await this.prisma.priseEnCharge.update({ where: { id: c.id }, data: { assureId: c.assureId, contratId: c.contratId, ...(c.acteMedicalId ? { acteMedicalId: c.acteMedicalId } : {}) } });
-    }
-    return { total: lignes.length, crees, corrigees: aCorriger.length, enAttente: aMettreEnAttente.length, rejets };
+    for (const c of aCorriger) await this.prisma.priseEnCharge.update({ where: { id: c.id }, data: c.data });
+    // Copies en trop des lignes du fichier (jamais une ligne réglée).
+    const copies = [...clesVues].flatMap(([cle, assures]) => (existantesParCle.get(cle) ?? [])
+      .filter((e) => assures.has(e.assureId) && !pris.has(e.id) && e.bordereau?.statut !== "Payé").map((e) => e.id));
+    const doublonsAnnules = copies.length
+      ? (await this.prisma.priseEnCharge.updateMany({ where: { id: { in: copies } }, data: { statut: "Annulé", motifAnnulation: MOTIF_DOUBLON } })).count
+      : 0;
+    return { total: lignes.length, crees, corrigees: aCorriger.length, doublonsAnnules, enAttente: aMettreEnAttente.length, rejets };
   }
 
   // Rejoue la file d'attente (2026-08 — voir demande utilisateur : "une
@@ -1092,11 +1114,11 @@ export class ImportService {
       : [];
     const factureExistanteParId = new Map(facturesExistantesDuLot.map((f) => [f.id, f]));
     const lignesExistantesDuLot = facturesExistantesDuLot.length > 0
-      ? await this.prisma.priseEnCharge.findMany({ where: { factureId: { in: facturesExistantesDuLot.map((f) => f.id) } }, select: { factureId: true, assureId: true, date: true, type: true, montant: true } })
+      ? await this.prisma.priseEnCharge.findMany({ where: { factureId: { in: facturesExistantesDuLot.map((f) => f.id) }, statut: { not: "Annulé" } }, select: { factureId: true, assureId: true, date: true, montant: true } })
       : [];
     const signaturesExistantes = new Set(lignesExistantesDuLot.map((l) => {
       const f = factureExistanteParId.get(l.factureId!)!;
-      return `${f.prestataireId}|${f.referenceFacture}|${l.assureId}|${l.date}|${l.type}|${Number(l.montant)}`;
+      return `${f.prestataireId}|${f.referenceFacture}|${l.assureId}|${l.date}|${Number(l.montant)}`; // jamais le type : recalculé à l'enregistrement
     }));
 
     const rejets: Rejet[] = [];
@@ -1113,7 +1135,7 @@ export class ImportService {
       const prestataireRow = prestataireParValeur.get(l.prestataire.trim());
       if (!prestataireRow) { rejets.push({ ligne: 0, motif: `Matricule "${l.matricule}" résolu, mais prestataire "${l.prestataire}" introuvable.` }); continue; }
       const assure = candidatsEligibles[0];
-      const signature = `${prestataireRow.id}|${l.referenceFacture.trim()}|${assure.id}|${l.datePrestation}|${l.typePrestation}|${Number(l.montant)}`;
+      const signature = `${prestataireRow.id}|${l.referenceFacture.trim()}|${assure.id}|${l.datePrestation}|${Number(l.montant)}`;
       if (signaturesExistantes.has(signature)) {
         rejets.push({ ligne: 0, motif: `Déjà importée — une ligne identique existe pour le matricule "${l.matricule}" chez "${l.prestataire}" (facture ${l.referenceFacture}, ${l.datePrestation}, ${l.montant} FCFA). Ignorée automatiquement.` });
         continue;

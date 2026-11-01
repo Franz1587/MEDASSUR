@@ -533,8 +533,8 @@ function ImportFacturesGlobalModal({ onClose, onImporte }: { onClose: () => void
       const res = await importerFacturesGlobal(fichier);
       setResultat(res);
       onImporte();
-      if (res.crees > 0 || res.enAttente > 0 || res.corrigees > 0) {
-        toast.success(`${res.crees} facture(s) créée(s)${res.corrigees > 0 ? `, ${res.corrigees} ligne(s) déjà importée(s) corrigée(s) (acte, bénéficiaire)` : ""}${res.enAttente > 0 ? `, ${res.enAttente} mise(s) en attente` : ""}.`);
+      if (res.crees > 0 || res.enAttente > 0 || res.corrigees > 0 || res.doublonsAnnules > 0) {
+        toast.success(`${res.crees} facture(s) créée(s)${res.corrigees > 0 ? `, ${res.corrigees} ligne(s) déjà importée(s) corrigée(s)` : ""}${res.doublonsAnnules > 0 ? `, ${res.doublonsAnnules} doublon(s) annulé(s)` : ""}${res.enAttente > 0 ? `, ${res.enAttente} mise(s) en attente` : ""}.`);
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Import impossible.");
@@ -575,7 +575,7 @@ function ImportFacturesGlobalModal({ onClose, onImporte }: { onClose: () => void
           {resultat && (
             <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-2">
               <p className="text-[13px] font-semibold text-foreground flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-primary" />
-                {resultat.total} ligne(s) lue(s) — {resultat.crees} créée(s), {resultat.corrigees} corrigée(s), {resultat.enAttente} mise(s) en attente, {resultat.rejets.length} rejetée(s).
+                {resultat.total} ligne(s) lue(s) — {resultat.crees} créée(s), {resultat.corrigees} corrigée(s), {resultat.doublonsAnnules} doublon(s) annulé(s), {resultat.enAttente} mise(s) en attente, {resultat.rejets.length} rejetée(s).
               </p>
               {resultat.enAttente > 0 && (
                 <p className="text-[11.5px] text-amber-700 dark:text-amber-300">Les lignes en attente seront synchronisées automatiquement dès que leur population sera chargée (ou via le bouton "Synchroniser maintenant" sur cet écran).</p>

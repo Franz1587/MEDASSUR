@@ -97,6 +97,7 @@ export interface ResultatActesMedicaux {
 export interface ResultatConfirmation {
   importees?: number;
   corrigees?: number;
+  doublonsAnnules?: number;
   crees?: number;
   miseAJour?: number;
   ignorees: number;

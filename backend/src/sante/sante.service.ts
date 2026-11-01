@@ -1718,7 +1718,7 @@ export class SanteService {
     if (opts?.baseRemboursementImpose !== undefined) {
       part.resteACharge = montantPourCalcul - baseRemboursement;
       // Taux réellement appliqué par l'ancien système, pour les décomptes.
-      if (montantPourCalcul > 0) part.tauxRemboursement = Math.round((baseRemboursement / montantPourCalcul) * 10000) / 100;
+      if (montantPourCalcul > 0 && baseRemboursement >= 0 && baseRemboursement <= montantPourCalcul) part.tauxRemboursement = Math.round((baseRemboursement / montantPourCalcul) * 10000) / 100;
     }
     const montantTps = ctx.appliquerTps ? await this.calculerTps(ctx.prestataireId, dto.acteMedicalId, baseRemboursement, dto.datePrestation) : 0;
     return this.prisma.priseEnCharge.create({

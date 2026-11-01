@@ -275,13 +275,15 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
           }
         } else {
           const ra = r as ResultatApercu;
-          const lignesValides = ra.lignes.filter((l) => l.assureId && !l.doublon && !l.erreur);
-          const lignesMaj = modeCorrection ? ra.lignes.filter((l) => l.miseAJour) : [];
-          if (lignesValides.length > 0 || lignesMaj.length > 0) {
-            const res = await confirmerImportLibre([...lignesValides, ...lignesMaj], modeCorrection, "factures");
+          // Lignes déjà importées comprises : elles corrigent l'existant
+          // (bénéficiaire, acte, net à payer) et éliminent les doublons.
+          const lignesValides = ra.lignes.filter((l) => l.assureId && !l.erreur);
+          if (lignesValides.length > 0) {
+            const res = await confirmerImportLibre(lignesValides, modeCorrection, "factures");
             if (res.importees) msgs.push(`${res.importees} ligne(s) importée(s)`);
-            if (res.corrigees) msgs.push(`${res.corrigees} montant(s) corrigé(s)`);
-            if (res.ignorees) msgs.push(`${res.ignorees} ignorée(s)`);
+            if (res.corrigees) msgs.push(`${res.corrigees} ligne(s) déjà importée(s) corrigée(s)`);
+            if (res.doublonsAnnules) msgs.push(`${res.doublonsAnnules} doublon(s) d'import annulé(s)`);
+            if (res.ignorees) msgs.push(`${res.ignorees} déjà à jour ou ignorée(s)`);
           }
         }
       }

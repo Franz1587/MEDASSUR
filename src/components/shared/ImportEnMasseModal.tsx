@@ -34,7 +34,7 @@ export function ImportEnMasseModal<Row>({
   onImported: () => void;
   telechargerModele: () => Promise<void>;
   apercu: (file: File) => Promise<{ lignes: Row[]; rejets: { ligne: number; motif: string }[] }>;
-  confirmer: (rows: Row[]) => Promise<{ crees: number; rejets: { ligne: number; motif: string }[] }>;
+  confirmer: (rows: Row[]) => Promise<{ crees: number; corrigees?: number; doublonsAnnules?: number; rejets: { ligne: number; motif: string }[] }>;
   colonnes: { key: keyof Row; label: string }[];
 }) {
   const [chargementModele, setChargementModele] = useState(false);
@@ -43,7 +43,7 @@ export function ImportEnMasseModal<Row>({
   const [resultatApercu, setResultatApercu] = useState<{ lignes: Row[]; rejets: { ligne: number; motif: string }[] } | null>(null);
   const [confirmation, setConfirmation] = useState(false);
   const [progression, setProgression] = useState<{ fait: number; total: number } | null>(null);
-  const [resultatConfirmation, setResultatConfirmation] = useState<{ crees: number; rejets: { ligne: number; motif: string }[] } | null>(null);
+  const [resultatConfirmation, setResultatConfirmation] = useState<{ crees: number; corrigees: number; doublonsAnnules: number; rejets: { ligne: number; motif: string }[] } | null>(null);
 
   const handleTelechargerModele = async () => {
     setChargementModele(true);
@@ -79,17 +79,20 @@ export function ImportEnMasseModal<Row>({
       // un petit fichier (1 lot), plusieurs requêtes séquentielles pour un
       // gros. Les numéros de ligne des rejets sont recalés sur l'offset du
       // lot pour rester lisibles (voir `r.ligne + offset`).
-      let crees = 0;
+      let crees = 0, corrigees = 0, doublonsAnnules = 0;
       const rejets: { ligne: number; motif: string }[] = [];
       for (let offset = 0; offset < resultatApercu.lignes.length; offset += TAILLE_LOT) {
         const lot = resultatApercu.lignes.slice(offset, offset + TAILLE_LOT);
         const res = await confirmer(lot);
-        crees += res.crees;
+        crees += res.crees; corrigees += res.corrigees ?? 0; doublonsAnnules += res.doublonsAnnules ?? 0;
         for (const r of res.rejets) rejets.push({ ligne: r.ligne + offset, motif: r.motif });
         setProgression({ fait: Math.min(offset + lot.length, resultatApercu.lignes.length), total: resultatApercu.lignes.length });
       }
-      setResultatConfirmation({ crees, rejets });
-      if (crees > 0) { toast.success(`${crees} ligne(s) importée(s).`); onImported(); }
+      setResultatConfirmation({ crees, corrigees, doublonsAnnules, rejets });
+      if (crees > 0 || corrigees > 0 || doublonsAnnules > 0) {
+        toast.success([`${crees} ligne(s) importée(s)`, corrigees > 0 && `${corrigees} ligne(s) déjà importée(s) corrigée(s)`, doublonsAnnules > 0 && `${doublonsAnnules} doublon(s) annulé(s)`].filter(Boolean).join(", ") + ".");
+        onImported();
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Import impossible.");
     } finally {
@@ -180,7 +183,7 @@ export function ImportEnMasseModal<Row>({
 
           {resultatConfirmation && (
             <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
-              <p className="text-[13px] font-semibold text-foreground">{resultatConfirmation.crees} ligne(s) importée(s) avec succès.</p>
+              <p className="text-[13px] font-semibold text-foreground">{resultatConfirmation.crees} ligne(s) importée(s) avec succès{resultatConfirmation.corrigees > 0 ? `, ${resultatConfirmation.corrigees} ligne(s) déjà importée(s) corrigée(s)` : ""}{resultatConfirmation.doublonsAnnules > 0 ? `, ${resultatConfirmation.doublonsAnnules} doublon(s) annulé(s)` : ""}.</p>
               {resultatConfirmation.rejets.length > 0 && (
                 <div className="mt-2 space-y-1">
                   {resultatConfirmation.rejets.slice(0, PLAFOND_REJETS_AFFICHES).map((r, i) => (

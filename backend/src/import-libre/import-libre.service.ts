@@ -8,6 +8,7 @@ import { FacturesService } from "../factures/factures.service";
 import { PrestatairesService } from "../prestataires/prestataires.service";
 import { RUBRIQUES_ACTES, resoudreDesignations } from "../actes-medicaux/resolution-designation.util";
 import { beneficiaireReel, chargerFamilles, scoreNom } from "../import/beneficiaire.util";
+import { RapprochementReprise } from "../import/reprise-correction.util";
 
 // Import libre Ariana (2026-10) — voir demande utilisateur : "elle doit
 // pouvoir traiter les données et dire à quoi ça correspond et ne jamais
@@ -49,6 +50,8 @@ export interface LigneApercu {
   // Ligne déjà importée avec l'acte générique : la désignation d'origine
   // lui sera rendue (voir resoudreDesignations).
   acteARetablir?: boolean;
+  // Assuré du matricule quand la ligne va à un ayant droit (rapprochement).
+  titulaireId?: string;
 }
 
 export interface ResultatApercu {
@@ -885,19 +888,19 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
         // Déjà importée sans le vrai acte, ou au nom du titulaire au lieu de
         // la personne soignée : la ligne existante est corrigée.
         if ((l.designation && (!existant.acteMedical || existant.acteMedical.libelle.includes("non détaillée"))) || existant.assureId !== assure.id) {
-          return { ...l, assureId: assure.id, contratId: assure.contratId, prestataireId, erreur: null, doublon: false, miseAJour: true, acteARetablir: true, priseEnChargeId: existant.id };
+          return { ...l, assureId: assure.id, contratId: assure.contratId, titulaireId, prestataireId, erreur: null, doublon: false, miseAJour: true, acteARetablir: true, priseEnChargeId: existant.id };
         }
         if (modeCorrection) {
           const baseActuelle = existant.baseRemboursement ? Number(existant.baseRemboursement) : 0;
           if (baseActuelle === 0 && l.partFinanceur > 0) {
-            return { ...l, assureId: assure.id, contratId: assure.contratId, prestataireId, erreur: null, doublon: false, miseAJour: true, priseEnChargeId: existant.id };
+            return { ...l, assureId: assure.id, contratId: assure.contratId, titulaireId, prestataireId, erreur: null, doublon: false, miseAJour: true, priseEnChargeId: existant.id };
           }
         }
-        return { ...l, assureId: assure.id, contratId: assure.contratId, prestataireId, erreur: null, doublon: true };
+        return { ...l, assureId: assure.id, contratId: assure.contratId, titulaireId, prestataireId, erreur: null, doublon: true };
       }
     }
 
-    return { ...l, assureId: assure.id, contratId: assure.contratId, prestataireId, erreur: null, doublon: false };
+    return { ...l, assureId: assure.id, contratId: assure.contratId, titulaireId, prestataireId, erreur: null, doublon: false };
   }
 
   // ── Aperçu principal (point d'entrée) ──────────────────────────────────
@@ -1049,7 +1052,7 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
     lignes: LigneApercu[],
     modeCorrection = false,
     type: TypeImportLibre = "factures",
-  ): Promise<{ importees: number; corrigees: number; ignorees: number }> {
+  ): Promise<{ importees: number; corrigees: number; ignorees: number; doublonsAnnules: number }> {
     if (type === "population") {
       throw new BadRequestException("Utilisez confirmerPopulation() pour les données de population.");
     }
@@ -1060,32 +1063,18 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
       throw new BadRequestException(`L'import en mode libre pour « ${type} » nécessite d'utiliser l'import dédié (/api/import/).`);
     }
 
-    const lignesValides = lignes.filter((l) => l.assureId && l.contratId && !l.doublon && !l.erreur && !l.acteARetablir);
+    // Ré-import correctif (voir RapprochementReprise) : TOUTE ligne résolue
+    // est traitée, y compris celles déjà importées — elles corrigent la
+    // ligne existante (bénéficiaire, acte, net à payer) au lieu d'être
+    // ignorées, et les copies d'imports précédents sont annulées.
+    const lignesValides = lignes.filter((l) => l.assureId && l.contratId && !l.erreur);
     let importees = 0;
-    let corrigees = 0;
-    let ignorees = lignes.filter((l) => !lignesValides.includes(l) && !l.acteARetablir).length;
+    let ignorees = lignes.length - lignesValides.length;
 
     // La désignation de l'ancien système devient l'acte de la ligne.
     const designations = new Map<string, string>();
-    for (const l of lignes) if (l.designation && !l.doublon && !l.erreur) designations.set(l.designation, mapperDesignation(l.designation));
+    for (const l of lignesValides) if (l.designation) designations.set(l.designation, mapperDesignation(l.designation));
     const acteParDesignation = await resoudreDesignations(this.prisma, designations, (t) => this.classerDesignations(t));
-    for (const l of lignes.filter((x) => x.acteARetablir && x.priseEnChargeId && x.assureId && x.contratId)) {
-      const acteMedicalId = acteParDesignation.get(l.designation);
-      try {
-        await this.prisma.priseEnCharge.update({ where: { id: l.priseEnChargeId! }, data: { assureId: l.assureId!, contratId: l.contratId!, ...(acteMedicalId ? { acteMedicalId } : {}) } });
-        corrigees++;
-      } catch { ignorees++; }
-    }
-
-    if (modeCorrection) {
-      const lignesMaj = lignes.filter((l) => l.miseAJour && !l.acteARetablir && l.priseEnChargeId && l.partFinanceur > 0);
-      for (const l of lignesMaj) {
-        try {
-          await this.prisma.priseEnCharge.update({ where: { id: l.priseEnChargeId! }, data: { baseRemboursement: l.partFinanceur } });
-          corrigees++;
-        } catch { ignorees++; }
-      }
-    }
 
     const acteGenerique = await this.prisma.acteMedical.findFirst({ where: { libelle: { contains: "non détaillée" } }, select: { id: true } });
     const prestataireCache = new Map<string, string>();
@@ -1105,10 +1094,16 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
       } catch { /* non créé */ }
     }
 
+    const rapprochement = new RapprochementReprise(this.prisma, acteGenerique?.id);
     const facturesParGroupe = new Map<string, string>();
     for (const l of lignesValides) {
       const prestataireId = prestataireCache.get(l.prestataireNom);
       if (!prestataireId || !l.assureId || !l.contratId) { ignorees++; continue; }
+      const deja = await rapprochement.rapprocher(
+        { prestataireId, referenceFacture: l.referenceFacture, date: l.datePrestation, montant: l.montantTotal, assureIds: [l.assureId, l.titulaireId ?? l.assureId] },
+        { assureId: l.assureId, contratId: l.contratId, acteMedicalId: acteParDesignation.get(l.designation), baseRemboursement: l.partFinanceur },
+      );
+      if (deja) { if (deja === "identique") ignorees++; continue; }
       const cleGroupe = `${prestataireId}|${l.referenceFacture}|${l.contratId}`;
       if (!facturesParGroupe.has(cleGroupe)) {
         const existante = await this.prisma.facture.findFirst({ where: { prestataireId, referenceFacture: l.referenceFacture, contratId: l.contratId }, select: { id: true } });
@@ -1124,18 +1119,20 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
       const factureId = facturesParGroupe.get(cleGroupe);
       if (!factureId) { ignorees++; continue; }
       try {
-        await this.factures.ajouterLigne(factureId, {
+        const creee = await this.factures.ajouterLigne(factureId, {
           assureId: l.assureId,
           typePrestation: mapperDesignation(l.designation),
           datePrestation: l.datePrestation,
           acteMedicalId: acteParDesignation.get(l.designation) ?? acteGenerique?.id,
           montant: l.montantTotal,
         }, { ignorerDoublonMemeJour: true, exigerAffection: false, baseRemboursementImpose: l.partFinanceur, ignorerRetrait: true });
+        rapprochement.pris.add(creee.id); // ligne du fichier, jamais une copie
         importees++;
       } catch { ignorees++; }
     }
 
-    return { importees, corrigees, ignorees };
+    const doublonsAnnules = await rapprochement.annulerCopies();
+    return { importees, corrigees: rapprochement.corrigees, ignorees, doublonsAnnules };
   }
 
   // ── Confirmer import population ────────────────────────────────────────
