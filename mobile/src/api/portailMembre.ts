@@ -320,11 +320,11 @@ export async function getCarnetSante(rubrique?: RubriqueCarnetSante): Promise<Ca
   return http.get<CarnetSanteDocument[]>(`/portail-membre/carnet-sante${qs}`);
 }
 
-export async function ajouterCarnetSante(rubrique: RubriqueCarnetSante, photo: RnFilePart, opts?: { assureId?: string; libelle?: string }): Promise<void> {
+export async function ajouterCarnetSante(rubrique: RubriqueCarnetSante, photo: RnFilePart, opts?: { assureId?: string; libelle?: string }): Promise<CarnetSanteDocument> {
   const extra: Record<string, string> = { rubrique };
   if (opts?.assureId) extra.assureId = opts.assureId;
   if (opts?.libelle) extra.libelle = opts.libelle;
-  await uploadFile(`/portail-membre/carnet-sante`, photo, "photo", extra);
+  return uploadFile<CarnetSanteDocument>(`/portail-membre/carnet-sante`, photo, "photo", extra);
 }
 
 export async function supprimerCarnetSante(id: string): Promise<void> {

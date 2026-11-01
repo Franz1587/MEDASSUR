@@ -17,7 +17,6 @@ import {
   type MembreIdentite, type RubriqueCarnetSante, type CarnetSanteDocument,
 } from "../../api/portailMembre";
 import { messageErreur, type RnFilePart } from "../../api/http";
-import { EditeurImage } from "../../components/EditeurImage";
 
 // E-carnet Santé — MÊME logique que src/features/portail-membre/CarnetSante.tsx
 // + InformationsMedicalesCard.tsx (web) : bloc "informations médicales"
@@ -96,9 +95,6 @@ export function CarnetSanteScreen() {
   const [ajoutOuvert, setAjoutOuvert] = useState(false);
   const [libelle, setLibelle] = useState("");
   const [envoi, setEnvoi] = useState(false);
-  // Photo à rogner / pivoter avant envoi.
-  const [aEditer, setAEditer] = useState<RnFilePart | null>(null);
-
   const chargerDepuis = (m: MembreIdentite) => {
     setMoi(m);
     setGroupeSanguin(m.groupeSanguin ?? "");
@@ -172,18 +168,17 @@ export function CarnetSanteScreen() {
     }
   };
 
-  const envoyerAsset = (asset: ImagePicker.ImagePickerAsset) => {
-    setAEditer({ uri: asset.uri, name: asset.fileName ?? `carnet-${Date.now()}.jpg`, type: asset.mimeType ?? "image/jpeg" });
-  };
-
   const envoyerFichier = async (file: RnFilePart) => {
-    setAEditer(null);
     setEnvoi(true);
     try {
-      await ajouterCarnetSante(rubrique, file, { assureId: beneficiaireId ?? undefined, libelle: libelle.trim() || undefined });
+      const doc = await ajouterCarnetSante(rubrique, file, { assureId: beneficiaireId ?? undefined, libelle: libelle.trim() || undefined });
       setLibelle("");
       setAjoutOuvert(false);
       chargerDocuments(rubrique);
+      // Navigation automatique vers ConvertirBon : ARIANA lit le document
+      // et crée le vrai bon électronique structuré (Feuille de Soins / FE),
+      // sans que l'utilisateur ait à trouver le bouton "Convertir".
+      navigation.navigate("ConvertirBon", { documentId: doc.id, assureId: doc.assureId });
     } catch (err) {
       Alert.alert("Erreur", messageErreur(err, "Envoi du document impossible."));
     } finally {
@@ -197,8 +192,11 @@ export function CarnetSanteScreen() {
       Alert.alert("Permission requise", "L'accès à la caméra est nécessaire pour photographier un document.");
       return;
     }
-    const res = await ImagePicker.launchCameraAsync({ quality: 0.7 });
-    if (!res.canceled && res.assets[0]) await envoyerAsset(res.assets[0]);
+    const res = await ImagePicker.launchCameraAsync({ quality: 0.7, allowsEditing: true });
+    if (!res.canceled && res.assets[0]) {
+      const { uri, fileName, mimeType } = res.assets[0];
+      void envoyerFichier({ uri, name: fileName ?? `carnet-${Date.now()}.jpg`, type: mimeType ?? "image/jpeg" });
+    }
   };
 
   const choisirGalerie = async () => {
@@ -208,7 +206,10 @@ export function CarnetSanteScreen() {
       return;
     }
     const res = await ImagePicker.launchImageLibraryAsync({ quality: 0.7, mediaTypes: ["images"] });
-    if (!res.canceled && res.assets[0]) await envoyerAsset(res.assets[0]);
+    if (!res.canceled && res.assets[0]) {
+      const { uri, fileName, mimeType } = res.assets[0];
+      void envoyerFichier({ uri, name: fileName ?? `carnet-${Date.now()}.jpg`, type: mimeType ?? "image/jpeg" });
+    }
   };
 
   const choisirSource = () => {
@@ -403,7 +404,6 @@ export function CarnetSanteScreen() {
       )}
     </ScrollView>
 
-      <EditeurImage fichier={aEditer} onAnnuler={() => setAEditer(null)} onValider={envoyerFichier} />
       <Pressable onPress={() => setAjoutOuvert((v) => !v)} style={styles.fab}>
         <Ionicons name={ajoutOuvert ? "close" : "add"} size={26} color="#fff" />
       </Pressable>

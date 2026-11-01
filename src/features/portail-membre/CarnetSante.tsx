@@ -78,10 +78,12 @@ export default function MembreCarnetSanteView() {
     if (!fichier) return;
     setEnvoi(true);
     try {
-      await ajouterCarnetSante(rubrique, fichier, { assureId: beneficiaireId ?? undefined, libelle: libelle.trim() || undefined });
-      toast.success("Document ajouté.");
+      const doc = await ajouterCarnetSante(rubrique, fichier, { assureId: beneficiaireId ?? undefined, libelle: libelle.trim() || undefined });
       setLibelle("");
       rafraichir();
+      // Conversion automatique : ARIANA crée le vrai bon électronique sans
+      // que l'utilisateur ait à chercher le bouton "Convertir en électronique".
+      setAConvertir(doc);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Envoi impossible.");
     } finally {

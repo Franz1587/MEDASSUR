@@ -414,7 +414,7 @@ export async function getCarnetSante(rubrique?: RubriqueCarnetSante): Promise<Ca
   return http.get<CarnetSanteDocument[]>(`/portail-membre/carnet-sante${qs}`);
 }
 
-export async function ajouterCarnetSante(rubrique: RubriqueCarnetSante, photo: File, opts?: { assureId?: string; libelle?: string }): Promise<void> {
+export async function ajouterCarnetSante(rubrique: RubriqueCarnetSante, photo: File, opts?: { assureId?: string; libelle?: string }): Promise<CarnetSanteDocument> {
   const token = getAccessToken();
   const form = new FormData();
   form.append("photo", photo);
@@ -427,6 +427,7 @@ export async function ajouterCarnetSante(rubrique: RubriqueCarnetSante, photo: F
     body: form,
   });
   if (!res.ok) throw new Error(`Envoi du document impossible (${res.status})`);
+  return res.json() as Promise<CarnetSanteDocument>;
 }
 
 export async function supprimerCarnetSante(id: string): Promise<void> {
