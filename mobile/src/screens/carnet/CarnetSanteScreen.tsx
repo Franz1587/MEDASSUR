@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { View, Text, TextInput, StyleSheet, Pressable, Alert, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -212,10 +213,19 @@ export function CarnetSanteScreen() {
     }
   };
 
+  const choisirFichier = async () => {
+    const res = await DocumentPicker.getDocumentAsync({ type: "application/pdf", copyToCacheDirectory: true });
+    if (!res.canceled && res.assets[0]) {
+      const { uri, name, mimeType } = res.assets[0];
+      void envoyerFichier({ uri, name: name ?? `carnet-${Date.now()}.pdf`, type: mimeType ?? "application/pdf" });
+    }
+  };
+
   const choisirSource = () => {
-    Alert.alert("Ajouter un document", "Photographiez le document ou choisissez-le dans votre galerie.", [
+    Alert.alert("Ajouter un document", "Photographiez le bon ou importez un scan PDF (CamScanner…).", [
       { text: "Prendre une photo", onPress: prendrePhoto },
       { text: "Choisir dans la galerie", onPress: choisirGalerie },
+      { text: "Fichier PDF / scan", onPress: choisirFichier },
       { text: "Annuler", style: "cancel" },
     ]);
   };

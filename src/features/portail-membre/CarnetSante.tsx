@@ -170,7 +170,7 @@ export default function MembreCarnetSanteView() {
           className="w-full h-9 px-3 rounded-lg border border-border bg-background text-[12.5px] text-foreground"
         />
         <input
-          ref={inputRef} type="file" accept="image/*" capture="environment" className="hidden"
+          ref={inputRef} type="file" accept="image/*,application/pdf" className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) setAEditer(f); e.target.value = ""; }}
         />
         <button

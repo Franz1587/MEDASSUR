@@ -65,20 +65,32 @@ export class CarnetSanteService {
     if (!RUBRIQUES_CARNET_SANTE.includes(rubrique as RubriqueCarnetSante)) {
       throw new BadRequestException(`Rubrique invalide : ${rubrique}`);
     }
-    const TYPES_IMAGE = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/tiff", "image/avif", "image/gif"];
-    if (!TYPES_IMAGE.includes(file.mimetype)) {
-      throw new BadRequestException("Seules les photos (JPEG, PNG, WebP, HEIC…) sont acceptées. Les fichiers PDF ou bureautiques ne sont pas pris en charge ici.");
+    const TYPES_ACCEPTES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/tiff", "image/avif", "image/gif", "application/pdf"];
+    if (!TYPES_ACCEPTES.includes(file.mimetype)) {
+      throw new BadRequestException("Seules les photos (JPEG, PNG, WebP, HEIC…) ou les scans PDF sont acceptés.");
     }
 
     const base = `${assureId}-${Date.now()}-${randomUUID().slice(0, 6)}`;
-    const { jpeg, pdf } = await this.preparerPhotoEtPdf(file.buffer);
+    const estPdf = file.mimetype === "application/pdf";
+    let pdf: Buffer;
+    let jpeg: Buffer | undefined;
+    if (estPdf) {
+      // Scan PDF (CamScanner, etc.) : stocker tel quel, pas de JPEG.
+      // ARIANA utilisera le PDF directement (chemin de secours existant).
+      pdf = file.buffer;
+    } else {
+      const prepare = await this.preparerPhotoEtPdf(file.buffer);
+      pdf = prepare.pdf;
+      jpeg = prepare.jpeg;
+    }
     if (this.storage.actif) {
       await this.storage.upload("carnet-sante", `${base}.pdf`, pdf, "application/pdf");
     } else {
       await fs.promises.mkdir(UPLOADS_CARNET_DIR, { recursive: true });
       await fs.promises.writeFile(path.join(UPLOADS_CARNET_DIR, `${base}.pdf`), pdf);
       // JPEG source conservé séparément pour extraction du cachet médecin (ARIANA).
-      await fs.promises.writeFile(path.join(UPLOADS_CARNET_DIR, `${base}.jpg`), jpeg);
+      // Absent pour les scans PDF — l'extraction cachet est ignorée silencieusement.
+      if (jpeg !== undefined) await fs.promises.writeFile(path.join(UPLOADS_CARNET_DIR, `${base}.jpg`), jpeg);
     }
 
     return this.prisma.carnetSanteDocument.create({
