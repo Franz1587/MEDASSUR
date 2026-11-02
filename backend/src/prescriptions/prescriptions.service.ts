@@ -522,7 +522,11 @@ export class PrescriptionsService {
     // best-effort, jamais bloquant : si le JPEG source est absent ou si le
     // crop échoue, le bon électronique est généré sans cachet.
     this.logger.log(`[cachet] dto.cachetVisible=${dto.cachetVisible} w=${dto.cachetW} h=${dto.cachetH} x=${dto.cachetX} y=${dto.cachetY}`);
-    if (dto.cachetVisible && dto.cachetW && dto.cachetH && dto.cachetW > 0 && dto.cachetH > 0) {
+    // Garde-taille : un tampon réel occupe rarement plus de 20 % de la surface.
+    // Une bbox > 20 % signale une détection floue (portion de page entière) → ignorer.
+    const cachetValide = dto.cachetVisible && dto.cachetW && dto.cachetH && dto.cachetW > 0 && dto.cachetH > 0
+      && (dto.cachetW * dto.cachetH) <= 0.20;
+    if (cachetValide) {
       try {
         const doc = await this.prisma.carnetSanteDocument.findUnique({ where: { id: carnetDocumentId }, select: { fichier: true } });
         if (doc) {
@@ -573,7 +577,7 @@ export class PrescriptionsService {
       } catch (err) {
         this.logger.warn(`Extraction cachet bon ${carnetDocumentId} échouée (non bloquant) : ${err instanceof Error ? err.message : String(err)}`);
       }
-    } else {
+    } else if (!dto.cachetVisible) {
       this.logger.log(`[cachet] ARIANA sans bbox — repli heuristique (moitié droite, tiers supérieur)`);
       // shortcut: région fixe ; couvre la zone praticien des bons gabonais standard.
       try {

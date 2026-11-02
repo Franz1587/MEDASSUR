@@ -35,7 +35,11 @@ export async function resoudreOuCreerPrescripteur(
     });
   }
   if (!medecin) {
-    const [nomSeul, ...restPrenom] = (nom || "Prescripteur").split(/\s+/);
+    // Retirer le titre en tête du nom si ARIANA l'a inclus malgré la consigne
+    // (ex. "Dr OBIANG Walter" → "OBIANG Walter" quand titrePrescripteur="Dr")
+    const TITRES_RE = /^(Dr\.?|Pr\.?|Docteur|Professeur|D[Rr]\.?)\s+/i;
+    const nomSansTitre = nom.replace(TITRES_RE, "").trim();
+    const [nomSeul, ...restPrenom] = (nomSansTitre || "Prescripteur").split(/\s+/);
     medecin = await prisma.medecin.create({
       data: { nom: nomSeul, prenom: restPrenom.join(" ") || null, codePraticien: code, titre: info.titrePrescripteur?.trim() || null },
     });

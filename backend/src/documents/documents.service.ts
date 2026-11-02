@@ -2124,7 +2124,8 @@ export class DocumentsService {
     const heure = lignePrincipale?.createdAt ?? pec.createdAt;
     const estTarifJour = heure.getHours() >= 6 && heure.getHours() < 20;
     const heureTexte = `${String(heure.getHours()).padStart(2, "0")}:${String(heure.getMinutes()).padStart(2, "0")}`;
-    const nomMedecin = medecin ? `${medecin.titre ?? "Dr"} ${medecin.nom} ${medecin.prenom ?? ""}`.trim() : "—";
+    const TITRE_RE = /^(Dr\.?|Pr\.?|Docteur|Professeur)\s+/i;
+    const nomMedecin = medecin ? `${medecin.titre ?? "Dr"} ${medecin.nom.replace(TITRE_RE, "")} ${medecin.prenom ?? ""}`.trim() : "—";
     // Zone "CONDITION DE PRISE EN CHARGE" / bas de page : toujours le
     // COURTIER (ou mutuelle) qui gère réellement le dossier, JAMAIS la
     // compagnie d'assurance porteuse du risque — voir demande utilisateur
