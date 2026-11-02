@@ -520,12 +520,14 @@ export class PrescriptionsService {
     // Extraction du cachet/signature du médecin depuis la photo originale —
     // best-effort, jamais bloquant : si le JPEG source est absent ou si le
     // crop échoue, le bon électronique est généré sans cachet.
+    this.logger.log(`[cachet] dto.cachetVisible=${dto.cachetVisible} w=${dto.cachetW} h=${dto.cachetH} x=${dto.cachetX} y=${dto.cachetY}`);
     if (dto.cachetVisible && dto.cachetW && dto.cachetH && dto.cachetW > 0 && dto.cachetH > 0) {
       try {
         const doc = await this.prisma.carnetSanteDocument.findUnique({ where: { id: carnetDocumentId }, select: { fichier: true } });
         if (doc) {
           const jpegPath = path.join(UPLOADS_ROOT, "carnet-sante", doc.fichier.replace(/\.pdf$/, ".jpg"));
           const jpegBuf = await fs.promises.readFile(jpegPath).catch(() => null);
+          this.logger.log(`[cachet] jpegPath=${jpegPath} jpegBuf=${jpegBuf ? jpegBuf.length + "B" : "null"}`);
           if (jpegBuf) {
             const meta = await sharp(jpegBuf).metadata();
             const w = meta.width ?? 1600, h = meta.height ?? 1200;
@@ -533,16 +535,24 @@ export class PrescriptionsService {
             const top = Math.max(0, Math.round((dto.cachetY ?? 0) * h));
             const width = Math.min(Math.round(dto.cachetW * w), w - left);
             const height = Math.min(Math.round(dto.cachetH * h), h - top);
+            this.logger.log(`[cachet] image ${w}x${h} → crop left=${left} top=${top} width=${width} height=${height}`);
             if (width > 10 && height > 10) {
               const crop = await sharp(jpegBuf).extract({ left, top, width, height }).jpeg({ quality: 90 }).toBuffer();
               const cachetPath = path.join(UPLOADS_ROOT, "carnet-sante", doc.fichier.replace(/\.pdf$/, "-cachet.jpg"));
               await fs.promises.writeFile(cachetPath, crop);
+              this.logger.log(`[cachet] sauvegardé → ${cachetPath}`);
+            } else {
+              this.logger.warn(`[cachet] dimensions trop petites (${width}x${height}), crop ignoré`);
             }
           }
+        } else {
+          this.logger.warn(`[cachet] carnetDocument ${carnetDocumentId} introuvable`);
         }
       } catch (err) {
         this.logger.warn(`Extraction cachet bon ${carnetDocumentId} échouée (non bloquant) : ${err instanceof Error ? err.message : String(err)}`);
       }
+    } else {
+      this.logger.log(`[cachet] ignoré (cachetVisible=${dto.cachetVisible}, cachetW=${dto.cachetW}, cachetH=${dto.cachetH})`);
     }
     const assure = creee.assure!;
     const telephone = assure.telephone
