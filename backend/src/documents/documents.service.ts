@@ -2132,7 +2132,7 @@ export class DocumentsService {
     const nomAffiche = p.nom;
     // Les taux (Contrat.tauxXxxPublique/Privee) sont stockés avec le signe
     // "%" déjà inclus (ex. "90%") — jamais réafficher un second "%" à côté.
-    const sansPourcent = (s: string | null) => s?.replace(/\s*%\s*$/, "") ?? "—";
+    const sansPourcent = (s: string | null) => s?.replace(/\s*%\s*$/, "").trim() || "—";
     // "Code des actes" C/CS/CSP (2026-09) — voir demande utilisateur : "il
     // faut mettre C pour la consultation généraliste et CS pour les
     // consultations spécialisées et CSP pour la consultation professeur".
