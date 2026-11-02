@@ -41,7 +41,7 @@ function statutBonDe(lignes: { statut: string }[]): StatutBon {
 // ATOMIQUE ligne par ligne : "lorsqu'une ligne... a déjà été traitée par
 // un prestataire... ce dernier ne verra que ce qui n'a pas été traité".
 interface LectureBonPapier {
-  lisible: boolean; typeDocument: string; prescripteur: string; structure: string; date: string; patient: string; remarques: string;
+  lisible: boolean; typeDocument: string; prescripteur: string; structure: string; date: string; patient: string; codeAffection: string; remarques: string;
   lignes: { type: "Medicament" | "Examen"; libelle: string; quantite: number; posologie: string }[];
 }
 
@@ -49,21 +49,22 @@ const CONSIGNES_BON_PAPIER = `Tu es ARIANA, assistante d'un gestionnaire d'assur
 On te donne la photo (en PDF) d'une ORDONNANCE ou d'un BON D'EXAMEN papier, souvent manuscrit.
 Relève fidèlement :
 - typeDocument : "Ordonnance" (médicaments), "Examen" (analyses, imagerie…), "Mixte" (les deux) ou "Autre" (ce n'est pas une prescription) ;
-- prescripteur : nom du médecin prescripteur tel qu'écrit (cachet ou signature), "" si illisible ;
-- structure : établissement (cachet, en-tête), "" si absent ;
+- prescripteur : nom complet du médecin prescripteur tel qu'écrit (cachet ou signature, sans le titre Dr/Pr), "" si illisible ;
+- structure : établissement (cachet, en-tête, nom de la clinique ou du cabinet), "" si absent ;
 - date : date de la prescription au format JJ/MM/AAAA, "" si absente ;
 - patient : nom du patient tel qu'écrit, "" si absent ;
+- codeAffection : code maladie ou code affection s'il figure sur le document (ex. "A09", "J06.9"), "" si absent ;
 - lignes : une ligne par médicament (type "Medicament" : nom commercial ou DCI avec dosage et forme, quantité = nombre de boîtes ou d'unités prescrites, posologie telle qu'écrite) ou par examen (type "Examen" : libellé de l'examen tel qu'un laboratoire le comprend, quantité 1, posologie "").
 N'invente jamais un médicament ou un examen illisible : signale-le dans remarques. lisible = false si le document est trop flou pour être exploité.
 Réponds uniquement avec le JSON demandé.`;
 
 const SCHEMA_BON_PAPIER = {
   type: "object", additionalProperties: false,
-  required: ["lisible", "typeDocument", "prescripteur", "structure", "date", "patient", "lignes", "remarques"],
+  required: ["lisible", "typeDocument", "prescripteur", "structure", "date", "patient", "codeAffection", "lignes", "remarques"],
   properties: {
     lisible: { type: "boolean" },
     typeDocument: { type: "string", enum: ["Ordonnance", "Examen", "Mixte", "Autre"] },
-    prescripteur: { type: "string" }, structure: { type: "string" }, date: { type: "string" }, patient: { type: "string" },
+    prescripteur: { type: "string" }, structure: { type: "string" }, date: { type: "string" }, patient: { type: "string" }, codeAffection: { type: "string" },
     remarques: { type: "string" },
     lignes: {
       type: "array",

@@ -100,7 +100,7 @@ export async function ouvrirDocumentPatient(assureId: string, documentId: string
 
 // ── Carnet : conversion d'un document papier en bon électronique ───────
 export interface LigneLue { type: "Medicament" | "Examen"; libelle: string; quantite: number; posologie: string; acteMedicalId: string | null; acteLibelle: string | null }
-export interface LectureBon { assureId: string; lisible: boolean; typeDocument: string; prescripteur: string; structure: string; date: string; patient: string; remarques: string; lignes: LigneLue[] }
+export interface LectureBon { assureId: string; lisible: boolean; typeDocument: string; prescripteur: string; structure: string; date: string; patient: string; codeAffection: string; remarques: string; lignes: LigneLue[] }
 export const lireBonPapier = (documentId: string) => http.post<LectureBon>(`/portail-membre/carnet-sante/${documentId}/lire`);
-export const convertirBonPapier = (documentId: string, dto: { assureId: string; prescripteurNom?: string; structureNom?: string; dateOrdonnance?: string; lignes: { type: string; libelle: string; quantite: number; posologie?: string; acteMedicalId?: string }[] }) =>
+export const convertirBonPapier = (documentId: string, dto: { assureId: string; prescripteurNom?: string; structureNom?: string; dateOrdonnance?: string; codeAffection?: string; lignes: { type: string; libelle: string; quantite: number; posologie?: string; acteMedicalId?: string }[] }) =>
   http.post<{ numeroOrdonnance: string | null; numeroBonExamen: string | null }>(`/portail-membre/carnet-sante/${documentId}/convertir`, dto);

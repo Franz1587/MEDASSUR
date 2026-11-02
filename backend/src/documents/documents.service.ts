@@ -2830,7 +2830,7 @@ export class DocumentsService {
       // Prescription numérisée — générer la vraie FE électronique depuis les
       // données de la prescription (assure + lignes ARIANA), pas la photo.
       if (!prescription.assure) return this.renderOriginalNumerise(prescriptionId, res);
-      const mecin = prescription.medecin ?? { id: "", nom: prescription.prescripteurNom ?? "—", prenom: null, titre: null, specialite: null, codePraticien: null };
+      const mecin = prescription.medecin ?? { id: "", nom: prescription.prescripteurNom ?? "—", prenom: null, titre: "", specialite: null, codePraticien: null };
       const pec: FormulairePec = {
         date: prescription.dateOrdonnance ?? new Date().toISOString().slice(0, 10),
         type: "Examen", createdAt: prescription.createdAt,
