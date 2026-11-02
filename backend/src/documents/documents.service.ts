@@ -2085,10 +2085,12 @@ export class DocumentsService {
       : pec.prestataireRef?.secteur;
     const secteurPublic = secteurEffectif === "Public";
     const tauxAmbulatoire = (estAyantDroit
-      ? (secteurPublic ? contrat.tauxAmbulatoirePubliqueAyantDroit : contrat.tauxAmbulatoirePriveeAyantDroit)
+      ? ((secteurPublic ? contrat.tauxAmbulatoirePubliqueAyantDroit : contrat.tauxAmbulatoirePriveeAyantDroit)
+         ?? (secteurPublic ? contrat.tauxAmbulatoirePublique : contrat.tauxAmbulatoirePrivee))
       : (secteurPublic ? contrat.tauxAmbulatoirePublique : contrat.tauxAmbulatoirePrivee)) ?? contrat.tauxCouvertureAmbulatoire ?? null;
     const tauxHospitalisation = (estAyantDroit
-      ? (secteurPublic ? contrat.tauxHospitalisationPubliqueAyantDroit : contrat.tauxHospitalisationPriveeAyantDroit)
+      ? ((secteurPublic ? contrat.tauxHospitalisationPubliqueAyantDroit : contrat.tauxHospitalisationPriveeAyantDroit)
+         ?? (secteurPublic ? contrat.tauxHospitalisationPublique : contrat.tauxHospitalisationPrivee))
       : (secteurPublic ? contrat.tauxHospitalisationPublique : contrat.tauxHospitalisationPrivee)) ?? contrat.tauxCouvertureHospitalisation ?? tauxAmbulatoire;
     const lignePrincipale = lignes[0] as LigneFormulaire | undefined;
     // Ticket modérateur = 100 - taux applicable (2026-09) — recalculé
