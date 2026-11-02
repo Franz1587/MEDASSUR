@@ -538,8 +538,8 @@ export class PrescriptionsService {
             const w = meta.width ?? 1600, h = meta.height ?? 1200;
             const left = Math.max(0, Math.round((dto.cachetX ?? 0) * w));
             const top = Math.max(0, Math.round((dto.cachetY ?? 0) * h));
-            const width = Math.min(Math.round(dto.cachetW * w), w - left);
-            const height = Math.min(Math.round(dto.cachetH * h), h - top);
+            const width = Math.min(Math.round(dto.cachetW! * w), w - left);
+            const height = Math.min(Math.round(dto.cachetH! * h), h - top);
             this.logger.log(`[cachet] image ${w}x${h} → crop left=${left} top=${top} width=${width} height=${height}`);
             if (width > 10 && height > 10) {
               // Effet "scan numérique" : normalise → seuil binaire pour supprimer
