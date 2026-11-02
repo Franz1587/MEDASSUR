@@ -313,6 +313,7 @@ export interface CarnetSanteDocument {
   // Bon papier converti en électronique (2026-11).
   numerise?: boolean;
   convertiEn?: string | null;
+  statutBonLie?: StatutBonCarnet | null;
 }
 
 export async function getCarnetSante(rubrique?: RubriqueCarnetSante): Promise<CarnetSanteDocument[]> {
@@ -329,6 +330,10 @@ export async function ajouterCarnetSante(rubrique: RubriqueCarnetSante, photo: R
 
 export async function supprimerCarnetSante(id: string): Promise<void> {
   await http.delete(`/portail-membre/carnet-sante/${id}`);
+}
+
+export async function supprimerBonNumerise(prescriptionId: string): Promise<void> {
+  await http.delete(`/portail-membre/carnet-sante/bon/${prescriptionId}`);
 }
 
 export function urlCarnetSante(fichier: string): string {

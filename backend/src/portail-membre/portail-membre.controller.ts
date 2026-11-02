@@ -568,4 +568,11 @@ export class PortailMembreController {
     await this.carnetSante.supprimer(id, idsFamille);
     return { ok: true };
   }
+
+  @Delete("carnet-sante/bon/:prescriptionId")
+  async supprimerBonNumerise(@Param("prescriptionId") prescriptionId: string, @Req() req: PortailMembreRequest) {
+    const idsFamille = await this.idsFamilleDe(this.assureSanteIdDe(req));
+    await this.prescriptions.supprimerNumerise(prescriptionId, idsFamille);
+    return { ok: true };
+  }
 }

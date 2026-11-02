@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, FileText, Sparkles, Trash2, Upload } from "lucide-react";
+import { Camera, FileText, RefreshCw, Sparkles, Trash2, Upload } from "lucide-react";
 import { EditeurImage } from "@/components/shared/EditeurImage";
 import { ConvertirBon } from "./ConvertirBon";
 import { toast } from "sonner";
@@ -7,7 +7,7 @@ import { Combobox } from "@/components/shared/Combobox";
 import { Badge } from "@/components/shared/Badge";
 import { LABEL_STATUT_BON, VARIANT_STATUT_BON } from "@/lib/statutBon";
 import {
-  getCarnetSante, ajouterCarnetSante, supprimerCarnetSante, urlCarnetSante, getMoi, getMaFamille,
+  getCarnetSante, ajouterCarnetSante, supprimerCarnetSante, supprimerBonNumerise, urlCarnetSante, getMoi, getMaFamille,
   openFeuilleSoinsDe, openFeuilleExamenBonDe,
   type CarnetSanteDocument, type RubriqueCarnetSante,
 } from "@/services/portailMembre.service";
@@ -99,6 +99,29 @@ export default function MembreCarnetSanteView() {
       rafraichir();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Suppression impossible.");
+    }
+  };
+
+  const supprimerBon = async (prescriptionId: string) => {
+    try {
+      await supprimerBonNumerise(prescriptionId);
+      toast.success("Bon électronique supprimé.");
+      rafraichir();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Suppression impossible.");
+    }
+  };
+
+  const regenerer = async (d: CarnetSanteDocument) => {
+    // Supprime la prescription liée — le bouton "Convertir" réapparaîtra
+    // automatiquement sur le document upload après rafraîchissement.
+    if (!d.prescriptionId) return;
+    try {
+      await supprimerBonNumerise(d.prescriptionId);
+      rafraichir();
+      setAConvertir(d);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Régénération impossible.");
     }
   };
 
@@ -214,6 +237,18 @@ export default function MembreCarnetSanteView() {
               {d.source === "upload" && !d.convertiEn && (
                 <button type="button" onClick={() => setAConvertir(d)} className="h-8 px-2.5 rounded-lg border border-primary/40 text-[11.5px] font-medium text-primary inline-flex items-center gap-1.5 hover:bg-primary/10 flex-shrink-0">
                   <Sparkles className="w-3.5 h-3.5" /><span className="hidden sm:inline">Convertir en électronique</span><span className="sm:hidden">Convertir</span>
+                </button>
+              )}
+              {/* Régénérer : re-lance la conversion sur un bon déjà converti mais non encore traité */}
+              {d.source === "upload" && d.convertiEn && (!d.statutBonLie || d.statutBonLie === "NonTraite") && (
+                <button type="button" onClick={() => regenerer(d)} title="Régénérer le bon électronique" className="h-8 px-2.5 rounded-lg border border-amber-400/50 text-[11.5px] font-medium text-amber-700 dark:text-amber-400 inline-flex items-center gap-1.5 hover:bg-amber-50 dark:hover:bg-amber-900/20 flex-shrink-0">
+                  <RefreshCw className="w-3.5 h-3.5" /><span className="hidden sm:inline">Régénérer</span>
+                </button>
+              )}
+              {/* Supprimer un bon électronique numérisé non encore traité */}
+              {d.source === "feuille" && d.numerise && d.statut === "NonTraite" && d.prescriptionId && (
+                <button type="button" onClick={() => supprimerBon(d.prescriptionId!)} title="Supprimer ce bon électronique" className="p-1.5 text-muted-foreground hover:text-destructive rounded-md flex-shrink-0">
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
               )}
               {d.source === "upload" && (

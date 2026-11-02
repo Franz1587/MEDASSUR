@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { FacturesService } from "../factures/factures.service";
 import { DocumentsService } from "../documents/documents.service";
@@ -486,6 +486,18 @@ export class PrescriptionsService {
     const references = [numeroOrdonnance && `Ordonnance N° ${numeroOrdonnance}`, numeroBonExamen && `Bon d'examen N° ${numeroBonExamen}`].filter(Boolean);
     await this.messaging.envoyer(telephone, `${references.join(" / ")} — présentez cette référence au prestataire de votre choix pour la faire traiter.`);
     return creee;
+  }
+
+  async supprimerNumerise(prescriptionId: string, assureIds: string[]) {
+    const p = await this.prisma.prescription.findUnique({
+      where: { id: prescriptionId },
+      include: { lignes: { select: { statut: true } } },
+    });
+    if (!p || p.origine !== "Numérisée" || !p.assureId || !assureIds.includes(p.assureId))
+      throw new NotFoundException("Bon électronique introuvable.");
+    if (p.lignes.some((l) => l.statut === "Traite"))
+      throw new ConflictException("Ce bon a déjà été traité par un prestataire — il ne peut plus être supprimé ni régénéré.");
+    await this.prisma.prescription.delete({ where: { id: prescriptionId } });
   }
 
   // Traitement d'un bon (2026-08) — crée une VRAIE Facture/PriseEnCharge par

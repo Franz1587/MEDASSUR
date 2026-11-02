@@ -44,6 +44,8 @@ export interface CarnetSanteDocument {
   // numéros électroniques) pour ne pas être converti deux fois.
   numerise?: boolean;
   convertiEn?: string | null;
+  // Statut de la prescription liée quand ce document upload a été converti.
+  statutBonLie?: StatutBonCarnet | null;
 }
 
 // E-carnet Santé (2026-08) — voir demande utilisateur : "Si les informations
@@ -141,13 +143,14 @@ export class CarnetSanteService {
       }),
     ]);
 
-    const convertis = new Map(prescriptions.filter((p) => p.carnetDocumentId).map((p) => [p.carnetDocumentId!, { id: p.id, numero: [p.numeroOrdonnance, p.numeroBonExamen].filter(Boolean).join(" / ") }]));
+    const convertis = new Map(prescriptions.filter((p) => p.carnetDocumentId).map((p) => [p.carnetDocumentId!, { id: p.id, numero: [p.numeroOrdonnance, p.numeroBonExamen].filter(Boolean).join(" / "), statut: statutBon(p.lignes) }]));
     const documentsUpload: CarnetSanteDocument[] = uploads.map((d) => ({
       id: d.id, source: "upload",
       assureId: d.assureId, assureNom: `${d.assure.nom} ${d.assure.prenom ?? ""}`.trim(),
       rubrique: d.rubrique as RubriqueCarnetSante, fichier: d.fichier, priseEnChargeId: null,
       prescriptionId: convertis.get(d.id)?.id ?? null, numero: null, dateSoins: null, statut: null,
       libelle: d.libelle, dateAjout: d.dateAjout, convertiEn: convertis.get(d.id)?.numero ?? null,
+      statutBonLie: convertis.get(d.id)?.statut ?? null,
     }));
 
     const documentsBons: CarnetSanteDocument[] = [];

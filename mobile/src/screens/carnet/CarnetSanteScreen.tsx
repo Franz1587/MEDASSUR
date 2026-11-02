@@ -13,7 +13,7 @@ import {
 import { colors, radius, spacing } from "../../theme/colors";
 import {
   getMoi, modifierInformationsMedicales, getMaFamille, getCarnetSante, ajouterCarnetSante,
-  supprimerCarnetSante, urlCarnetSante, cheminFeuilleSoins, cheminFeuilleExamenBon,
+  supprimerCarnetSante, supprimerBonNumerise, urlCarnetSante, cheminFeuilleSoins, cheminFeuilleExamenBon,
   type MembreIdentite, type RubriqueCarnetSante, type CarnetSanteDocument,
 } from "../../api/portailMembre";
 import { messageErreur, type RnFilePart } from "../../api/http";
@@ -238,6 +238,43 @@ export function CarnetSanteScreen() {
     ]);
   };
 
+  const supprimerBon = (prescriptionId: string) => {
+    Alert.alert("Supprimer ce bon électronique ?", "Cette action est définitive. Vous pourrez le régénérer depuis le document original.", [
+      { text: "Annuler", style: "cancel" },
+      {
+        text: "Supprimer",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await supprimerBonNumerise(prescriptionId);
+            chargerDocuments(rubrique);
+          } catch (err) {
+            Alert.alert("Erreur", messageErreur(err, "Suppression impossible."));
+          }
+        },
+      },
+    ]);
+  };
+
+  const regenerer = (d: CarnetSanteDocument) => {
+    if (!d.prescriptionId) return;
+    Alert.alert("Régénérer le bon électronique ?", "L'ancien bon sera supprimé et ARIANA recréera un nouveau bon à partir de ce document.", [
+      { text: "Annuler", style: "cancel" },
+      {
+        text: "Régénérer",
+        onPress: async () => {
+          try {
+            await supprimerBonNumerise(d.prescriptionId!);
+            chargerDocuments(rubrique);
+            navigation.navigate("ConvertirBon", { documentId: d.id, assureId: d.assureId });
+          } catch (err) {
+            Alert.alert("Erreur", messageErreur(err, "Régénération impossible."));
+          }
+        },
+      },
+    ]);
+  };
+
   // Ouverture dans l'application (2026-09) — voir demande utilisateur : "il
   // faut normalement que lorsqu'on clique ici le document s'ouvre dans
   // l'application et non hors de l'application". Navigue vers la
@@ -391,11 +428,22 @@ export function CarnetSanteScreen() {
                   <Text style={styles.convertirTexte}>Convertir en électronique</Text>
                 </Pressable>
               ) : null}
+              {d.source === "upload" && d.convertiEn && (!d.statutBonLie || d.statutBonLie === "NonTraite") ? (
+                <Pressable onPress={() => regenerer(d)} style={[styles.convertir, { marginTop: 4 }]} hitSlop={6}>
+                  <Ionicons name="refresh-outline" size={14} color={colors.warning ?? colors.primary} />
+                  <Text style={[styles.convertirTexte, { color: colors.warning ?? colors.primary }]}>Régénérer</Text>
+                </Pressable>
+              ) : null}
             </View>
             {d.statut ? <Badge label={d.statut === "NonTraite" ? "Non traité" : d.statut === "PartiellementTraite" ? "Partiel" : "Traité"} variant={statutVariant(d.statut)} /> : null}
             <Pressable onPress={() => ouvrir(d)} hitSlop={8} style={styles.docAction}>
               <Ionicons name="eye-outline" size={18} color={colors.primary} />
             </Pressable>
+            {d.source === "feuille" && d.numerise && d.statut === "NonTraite" && d.prescriptionId ? (
+              <Pressable onPress={() => supprimerBon(d.prescriptionId!)} hitSlop={8} style={styles.docAction}>
+                <Ionicons name="trash-outline" size={18} color={colors.danger} />
+              </Pressable>
+            ) : null}
             {d.source === "upload" ? (
               <Pressable onPress={() => supprimer(d.id)} hitSlop={8} style={styles.docAction}>
                 <Ionicons name="trash-outline" size={18} color={colors.danger} />
