@@ -2089,7 +2089,7 @@ export class DocumentsService {
       : (secteurPublic ? contrat.tauxAmbulatoirePublique : contrat.tauxAmbulatoirePrivee)) ?? contrat.tauxCouvertureAmbulatoire ?? null;
     const tauxHospitalisation = (estAyantDroit
       ? (secteurPublic ? contrat.tauxHospitalisationPubliqueAyantDroit : contrat.tauxHospitalisationPriveeAyantDroit)
-      : (secteurPublic ? contrat.tauxHospitalisationPublique : contrat.tauxHospitalisationPrivee)) ?? contrat.tauxCouvertureHospitalisation ?? null;
+      : (secteurPublic ? contrat.tauxHospitalisationPublique : contrat.tauxHospitalisationPrivee)) ?? contrat.tauxCouvertureHospitalisation ?? tauxAmbulatoire;
     const lignePrincipale = lignes[0] as LigneFormulaire | undefined;
     // Ticket modérateur = 100 - taux applicable (2026-09) — recalculé
     // depuis tauxAmbulatoire/tauxHospitalisation ci-dessus (donc lui aussi
