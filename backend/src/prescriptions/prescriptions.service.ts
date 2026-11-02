@@ -537,8 +537,23 @@ export class PrescriptionsService {
             const height = Math.min(Math.round(dto.cachetH * h), h - top);
             this.logger.log(`[cachet] image ${w}x${h} → crop left=${left} top=${top} width=${width} height=${height}`);
             if (width > 10 && height > 10) {
-              const crop = await sharp(jpegBuf).extract({ left, top, width, height }).jpeg({ quality: 90 }).toBuffer();
-              const cachetPath = path.join(UPLOADS_ROOT, "carnet-sante", doc.fichier.replace(/\.pdf$/, "-cachet.jpg"));
+              // Effet "scan numérique" : contraste auto + netteté + fond transparent
+              // (pixels clairs → transparents, encre sombre → opaque).
+              const { data: raw, info: meta2 } = await sharp(jpegBuf)
+                .extract({ left, top, width, height })
+                .normalise()
+                .sharpen({ sigma: 2 })
+                .flatten({ background: "#ffffff" })
+                .ensureAlpha()
+                .raw()
+                .toBuffer({ resolveWithObject: true });
+              const rgba = Buffer.from(raw);
+              for (let i = 0; i < rgba.length; i += 4) {
+                const lum = 0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2];
+                rgba[i + 3] = lum > 210 ? 0 : lum < 100 ? 255 : Math.round((210 - lum) * 255 / 110);
+              }
+              const crop = await sharp(rgba, { raw: { width: meta2.width, height: meta2.height, channels: 4 } }).png().toBuffer();
+              const cachetPath = path.join(UPLOADS_ROOT, "carnet-sante", doc.fichier.replace(/\.pdf$/, "-cachet.png"));
               await fs.promises.writeFile(cachetPath, crop);
               this.logger.log(`[cachet] sauvegardé → ${cachetPath}`);
             } else {

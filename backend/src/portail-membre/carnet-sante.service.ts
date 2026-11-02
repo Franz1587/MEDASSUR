@@ -89,7 +89,7 @@ export class CarnetSanteService {
 
   // Retourne le chemin complet du cachet médecin extrait (si disponible).
   cheminCachet(fichierPdf: string): string {
-    return path.join(UPLOADS_CARNET_DIR, fichierPdf.replace(/\.pdf$/, "-cachet.jpg"));
+    return path.join(UPLOADS_CARNET_DIR, fichierPdf.replace(/\.pdf$/, "-cachet.png"));
   }
 
   // Prépare le JPEG source (redimensionné) ET le PDF A4 à partir d'une photo.

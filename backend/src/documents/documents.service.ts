@@ -2674,7 +2674,9 @@ export class DocumentsService {
       }
       texte("Cachet et signature du Praticien", 416.1, 788.0, { taille: 7.5, w: 150 });
       if (cachetNumerise) {
-        try { doc.image(cachetNumerise, 416.1, 793, { fit: [148, 45], align: "center", valign: "center" }); } catch { /* jamais bloquant */ }
+        // Zone agrandie : de y=748 à y=840 (~3,3 cm) pour afficher le tampon
+        // à taille lisible ; fond transparent (PNG) incruste l'encre sur le PDF.
+        try { doc.image(cachetNumerise, 416.1, 748, { fit: [150, 90], align: "center", valign: "center" }); } catch { /* jamais bloquant */ }
       } else if (prestataireFiltre) await this.dessinerCachetPrestataire(doc, 416.1, 795, 150, utilisateur?.id ?? null, prestataireFiltre.nom);
     }
 
@@ -2852,7 +2854,7 @@ export class DocumentsService {
       if (prescription.carnetDocumentId) {
         const carnetDoc = await this.prisma.carnetSanteDocument.findUnique({ where: { id: prescription.carnetDocumentId }, select: { fichier: true } });
         if (carnetDoc) {
-          const cachetPath = path.join(UPLOADS_ROOT, "carnet-sante", carnetDoc.fichier.replace(/\.pdf$/, "-cachet.jpg"));
+          const cachetPath = path.join(UPLOADS_ROOT, "carnet-sante", carnetDoc.fichier.replace(/\.pdf$/, "-cachet.png"));
           cachetNumerise = await fs.promises.readFile(cachetPath).catch(() => undefined);
           Logger.log(`[cachet-render] carnetDocumentId=${prescription.carnetDocumentId} fichier=${carnetDoc.fichier} cachetPath=${cachetPath} trouvé=${!!cachetNumerise}`, "DocumentsService");
         }
