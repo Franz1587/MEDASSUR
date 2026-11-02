@@ -444,10 +444,13 @@ export class PrescriptionsService {
   // d'examen (feuille d'examen) ou une ordonnance (feuille de soins) en bon
   // d'examen ou ordonnance électronique". Proposition seulement : l'assuré
   // relit et corrige chaque ligne avant de valider (creerNumerise).
-  async lireBonPapier(pdf: Buffer) {
+  async lireBonPapier(buffer: Buffer, mediaType: "image/jpeg" | "application/pdf" = "application/pdf") {
     const client = this.getClient();
     if (!client) throw new ServiceUnavailableException("ARIANA n'est pas configurée sur ce serveur.");
     let reponse;
+    const contenu = mediaType === "image/jpeg"
+      ? { type: "image" as const, source: { type: "base64" as const, media_type: "image/jpeg" as const, data: buffer.toString("base64") } }
+      : { type: "document" as const, source: { type: "base64" as const, media_type: "application/pdf" as const, data: buffer.toString("base64") } };
     try {
       reponse = await client.beta.messages.stream({
         model: "claude-opus-5-5",
@@ -457,7 +460,7 @@ export class PrescriptionsService {
         output_config: { effort: "high", format: { type: "json_schema", schema: SCHEMA_BON_PAPIER } },
         system: CONSIGNES_BON_PAPIER,
         messages: [{ role: "user", content: [
-          { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdf.toString("base64") } },
+          contenu,
           { type: "text", text: "Lis ce document médical et renvoie le JSON demandé." },
         ] }],
       }).finalMessage();

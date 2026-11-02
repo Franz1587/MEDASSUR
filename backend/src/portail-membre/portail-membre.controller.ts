@@ -1,3 +1,4 @@
+import * as fs from "fs";
 import {
   BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Query, Req, Res, UploadedFile, UploadedFiles, UseGuards, UseInterceptors,
 } from "@nestjs/common";
@@ -551,7 +552,11 @@ export class PortailMembreController {
   async lireBonPapier(@Param("id") id: string, @Req() req: PortailMembreRequest) {
     const idsFamille = await this.idsFamilleDe(this.assureSanteIdDe(req));
     const { doc, pdf } = await this.carnetSante.document(id, idsFamille);
-    return { assureId: doc.assureId, ...(await this.prescriptions.lireBonPapier(pdf)) };
+    // ARIANA lit le JPEG source (coordonnées pixel exactes pour le cachet)
+    // et replie sur le PDF si le JPEG n'existe pas (anciens documents).
+    const jpegPath = doc.fichier ? this.carnetSante.cheminJpeg(doc.fichier) : null;
+    const jpeg = jpegPath ? await fs.promises.readFile(jpegPath).catch(() => null) : null;
+    return { assureId: doc.assureId, ...(await this.prescriptions.lireBonPapier(jpeg ?? pdf, jpeg ? "image/jpeg" : "application/pdf")) };
   }
 
   @Post("carnet-sante/:id/convertir")
