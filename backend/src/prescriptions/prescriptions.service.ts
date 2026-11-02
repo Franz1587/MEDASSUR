@@ -69,8 +69,8 @@ Relève fidèlement :
 - patient : nom du patient tel qu'écrit, "" si absent ;
 - codeAffection : code maladie ou code affection s'il figure sur le document (ex. "A09", "J06.9"), "" si absent ;
 - lignes : une ligne par médicament (type "Medicament" : nom commercial ou DCI avec dosage et forme, quantité = nombre de boîtes ou d'unités prescrites, posologie telle qu'écrite) ou par examen (type "Examen" : libellé de l'examen tel qu'un laboratoire le comprend, quantité 1, posologie "").
-- cachetVisible : true si un tampon ou cachet du médecin (avec son nom, sa spécialité ou son numéro d'ordre) est lisiblement visible sur le document, false sinon.
-- cachetX, cachetY, cachetW, cachetH : zone rectangulaire englobant le cachet et la signature du médecin, exprimée en fractions de la largeur et hauteur totale de l'image (0.0 à 1.0, origine en haut à gauche). Mettre à 0 si cachetVisible = false.
+- cachetVisible : true si un tampon ou cachet du médecin est visible sur le document, même partiellement lisible, flou ou penché — mettre true dès qu'un tampon est présent ; false uniquement si aucun tampon n'est visible du tout.
+- cachetX, cachetY, cachetW, cachetH : zone rectangulaire englobant le cachet ET la signature du médecin (les deux ensemble s'ils sont proches), exprimée en fractions de la largeur et hauteur totale de l'image (0.0 à 1.0, origine en haut à gauche). Agrandir légèrement la zone pour ne rien couper. Mettre à 0 si cachetVisible = false.
 N'invente jamais un médicament ou un examen illisible : signale-le dans remarques. lisible = false si le document est trop flou pour être exploité.
 Réponds uniquement avec le JSON demandé.`;
 
@@ -573,7 +573,36 @@ export class PrescriptionsService {
         this.logger.warn(`Extraction cachet bon ${carnetDocumentId} échouée (non bloquant) : ${err instanceof Error ? err.message : String(err)}`);
       }
     } else {
-      this.logger.log(`[cachet] ignoré (cachetVisible=${dto.cachetVisible}, cachetW=${dto.cachetW}, cachetH=${dto.cachetH})`);
+      this.logger.log(`[cachet] ARIANA sans bbox — repli heuristique (moitié droite, tiers supérieur)`);
+      // shortcut: région fixe ; couvre la zone praticien des bons gabonais standard.
+      try {
+        const doc2 = await this.prisma.carnetSanteDocument.findUnique({ where: { id: carnetDocumentId }, select: { fichier: true } });
+        if (doc2) {
+          const jpegPath2 = path.join(UPLOADS_ROOT, "carnet-sante", doc2.fichier.replace(/\.pdf$/, ".jpg"));
+          const jpegBuf2 = await fs.promises.readFile(jpegPath2).catch(() => null);
+          if (jpegBuf2) {
+            const meta3 = await sharp(jpegBuf2).metadata();
+            const iw = meta3.width ?? 1600, ih = meta3.height ?? 1200;
+            // Zone : moitié droite (x 50-100 %), du 15 % au 65 % en hauteur
+            const hLeft = Math.round(iw * 0.50), hTop = Math.round(ih * 0.15);
+            const hWidth = iw - hLeft, hHeight = Math.round(ih * 0.50);
+            const { data: raw3, info: meta4 } = await sharp(jpegBuf2)
+              .extract({ left: hLeft, top: hTop, width: hWidth, height: hHeight })
+              .normalise().sharpen({ sigma: 2 }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+            const rgba3 = Buffer.from(raw3);
+            for (let i = 0; i < rgba3.length; i += 4) {
+              const lum = 0.299 * rgba3[i] + 0.587 * rgba3[i + 1] + 0.114 * rgba3[i + 2];
+              const maxC = Math.max(rgba3[i], rgba3[i + 1], rgba3[i + 2]);
+              const sat = maxC === 0 ? 0 : (maxC - Math.min(rgba3[i], rgba3[i + 1], rgba3[i + 2])) / maxC;
+              rgba3[i + 3] = (lum < 128 || (sat > 0.3 && lum < 180)) ? 255 : 0;
+            }
+            const cropH = await sharp(rgba3, { raw: { width: meta4.width, height: meta4.height, channels: 4 } }).png().toBuffer();
+            const cachetPathH = path.join(UPLOADS_ROOT, "carnet-sante", doc2.fichier.replace(/\.pdf$/, "-cachet.png"));
+            await fs.promises.writeFile(cachetPathH, cropH);
+            this.logger.log(`[cachet] heuristique sauvegardé → ${cachetPathH}`);
+          }
+        }
+      } catch { /* jamais bloquant */ }
     }
     const assure = creee.assure!;
     const telephone = assure.telephone
