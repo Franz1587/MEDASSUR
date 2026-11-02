@@ -66,7 +66,7 @@ type FormulairePec = {
       tauxHospitalisationPubliqueAyantDroit: string | null; tauxHospitalisationPriveeAyantDroit: string | null;
     };
   };
-  prestataireRef: { id: string; nom: string; secteur: string | null } | null;
+  prestataireRef: { id: string; nom: string; secteur: string | null; codeEtablissement?: string | null } | null;
   codeAffection?: string | null;
   prescriptionOrigine: {
     medecin: { id: string; nom: string; prenom: string | null; titre: string | null; specialite: string | null; codePraticien: string | null };
@@ -2111,7 +2111,7 @@ export class DocumentsService {
       : (lignePrincipale?.tauxRemboursement !== null && lignePrincipale?.tauxRemboursement !== undefined
         ? String(Math.round(100 - lignePrincipale.tauxRemboursement)) : null);
     const codePraticien = medecin?.codePraticien || (medecin && medecin.id ? refNumerique(medecin.id) : null);
-    const codeEtablissement = pec.prestataireRef?.id ? refNumerique(pec.prestataireRef.id) : null;
+    const codeEtablissement = (pec.prestataireRef as any)?.codeEtablissement || (pec.prestataireRef?.id ? refNumerique(pec.prestataireRef.id) : null);
     const codeAffection = lignePrincipale?.codeAffection ?? pec.codeAffection ?? null;
     const estSpecialiste = !!medecin?.specialite;
     const heure = lignePrincipale?.createdAt ?? pec.createdAt;
@@ -2837,7 +2837,7 @@ export class DocumentsService {
         date: prescription.dateOrdonnance ?? new Date().toISOString().slice(0, 10),
         type: "Examen", createdAt: prescription.createdAt,
         assure: prescription.assure as unknown as FormulairePec["assure"],
-        prestataireRef: prescription.structureNom ? { id: "", nom: prescription.structureNom, secteur: null } : null,
+        prestataireRef: prescription.structureNom ? { id: "", nom: prescription.structureNom, secteur: null, codeEtablissement: (prescription as any).codeEtablissement ?? null } : null,
         codeAffection: prescription.codeAffection ?? null,
         prescriptionOrigine: { medecin: mecin, numeroBonExamen: prescription.numeroBonExamen, medicaments: [] },
       };

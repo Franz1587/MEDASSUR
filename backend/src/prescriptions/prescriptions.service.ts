@@ -494,6 +494,7 @@ export class PrescriptionsService {
       data: {
         origine: "Numérisée", assureId: dto.assureId, carnetDocumentId, motifsConsultation: [],
         prescripteurNom: dto.prescripteurNom?.trim() || null, structureNom: dto.structureNom?.trim() || null,
+        ...({ codeEtablissement: dto.codeEtablissement?.trim() || null } as any),
         dateOrdonnance: dto.dateOrdonnance?.trim() || null, codeAffection: dto.codeAffection?.trim() || null,
         medecinId: prescripteur.medecinId,
         numeroOrdonnance, numeroBonExamen,

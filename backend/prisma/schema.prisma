@@ -2621,6 +2621,7 @@ model Prescription {
   // saisie libre.
   codeAffection     String?
   affection         CodeAffection? @relation(fields: [codeAffection], references: [code])
+  codeEtablissement String?
   // Numéro du bon d'examen (2026-08) — réutilise la numérotation des
   // Feuilles d'Examen déjà en place (DocumentsService.prochainNumeroFormulaire
   // "feuille-examen", FE-000001/2026). Absent si aucune ligne Examen.
