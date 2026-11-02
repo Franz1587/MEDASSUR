@@ -537,9 +537,11 @@ export class PrescriptionsService {
             const height = Math.min(Math.round(dto.cachetH * h), h - top);
             this.logger.log(`[cachet] image ${w}x${h} → crop left=${left} top=${top} width=${width} height=${height}`);
             if (width > 10 && height > 10) {
-              // Effet "scan numérique" : contraste auto + netteté + fond transparent.
-              // Encre colorée (saturation > 0.2) ou sombre (max < 170) → opaque,
-              // fond blanc/gris non saturé → transparent. Garde la couleur originale.
+              // Effet "scan numérique" : normalise → seuil binaire pour supprimer
+              // le fond papier sans dégradé (les tons moyens du papier photo
+              // passent sinon). Après normalise(), l'encre est ≈ 0-100 lum,
+              // le fond papier ≈ 160-255 lum. Seuil à 128 sépare nettement
+              // les deux ; tampons colorés (sat > 0.3) conservés au-delà.
               const { data: raw, info: meta2 } = await sharp(jpegBuf)
                 .extract({ left, top, width, height })
                 .normalise()
@@ -549,12 +551,12 @@ export class PrescriptionsService {
                 .toBuffer({ resolveWithObject: true });
               const rgba = Buffer.from(raw);
               for (let i = 0; i < rgba.length; i += 4) {
+                const lum = 0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2];
                 const maxC = Math.max(rgba[i], rgba[i + 1], rgba[i + 2]);
                 const minC = Math.min(rgba[i], rgba[i + 1], rgba[i + 2]);
                 const sat = maxC === 0 ? 0 : (maxC - minC) / maxC;
-                // Encre : colorée (tampon bleu/violet) ou sombre (noir) → opaque
-                const isInk = sat > 0.2 || maxC < 170;
-                rgba[i + 3] = isInk ? 255 : Math.max(0, Math.round((200 - maxC) * 255 / 30));
+                // Encre = sombre OU coloré (tampon bleu/violet) ; fond = transparent
+                rgba[i + 3] = (lum < 128 || (sat > 0.3 && lum < 180)) ? 255 : 0;
               }
               const crop = await sharp(rgba, { raw: { width: meta2.width, height: meta2.height, channels: 4 } }).png().toBuffer();
               const cachetPath = path.join(UPLOADS_ROOT, "carnet-sante", doc.fichier.replace(/\.pdf$/, "-cachet.png"));
