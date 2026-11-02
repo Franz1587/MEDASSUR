@@ -1049,14 +1049,13 @@ export class SanteService {
     }
     const lignes = await this.prisma.priseEnCharge.findMany({
       where,
-      // select ciblé (2026-09, était include: {assure, prestataireRef,
-      // accordPrealable, acteMedical} en entier) — voir demande utilisateur :
-      // "je veux la rapidité, la fluidité" ; mesuré en production sans
-      // filtre : 93 Mo de JSON, 14,8s. `prestataireRef`/`accordPrealable`
-      // n'étaient même pas lus par ApiPriseEnCharge côté frontend (voir
-      // src/services/sante.service.ts) — uniquement `assure.nom` et
-      // `acteMedical.categorieGarantie`. Même diagnostic que
-      // SanteService.findAssures (voir mémoire project-performance-optimisations).
+      // shortcut: 500 lignes les plus récentes, suffit pour tout affichage UI.
+      // Sans cette limite, un contrat de 47 k lignes déclenche 13,7 s
+      // d'hydratation Prisma des Decimal (mesuré en prod 2026-11-02) malgré
+      // un select ciblé, car le goulot est la transformation JS, pas le SQL.
+      // Les statistiques/agrégations passent par leurs propres endpoints.
+      orderBy: { date: "desc" },
+      take: 500,
       select: {
         id: true, assureId: true, contratId: true, prestataire: true, type: true, montant: true, statut: true, date: true,
         modePaiement: true, statutControleMedical: true, motifRejet: true, prescriptionRef: true, factureRef: true,
