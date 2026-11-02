@@ -44,6 +44,10 @@ export class ValiderBonNumeriseDto {
   @IsOptional() @IsNumber() cachetW?: number;
   @IsOptional() @IsNumber() cachetH?: number;
 
+  @IsOptional()
+  @IsString()
+  indicationsLibres?: string;
+
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })

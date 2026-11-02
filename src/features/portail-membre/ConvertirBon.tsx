@@ -22,6 +22,7 @@ function rapprocher<T>(texte: string, options: T[], nom: (o: T) => string): T | 
 export function ConvertirBon({ documentId, assureId, onFermer, onConverti }: { documentId: string; assureId: string; onFermer: () => void; onConverti: () => void }) {
   const [lecture, setLecture] = useState<"cours" | "ok" | "echec">("cours");
   const [remarque, setRemarque] = useState("");
+  const [indicationsLibres, setIndicationsLibres] = useState("");
   const [beneficiaire, setBeneficiaire] = useState(assureId);
   const [entete, setEntete] = useState({ prescripteur: "", titrePrescripteur: "", codePraticien: "", structure: "", codeEtablissement: "", date: "", codeAffection: "" });
   const [lignes, setLignes] = useState<Ligne[]>([]);
@@ -52,6 +53,7 @@ export function ConvertirBon({ documentId, assureId, onFermer, onConverti }: { d
         setBeneficiaire(l.assureId);
         setEntete({ prescripteur: l.prescripteur, titrePrescripteur: l.titrePrescripteur, codePraticien: l.codePraticien, structure: l.structure, codeEtablissement: l.codeEtablissement, date: l.date, codeAffection: l.codeAffection });
         setLignes(l.lignes);
+        setIndicationsLibres(l.remarques);
         if (l.cachetVisible && l.cachetW && l.cachetH) setCachet({ visible: true, x: l.cachetX ?? 0, y: l.cachetY ?? 0, w: l.cachetW, h: l.cachetH });
         setRemarque([!l.lisible && "Document peu lisible : vérifiez chaque ligne.", l.typeDocument === "Autre" && "Ce document ne ressemble pas à une prescription.", l.remarques].filter(Boolean).join(" "));
         setLecture("ok");
@@ -78,6 +80,7 @@ export function ConvertirBon({ documentId, assureId, onFermer, onConverti }: { d
         structureNom: structure?.nom ?? entete.structure,
         codeEtablissement: entete.codeEtablissement || undefined,
         dateOrdonnance: entete.date, codeAffection: entete.codeAffection || undefined,
+        indicationsLibres: indicationsLibres || undefined,
         ...(cachet ? { cachetVisible: true, cachetX: cachet.x, cachetY: cachet.y, cachetW: cachet.w, cachetH: cachet.h } : {}),
         lignes: retenues.map((l) => ({ type: l.type, libelle: l.libelle, quantite: l.quantite, posologie: l.posologie || undefined, acteMedicalId: l.acteMedicalId ?? undefined })),
       });

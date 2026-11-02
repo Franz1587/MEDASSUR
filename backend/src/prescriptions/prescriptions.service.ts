@@ -71,7 +71,8 @@ Relève fidèlement :
 - lignes : une ligne par médicament (type "Medicament" : nom commercial ou DCI avec dosage et forme, quantité = nombre de boîtes ou d'unités prescrites, posologie telle qu'écrite) ou par examen (type "Examen" : libellé de l'examen tel qu'un laboratoire le comprend, quantité 1, posologie "").
 - cachetVisible : true si un tampon ou cachet du médecin est visible sur le document, même partiellement lisible, flou ou penché — mettre true dès qu'un tampon est présent ; false uniquement si aucun tampon n'est visible du tout.
 - cachetX, cachetY, cachetW, cachetH : zone rectangulaire englobant le cachet ET la signature du médecin (les deux ensemble s'ils sont proches), exprimée en fractions de la largeur et hauteur totale de l'image (0.0 à 1.0, origine en haut à gauche). Agrandir légèrement la zone pour ne rien couper. Mettre à 0 si cachetVisible = false.
-N'invente jamais un médicament ou un examen illisible : signale-le dans remarques. lisible = false si le document est trop flou pour être exploité.
+- remarques : tout texte libre laissé par le médecin sur le document qui n'entre pas dans les champs structurés ci-dessus : indications cliniques, motif de prescription, notes sur l'état du patient, commentaires manuscrits, annotations — capturer tel quel, en un seul bloc de texte. Signaler aussi ici tout médicament ou examen illisible. "" si aucun texte libre.
+lisible = false si le document est trop flou pour être exploité.
 Réponds uniquement avec le JSON demandé.`;
 
 const SCHEMA_BON_PAPIER = {
@@ -506,7 +507,7 @@ export class PrescriptionsService {
 
     const creee = await this.prisma.prescription.create({
       data: {
-        origine: "Numérisée", assureId: dto.assureId, carnetDocumentId, motifsConsultation: [],
+        origine: "Numérisée", assureId: dto.assureId, carnetDocumentId, motifsConsultation: dto.indicationsLibres ? [dto.indicationsLibres] : [],
         prescripteurNom: dto.prescripteurNom?.trim() || null, structureNom: dto.structureNom?.trim() || null,
         ...({ codeEtablissement: dto.codeEtablissement?.trim() || null } as any),
         dateOrdonnance: dto.dateOrdonnance?.trim() || null, codeAffection: dto.codeAffection?.trim() || null,

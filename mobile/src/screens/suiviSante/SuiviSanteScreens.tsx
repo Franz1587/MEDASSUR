@@ -142,7 +142,8 @@ export function ConvertirBonScreen() {
   const { documentId, assureId } = useRoute<RouteProp<RootStackParamList, "ConvertirBon">>().params;
   const [etat, setEtat] = useState<"cours" | "ok" | "echec">("cours");
   const [remarque, setRemarque] = useState("");
-  const [entete, setEntete] = useState({ prescripteur: "", structure: "", date: "", codeAffection: "" });
+  const [entete, setEntete] = useState({ prescripteur: "", titrePrescripteur: "", codePraticien: "", structure: "", codeEtablissement: "", date: "", codeAffection: "" });
+  const [indicationsLibres, setIndicationsLibres] = useState("");
   const [lignes, setLignes] = useState<LigneLue[]>([]);
   const [beneficiaire, setBeneficiaire] = useState(assureId);
   const [envoi, setEnvoi] = useState(false);
@@ -167,7 +168,8 @@ export function ConvertirBonScreen() {
   useEffect(() => {
     lireBonPapier(documentId).then((l) => {
       setBeneficiaire(l.assureId);
-      setEntete({ prescripteur: l.prescripteur, structure: l.structure, date: l.date, codeAffection: l.codeAffection });
+      setEntete({ prescripteur: l.prescripteur, titrePrescripteur: l.titrePrescripteur, codePraticien: l.codePraticien, structure: l.structure, codeEtablissement: l.codeEtablissement, date: l.date, codeAffection: l.codeAffection });
+      setIndicationsLibres(l.remarques);
       setLignes(l.lignes.length ? l.lignes : [vide]);
       if (l.cachetVisible && l.cachetW && l.cachetH) setCachet({ x: l.cachetX ?? 0, y: l.cachetY ?? 0, w: l.cachetW, h: l.cachetH });
       setRemarque([!l.lisible && "Document peu lisible : vérifiez chaque ligne.", l.typeDocument === "Autre" && "Ce document ne ressemble pas à une prescription.", l.remarques].filter(Boolean).join(" "));
@@ -183,7 +185,11 @@ export function ConvertirBonScreen() {
     setEnvoi(true);
     try {
       const r = await convertirBonPapier(documentId, {
-        assureId: beneficiaire, prescripteurNom: medecin ? nomMedecin(medecin) : entete.prescripteur, structureNom: structure?.nom ?? entete.structure, dateOrdonnance: entete.date, codeAffection: entete.codeAffection || undefined,
+        assureId: beneficiaire, prescripteurNom: medecin ? nomMedecin(medecin) : entete.prescripteur,
+        titrePrescripteur: entete.titrePrescripteur || undefined, codePraticien: entete.codePraticien || undefined,
+        structureNom: structure?.nom ?? entete.structure, codeEtablissement: entete.codeEtablissement || undefined,
+        dateOrdonnance: entete.date, codeAffection: entete.codeAffection || undefined,
+        indicationsLibres: indicationsLibres || undefined,
         ...(cachet ? { cachetVisible: true, cachetX: cachet.x, cachetY: cachet.y, cachetW: cachet.w, cachetH: cachet.h } : {}),
         lignes: retenues.map((l) => ({ type: l.type, libelle: l.libelle, quantite: l.quantite, posologie: l.posologie || undefined, acteMedicalId: l.acteMedicalId ?? undefined })),
       });

@@ -80,6 +80,9 @@ type FormulairePec = {
     // jamais une valeur inventée.
     medicaments: { libelle: string; quantite: number; posologie: string | null; montant: number | null; baseRemboursement: number | null }[];
   } | null;
+  // Indications cliniques libres lues par ARIANA sur la prescription
+  // numérisée (motifsConsultation de la Prescription) — null hors contexte.
+  indicationsLibres?: string | null;
 };
 type LigneFormulaire = {
   // `montant` null = ligne pas encore traitée par un prestataire (bon
@@ -2664,6 +2667,11 @@ export class DocumentsService {
       for (const cx of colsC) ligneV(cx, 475.0, 719.6);
       boite(gx, 125.2, dx - gx, 719.6 - 125.2);
 
+      if (pec.indicationsLibres) {
+        texte("Indications cliniques :", gx, 723.0, { taille: 7, gras: true, w: 103 });
+        texte(pec.indicationsLibres, gx + 105, 723.0, { taille: 7, w: dx - gx - 107 });
+      }
+
       if (utilisateur && documentRef) await this.dessinerSignatureElectronique(doc, gx, 745, "Feuille d'Examen", documentRef, utilisateur);
 
       texte(`Visa du Médecin conseil ${nomAffiche}`, 40.0, 791.1, { taille: 7.5 });
@@ -2850,6 +2858,7 @@ export class DocumentsService {
         prestataireRef: prescription.structureNom ? { id: "", nom: prescription.structureNom, secteur: null, codeEtablissement: (prescription as any).codeEtablissement ?? null } : null,
         codeAffection: prescription.codeAffection ?? null,
         prescriptionOrigine: { medecin: mecin, numeroBonExamen: prescription.numeroBonExamen, medicaments: [] },
+        indicationsLibres: prescription.motifsConsultation.length ? prescription.motifsConsultation.join(" ") : null,
       };
       // Cachet médecin extrait par ARIANA depuis la photo originale.
       let cachetNumerise: Buffer | undefined;

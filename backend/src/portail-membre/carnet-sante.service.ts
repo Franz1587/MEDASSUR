@@ -65,6 +65,10 @@ export class CarnetSanteService {
     if (!RUBRIQUES_CARNET_SANTE.includes(rubrique as RubriqueCarnetSante)) {
       throw new BadRequestException(`Rubrique invalide : ${rubrique}`);
     }
+    const TYPES_IMAGE = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/tiff", "image/avif", "image/gif"];
+    if (!TYPES_IMAGE.includes(file.mimetype)) {
+      throw new BadRequestException("Seules les photos (JPEG, PNG, WebP, HEIC…) sont acceptées. Les fichiers PDF ou bureautiques ne sont pas pris en charge ici.");
+    }
 
     const base = `${assureId}-${Date.now()}-${randomUUID().slice(0, 6)}`;
     const { jpeg, pdf } = await this.preparerPhotoEtPdf(file.buffer);
