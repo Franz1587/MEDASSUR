@@ -67,7 +67,7 @@ Relève fidèlement :
 - codeEtablissement : code officiel de l'établissement tel que lisible sur le tampon ou la case "Code établissement" du formulaire, "" si absent ;
 - date : date de la prescription au format JJ/MM/AAAA, "" si absente ;
 - patient : nom du patient tel qu'écrit, "" si absent ;
-- codeAffection : code maladie ou code affection s'il figure sur le document (ex. "A09", "J06.9"), "" si absent ;
+- codeAffection : cherche d'abord la case ou le champ intitulé "Code affection", "Code maladie", "N° affection" ou "Code ALD" sur le formulaire imprimé et lis la valeur écrite dedans ; c'est souvent un code CIM-10 (ex. "N18", "A09", "J06.9", "Z34") ou un code CNAMGS à 3-6 caractères — retourne exactement ce qui est écrit, "" si la case est vide ou absente ;
 - lignes : une ligne par médicament (type "Medicament" : nom commercial ou DCI avec dosage et forme, quantité = nombre de boîtes ou d'unités prescrites, posologie telle qu'écrite) ou par examen (type "Examen" : libellé de l'examen tel qu'un laboratoire le comprend, quantité 1, posologie "").
 - cachetVisible : true si un tampon ou cachet du médecin est visible sur le document, même partiellement lisible, flou ou penché — mettre true dès qu'un tampon est présent ; false uniquement si aucun tampon n'est visible du tout.
 - cachetX, cachetY, cachetW, cachetH : zone rectangulaire englobant le cachet ET la signature du médecin (les deux ensemble s'ils sont proches), exprimée en fractions de la largeur et hauteur totale de l'image (0.0 à 1.0, origine en haut à gauche). Agrandir légèrement la zone pour ne rien couper. Mettre à 0 si cachetVisible = false.
