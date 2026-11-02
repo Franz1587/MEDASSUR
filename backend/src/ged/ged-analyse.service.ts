@@ -17,7 +17,10 @@ const MEDIA_TYPES_IMAGE: Record<string, "image/jpeg" | "image/png" | "image/gif"
 // Rubriques alignées sur le besoin d'origine (factures/courriers
 // prestataires en priorité) — "Autre" en repli pour tout document qui ne
 // rentre dans aucune des catégories métier suivies.
-export const TYPES_GED = ["Facture prestataire", "Courrier", "Contrat", "Avenant", "Pièce d'identité", "Autre"] as const;
+// "Prescription médicale" (2026-11) — Feuille de Soins ou Feuille d'Examen
+// déposée par un prestataire ou archivée par un gestionnaire ; permet à
+// ARIANA d'extraire automatiquement le prescripteur et de l'enregistrer.
+export const TYPES_GED = ["Facture prestataire", "Courrier", "Contrat", "Avenant", "Pièce d'identité", "Prescription médicale", "Autre"] as const;
 
 export interface AnalyseGedResultat {
   statutOcr: "Analysé" | "Échec";
@@ -28,11 +31,17 @@ export interface AnalyseGedResultat {
   montantExtrait: number | null;
   dateCachet: string | null;
   nomEmetteurExtrait: string | null;
+  // Prescripteur extrait (renseigné uniquement pour type = "Prescription médicale")
+  nomPrescripteurExtrait: string | null;
+  titrePrescripteurExtrait: string | null;
+  codePraticienExtrait: string | null;
+  codeEtablissementExtrait: string | null;
 }
 
 const RESULTAT_ECHEC: AnalyseGedResultat = {
   statutOcr: "Échec", type: null, objet: null, resume: null,
   referenceExtraite: null, montantExtrait: null, dateCachet: null, nomEmetteurExtrait: null,
+  nomPrescripteurExtrait: null, titrePrescripteurExtrait: null, codePraticienExtrait: null, codeEtablissementExtrait: null,
 };
 
 @Injectable()
@@ -106,7 +115,11 @@ export class GedAnalyseService {
           "seule) les mentions explicites : 'Prestataire :', 'Établissement :', 'Structure :', " +
           "'factures de [NOM]', ou la phrase décrivant l'émetteur réel des soins. " +
           "Si l'en-tête et le corps désignent des entités différentes, PRIORITÉ au corps (la structure qui soigne). " +
-          "Null si aucune structure médicale identifiable.>}\n" +
+          "Null si aucune structure médicale identifiable.>, " +
+          "\"nomPrescripteur\": <si type = \"Prescription médicale\" : nom du médecin prescripteur SANS le titre Dr/Pr, tel qu'écrit sur le cachet ; null sinon>, " +
+          "\"titrePrescripteur\": <si type = \"Prescription médicale\" : titre professionnel visible (\"Dr\", \"Pr\"…) ; null sinon>, " +
+          "\"codePraticien\": <si type = \"Prescription médicale\" : numéro d'ordre / code praticien lisible sur le tampon ou la case \"Code praticien\" ; null sinon>, " +
+          "\"codeEtablissement\": <si type = \"Prescription médicale\" : code officiel de la structure lisible sur le tampon ou la case \"Code établissement\" ; null sinon>}\n" +
           listePrestataires +
           "\nSi le document est flou, coupé ou réellement illisible, réponds quand même le JSON avec objet/resume " +
           "expliquant que le contenu n'est pas lisible, jamais d'invention de contenu absent.",
@@ -119,6 +132,8 @@ export class GedAnalyseService {
         type?: string; objet?: string; resume?: string;
         referenceFacture?: string | null; montant?: number | string | null;
         dateCachet?: string | null; nomEmetteur?: string | null;
+        nomPrescripteur?: string | null; titrePrescripteur?: string | null;
+        codePraticien?: string | null; codeEtablissement?: string | null;
       };
       const montant = parsed.montant != null && parsed.montant !== "" ? Number(parsed.montant) : null;
       return {
@@ -130,6 +145,10 @@ export class GedAnalyseService {
         montantExtrait: montant != null && !Number.isNaN(montant) ? montant : null,
         dateCachet: parsed.dateCachet?.trim() || null,
         nomEmetteurExtrait: parsed.nomEmetteur?.trim() || null,
+        nomPrescripteurExtrait: parsed.nomPrescripteur?.trim() || null,
+        titrePrescripteurExtrait: parsed.titrePrescripteur?.trim() || null,
+        codePraticienExtrait: parsed.codePraticien?.trim() || null,
+        codeEtablissementExtrait: parsed.codeEtablissement?.trim() || null,
       };
     } catch (err) {
       this.logger.warn(`Lecture GED de "${nomFichier}" échouée : ${err instanceof Error ? err.message : err}`);

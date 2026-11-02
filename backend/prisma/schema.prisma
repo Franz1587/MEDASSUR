@@ -2355,6 +2355,11 @@ model Prestataire {
   adresse              String?
   statutConvention     String? // En négociation | Conventionné | Suspendu
   dateConventionnement String?
+  // Code officiel de la structure médicale lu sur les formulaires FS/FE
+  // (2026-11) — renseigné automatiquement par ARIANA lors de la conversion
+  // d'un bon numérisé ou de l'analyse GED ; permet un appariement exact
+  // sur les scans futurs sans dépendre de la qualité OCR du nom.
+  codeEtablissement    String?
   delaiPaiementMoyen   Int?
   scoreQualite         Decimal? @db.Decimal(5, 2)
   motifSuspension      String?

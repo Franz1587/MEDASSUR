@@ -23,7 +23,7 @@ export function ConvertirBon({ documentId, assureId, onFermer, onConverti }: { d
   const [lecture, setLecture] = useState<"cours" | "ok" | "echec">("cours");
   const [remarque, setRemarque] = useState("");
   const [beneficiaire, setBeneficiaire] = useState(assureId);
-  const [entete, setEntete] = useState({ prescripteur: "", structure: "", date: "", codeAffection: "" });
+  const [entete, setEntete] = useState({ prescripteur: "", titrePrescripteur: "", codePraticien: "", structure: "", codeEtablissement: "", date: "", codeAffection: "" });
   const [lignes, setLignes] = useState<Ligne[]>([]);
   const [envoi, setEnvoi] = useState(false);
   // Établissement et prescripteur pris dans la base quand ils y sont,
@@ -49,7 +49,7 @@ export function ConvertirBon({ documentId, assureId, onFermer, onConverti }: { d
     lireBonPapier(documentId)
       .then((l) => {
         setBeneficiaire(l.assureId);
-        setEntete({ prescripteur: l.prescripteur, structure: l.structure, date: l.date, codeAffection: l.codeAffection });
+        setEntete({ prescripteur: l.prescripteur, titrePrescripteur: l.titrePrescripteur, codePraticien: l.codePraticien, structure: l.structure, codeEtablissement: l.codeEtablissement, date: l.date, codeAffection: l.codeAffection });
         setLignes(l.lignes);
         setRemarque([!l.lisible && "Document peu lisible : vérifiez chaque ligne.", l.typeDocument === "Autre" && "Ce document ne ressemble pas à une prescription.", l.remarques].filter(Boolean).join(" "));
         setLecture("ok");
@@ -69,7 +69,13 @@ export function ConvertirBon({ documentId, assureId, onFermer, onConverti }: { d
     setEnvoi(true);
     try {
       const r = await convertirBonPapier(documentId, {
-        assureId: beneficiaire, prescripteurNom: medecin ? nomMedecin(medecin) : entete.prescripteur, structureNom: structure?.nom ?? entete.structure, dateOrdonnance: entete.date, codeAffection: entete.codeAffection || undefined,
+        assureId: beneficiaire,
+        prescripteurNom: medecin ? nomMedecin(medecin) : entete.prescripteur,
+        titrePrescripteur: entete.titrePrescripteur || undefined,
+        codePraticien: entete.codePraticien || undefined,
+        structureNom: structure?.nom ?? entete.structure,
+        codeEtablissement: entete.codeEtablissement || undefined,
+        dateOrdonnance: entete.date, codeAffection: entete.codeAffection || undefined,
         lignes: retenues.map((l) => ({ type: l.type, libelle: l.libelle, quantite: l.quantite, posologie: l.posologie || undefined, acteMedicalId: l.acteMedicalId ?? undefined })),
       });
       toast.success(`Bon électronique créé : ${[r.numeroOrdonnance && `ordonnance ${r.numeroOrdonnance}`, r.numeroBonExamen && `bon d'examen ${r.numeroBonExamen}`].filter(Boolean).join(" et ")}. La référence vous est aussi envoyée par SMS.`);

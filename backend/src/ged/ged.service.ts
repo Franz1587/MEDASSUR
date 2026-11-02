@@ -8,6 +8,7 @@ import { FacturesService } from "../factures/factures.service";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { GedAnalyseService } from "./ged-analyse.service";
 import { EN_TETE_SIGNATURE } from "../documents/signature-pdf.middleware";
+import { resoudreOuCreerPrescripteur } from "../lib/prescripteur.util";
 
 const UPLOADS_GED_DIR = path.join(UPLOADS_ROOT, "ged");
 const CATEGORIE_STORAGE = "ged";
@@ -105,6 +106,17 @@ export class GedService {
 
     if (resultat.type === "Facture prestataire" && prestataireIdEffectif) {
       return this.rapprocher(doc.id);
+    }
+    // Prescription médicale (2026-11) — enregistrer automatiquement le
+    // prescripteur et lier la structure ; best-effort (jamais bloquant).
+    if (resultat.type === "Prescription médicale" && (resultat.nomPrescripteurExtrait || resultat.codePraticienExtrait)) {
+      resoudreOuCreerPrescripteur(this.prisma, {
+        prescripteurNom: resultat.nomPrescripteurExtrait ?? "",
+        titrePrescripteur: resultat.titrePrescripteurExtrait ?? undefined,
+        codePraticien: resultat.codePraticienExtrait ?? "",
+        structureNom: resultat.nomEmetteurExtrait ?? "",
+        codeEtablissement: resultat.codeEtablissementExtrait ?? "",
+      }).catch(() => undefined);
     }
     return doc;
   }

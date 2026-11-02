@@ -6,6 +6,7 @@ import { DocumentsService } from "../documents/documents.service";
 import { MessagingService } from "../messaging/messaging.service";
 import { GROUPES_ACTES, groupeDeFamille } from "../actes-medicaux/groupes-actes.util";
 import { calculerAgeAns } from "../mouvements/age-limite.util";
+import { resoudreOuCreerPrescripteur } from "../lib/prescripteur.util";
 import { CreatePrescriptionDto } from "./dto/create-prescription.dto";
 import { TraiterBonDto } from "./dto/traiter-bon.dto";
 import { ValiderBonNumeriseDto } from "./dto/bon-numerise.dto";
@@ -41,7 +42,10 @@ function statutBonDe(lignes: { statut: string }[]): StatutBon {
 // ATOMIQUE ligne par ligne : "lorsqu'une ligne... a déjà été traitée par
 // un prestataire... ce dernier ne verra que ce qui n'a pas été traité".
 interface LectureBonPapier {
-  lisible: boolean; typeDocument: string; prescripteur: string; structure: string; date: string; patient: string; codeAffection: string; remarques: string;
+  lisible: boolean; typeDocument: string;
+  prescripteur: string; titrePrescripteur: string; codePraticien: string;
+  structure: string; codeEtablissement: string;
+  date: string; patient: string; codeAffection: string; remarques: string;
   lignes: { type: "Medicament" | "Examen"; libelle: string; quantite: number; posologie: string }[];
 }
 
@@ -49,8 +53,11 @@ const CONSIGNES_BON_PAPIER = `Tu es ARIANA, assistante d'un gestionnaire d'assur
 On te donne la photo (en PDF) d'une ORDONNANCE ou d'un BON D'EXAMEN papier, souvent manuscrit.
 Relève fidèlement :
 - typeDocument : "Ordonnance" (médicaments), "Examen" (analyses, imagerie…), "Mixte" (les deux) ou "Autre" (ce n'est pas une prescription) ;
-- prescripteur : nom complet du médecin prescripteur tel qu'écrit (cachet ou signature, sans le titre Dr/Pr), "" si illisible ;
+- prescripteur : nom complet du médecin prescripteur tel qu'écrit (cachet ou signature, SANS le titre Dr/Pr), "" si illisible ;
+- titrePrescripteur : titre professionnel du prescripteur visible sur le cachet ("Dr", "Pr", "Docteur", "Professeur"…), "" si absent ;
+- codePraticien : numéro à l'ordre des médecins / code praticien tel qu'il figure sur le tampon ou le formulaire (case "Code praticien" ou "N° Ordre"), "" si absent ;
 - structure : établissement (cachet, en-tête, nom de la clinique ou du cabinet), "" si absent ;
+- codeEtablissement : code officiel de l'établissement tel que lisible sur le tampon ou la case "Code établissement" du formulaire, "" si absent ;
 - date : date de la prescription au format JJ/MM/AAAA, "" si absente ;
 - patient : nom du patient tel qu'écrit, "" si absent ;
 - codeAffection : code maladie ou code affection s'il figure sur le document (ex. "A09", "J06.9"), "" si absent ;
@@ -60,11 +67,13 @@ Réponds uniquement avec le JSON demandé.`;
 
 const SCHEMA_BON_PAPIER = {
   type: "object", additionalProperties: false,
-  required: ["lisible", "typeDocument", "prescripteur", "structure", "date", "patient", "codeAffection", "lignes", "remarques"],
+  required: ["lisible", "typeDocument", "prescripteur", "titrePrescripteur", "codePraticien", "structure", "codeEtablissement", "date", "patient", "codeAffection", "lignes", "remarques"],
   properties: {
     lisible: { type: "boolean" },
     typeDocument: { type: "string", enum: ["Ordonnance", "Examen", "Mixte", "Autre"] },
-    prescripteur: { type: "string" }, structure: { type: "string" }, date: { type: "string" }, patient: { type: "string" }, codeAffection: { type: "string" },
+    prescripteur: { type: "string" }, titrePrescripteur: { type: "string" }, codePraticien: { type: "string" },
+    structure: { type: "string" }, codeEtablissement: { type: "string" },
+    date: { type: "string" }, patient: { type: "string" }, codeAffection: { type: "string" },
     remarques: { type: "string" },
     lignes: {
       type: "array",
@@ -470,11 +479,23 @@ export class PrescriptionsService {
     if (!lignes.length) throw new BadRequestException("Ajoutez au moins une ligne (médicament ou examen).");
     const numeroOrdonnance = lignes.some((l) => l.type === "Medicament") ? await this.documents.prochainNumeroFormulaire("feuille-soins") : undefined;
     const numeroBonExamen = lignes.some((l) => l.type === "Examen") ? await this.documents.prochainNumeroFormulaire("feuille-examen") : undefined;
+    // Résolution automatique du prescripteur lue par ARIANA (2026-11) — trouve
+    // ou crée le Medecin + Prestataire et maintient leur lien ; best-effort
+    // (jamais bloquant si codePraticien absent ou illisible).
+    const prescripteur = await resoudreOuCreerPrescripteur(this.prisma, {
+      prescripteurNom: dto.prescripteurNom ?? "",
+      titrePrescripteur: dto.titrePrescripteur,
+      codePraticien: dto.codePraticien ?? "",
+      structureNom: dto.structureNom ?? "",
+      codeEtablissement: dto.codeEtablissement ?? "",
+    }).catch(() => ({ medecinId: null, prestataireId: null }));
+
     const creee = await this.prisma.prescription.create({
       data: {
         origine: "Numérisée", assureId: dto.assureId, carnetDocumentId, motifsConsultation: [],
         prescripteurNom: dto.prescripteurNom?.trim() || null, structureNom: dto.structureNom?.trim() || null,
         dateOrdonnance: dto.dateOrdonnance?.trim() || null, codeAffection: dto.codeAffection?.trim() || null,
+        medecinId: prescripteur.medecinId,
         numeroOrdonnance, numeroBonExamen,
         lignes: { create: lignes.map((l) => ({ type: l.type, acteMedicalId: l.acteMedicalId || null, libelle: l.libelle.trim(), quantite: l.quantite ?? 1, posologie: l.posologie?.trim() || null })) },
       },
