@@ -1,9 +1,13 @@
+import * as fs from "fs";
+import * as path from "path";
 import Anthropic from "@anthropic-ai/sdk";
+import sharp from "sharp";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { FacturesService } from "../factures/factures.service";
 import { DocumentsService } from "../documents/documents.service";
 import { MessagingService } from "../messaging/messaging.service";
+import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { GROUPES_ACTES, groupeDeFamille } from "../actes-medicaux/groupes-actes.util";
 import { calculerAgeAns } from "../mouvements/age-limite.util";
 import { resoudreOuCreerPrescripteur } from "../lib/prescripteur.util";
@@ -47,6 +51,9 @@ interface LectureBonPapier {
   structure: string; codeEtablissement: string;
   date: string; patient: string; codeAffection: string; remarques: string;
   lignes: { type: "Medicament" | "Examen"; libelle: string; quantite: number; posologie: string }[];
+  // Zone du cachet/signature du médecin (fractions 0-1 de l'image).
+  cachetVisible: boolean;
+  cachetX: number; cachetY: number; cachetW: number; cachetH: number;
 }
 
 const CONSIGNES_BON_PAPIER = `Tu es ARIANA, assistante d'un gestionnaire d'assurance santé au Gabon.
@@ -62,12 +69,14 @@ Relève fidèlement :
 - patient : nom du patient tel qu'écrit, "" si absent ;
 - codeAffection : code maladie ou code affection s'il figure sur le document (ex. "A09", "J06.9"), "" si absent ;
 - lignes : une ligne par médicament (type "Medicament" : nom commercial ou DCI avec dosage et forme, quantité = nombre de boîtes ou d'unités prescrites, posologie telle qu'écrite) ou par examen (type "Examen" : libellé de l'examen tel qu'un laboratoire le comprend, quantité 1, posologie "").
+- cachetVisible : true si un tampon ou cachet du médecin (avec son nom, sa spécialité ou son numéro d'ordre) est lisiblement visible sur le document, false sinon.
+- cachetX, cachetY, cachetW, cachetH : zone rectangulaire englobant le cachet et la signature du médecin, exprimée en fractions de la largeur et hauteur totale de l'image (0.0 à 1.0, origine en haut à gauche). Mettre à 0 si cachetVisible = false.
 N'invente jamais un médicament ou un examen illisible : signale-le dans remarques. lisible = false si le document est trop flou pour être exploité.
 Réponds uniquement avec le JSON demandé.`;
 
 const SCHEMA_BON_PAPIER = {
   type: "object", additionalProperties: false,
-  required: ["lisible", "typeDocument", "prescripteur", "titrePrescripteur", "codePraticien", "structure", "codeEtablissement", "date", "patient", "codeAffection", "lignes", "remarques"],
+  required: ["lisible", "typeDocument", "prescripteur", "titrePrescripteur", "codePraticien", "structure", "codeEtablissement", "date", "patient", "codeAffection", "lignes", "remarques", "cachetVisible", "cachetX", "cachetY", "cachetW", "cachetH"],
   properties: {
     lisible: { type: "boolean" },
     typeDocument: { type: "string", enum: ["Ordonnance", "Examen", "Mixte", "Autre"] },
@@ -75,6 +84,8 @@ const SCHEMA_BON_PAPIER = {
     structure: { type: "string" }, codeEtablissement: { type: "string" },
     date: { type: "string" }, patient: { type: "string" }, codeAffection: { type: "string" },
     remarques: { type: "string" },
+    cachetVisible: { type: "boolean" },
+    cachetX: { type: "number" }, cachetY: { type: "number" }, cachetW: { type: "number" }, cachetH: { type: "number" },
     lignes: {
       type: "array",
       items: {
@@ -502,6 +513,34 @@ export class PrescriptionsService {
       },
       include: { lignes: true, assure: true },
     });
+
+    // Extraction du cachet/signature du médecin depuis la photo originale —
+    // best-effort, jamais bloquant : si le JPEG source est absent ou si le
+    // crop échoue, le bon électronique est généré sans cachet.
+    if (dto.cachetVisible && dto.cachetW && dto.cachetH && dto.cachetW > 0 && dto.cachetH > 0) {
+      try {
+        const doc = await this.prisma.carnetSanteDocument.findUnique({ where: { id: carnetDocumentId }, select: { fichier: true } });
+        if (doc) {
+          const jpegPath = path.join(UPLOADS_ROOT, "carnet-sante", doc.fichier.replace(/\.pdf$/, ".jpg"));
+          const jpegBuf = await fs.promises.readFile(jpegPath).catch(() => null);
+          if (jpegBuf) {
+            const meta = await sharp(jpegBuf).metadata();
+            const w = meta.width ?? 1600, h = meta.height ?? 1200;
+            const left = Math.max(0, Math.round((dto.cachetX ?? 0) * w));
+            const top = Math.max(0, Math.round((dto.cachetY ?? 0) * h));
+            const width = Math.min(Math.round(dto.cachetW * w), w - left);
+            const height = Math.min(Math.round(dto.cachetH * h), h - top);
+            if (width > 10 && height > 10) {
+              const crop = await sharp(jpegBuf).extract({ left, top, width, height }).jpeg({ quality: 90 }).toBuffer();
+              const cachetPath = path.join(UPLOADS_ROOT, "carnet-sante", doc.fichier.replace(/\.pdf$/, "-cachet.jpg"));
+              await fs.promises.writeFile(cachetPath, crop);
+            }
+          }
+        }
+      } catch (err) {
+        this.logger.warn(`Extraction cachet bon ${carnetDocumentId} échouée (non bloquant) : ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
     const assure = creee.assure!;
     const telephone = assure.telephone
       ?? (assure.familleId ? (await this.prisma.assureSante.findUnique({ where: { id: assure.familleId }, select: { telephone: true } }))?.telephone : null);

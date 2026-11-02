@@ -26,6 +26,7 @@ export function ConvertirBon({ documentId, assureId, onFermer, onConverti }: { d
   const [entete, setEntete] = useState({ prescripteur: "", titrePrescripteur: "", codePraticien: "", structure: "", codeEtablissement: "", date: "", codeAffection: "" });
   const [lignes, setLignes] = useState<Ligne[]>([]);
   const [envoi, setEnvoi] = useState(false);
+  const [cachet, setCachet] = useState<{ visible: boolean; x: number; y: number; w: number; h: number } | null>(null);
   // Établissement et prescripteur pris dans la base quand ils y sont,
   // saisie libre sinon (structure hors réseau, médecin non enregistré).
   const [structures, setStructures] = useState<PrestataireReseau[]>([]);
@@ -51,6 +52,7 @@ export function ConvertirBon({ documentId, assureId, onFermer, onConverti }: { d
         setBeneficiaire(l.assureId);
         setEntete({ prescripteur: l.prescripteur, titrePrescripteur: l.titrePrescripteur, codePraticien: l.codePraticien, structure: l.structure, codeEtablissement: l.codeEtablissement, date: l.date, codeAffection: l.codeAffection });
         setLignes(l.lignes);
+        if (l.cachetVisible && l.cachetW && l.cachetH) setCachet({ visible: true, x: l.cachetX ?? 0, y: l.cachetY ?? 0, w: l.cachetW, h: l.cachetH });
         setRemarque([!l.lisible && "Document peu lisible : vérifiez chaque ligne.", l.typeDocument === "Autre" && "Ce document ne ressemble pas à une prescription.", l.remarques].filter(Boolean).join(" "));
         setLecture("ok");
       })
@@ -76,6 +78,7 @@ export function ConvertirBon({ documentId, assureId, onFermer, onConverti }: { d
         structureNom: structure?.nom ?? entete.structure,
         codeEtablissement: entete.codeEtablissement || undefined,
         dateOrdonnance: entete.date, codeAffection: entete.codeAffection || undefined,
+        ...(cachet ? { cachetVisible: true, cachetX: cachet.x, cachetY: cachet.y, cachetW: cachet.w, cachetH: cachet.h } : {}),
         lignes: retenues.map((l) => ({ type: l.type, libelle: l.libelle, quantite: l.quantite, posologie: l.posologie || undefined, acteMedicalId: l.acteMedicalId ?? undefined })),
       });
       toast.success(`Bon électronique créé : ${[r.numeroOrdonnance && `ordonnance ${r.numeroOrdonnance}`, r.numeroBonExamen && `bon d'examen ${r.numeroBonExamen}`].filter(Boolean).join(" et ")}. La référence vous est aussi envoyée par SMS.`);

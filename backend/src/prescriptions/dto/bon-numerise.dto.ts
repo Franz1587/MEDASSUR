@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { ArrayMinSize, IsArray, IsOptional, IsString, ValidateNested } from "class-validator";
+import { ArrayMinSize, IsArray, IsBoolean, IsNumber, IsOptional, IsString, ValidateNested } from "class-validator";
 import { CreatePrescriptionLigneDto } from "./create-prescription.dto";
 
 // Ordonnance / bon d'examen papier converti en électronique par l'assuré
@@ -35,6 +35,14 @@ export class ValiderBonNumeriseDto {
   @IsOptional()
   @IsString()
   codeAffection?: string;
+
+  // Bounding box du cachet/signature du médecin, lu par ARIANA sur l'original
+  // photographié (fractions 0-1 de la largeur/hauteur de l'image).
+  @IsOptional() @IsBoolean() cachetVisible?: boolean;
+  @IsOptional() @IsNumber() cachetX?: number;
+  @IsOptional() @IsNumber() cachetY?: number;
+  @IsOptional() @IsNumber() cachetW?: number;
+  @IsOptional() @IsNumber() cachetH?: number;
 
   @IsArray()
   @ArrayMinSize(1)

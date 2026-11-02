@@ -146,6 +146,7 @@ export function ConvertirBonScreen() {
   const [lignes, setLignes] = useState<LigneLue[]>([]);
   const [beneficiaire, setBeneficiaire] = useState(assureId);
   const [envoi, setEnvoi] = useState(false);
+  const [cachet, setCachet] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   // Établissement et prescripteur pris dans la base, saisie libre sinon.
   const [structures, setStructures] = useState<PrestataireReseau[]>([]);
   const [medecins, setMedecins] = useState<Professionnel[]>([]);
@@ -168,6 +169,7 @@ export function ConvertirBonScreen() {
       setBeneficiaire(l.assureId);
       setEntete({ prescripteur: l.prescripteur, structure: l.structure, date: l.date, codeAffection: l.codeAffection });
       setLignes(l.lignes.length ? l.lignes : [vide]);
+      if (l.cachetVisible && l.cachetW && l.cachetH) setCachet({ x: l.cachetX ?? 0, y: l.cachetY ?? 0, w: l.cachetW, h: l.cachetH });
       setRemarque([!l.lisible && "Document peu lisible : vérifiez chaque ligne.", l.typeDocument === "Autre" && "Ce document ne ressemble pas à une prescription.", l.remarques].filter(Boolean).join(" "));
       setEtat("ok");
     }).catch((err) => { setRemarque(`${messageErreur(err, "Lecture impossible.")} Saisissez les lignes à la main.`); setLignes([vide]); setEtat("echec"); });
@@ -182,6 +184,7 @@ export function ConvertirBonScreen() {
     try {
       const r = await convertirBonPapier(documentId, {
         assureId: beneficiaire, prescripteurNom: medecin ? nomMedecin(medecin) : entete.prescripteur, structureNom: structure?.nom ?? entete.structure, dateOrdonnance: entete.date, codeAffection: entete.codeAffection || undefined,
+        ...(cachet ? { cachetVisible: true, cachetX: cachet.x, cachetY: cachet.y, cachetW: cachet.w, cachetH: cachet.h } : {}),
         lignes: retenues.map((l) => ({ type: l.type, libelle: l.libelle, quantite: l.quantite, posologie: l.posologie || undefined, acteMedicalId: l.acteMedicalId ?? undefined })),
       });
       Alert.alert("Bon électronique créé", `${[r.numeroOrdonnance && `Ordonnance ${r.numeroOrdonnance}`, r.numeroBonExamen && `Bon d'examen ${r.numeroBonExamen}`].filter(Boolean).join("\n")}\n\nPrésentez cette référence en pharmacie ou au laboratoire (aussi envoyée par SMS).`);

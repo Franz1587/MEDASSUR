@@ -2064,6 +2064,7 @@ export class DocumentsService {
     kind: "soins" | "examen", numero: string, pec: FormulairePec, lignes: LigneFormulaire[], res: Response,
     documentRef?: string, utilisateur?: { id: string | null; nom: string; roleId: string; masquerPrixPharmacie?: boolean },
     prestataireFiltre?: { id: string; nom: string; secteur?: string | null },
+    cachetNumerise?: Buffer,
   ) {
     const p = await this.parametresEntreprise.findOne();
     const logoImage = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
@@ -2672,7 +2673,9 @@ export class DocumentsService {
         if (signatureAssure) { try { doc.image(signatureAssure, 261.1, 795, { fit: TAILLE_SIGNATURE }); } catch { /* jamais bloquant */ } }
       }
       texte("Cachet et signature du Praticien", 416.1, 788.0, { taille: 7.5, w: 150 });
-      if (prestataireFiltre) await this.dessinerCachetPrestataire(doc, 416.1, 795, 150, utilisateur?.id ?? null, prestataireFiltre.nom);
+      if (cachetNumerise) {
+        try { doc.image(cachetNumerise, 416.1, 793, { fit: [148, 45], align: "center", valign: "center" }); } catch { /* jamais bloquant */ }
+      } else if (prestataireFiltre) await this.dessinerCachetPrestataire(doc, 416.1, 795, 150, utilisateur?.id ?? null, prestataireFiltre.nom);
     }
 
     doc.end();
@@ -2844,7 +2847,16 @@ export class DocumentsService {
         codeAffection: prescription.codeAffection ?? null,
         prescriptionOrigine: { medecin: mecin, numeroBonExamen: prescription.numeroBonExamen, medicaments: [] },
       };
-      return this.genererFormulaire("examen", prescription.numeroBonExamen, pec, lignes, res, prescriptionId, utilisateur, prestataireFiltre);
+      // Cachet médecin extrait par ARIANA depuis la photo originale.
+      let cachetNumerise: Buffer | undefined;
+      if (prescription.carnetDocumentId) {
+        const carnetDoc = await this.prisma.carnetSanteDocument.findUnique({ where: { id: prescription.carnetDocumentId }, select: { fichier: true } });
+        if (carnetDoc) {
+          const cachetPath = path.join(UPLOADS_ROOT, "carnet-sante", carnetDoc.fichier.replace(/\.pdf$/, "-cachet.jpg"));
+          cachetNumerise = await fs.promises.readFile(cachetPath).catch(() => undefined);
+        }
+      }
+      return this.genererFormulaire("examen", prescription.numeroBonExamen, pec, lignes, res, prescriptionId, utilisateur, prestataireFiltre, cachetNumerise);
     }
 
     const pec: FormulairePec = {

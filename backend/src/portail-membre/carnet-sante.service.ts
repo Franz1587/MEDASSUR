@@ -66,54 +66,51 @@ export class CarnetSanteService {
       throw new BadRequestException(`Rubrique invalide : ${rubrique}`);
     }
 
-    const filename = `${assureId}-${Date.now()}-${randomUUID().slice(0, 6)}.pdf`;
-    const pdf = await this.convertirPhotoEnPdf(file.buffer);
+    const base = `${assureId}-${Date.now()}-${randomUUID().slice(0, 6)}`;
+    const { jpeg, pdf } = await this.preparerPhotoEtPdf(file.buffer);
     if (this.storage.actif) {
-      await this.storage.upload("carnet-sante", filename, pdf, "application/pdf");
+      await this.storage.upload("carnet-sante", `${base}.pdf`, pdf, "application/pdf");
     } else {
       await fs.promises.mkdir(UPLOADS_CARNET_DIR, { recursive: true });
-      await fs.promises.writeFile(path.join(UPLOADS_CARNET_DIR, filename), pdf);
+      await fs.promises.writeFile(path.join(UPLOADS_CARNET_DIR, `${base}.pdf`), pdf);
+      // JPEG source conservé séparément pour extraction du cachet médecin (ARIANA).
+      await fs.promises.writeFile(path.join(UPLOADS_CARNET_DIR, `${base}.jpg`), jpeg);
     }
 
     return this.prisma.carnetSanteDocument.create({
-      data: { assureId, rubrique, fichier: filename, libelle: libelle?.trim() || null },
+      data: { assureId, rubrique, fichier: `${base}.pdf`, libelle: libelle?.trim() || null },
     });
   }
 
-  // Une page A4, photo centrée et mise à l'échelle (2026-08) — voir
-  // demande utilisateur ci-dessus : "comme des scan existant dans les
-  // téléphones mobiles" — recadrage/amélioration avancée (contraste,
-  // détection de bords) explicitement hors périmètre pour cette version,
-  // seule la mise en page A4 est assurée ici. Rendu en mémoire (Buffer,
-  // 2026-09) plutôt que directement sur disque — nécessaire pour pouvoir
-  // l'envoyer à Supabase Storage aussi bien qu'au disque local, voir
-  // StorageService.
-  private async convertirPhotoEnPdf(photo: Buffer): Promise<Buffer> {
-    // Redimensionnement avant embarquement (2026-09) — voir demande
-    // utilisateur : "je veux la rapidité, la fluidité". Une photo de
-    // téléphone (souvent plusieurs Mo, résolution capteur brute) était
-    // embarquée TELLE QUELLE par pdfkit dans cette page A4 — même symptôme
-    // que sur les cartes d'assurance (voir dessinerPhoto/redimensionnerPhoto,
-    // documents.service.ts) : documents énormes, très lents à charger dans
-    // la visionneuse. 1600px de long côté reste largement lisible en A4 (≈
-    // 190 DPI), ré-encodage JPEG qualité 82. Échec de lecture (format
-    // exotique) → repli sur la photo brute, jamais bloquant.
-    let source: Buffer | string = photo;
+  // Retourne le chemin complet du JPEG source d'un document (si disponible).
+  cheminJpeg(fichierPdf: string): string {
+    return path.join(UPLOADS_CARNET_DIR, fichierPdf.replace(/\.pdf$/, ".jpg"));
+  }
+
+  // Retourne le chemin complet du cachet médecin extrait (si disponible).
+  cheminCachet(fichierPdf: string): string {
+    return path.join(UPLOADS_CARNET_DIR, fichierPdf.replace(/\.pdf$/, "-cachet.jpg"));
+  }
+
+  // Prépare le JPEG source (redimensionné) ET le PDF A4 à partir d'une photo.
+  // JPEG conservé séparément pour extraction du cachet médecin par ARIANA.
+  private async preparerPhotoEtPdf(photo: Buffer): Promise<{ jpeg: Buffer; pdf: Buffer }> {
+    let jpeg: Buffer = photo;
     try {
-      // flatten fond blanc — voir même correctif sur redimensionnerPhoto,
-      // documents.service.ts (sinon toute zone transparente vire au noir).
-      source = await sharp(photo).rotate().resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true }).flatten({ background: "#ffffff" }).jpeg({ quality: 82 }).toBuffer();
+      // flatten fond blanc — toute zone transparente vire au noir sans ça.
+      jpeg = await sharp(photo).rotate().resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true }).flatten({ background: "#ffffff" }).jpeg({ quality: 82 }).toBuffer();
     } catch { /* repli sur la photo brute */ }
 
-    return new Promise((resolve, reject) => {
+    const pdf = await new Promise<Buffer>((resolve, reject) => {
       const doc = new PDFDocument({ size: "A4", margin: 0 });
       const morceaux: Buffer[] = [];
       doc.on("data", (m: Buffer) => morceaux.push(m));
       doc.on("end", () => resolve(Buffer.concat(morceaux)));
       doc.on("error", reject);
-      doc.image(source, 0, 0, { fit: [doc.page.width, doc.page.height], align: "center", valign: "center" });
+      doc.image(jpeg, 0, 0, { fit: [doc.page.width, doc.page.height], align: "center", valign: "center" });
       doc.end();
     });
+    return { jpeg, pdf };
   }
 
   // Fusionne les documents photographiés par l'assuré ET les vrais bons
@@ -183,7 +180,12 @@ export class CarnetSanteService {
     if (!doc || !idsFamille.includes(doc.assureId)) throw new NotFoundException(`Document ${id} introuvable`);
     await this.prisma.carnetSanteDocument.delete({ where: { id } });
     if (this.storage.actif) await this.storage.delete("carnet-sante", doc.fichier);
-    else await fs.promises.unlink(path.join(UPLOADS_CARNET_DIR, doc.fichier)).catch(() => undefined);
+    else {
+      await fs.promises.unlink(path.join(UPLOADS_CARNET_DIR, doc.fichier)).catch(() => undefined);
+      // Supprimer aussi le JPEG source et le cachet extrait (silencieux si absents).
+      await fs.promises.unlink(this.cheminJpeg(doc.fichier)).catch(() => undefined);
+      await fs.promises.unlink(this.cheminCachet(doc.fichier)).catch(() => undefined);
+    }
   }
 
   async document(id: string, idsFamille: string[]) {

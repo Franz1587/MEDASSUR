@@ -436,6 +436,11 @@ export function CarnetSanteScreen() {
               ) : null}
             </View>
             {d.statut ? <Badge label={d.statut === "NonTraite" ? "Non traité" : d.statut === "PartiellementTraite" ? "Partiel" : "Traité"} variant={statutVariant(d.statut)} /> : null}
+            {d.source === "upload" && d.prescriptionId && d.fichier ? (
+              <Pressable onPress={() => navigation.navigate("DocumentViewer", { path: urlCarnetSante(d.fichier!), titre: "Photo originale" })} hitSlop={8} style={styles.docAction}>
+                <Ionicons name="image-outline" size={18} color={colors.textMuted} />
+              </Pressable>
+            ) : null}
             <Pressable onPress={() => ouvrir(d)} hitSlop={8} style={styles.docAction}>
               <Ionicons name="eye-outline" size={18} color={colors.primary} />
             </Pressable>
