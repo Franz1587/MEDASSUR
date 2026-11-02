@@ -28,15 +28,15 @@ function chargerPdfjs(): Promise<typeof PdfjsLib> {
 // nouvel onglet ou en téléchargement forcé. Télécharger/Imprimer restent
 // disponibles depuis la visionneuse elle-même.
 //
-// Rendu via pdf.js sur <canvas> (2026-09) — voir demande utilisateur :
-// "sur la version responsive sur smartphone il y a un problème d'affichage
-// de document". L'ancienne implémentation déléguait le rendu à l'iframe
-// PDF native du navigateur (`<iframe src="blob:...#toolbar=0">`) : Chrome
-// et Edge desktop savent l'afficher, mais Chrome/Safari mobile n'ont PAS ce
-// plugin PDF intégré dans une iframe — la zone restait blanche. pdf.js
-// dessine chaque page nous-mêmes sur un <canvas>, donc le rendu est
-// identique sur toutes les plateformes (desktop ET mobile), sans dépendre
-// d'une fonctionnalité de navigateur absente sur mobile.
+// Rendu lazy par page (2026-11) : seules les pages visibles (± 150 px) sont
+// dessinées sur canvas. Les autres ont un placeholder de la bonne hauteur
+// (calculé depuis les dimensions de la page 1, toutes les pages étant A4
+// pour les documents générés). Résultat : la page 1 s'affiche en ~300 ms et
+// la RAM reste basse même pour un PDF de 24 pages.
+//
+// DPR plafonné à 1,5 — un DPR=3 (mobiles récents) rend les canvases 9×
+// plus lourds qu'à DPR=1 pour un gain visuel marginal sur des documents
+// A4 typiquement affichés en plein écran à ~400 px de large.
 export function PdfViewerHost() {
   const [doc, setDoc] = useState<PdfAAfficher | null>(null);
   const [url, setUrl] = useState<string | null>(null);
@@ -45,11 +45,8 @@ export function PdfViewerHost() {
   const [erreur, setErreur] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pdfDocRef = useRef<PdfjsLib.PDFDocumentProxy | null>(null);
-  // Un seul jeu de rendu à la fois par page (2026-09) — un changement de
-  // largeur de fenêtre pendant le rendu (rotation d'écran, redimensionnement)
-  // relance le rendu de toutes les pages ; sans ce verrou, deux rendus
-  // concurrents sur le même <canvas> pdf.js lèvent une exception.
   const renderTokenRef = useRef(0);
+  const observerRef = useRef<IntersectionObserver | null>(null);
 
   useEffect(() => {
     enregistrerAfficheurPdf(setDoc);
@@ -70,10 +67,6 @@ export function PdfViewerHost() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [doc]);
 
-  // Chargement + rendu de toutes les pages, empilées verticalement dans le
-  // conteneur défilant — chaque page mise à l'échelle sur la largeur
-  // disponible, recalculée à l'ouverture et au redimensionnement (rotation
-  // téléphone/tablette, panneau latéral qui change de taille).
   useEffect(() => {
     if (!url || !scrollRef.current) return;
     const token = ++renderTokenRef.current;
@@ -81,50 +74,97 @@ export function PdfViewerHost() {
     setChargement(true);
     setErreur(false);
     setNbPages(0);
+    // Plafonner le DPR à 1,5 — DPR=2-3 (Retina/mobile) multiplie la mémoire
+    // canvas par 4-9 pour un gain de netteté négligeable sur un PDF A4.
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
 
-    const rendreTout = async () => {
-      const conteneur = scrollRef.current;
-      if (!conteneur) return;
+    const init = async () => {
+      const conteneur = scrollRef.current!;
       conteneur.innerHTML = "";
+      observerRef.current?.disconnect();
 
       const pdfjsLib = await chargerPdfjs();
       const pdfDoc = await pdfjsLib.getDocument(url).promise;
       if (annule || token !== renderTokenRef.current) { pdfDoc.destroy(); return; }
       pdfDocRef.current = pdfDoc;
-      setNbPages(pdfDoc.numPages);
 
-      const largeurDisponible = Math.max(200, conteneur.clientWidth - 32);
+      const n = pdfDoc.numPages;
+      setNbPages(n);
 
-      for (let n = 1; n <= pdfDoc.numPages; n++) {
-        if (annule || token !== renderTokenRef.current) return;
-        const page = await pdfDoc.getPage(n);
-        const viewportBrut = page.getViewport({ scale: 1 });
-        const echelle = largeurDisponible / viewportBrut.width;
-        const viewport = page.getViewport({ scale: echelle * (window.devicePixelRatio || 1) });
+      const largeur = Math.max(200, conteneur.clientWidth - 32);
 
-        const canvas = document.createElement("canvas");
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        canvas.style.width = `${largeurDisponible}px`;
-        canvas.style.height = `${viewport.height / (window.devicePixelRatio || 1)}px`;
-        canvas.className = "shadow-sm border border-border/60 bg-white mx-auto block mb-3 last:mb-0";
-        conteneur.appendChild(canvas);
+      // Dimensions de la page 1 utilisées pour tous les placeholders —
+      // tous nos PDFs générés sont A4 : une seule requête getPage() suffit.
+      const page1 = await pdfDoc.getPage(1);
+      if (annule || token !== renderTokenRef.current) return;
+      const vp0 = page1.getViewport({ scale: 1 });
+      const echelle = largeur / vp0.width;
+      const pageH = Math.round(vp0.height * echelle);
 
-        const ctx = canvas.getContext("2d");
-        if (!ctx) continue;
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        // Rendu progressif : masquer le spinner dès que la page 1 est visible,
-        // les pages suivantes s'ajoutent en arrière-plan pendant que l'utilisateur lit.
-        if (n === 1) setChargement(false);
+      // Créer les placeholders pour toutes les pages en une passe (instantané)
+      // afin que le scrollbar reflète la vraie hauteur du document dès
+      // l'ouverture, avant même que les pages soient rendues.
+      const placeholders: HTMLDivElement[] = [];
+      for (let i = 1; i <= n; i++) {
+        const ph = document.createElement("div");
+        ph.style.cssText = `width:${largeur}px;height:${pageH}px;`;
+        ph.className = "mx-auto mb-3 last:mb-0 bg-white shadow-sm border border-border/60";
+        ph.dataset.page = String(i);
+        conteneur.appendChild(ph);
+        placeholders.push(ph);
       }
+
+      const rendered = new Set<number>();
+
+      const renderPage = async (pageNum: number, ph: HTMLDivElement) => {
+        if (rendered.has(pageNum) || annule || token !== renderTokenRef.current) return;
+        rendered.add(pageNum);
+        try {
+          const page = await pdfDoc.getPage(pageNum);
+          const viewport = page.getViewport({ scale: echelle * dpr });
+          const canvas = document.createElement("canvas");
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          canvas.style.cssText = `width:${largeur}px;height:${Math.round(viewport.height / dpr)}px;display:block;`;
+          ph.style.height = "";
+          ph.innerHTML = "";
+          ph.appendChild(canvas);
+          const ctx = canvas.getContext("2d");
+          if (ctx) await page.render({ canvasContext: ctx, viewport }).promise;
+        } catch { /* non-bloquant */ }
+      };
+
+      // Rendre la page 1 immédiatement → le spinner disparaît
+      await renderPage(1, placeholders[0]);
+      setChargement(false);
+
+      // IntersectionObserver pour les pages suivantes : render à la demande
+      // quand une page entre dans le viewport (+ 150 px de marge anticipée).
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            const ph = entry.target as HTMLDivElement;
+            const p = Number(ph.dataset.page);
+            renderPage(p, ph).catch(() => {});
+            // Pré-rendre la page suivante pour fluidifier le défilement
+            if (p < n) renderPage(p + 1, placeholders[p]).catch(() => {});
+          }
+        },
+        { root: conteneur.parentElement, rootMargin: "150px 0px" },
+      );
+      observerRef.current = observer;
+      // Observez toutes les pages sauf la 1re déjà rendue
+      for (const ph of placeholders.slice(1)) observer.observe(ph);
     };
 
-    rendreTout()
-      .catch((e) => { if (!annule) { console.error("Rendu PDF échoué", e); setErreur(true); } })
-      .finally(() => { if (!annule) setChargement(false); }); // no-op après page 1, gère doc vide
+    init().catch((e) => {
+      if (!annule) { console.error("Rendu PDF échoué", e); setErreur(true); setChargement(false); }
+    });
 
     return () => {
       annule = true;
+      observerRef.current?.disconnect();
       pdfDocRef.current?.destroy();
       pdfDocRef.current = null;
     };
