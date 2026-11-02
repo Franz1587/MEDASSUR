@@ -2854,10 +2854,10 @@ export class DocumentsService {
         if (carnetDoc) {
           const cachetPath = path.join(UPLOADS_ROOT, "carnet-sante", carnetDoc.fichier.replace(/\.pdf$/, "-cachet.jpg"));
           cachetNumerise = await fs.promises.readFile(cachetPath).catch(() => undefined);
-          this.logger.log(`[cachet-render] carnetDocumentId=${prescription.carnetDocumentId} fichier=${carnetDoc.fichier} cachetPath=${cachetPath} trouvé=${!!cachetNumerise}`);
+          Logger.log(`[cachet-render] carnetDocumentId=${prescription.carnetDocumentId} fichier=${carnetDoc.fichier} cachetPath=${cachetPath} trouvé=${!!cachetNumerise}`, "DocumentsService");
         }
       } else {
-        this.logger.log(`[cachet-render] prescription ${prescriptionId} sans carnetDocumentId`);
+        Logger.log(`[cachet-render] prescription ${prescriptionId} sans carnetDocumentId`, "DocumentsService");
       }
       return this.genererFormulaire("examen", prescription.numeroBonExamen, pec, lignes, res, prescriptionId, utilisateur, prestataireFiltre, cachetNumerise);
     }
