@@ -20,6 +20,10 @@ export class ValiderBonNumeriseDto {
   @IsString()
   dateOrdonnance?: string;
 
+  @IsOptional()
+  @IsString()
+  codeAffection?: string;
+
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })

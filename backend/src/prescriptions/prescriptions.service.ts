@@ -473,7 +473,8 @@ export class PrescriptionsService {
       data: {
         origine: "Numérisée", assureId: dto.assureId, carnetDocumentId, motifsConsultation: [],
         prescripteurNom: dto.prescripteurNom?.trim() || null, structureNom: dto.structureNom?.trim() || null,
-        dateOrdonnance: dto.dateOrdonnance?.trim() || null, numeroOrdonnance, numeroBonExamen,
+        dateOrdonnance: dto.dateOrdonnance?.trim() || null, codeAffection: dto.codeAffection?.trim() || null,
+        numeroOrdonnance, numeroBonExamen,
         lignes: { create: lignes.map((l) => ({ type: l.type, acteMedicalId: l.acteMedicalId || null, libelle: l.libelle.trim(), quantite: l.quantite ?? 1, posologie: l.posologie?.trim() || null })) },
       },
       include: { lignes: true, assure: true },

@@ -67,6 +67,7 @@ type FormulairePec = {
     };
   };
   prestataireRef: { id: string; nom: string; secteur: string | null } | null;
+  codeAffection?: string | null;
   prescriptionOrigine: {
     medecin: { id: string; nom: string; prenom: string | null; titre: string | null; specialite: string | null; codePraticien: string | null };
     numeroBonExamen: string | null;
@@ -2107,9 +2108,9 @@ export class DocumentsService {
       ? String(Math.round(100 - tauxApplicable))
       : (lignePrincipale?.tauxRemboursement !== null && lignePrincipale?.tauxRemboursement !== undefined
         ? String(Math.round(100 - lignePrincipale.tauxRemboursement)) : null);
-    const codePraticien = medecin?.codePraticien || (medecin ? refNumerique(medecin.id) : null);
-    const codeEtablissement = pec.prestataireRef ? refNumerique(pec.prestataireRef.id) : null;
-    const codeAffection = lignePrincipale?.codeAffection ?? null;
+    const codePraticien = medecin?.codePraticien || (medecin && medecin.id ? refNumerique(medecin.id) : null);
+    const codeEtablissement = pec.prestataireRef?.id ? refNumerique(pec.prestataireRef.id) : null;
+    const codeAffection = lignePrincipale?.codeAffection ?? pec.codeAffection ?? null;
     const estSpecialiste = !!medecin?.specialite;
     const heure = lignePrincipale?.createdAt ?? pec.createdAt;
     const estTarifJour = heure.getHours() >= 6 && heure.getHours() < 20;
@@ -2829,12 +2830,13 @@ export class DocumentsService {
       // Prescription numérisée — générer la vraie FE électronique depuis les
       // données de la prescription (assure + lignes ARIANA), pas la photo.
       if (!prescription.assure) return this.renderOriginalNumerise(prescriptionId, res);
-      const mecin = prescription.medecin ?? { id: "", nom: "—", prenom: null, titre: null, specialite: null, codePraticien: null };
+      const mecin = prescription.medecin ?? { id: "", nom: prescription.prescripteurNom ?? "—", prenom: null, titre: null, specialite: null, codePraticien: null };
       const pec: FormulairePec = {
         date: prescription.dateOrdonnance ?? new Date().toISOString().slice(0, 10),
         type: "Examen", createdAt: prescription.createdAt,
         assure: prescription.assure as unknown as FormulairePec["assure"],
-        prestataireRef: null,
+        prestataireRef: prescription.structureNom ? { id: "", nom: prescription.structureNom, secteur: null } : null,
+        codeAffection: prescription.codeAffection ?? null,
         prescriptionOrigine: { medecin: mecin, numeroBonExamen: prescription.numeroBonExamen, medicaments: [] },
       };
       return this.genererFormulaire("examen", prescription.numeroBonExamen, pec, lignes, res, prescriptionId, utilisateur, prestataireFiltre);
