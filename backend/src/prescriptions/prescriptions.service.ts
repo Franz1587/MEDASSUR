@@ -550,7 +550,6 @@ export class PrescriptionsService {
               const { data: raw, info: meta2 } = await sharp(jpegBuf)
                 .extract({ left, top, width, height })
                 .normalise()
-                .sharpen({ sigma: 2 })
                 .ensureAlpha()
                 .raw()
                 .toBuffer({ resolveWithObject: true });
@@ -560,8 +559,10 @@ export class PrescriptionsService {
                 const maxC = Math.max(rgba[i], rgba[i + 1], rgba[i + 2]);
                 const minC = Math.min(rgba[i], rgba[i + 1], rgba[i + 2]);
                 const sat = maxC === 0 ? 0 : (maxC - minC) / maxC;
-                // Encre = sombre OU coloré (tampon bleu/violet) ; fond = transparent
-                rgba[i + 3] = (lum < 128 || (sat > 0.3 && lum < 180)) ? 255 : 0;
+                // Seuil 90 (au lieu de 128) : évite que la texture papier grise
+                // (lum 90-127 après normalise) reste opaque. sharpen() retiré car
+                // il crée des halos gris aux bordures de l'encre.
+                rgba[i + 3] = (lum < 90 || (sat > 0.3 && lum < 180)) ? 255 : 0;
               }
               const crop = await sharp(rgba, { raw: { width: meta2.width, height: meta2.height, channels: 4 } }).png().toBuffer();
               const cachetPath = path.join(UPLOADS_ROOT, "carnet-sante", doc.fichier.replace(/\.pdf$/, "-cachet.png"));
@@ -593,13 +594,13 @@ export class PrescriptionsService {
             const hWidth = iw - hLeft, hHeight = Math.round(ih * 0.50);
             const { data: raw3, info: meta4 } = await sharp(jpegBuf2)
               .extract({ left: hLeft, top: hTop, width: hWidth, height: hHeight })
-              .normalise().sharpen({ sigma: 2 }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+              .normalise().ensureAlpha().raw().toBuffer({ resolveWithObject: true });
             const rgba3 = Buffer.from(raw3);
             for (let i = 0; i < rgba3.length; i += 4) {
               const lum = 0.299 * rgba3[i] + 0.587 * rgba3[i + 1] + 0.114 * rgba3[i + 2];
               const maxC = Math.max(rgba3[i], rgba3[i + 1], rgba3[i + 2]);
               const sat = maxC === 0 ? 0 : (maxC - Math.min(rgba3[i], rgba3[i + 1], rgba3[i + 2])) / maxC;
-              rgba3[i + 3] = (lum < 128 || (sat > 0.3 && lum < 180)) ? 255 : 0;
+              rgba3[i + 3] = (lum < 90 || (sat > 0.3 && lum < 180)) ? 255 : 0;
             }
             const cropH = await sharp(rgba3, { raw: { width: meta4.width, height: meta4.height, channels: 4 } }).png().toBuffer();
             const cachetPathH = path.join(UPLOADS_ROOT, "carnet-sante", doc2.fichier.replace(/\.pdf$/, "-cachet.png"));
