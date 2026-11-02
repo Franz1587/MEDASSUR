@@ -537,20 +537,24 @@ export class PrescriptionsService {
             const height = Math.min(Math.round(dto.cachetH * h), h - top);
             this.logger.log(`[cachet] image ${w}x${h} → crop left=${left} top=${top} width=${width} height=${height}`);
             if (width > 10 && height > 10) {
-              // Effet "scan numérique" : contraste auto + netteté + fond transparent
-              // (pixels clairs → transparents, encre sombre → opaque).
+              // Effet "scan numérique" : contraste auto + netteté + fond transparent.
+              // Encre colorée (saturation > 0.2) ou sombre (max < 170) → opaque,
+              // fond blanc/gris non saturé → transparent. Garde la couleur originale.
               const { data: raw, info: meta2 } = await sharp(jpegBuf)
                 .extract({ left, top, width, height })
                 .normalise()
                 .sharpen({ sigma: 2 })
-                .flatten({ background: "#ffffff" })
                 .ensureAlpha()
                 .raw()
                 .toBuffer({ resolveWithObject: true });
               const rgba = Buffer.from(raw);
               for (let i = 0; i < rgba.length; i += 4) {
-                const lum = 0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2];
-                rgba[i + 3] = lum > 210 ? 0 : lum < 100 ? 255 : Math.round((210 - lum) * 255 / 110);
+                const maxC = Math.max(rgba[i], rgba[i + 1], rgba[i + 2]);
+                const minC = Math.min(rgba[i], rgba[i + 1], rgba[i + 2]);
+                const sat = maxC === 0 ? 0 : (maxC - minC) / maxC;
+                // Encre : colorée (tampon bleu/violet) ou sombre (noir) → opaque
+                const isInk = sat > 0.2 || maxC < 170;
+                rgba[i + 3] = isInk ? 255 : Math.max(0, Math.round((200 - maxC) * 255 / 30));
               }
               const crop = await sharp(rgba, { raw: { width: meta2.width, height: meta2.height, channels: 4 } }).png().toBuffer();
               const cachetPath = path.join(UPLOADS_ROOT, "carnet-sante", doc.fichier.replace(/\.pdf$/, "-cachet.png"));

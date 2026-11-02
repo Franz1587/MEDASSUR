@@ -2576,6 +2576,8 @@ export class DocumentsService {
       if (medecin) {
         const signatureMedecin = await this.chargerSignatureMedecin(medecin.id);
         if (signatureMedecin) { try { doc.image(signatureMedecin, 413.2, 338, { fit: TAILLE_SIGNATURE }); } catch { /* jamais bloquant */ } }
+      } else if (cachetNumerise) {
+        try { doc.image(cachetNumerise, 413.2, 333, { fit: [150, 36], align: "center", valign: "center" }); } catch { /* jamais bloquant */ }
       }
       texte("Code praticien", 50.0, 346.9);
       let finC = boiteValeur(102.8, 344.6, 46.9, 10.1, codePraticien ?? "—");
