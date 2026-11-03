@@ -42,7 +42,10 @@ export class CommunicationsService {
   private async envoyerReel(canal: string, contact: string, contenu: string): Promise<"Envoyé" | "Simulé"> {
     if (canal === "Email") return "Simulé";
     if (!this.messaging.actif) return "Simulé";
-    const canalZavu = canal === "WhatsApp" ? "whatsapp" : canal === "SMS" ? "sms" : "auto";
+    // "auto" pour SMS aussi : Zavu tente WhatsApp (sender Ariana valide) puis
+    // retombe sur SMS carrier — SMS pur échoue sur Airtel Gabon ("Invalid
+    // sender phone number" depuis le numéro US +14302830369 de Zavu).
+    const canalZavu = canal === "WhatsApp" ? "whatsapp" : "auto";
     const ok = await this.messaging.envoyer(contact, contenu, canalZavu as "auto" | "sms" | "whatsapp");
     return ok ? "Envoyé" : "Simulé";
   }
