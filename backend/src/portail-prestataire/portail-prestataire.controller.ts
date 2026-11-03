@@ -273,15 +273,17 @@ export class PortailPrestataireController {
   // toujours résolu en direct (jamais mis en cache depuis la première
   // visite).
   @Get("patients")
-  async mesPatients(@Req() req: PortailPrestataireRequest) {
+  async mesPatients(@Query("clientSocieteId") clientSocieteId: string | undefined, @Req() req: PortailPrestataireRequest) {
     const prestataireId = this.prestataireIdDe(req);
-    const lignes = await this.prisma.priseEnCharge.findMany({
-      where: { prestataireId },
-      distinct: ["assureId"],
-      select: { assure: true },
-      orderBy: { date: "desc" },
+    return this.avecClientSociete(prestataireId, req.user.societeId, clientSocieteId, req.user.userId, async () => {
+      const lignes = await this.prisma.priseEnCharge.findMany({
+        where: { prestataireId },
+        distinct: ["assureId"],
+        select: { assure: true },
+        orderBy: { date: "desc" },
+      });
+      return lignes.map((l) => l.assure);
     });
-    return lignes.map((l) => l.assure);
   }
 
   // garantiesVisibles (2026-08) — voir demande utilisateur : "on doit
@@ -339,9 +341,10 @@ export class PortailPrestataireController {
   }
 
   @Get("prestations")
-  async prestations(@Req() req: PortailPrestataireRequest) {
+  async prestations(@Query("clientSocieteId") clientSocieteId: string | undefined, @Req() req: PortailPrestataireRequest) {
     const prestataireId = this.prestataireIdDe(req);
-    const societeIds = await this.getSocietesAccessibles(prestataireId, req.user.societeId);
+    const allSocieteIds = await this.getSocietesAccessibles(prestataireId, req.user.societeId);
+    const societeIds = clientSocieteId ? allSocieteIds.filter((id) => id === clientSocieteId) : allSocieteIds;
     const lots = await Promise.all(
       societeIds.map(async (sid) => {
         const [societe, factures] = await Promise.all([

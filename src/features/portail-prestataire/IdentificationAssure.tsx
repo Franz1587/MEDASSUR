@@ -69,7 +69,7 @@ export function IdentificationAssure({ onNouvellePrestation, titreAction = "Nouv
     setSelectionne(null);
     try {
       const resultats = await rechercherPatients(canalRecherche, valeurRecherche.trim(), clientActif?.id);
-      if (resultats.length === 0) toast.error("Aucun assuré trouvé pour cette recherche.");
+      if (resultats.length === 0) toast.error(clientActif ? `Aucun assuré ou ayant droit actif existe sur cet organisme de prise en charge avec ces informations.` : "Aucun assuré trouvé pour cette recherche.");
       setFamille(resultats);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Recherche impossible.");

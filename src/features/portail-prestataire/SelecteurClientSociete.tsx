@@ -3,6 +3,7 @@ import { Building2 } from "lucide-react";
 import { useClientSociete } from "./ClientSocieteContext";
 import { logoEntrepriseUrl } from "@/services/parametresEntreprise.service";
 import type { ClientSociete } from "@/services/portailPrestataire.service";
+import logoMedassurPlus from "@/assets/logo-mark.png";
 export type { ClientSociete };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -13,7 +14,7 @@ const TYPE_LABEL: Record<string, string> = {
 
 // Carte sélecteur réutilisable (inline ou plein écran).
 export function CarteClientSociete({ c, onClick }: { c: ClientSociete; onClick: () => void }) {
-  const logoSrc = logoEntrepriseUrl(c.logo);
+  const logoSrc = c.id === "societe-bootstrap" ? logoMedassurPlus : logoEntrepriseUrl(c.logo);
   return (
     <button
       type="button"

@@ -161,14 +161,13 @@ export default function PrestatairePrestationsView() {
   const [rechercheAu, setRechercheAu] = useState("");
   const [filtre, setFiltre] = useState({ ref: "", patient: "", du: "", au: "" });
 
-  const rafraichir = () => getPrestations().then(setPrestations);
+  const rafraichir = () => getPrestations(clientActif?.id).then(setPrestations);
 
   const prestationsFiltrees = useMemo(() => {
     const ref = filtre.ref.trim().toLowerCase();
     const nom = filtre.patient.trim().toLowerCase();
     return (prestations ?? []).filter((p) =>
-      (!clientActif || !p.societeNom || p.societeNom === clientActif.nom)
-      && referenceCorrespond(p.referenceFacture, ref)
+      referenceCorrespond(p.referenceFacture, ref)
       && (nom === "" || p.lignes.some((l) => l.assureNom.toLowerCase().includes(nom)))
       && dansPeriode(p.dateReception, filtre.du, filtre.au));
   }, [prestations, filtre, clientActif]);
@@ -180,7 +179,11 @@ export default function PrestatairePrestationsView() {
   };
 
   useEffect(() => {
-    rafraichir();
+    setPrestations(null);
+    getPrestations(clientActif?.id).then(setPrestations);
+  }, [clientActif?.id]);
+
+  useEffect(() => {
     getActesMedicaux().then(setActes);
     getMoiPrestataire().then((p) => setCategoriesActesVisibles(p.categoriesActesVisibles));
     getMedecinsPrestataire().then(setMedecins).catch(() => undefined);

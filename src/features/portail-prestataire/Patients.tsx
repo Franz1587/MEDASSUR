@@ -39,7 +39,10 @@ export default function PrestatairePatientsView() {
   const [filtre, setFiltre] = useState("");
   const [patientDirect, setPatientDirect] = useState<string | undefined>();
 
-  useEffect(() => { getMesPatients().then(setPatients); }, []);
+  useEffect(() => {
+    setPatients(null);
+    if (clientActif) getMesPatients(clientActif.id).then(setPatients).catch(() => setPatients([]));
+  }, [clientActif?.id]);
 
   const patientsFiltres = useMemo(() => {
     const q = filtre.trim().toLowerCase();

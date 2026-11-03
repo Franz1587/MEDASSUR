@@ -95,8 +95,9 @@ export async function rechercherPatients(type: CanalRecherchePatient, valeur: st
 // déjà existant... ayant déjà été servi au moins une fois par le
 // prestataire". Un patient par ligne, statut toujours résolu en direct
 // côté serveur (voir PortailPrestataireController.mesPatients).
-export async function getMesPatients(): Promise<PatientFamilleMembre[]> {
-  return http.get<PatientFamilleMembre[]>("/portail-prestataire/patients");
+export async function getMesPatients(clientSocieteId?: string): Promise<PatientFamilleMembre[]> {
+  const params = clientSocieteId ? `?clientSocieteId=${encodeURIComponent(clientSocieteId)}` : "";
+  return http.get<PatientFamilleMembre[]>(`/portail-prestataire/patients${params}`);
 }
 
 export interface PatientGarantie {
@@ -251,8 +252,9 @@ export async function apercuLignePrestation(payload: { assureId: string; typePre
   };
 }
 
-export async function getPrestations(): Promise<Prestation[]> {
-  const data = await http.get<ApiPrestation[]>("/portail-prestataire/prestations");
+export async function getPrestations(clientSocieteId?: string): Promise<Prestation[]> {
+  const params = clientSocieteId ? `?clientSocieteId=${encodeURIComponent(clientSocieteId)}` : "";
+  const data = await http.get<ApiPrestation[]>(`/portail-prestataire/prestations${params}`);
   return data.map(mapPrestation);
 }
 
