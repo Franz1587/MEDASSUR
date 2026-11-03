@@ -23,9 +23,10 @@ export function ClientSocieteProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     getMesClients().then((list) => {
       setClients(list);
-      if (list.length === 1) { setClientActif(list[0]); setPret(true); }
-      else if (list.length === 0) setPret(true);
-      // Si > 1 : l'écran SélecteurClientSociete attend que l'utilisateur choisisse
+      // Toujours pré-sélectionner le premier client (société maison) —
+      // la sélection explicite se fait page par page via SocieteGate.
+      if (list.length > 0) setClientActif(list[0]);
+      setPret(true);
     }).catch(() => setPret(true));
   }, []);
 
