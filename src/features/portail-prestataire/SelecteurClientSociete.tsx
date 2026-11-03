@@ -34,29 +34,37 @@ export function CarteClientSociete({ c, onClick }: { c: ClientSociete; onClick: 
   );
 }
 
-// Sélecteur compact horizontal — affiché en haut d'une page quand multi-clients.
+// Sélecteur compact horizontal — toujours affiché dès qu'il y a au moins un client.
+// Un seul client : badge de contexte (non interactif). Plusieurs : boutons cliquables.
 export function SocieteSwitcherInline() {
   const { clients, clientActif, setClientActif } = useClientSociete();
-  if (clients.length <= 1) return null;
+  if (clients.length === 0 || !clientActif) return null;
+
+  const chipCls = (isActif: boolean, clickable: boolean) =>
+    `inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12px] font-medium transition-colors ${
+      isActif ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground"
+    } ${clickable ? "hover:border-primary/40 hover:text-foreground cursor-pointer" : "cursor-default"}`;
+
   return (
     <div className="flex items-center gap-2 flex-wrap py-1">
+      <span className="text-[11.5px] text-muted-foreground shrink-0">Organisme :</span>
       {clients.map((c) => {
         const logoSrc = logoEntrepriseUrl(c.logo);
-        const isActif = c.id === clientActif?.id;
+        const isActif = c.id === clientActif.id;
+        const logo = (
+          <span className="w-5 h-5 flex items-center justify-center overflow-hidden shrink-0">
+            {logoSrc ? <img src={logoSrc} alt={c.nom} className="w-full h-full object-contain" /> : <Building2 className="w-4 h-4" />}
+          </span>
+        );
+        if (clients.length > 1) {
+          return (
+            <button key={c.id} type="button" onClick={() => setClientActif(c)} className={chipCls(isActif, true)}>
+              {logo}{c.nom}
+            </button>
+          );
+        }
         return (
-          <button
-            key={c.id} type="button" onClick={() => setClientActif(c)}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12px] font-medium transition-colors ${
-              isActif ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"
-            }`}
-          >
-            <span className="w-5 h-5 flex items-center justify-center overflow-hidden shrink-0">
-              {logoSrc
-                ? <img src={logoSrc} alt={c.nom} className="w-full h-full object-contain" />
-                : <Building2 className="w-4 h-4" />}
-            </span>
-            {c.nom}
-          </button>
+          <span key={c.id} className={chipCls(isActif, false)}>{logo}{c.nom}</span>
         );
       })}
     </div>
