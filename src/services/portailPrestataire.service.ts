@@ -184,6 +184,7 @@ export interface Prestation {
   statut: string;
   motifAnnulation?: string;
   statutReel: StatutActuelDocument | null;
+  societeNom?: string;
   lignes: PrestationLigne[];
 }
 
@@ -195,7 +196,8 @@ interface ApiPrestationLigne {
 }
 interface ApiPrestation {
   id: string; referenceFacture: string; dateReception: string; statut: string;
-  motifAnnulation?: string | null; statutReel: StatutActuelDocument | null; lignes: ApiPrestationLigne[];
+  motifAnnulation?: string | null; statutReel: StatutActuelDocument | null;
+  societeNom?: string | null; lignes: ApiPrestationLigne[];
 }
 
 function mapPrestation(f: ApiPrestation): Prestation {
@@ -203,6 +205,7 @@ function mapPrestation(f: ApiPrestation): Prestation {
     id: f.id, referenceFacture: f.referenceFacture, dateReception: f.dateReception, statut: f.statut,
     motifAnnulation: f.motifAnnulation ?? undefined,
     statutReel: f.statutReel ?? null,
+    societeNom: f.societeNom ?? undefined,
     lignes: f.lignes.map((l) => ({
       id: l.id, assureId: l.assureId, assureNom: `${l.assure.nom} ${l.assure.prenom ?? ""}`.trim(),
       typePrestation: l.type, datePrestation: l.date, acteMedicalId: l.acteMedicalId, acteLibelle: l.acteMedical?.libelle,

@@ -580,6 +580,7 @@ export default function PrestataireFinanceView() {
               <thead>
                 <tr className="bg-secondary/40 text-[10.5px] uppercase tracking-wide text-muted-foreground">
                   <th className="text-left px-4 py-2.5">Référence</th>
+                  <th className="text-left px-4 py-2.5">Assurance</th>
                   <th className="text-left px-4 py-2.5">Patient(s)</th>
                   <th className="text-left px-4 py-2.5">Date</th>
                   <th className="text-right px-4 py-2.5">Montant</th>
@@ -590,6 +591,7 @@ export default function PrestataireFinanceView() {
                 {pagFactures.pageItems.map((f) => (
                   <tr key={f.id} className="hover:bg-secondary/25">
                     <td className="px-4 py-2.5 text-foreground font-medium">{referenceLisible(f.referenceFacture)}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">{f.societeNom ?? "—"}</td>
                     <td className="px-4 py-2.5 text-muted-foreground">{[...new Set(f.lignes.map((l) => l.assureNom))].join(", ") || "—"}</td>
                     <td className="px-4 py-2.5 text-muted-foreground">{f.dateReception}</td>
                     <td className="px-4 py-2.5 text-right text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(f.lignes.reduce((s, l) => s + l.montant, 0))} FCFA</td>
@@ -606,10 +608,10 @@ export default function PrestataireFinanceView() {
                   </tr>
                 ))}
                 {factures && facturesFiltrees.length === 0 && (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">{rechercheFacturesActive ? "Aucune facture ne correspond à cette recherche." : "Aucune facture saisie pour l'instant."}</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">{rechercheFacturesActive ? "Aucune facture ne correspond à cette recherche." : "Aucune facture saisie pour l'instant."}</td></tr>
                 )}
                 {!factures && (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">Chargement…</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">Chargement…</td></tr>
                 )}
               </tbody>
             </table>
