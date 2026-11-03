@@ -601,10 +601,6 @@ export default function PrestatairePrestationsView() {
   const pagLignesDetail = usePagination(detail?.lignes ?? []);
   const pagPrestations = usePagination(prestationsFiltrees);
 
-  if (!societeOk) {
-    return <SocieteGate onSelect={(c) => { setClientActif(c); setSocieteOk(true); }} />;
-  }
-
   if (vue === "identification") {
     return (
       <div className="p-6 space-y-4">
@@ -1241,6 +1237,7 @@ export default function PrestatairePrestationsView() {
   }
 
   return (
+    <SocieteGate societeOk={societeOk} onSelect={(c) => { setClientActif(c); setSocieteOk(true); }}>
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-[1.2rem] font-bold text-foreground uppercase tracking-wide">Liste des prestations financières</h1>
@@ -1315,5 +1312,6 @@ export default function PrestatairePrestationsView() {
         <Pager p={pagPrestations} />
       </div>
     </div>
+    </SocieteGate>
   );
 }

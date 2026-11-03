@@ -252,9 +252,6 @@ export default function PrestataireFinanceView() {
     // facture" — detailReleve.factures est déjà agrégé côté serveur (voir
     // RelevesPrestataireService.agregerLignesFacture), fusionné ici avec
     // l'ancien tableau "Factures de ce relevé" (même granularité désormais).
-    if (!societeOk) {
-      return <SocieteGate onSelect={(c) => { setClientActif(c); setSocieteOk(true); }} />;
-    }
     const factures = detailReleve.factures;
     const totalFrais = factures.reduce((s, f) => s + f.montant, 0);
     const totalAssurance = factures.reduce((s, f) => s + (f.baseRemboursement ?? 0), 0);
@@ -374,11 +371,8 @@ export default function PrestataireFinanceView() {
     );
   }
 
-  if (!societeOk) {
-    return <SocieteGate onSelect={(c) => { setClientActif(c); setSocieteOk(true); }} />;
-  }
-
   return (
+    <SocieteGate societeOk={societeOk} onSelect={(c) => { setClientActif(c); setSocieteOk(true); }}>
     <div className="p-6 space-y-5">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-[1.2rem] font-bold text-foreground uppercase tracking-wide">Gestion financière</h1>
@@ -639,5 +633,6 @@ export default function PrestataireFinanceView() {
         </div>
       )}
     </div>
+    </SocieteGate>
   );
 }

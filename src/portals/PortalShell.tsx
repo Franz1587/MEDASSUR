@@ -126,6 +126,10 @@ function PortalShellCore({ meta }: { meta: PortalMeta }) {
     if (isPrestataire && !isPortalMedecin) base = base.filter((m) => m !== "prestataireRendezVous");
     // Accueil/facturation : calendrier RDV ✓, file d'attente ✗
     if (isPrestataire && isPortalMedecin) base = base.filter((m) => m !== "prestataireCalendrier");
+    // Consultation (prestataireMedecinPrescripteur) : réservée au médecin — jamais visible pour accueil/facturation
+    if (isPrestataire && !isPortalMedecin) base = base.filter((m) => m !== "prestataireMedecinPrescripteur");
+    // Devis + Logistique : retirés de l'application
+    if (isPrestataire) base = base.filter((m) => m !== "prestataireDevis" && m !== "prestataireLogistique");
     if (!base.includes("messagerie")) return base;
     const sansMessagerie = base.filter((m) => m !== "messagerie");
     const avantDernier = Math.max(0, sansMessagerie.length - 1);

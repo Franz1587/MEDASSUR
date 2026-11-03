@@ -35,26 +35,44 @@ export function CarteClientSociete({ c, onClick }: { c: ClientSociete; onClick: 
   );
 }
 
-// Porte bloquante — s'affiche avant le contenu de la page tant que l'utilisateur
-// n'a pas activement choisi un organisme. Chaque visite de la page repart de zéro.
-export function SocieteGate({ onSelect }: { onSelect: (c: ClientSociete) => void }) {
+// Porte bloquante overlay — enveloppe le contenu de la page :
+// quand verrouillée, le contenu s'affiche flou en arrière-plan et une
+// bulle modale demande à l'utilisateur de choisir un organisme.
+export function SocieteGate({
+  societeOk, onSelect, children,
+}: {
+  societeOk: boolean;
+  onSelect: (c: ClientSociete) => void;
+  children: ReactNode;
+}) {
   const { clients } = useClientSociete();
   return (
-    <div className="min-h-[70vh] flex flex-col items-center justify-center p-6">
-      <div className="w-full max-w-sm space-y-5">
-        <div className="text-center space-y-1.5">
-          <Building2 className="w-10 h-10 text-primary mx-auto" strokeWidth={1.5} />
-          <h1 className="text-[1.1rem] font-bold text-foreground">Pour quel organisme ?</h1>
-          <p className="text-[12.5px] text-muted-foreground">
-            Sélectionnez l'organisme assureur dont vous souhaitez consulter ou saisir les données.
-          </p>
-        </div>
-        <div className="space-y-2.5">
-          {clients.map((c) => (
-            <CarteClientSociete key={c.id} c={c} onClick={() => onSelect(c)} />
-          ))}
-        </div>
+    <div className="relative">
+      {/* Contenu — flou + non-interactif tant que verrou actif */}
+      <div className={!societeOk ? "blur-sm pointer-events-none select-none opacity-60" : ""}>
+        {children}
       </div>
+      {/* Bulle modale de sélection */}
+      {!societeOk && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/40 backdrop-blur-[2px]">
+          <div className="bg-card border border-border rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4 space-y-5">
+            <div className="text-center space-y-2">
+              <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+                <Building2 className="w-7 h-7 text-primary" strokeWidth={1.5} />
+              </div>
+              <h2 className="text-[1.05rem] font-bold text-foreground">Pour quel organisme ?</h2>
+              <p className="text-[12px] text-muted-foreground leading-relaxed">
+                Sélectionnez l'assureur pour consulter ou saisir les données.
+              </p>
+            </div>
+            <div className="space-y-2">
+              {clients.map((c) => (
+                <CarteClientSociete key={c.id} c={c} onClick={() => onSelect(c)} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
