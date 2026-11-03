@@ -73,25 +73,31 @@ export class MessagingService {
   // canal "auto" par défaut (2026-09) — Zavu tente WhatsApp puis retombe
   // sur SMS automatiquement (fallbackEnabled), le choix le plus fiable pour
   // joindre réellement le destinataire sans configuration par appelant.
-  async envoyer(numero: string | null | undefined, texte: string, canal: "auto" | "sms" | "whatsapp" = "auto"): Promise<void> {
-    if (!numero) return;
+  // Retourne true si Zavu a accepté le message, false sinon (clé absente,
+  // numéro invalide, erreur Zavu). Jamais bloquant pour les appelants
+  // fire-and-forget (accord préalable, règlement…) qui ignorent le retour ;
+  // CommunicationsService l'utilise pour stocker le vrai statut.
+  async envoyer(numero: string | null | undefined, texte: string, canal: "auto" | "sms" | "whatsapp" = "auto"): Promise<boolean> {
+    if (!numero) return false;
     const client = this.getClient();
     if (!client) {
-      this.logger.debug("ZAVUDEV_API_KEY non configurée — envoi SMS/WhatsApp ignoré.");
-      return;
+      this.logger.debug("ZAVU_API_KEY non configurée — envoi SMS/WhatsApp ignoré.");
+      return false;
     }
     const to = this.normaliserNumeroGabon(numero);
     if (!to) {
       this.logger.warn(`Numéro invalide, envoi ignoré : "${numero}"`);
-      return;
+      return false;
     }
     const senderId = process.env.ZAVU_SENDER_ID;
     try {
       const texteSigne = await this.signer(texte);
       await client.messages.send({ to, text: texteSigne, channel: canal, ...(senderId ? { "Zavu-Sender": senderId } : {}) });
+      return true;
     } catch (err) {
       // Jamais bloquant pour le workflow appelant (voir en-tête du fichier).
       this.logger.error(`Échec envoi message à ${to}`, err instanceof Error ? err.stack : String(err));
+      return false;
     }
   }
 }

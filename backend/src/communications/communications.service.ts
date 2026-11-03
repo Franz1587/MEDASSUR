@@ -43,8 +43,8 @@ export class CommunicationsService {
     if (canal === "Email") return "Simulé";
     if (!this.messaging.actif) return "Simulé";
     const canalZavu = canal === "WhatsApp" ? "whatsapp" : canal === "SMS" ? "sms" : "auto";
-    await this.messaging.envoyer(contact, contenu, canalZavu as "auto" | "sms" | "whatsapp");
-    return "Envoyé";
+    const ok = await this.messaging.envoyer(contact, contenu, canalZavu as "auto" | "sms" | "whatsapp");
+    return ok ? "Envoyé" : "Simulé";
   }
 
   async envoyer(dto: EnvoyerCommunicationDto, auteurId?: string) {

@@ -59,11 +59,11 @@ export default function CommunicationsView() {
     }
     try {
       setSubmitting(true);
-      await envoyerCommunication(form);
+      const result = await envoyerCommunication(form);
       setShowCreate(false);
       setForm(emptyForm());
       refresh();
-      toast.success("Message envoyé (simulé) et journalisé.");
+      toast.success(result.statut === "Envoyé" ? "Message envoyé via Zavu." : "Message journalisé (simulé — fournisseur inactif).");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Envoi impossible.");
     } finally {
