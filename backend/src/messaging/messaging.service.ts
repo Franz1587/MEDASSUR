@@ -93,7 +93,7 @@ export class MessagingService {
     try {
       const texteSigne = await this.signer(texte);
       const rep = await client.messages.send({ to, text: texteSigne, channel: canal, ...(senderId ? { "Zavu-Sender": senderId } : {}) });
-      this.logger.log(`Zavu OK → id=${(rep as any)?.id ?? "?"} status=${(rep as any)?.status ?? "?"} channel=${(rep as any)?.channel ?? canal} to=${to}`);
+      this.logger.log(`Zavu OK → to=${to} rep=${JSON.stringify(rep)}`);
       return true;
     } catch (err) {
       // Jamais bloquant pour le workflow appelant (voir en-tête du fichier).
