@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { referenceLisible } from "@/lib/referenceFacture";
+import { MedecinsPrestataire } from "./MedecinsPrestataire";
 import { Building2, Star, Clock, ShieldOff, ShieldCheck, Stethoscope, Plus, Pencil, ReceiptText, Printer, ClipboardList, FileStack, TrendingUp, Search, X, MapPin, MapPinOff, Loader2, FileDown, UserPlus, Merge } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/shared/Badge";
@@ -546,6 +547,8 @@ export default function PrestatairesView() {
                   )}
                 </div>
               )}
+
+              <MedecinsPrestataire prestataireId={selected.id} />
 
               <div>
                 <p className="text-xs text-muted-foreground mb-2">Grille tarifaire</p>
