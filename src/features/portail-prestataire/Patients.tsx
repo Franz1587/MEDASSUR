@@ -8,6 +8,8 @@ import { assurePhotoUrl } from "@/services/sante.service";
 import { useShellNavigation } from "@/layout/ShellNavigationContext";
 import { getMesPatients, type PatientDetail, type PatientFamilleMembre } from "@/services/portailPrestataire.service";
 import { IdentificationAssure } from "./IdentificationAssure";
+import { SocieteGate } from "./SelecteurClientSociete";
+import { useClientSociete } from "./ClientSocieteContext";
 import { PRESTATION_HANDOFF_KEY } from "./prestationTypes";
 
 const LABEL_TYPE: Record<string, string> = { AS: "Bénéficiaire Principal", CJ: "Conjoint(e)", EF: "Enfant" };
@@ -26,6 +28,8 @@ type Vue = "liste" | "identification";
 // appliqué si son statut n'est plus "Actif".
 export default function PrestatairePatientsView() {
   const { setView } = useShellNavigation();
+  const { clientActif, setClientActif } = useClientSociete();
+  const [societeOk, setSocieteOk] = useState(false);
   const [vue, setVue] = useState<Vue>("liste");
   const [patients, setPatients] = useState<PatientFamilleMembre[] | null>(null);
   // Saisie des critères (2026-08) — voir demande utilisateur : "je veux...
@@ -74,6 +78,7 @@ export default function PrestatairePatientsView() {
   }
 
   return (
+    <SocieteGate societeOk={societeOk} onSelect={(c) => { setClientActif(c); setSocieteOk(true); }}>
     <div className="p-6 space-y-4">
       <h1 className="text-[1.2rem] font-bold text-foreground uppercase tracking-wide">Patients</h1>
 
@@ -139,5 +144,6 @@ export default function PrestatairePatientsView() {
         </div>
       </div>
     </div>
+    </SocieteGate>
   );
 }

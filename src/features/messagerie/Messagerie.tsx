@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { SocieteGate } from "@/features/portail-prestataire/SelecteurClientSociete";
+import { useClientSociete } from "@/features/portail-prestataire/ClientSocieteContext";
 import { MessageCircle, Send, Paperclip, UserPlus, Bot, User, Headset, X, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/auth/AuthContext";
@@ -138,6 +140,9 @@ function NouvelleConversationModal({ onClose, onCreated }: { onClose: () => void
 export default function MessagerieView() {
   const { currentUser, currentRole } = useAuth();
   const interne = currentRole?.family === "interne";
+  const isPrestataire = currentRole?.id === "prestataire_sante";
+  const { clientActif, setClientActif } = useClientSociete();
+  const [societeOk, setSocieteOk] = useState(false);
   const [conversations, setConversations] = useState<Conversation[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[] | null>(null);
@@ -246,6 +251,7 @@ export default function MessagerieView() {
   );
 
   return (
+    <SocieteGate societeOk={!isPrestataire || societeOk} onSelect={(c) => { setClientActif(c); setSocieteOk(true); }}>
     <div className="p-6 h-full flex flex-col">
       <div className="flex items-center justify-between mb-4">
         <div>
@@ -373,5 +379,6 @@ export default function MessagerieView() {
         />
       )}
     </div>
+    </SocieteGate>
   );
 }

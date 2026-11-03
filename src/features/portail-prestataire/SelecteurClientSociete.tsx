@@ -54,7 +54,7 @@ export function SocieteGate({
       </div>
       {/* Bulle modale de sélection */}
       {!societeOk && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/40 backdrop-blur-[2px]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/50 backdrop-blur-sm">
           <div className="bg-card border border-border rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4 space-y-5">
             <div className="text-center space-y-2">
               <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
