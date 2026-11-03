@@ -14,7 +14,7 @@ import {
   type LotProposeReleve, type Releve, type ReleveDetail, type Prestation, type FactureEligibleReleve,
 } from "@/services/portailPrestataire.service";
 import { useClientSociete } from "./ClientSocieteContext";
-import { SocieteSwitcherInline } from "./SelecteurClientSociete";
+import { SocieteGate } from "./SelecteurClientSociete";
 
 // Statut réel, temps réel (2026-08) — voir demande utilisateur : "le statut
 // d'une facture ou d'un relevé de facture doit remonter en temps réel en
@@ -93,7 +93,8 @@ const fieldCls = "h-9 px-3 rounded-lg border border-border bg-background text-[1
 // page" — chacun avec ses propres filtres de recherche dédiés (référence,
 // nom, date/période).
 export default function PrestataireFinanceView() {
-  const { clientActif } = useClientSociete();
+  const { clientActif, setClientActif } = useClientSociete();
+  const [societeOk, setSocieteOk] = useState(false);
   const [onglet, setOnglet] = useState<Onglet>("lots");
   const [detailReleve, setDetailReleve] = useState<ReleveDetail | null>(null);
 
@@ -251,6 +252,9 @@ export default function PrestataireFinanceView() {
     // facture" — detailReleve.factures est déjà agrégé côté serveur (voir
     // RelevesPrestataireService.agregerLignesFacture), fusionné ici avec
     // l'ancien tableau "Factures de ce relevé" (même granularité désormais).
+    if (!societeOk) {
+      return <SocieteGate onSelect={(c) => { setClientActif(c); setSocieteOk(true); }} />;
+    }
     const factures = detailReleve.factures;
     const totalFrais = factures.reduce((s, f) => s + f.montant, 0);
     const totalAssurance = factures.reduce((s, f) => s + (f.baseRemboursement ?? 0), 0);
@@ -370,10 +374,18 @@ export default function PrestataireFinanceView() {
     );
   }
 
+  if (!societeOk) {
+    return <SocieteGate onSelect={(c) => { setClientActif(c); setSocieteOk(true); }} />;
+  }
+
   return (
     <div className="p-6 space-y-5">
-      <h1 className="text-[1.2rem] font-bold text-foreground uppercase tracking-wide">Gestion financière</h1>
-      <SocieteSwitcherInline />
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-[1.2rem] font-bold text-foreground uppercase tracking-wide">Gestion financière</h1>
+        <button type="button" onClick={() => setSocieteOk(false)} className="h-9 px-3 rounded-lg border border-border text-[12.5px] text-muted-foreground hover:text-foreground hover:bg-secondary/40">
+          {clientActif?.nom ?? "Organisme"} ↺
+        </button>
+      </div>
 
       <div className="flex border border-border rounded-lg overflow-hidden text-[12px] w-fit">
         {ONGLETS.map((o) => (

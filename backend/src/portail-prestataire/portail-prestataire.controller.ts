@@ -137,6 +137,13 @@ export class PortailPrestataireController {
     for (const a of acces) {
       if (a.societeId !== homeSocieteId) clients.push({ id: a.societe.id, nom: a.societe.nom, type: a.societe.type });
     }
+    // MedAssur (courtier test) — toujours inclus pour la formation, sauf si déjà présent.
+    if (!clients.some((c) => c.id === "societe-bootstrap")) {
+      const bootstrap = await this.prisma.societeAssurance.findUnique({
+        where: { id: "societe-bootstrap" }, select: { id: true, nom: true, type: true },
+      });
+      if (bootstrap) clients.push({ id: bootstrap.id, nom: bootstrap.nom, type: bootstrap.type });
+    }
     const logos = await this.prisma.parametresEntreprise.findMany({
       where: { id: { in: clients.map((c) => c.id) } },
       select: { id: true, logo: true },

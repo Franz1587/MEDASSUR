@@ -21,7 +21,7 @@ import {
 } from "@/services/portailPrestataire.service";
 import { IdentificationAssure } from "./IdentificationAssure";
 import { useClientSociete } from "./ClientSocieteContext";
-import { SocieteSwitcherInline } from "./SelecteurClientSociete";
+import { SocieteGate } from "./SelecteurClientSociete";
 import { GROUPES_ACTES, PRESTATION_HANDOFF_KEY, TYPES_PRESTATION_LABELS, type PrestationHandoff } from "./prestationTypes";
 
 // "dd/mm/yyyy" — même repère que partout ailleurs dans l'app.
@@ -94,7 +94,9 @@ type Vue = "liste" | "identification" | "creation" | "detail";
 // PortailPrestataireController) — visible et traitable côté interne comme
 // côté portail assuré, sans synchronisation supplémentaire.
 export default function PrestatairePrestationsView() {
-  const { clientActif } = useClientSociete();
+  const { clientActif, setClientActif } = useClientSociete();
+  // Porte bloquante — réinitialisée à chaque visite de l'onglet (montage).
+  const [societeOk, setSocieteOk] = useState(false);
   const [vue, setVue] = useState<Vue>("liste");
   const [prestations, setPrestations] = useState<Prestation[] | null>(null);
   const [detail, setDetail] = useState<Prestation | null>(null);
@@ -598,6 +600,11 @@ export default function PrestatairePrestationsView() {
   const pagHistorique = usePagination(historique ?? []);
   const pagLignesDetail = usePagination(detail?.lignes ?? []);
   const pagPrestations = usePagination(prestationsFiltrees);
+
+  if (!societeOk) {
+    return <SocieteGate onSelect={(c) => { setClientActif(c); setSocieteOk(true); }} />;
+  }
+
   if (vue === "identification") {
     return (
       <div className="p-6 space-y-4">
@@ -1237,11 +1244,15 @@ export default function PrestatairePrestationsView() {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-[1.2rem] font-bold text-foreground uppercase tracking-wide">Liste des prestations financières</h1>
-        <button type="button" onClick={ouvrirCreation} className="h-9 px-3.5 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium inline-flex items-center gap-1.5">
-          <Plus className="w-4 h-4" />Créer une prestation
-        </button>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setSocieteOk(false)} className="h-9 px-3 rounded-lg border border-border text-[12.5px] text-muted-foreground hover:text-foreground hover:bg-secondary/40">
+            {clientActif?.nom ?? "Organisme"} ↺
+          </button>
+          <button type="button" onClick={ouvrirCreation} className="h-9 px-3.5 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium inline-flex items-center gap-1.5">
+            <Plus className="w-4 h-4" />Créer une prestation
+          </button>
+        </div>
       </div>
-      <SocieteSwitcherInline />
 
       <div className="flex flex-wrap items-center gap-2">
         <input
