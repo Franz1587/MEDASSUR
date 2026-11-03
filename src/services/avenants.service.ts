@@ -104,8 +104,8 @@ export async function updateAvenantStatut(id: string, statut: AvenantUpsertInput
   return mapAvenant(a);
 }
 
-export async function appliquerAvenant(id: string): Promise<Avenant> {
-  const a = await http.patch<ApiAvenant>(`/avenants/${id}/appliquer`);
+export async function appliquerAvenant(id: string, compagnieId?: string): Promise<Avenant> {
+  const a = await http.patch<ApiAvenant>(`/avenants/${id}/appliquer`, compagnieId ? { compagnieId } : {});
   return mapAvenant(a);
 }
 

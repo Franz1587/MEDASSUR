@@ -21,6 +21,7 @@ import {
 } from "@/services/portailPrestataire.service";
 import { IdentificationAssure } from "./IdentificationAssure";
 import { useClientSociete } from "./ClientSocieteContext";
+import { SocieteSwitcherInline } from "./SelecteurClientSociete";
 import { GROUPES_ACTES, PRESTATION_HANDOFF_KEY, TYPES_PRESTATION_LABELS, type PrestationHandoff } from "./prestationTypes";
 
 // "dd/mm/yyyy" — même repère que partout ailleurs dans l'app.
@@ -164,10 +165,11 @@ export default function PrestatairePrestationsView() {
     const ref = filtre.ref.trim().toLowerCase();
     const nom = filtre.patient.trim().toLowerCase();
     return (prestations ?? []).filter((p) =>
-      referenceCorrespond(p.referenceFacture, ref)
+      (!clientActif || !p.societeNom || p.societeNom === clientActif.nom)
+      && referenceCorrespond(p.referenceFacture, ref)
       && (nom === "" || p.lignes.some((l) => l.assureNom.toLowerCase().includes(nom)))
       && dansPeriode(p.dateReception, filtre.du, filtre.au));
-  }, [prestations, filtre]);
+  }, [prestations, filtre, clientActif]);
   const rechercheActive = filtre.ref || filtre.patient || filtre.du || filtre.au;
   const lancerRecherche = () => setFiltre({ ref: rechercheRef, patient: recherchePatient, du: rechercheDu, au: rechercheAu });
   const reinitialiserRecherche = () => {
@@ -1239,6 +1241,7 @@ export default function PrestatairePrestationsView() {
           <Plus className="w-4 h-4" />Créer une prestation
         </button>
       </div>
+      <SocieteSwitcherInline />
 
       <div className="flex flex-wrap items-center gap-2">
         <input

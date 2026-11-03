@@ -103,3 +103,8 @@ export async function chatAssistant(message: string, historique: { role: "user" 
   return reponse;
 }
 
+export async function chatAriana(message: string, historique: { role: "user" | "assistant"; content: string }[] = []): Promise<string> {
+  const { reponse } = await http.post<{ reponse: string }>("/appel-offres/chat", { message, historique });
+  return reponse;
+}
+

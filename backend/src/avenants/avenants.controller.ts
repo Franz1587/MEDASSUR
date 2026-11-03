@@ -30,8 +30,8 @@ export class AvenantsController {
   }
 
   @Patch(":id/appliquer")
-  appliquer(@Param("id") id: string) {
-    return this.service.appliquer(id);
+  appliquer(@Param("id") id: string, @Body() body: { compagnieId?: string }) {
+    return this.service.appliquer(id, body.compagnieId);
   }
 
   @Delete(":id")

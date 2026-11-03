@@ -75,6 +75,7 @@ const MembreSuiviSanteView = lazy(() => import("@/features/suivi-sante/SuiviSant
 const MembreAccesDossierView = lazy(() => import("@/features/suivi-sante/AccesDossierMembre"));
 const MedecinRendezVousView = lazy(() => import("@/features/suivi-sante/RendezVousPro").then((m) => ({ default: m.MedecinRendezVousView })));
 const PrestataireRendezVousView = lazy(() => import("@/features/suivi-sante/RendezVousPro").then((m) => ({ default: m.PrestataireRendezVousView })));
+const PrestataireCalendrierView = lazy(() => import("@/features/portail-prestataire/CalendrierRendezVous"));
 const MembreHistoriqueView = lazy(() => import("@/features/portail-membre/Historique"));
 const MembreFamilleView = lazy(() => import("@/features/portail-membre/Famille"));
 const MembreDelegationsView = lazy(() => import("@/features/portail-membre/Delegations"));
@@ -178,6 +179,7 @@ export const viewRegistry: Record<View, React.ComponentType<any>> = {
   membreAccesDossier: MembreAccesDossierView,
   medecinRendezVous: MedecinRendezVousView,
   prestataireRendezVous: PrestataireRendezVousView,
+  prestataireCalendrier: PrestataireCalendrierView,
   membreHistorique: MembreHistoriqueView,
   membreFamille: MembreFamilleView,
   membreDelegations: MembreDelegationsView,

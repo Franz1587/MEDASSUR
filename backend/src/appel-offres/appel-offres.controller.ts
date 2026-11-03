@@ -67,6 +67,14 @@ export class AppelOffresController {
     return this.service.supprimerDocument(id, docId);
   }
 
+  // Chat ARIANA (2026-11) — voir demande utilisateur : "la possibilité de discuter
+  // directement avec Ariana". Réutilise le même service que l'analyse de proposition,
+  // système différent de IaAssistantService (spécialisé appels d'offres/cotations).
+  @Post("chat")
+  chatAriana(@Body() body: { message: string; historique?: { role: "user" | "assistant"; content: string }[] }) {
+    return this.service.chatAriana(body.message, body.historique ?? []);
+  }
+
   // ARIANA lit une proposition de compagnie importée et en crée les cotations.
   @Post(":id/documents/:docId/analyser")
   analyserDocument(@Param("id") id: string, @Param("docId") docId: string, @Body() dto: AnalyserDocumentDto, @Req() req: ReqUser) {

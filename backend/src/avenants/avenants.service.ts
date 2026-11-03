@@ -131,7 +131,7 @@ export class AvenantsService {
   // RenouvellementsService.renouveler() et ResiliationsService.
   // rendreEffective() dupliquaient chacun leur propre logique déconnectée
   // d'Avenant — désormais tout passe par ici.
-  async appliquer(id: string) {
+  async appliquer(id: string, compagnieId?: string) {
     const avenant = await this.findOne(id);
     const contrat = avenant.contrat;
 
@@ -155,6 +155,7 @@ export class AvenantsService {
           contratId: avenant.contratId, numero: nouvelExercice,
           dateDebut: contratMaj.dateDebut, dateFin: contratMaj.dateFin,
           periodicite: contratMaj.periodicite, prime: contratMaj.prime, statut: "Actif",
+          ...(compagnieId ? { compagnieId } : {}),
         },
       });
     } else if (avenant.type === "Changement de Compagnie") {

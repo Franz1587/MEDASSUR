@@ -13,6 +13,8 @@ import {
   type AvenantUpsertInput,
 } from "@/services/avenants.service";
 import { getContrats } from "@/services/contrats.service";
+import { getCompagnies } from "@/services/compagnies.service";
+import type { Compagnie } from "@/types/compagnies";
 import { openQuittanceAvenant, openAvenantDocument, openTableauGaranties } from "@/services/documents.service";
 import QuittancesLibresTab from "@/features/avenants/QuittancesLibres";
 import type { Avenant } from "@/types/avenants";
@@ -40,6 +42,8 @@ export default function AvenantsView() {
   const [tab, setTab] = useState<"avenants" | "quittances">("avenants");
   const [avenants, setAvenants] = useState<Avenant[]>([]);
   const [contrats, setContrats] = useState<Contrat[]>([]);
+  const [compagnies, setCompagnies] = useState<Compagnie[]>([]);
+  const [pickerAvenant, setPickerAvenant] = useState<Avenant | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState<AvenantUpsertInput>(emptyForm());
   const [submitting, setSubmitting] = useState(false);
@@ -53,6 +57,7 @@ export default function AvenantsView() {
   useEffect(() => {
     refresh();
     getContrats().then(setContrats);
+    getCompagnies().then(setCompagnies);
   }, []);
 
   const openCreate = () => {
@@ -94,11 +99,22 @@ export default function AvenantsView() {
     }
   };
 
-  const handleAppliquer = async (a: Avenant) => {
+  const handleAppliquer = (a: Avenant) => {
+    if (a.type === "Renouvellement") {
+      setPickerAvenant(a);
+    } else {
+      appliquerAvenant(a.id).then(() => { refresh(); toast.success("Avenant appliqué — la prime du contrat a été mise à jour."); })
+        .catch((err) => toast.error(err instanceof Error ? err.message : "Application impossible."));
+    }
+  };
+
+  const handleAppliquerAvecCompagnie = async (compagnieId: string) => {
+    if (!pickerAvenant) return;
     try {
-      await appliquerAvenant(a.id);
+      await appliquerAvenant(pickerAvenant.id, compagnieId);
+      setPickerAvenant(null);
       refresh();
-      toast.success("Avenant appliqué — la prime du contrat a été mise à jour.");
+      toast.success("Renouvellement appliqué — la prime du contrat a été mise à jour.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Application impossible.");
     }
@@ -194,6 +210,27 @@ export default function AvenantsView() {
           onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
         />
       </div>
+      )}
+
+      {pickerAvenant && (
+        <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-card border border-border rounded-xl shadow-2xl">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+              <h3 className="text-[15px] font-semibold text-foreground">Compagnie d'assurance pour ce renouvellement</h3>
+              <button type="button" onClick={() => setPickerAvenant(null)} className="h-8 px-3 rounded-lg border border-border text-[12px] text-foreground hover:bg-secondary/40">Fermer</button>
+            </div>
+            <div className="p-5">
+              <p className="text-[12.5px] text-muted-foreground mb-4">Sélectionnez la compagnie à associer au nouvel exercice. Ce choix est enregistré dans l'historique du contrat.</p>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {compagnies.map((cp) => (
+                  <button key={cp.id} type="button" onClick={() => handleAppliquerAvecCompagnie(cp.id)}
+                    className="w-full text-left px-4 py-2.5 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 text-[13px] text-foreground transition-colors"
+                  >{cp.nom}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {showCreate && (

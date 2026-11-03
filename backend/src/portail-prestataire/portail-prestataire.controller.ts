@@ -132,12 +132,17 @@ export class PortailPrestataireController {
         include: { societe: { select: { id: true, nom: true, type: true } } },
       }),
     ]);
-    const clients = [];
+    const clients: { id: string; nom: string; type: string }[] = [];
     if (propre) clients.push({ id: propre.id, nom: propre.nom, type: propre.type });
     for (const a of acces) {
       if (a.societeId !== homeSocieteId) clients.push({ id: a.societe.id, nom: a.societe.nom, type: a.societe.type });
     }
-    return clients;
+    const logos = await this.prisma.parametresEntreprise.findMany({
+      where: { id: { in: clients.map((c) => c.id) } },
+      select: { id: true, logo: true },
+    });
+    const logoMap = Object.fromEntries(logos.map((l) => [l.id, l.logo]));
+    return clients.map((c) => ({ ...c, logo: logoMap[c.id] ?? null }));
   }
 
   // Prix des médicaments/quote-part JAMAIS visibles côté clinique/cabinet/

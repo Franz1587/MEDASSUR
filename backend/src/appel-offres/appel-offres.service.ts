@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import Anthropic from "@anthropic-ai/sdk";
+import { BadRequestException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { avecInfosProspect, type ParametresOffre } from "../cotation/contenu-offre";
@@ -28,7 +29,35 @@ const INCLUDE = {
 
 @Injectable()
 export class AppelOffresService {
+  private readonly logger = new Logger(AppelOffresService.name);
+  private arianaClient: Anthropic | null = null;
+
   constructor(private prisma: PrismaService, private storage: StorageService, private parametresEntreprise: ParametresEntrepriseService) {}
+
+  private getArianaClient(): Anthropic | null {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return null;
+    if (!this.arianaClient) this.arianaClient = new Anthropic({ apiKey });
+    return this.arianaClient;
+  }
+
+  async chatAriana(message: string, historique: { role: "user" | "assistant"; content: string }[] = []): Promise<{ reponse: string }> {
+    const client = this.getArianaClient();
+    if (!client) throw new ServiceUnavailableException("ARIANA indisponible (clé API non configurée).");
+    const p = await this.parametresEntreprise.findOne();
+    const systemPrompt = `Tu es ARIANA, l'assistante spécialisée en appels d'offres santé de MEDASSUR+ pour "${p.nom}". Tu analyses les propositions des compagnies d'assurance, compares les cotations (garanties, plafonds, taux de couverture, primes), et conseilles les gestionnaires sur les meilleures offres du marché gabonais (CIMA, NSIA, AXA, Allianz, etc.). Tu maîtrises le vocabulaire de l'assurance santé collective, les tableaux de garanties, la tarification par tranche d'âge et les règles CIMA. Réponds en français, de façon précise et professionnelle. Ne fabrique jamais de chiffres : si une donnée n'est pas dans le contexte de la conversation, dis-le clairement.`;
+    const messages: Anthropic.MessageParam[] = [
+      ...historique.map((m) => ({ role: m.role, content: m.content } as Anthropic.MessageParam)),
+      { role: "user", content: message },
+    ];
+    try {
+      const response = await client.messages.create({ model: "claude-opus-4-5", max_tokens: 2048, system: systemPrompt, messages });
+      return { reponse: response.content[0].type === "text" ? response.content[0].text : "" };
+    } catch (err) {
+      this.logger.error("ARIANA chat error", err);
+      throw new ServiceUnavailableException("ARIANA indisponible pour le moment. Réessayez dans un instant.");
+    }
+  }
 
   findAll() {
     return this.prisma.appelOffres.findMany({ include: INCLUDE, orderBy: { dateCreation: "desc" } });

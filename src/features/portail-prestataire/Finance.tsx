@@ -13,6 +13,8 @@ import {
   getFacturesEligiblesReleve, ajouterFactureReleve, retirerFactureReleve,
   type LotProposeReleve, type Releve, type ReleveDetail, type Prestation, type FactureEligibleReleve,
 } from "@/services/portailPrestataire.service";
+import { useClientSociete } from "./ClientSocieteContext";
+import { SocieteSwitcherInline } from "./SelecteurClientSociete";
 
 // Statut réel, temps réel (2026-08) — voir demande utilisateur : "le statut
 // d'une facture ou d'un relevé de facture doit remonter en temps réel en
@@ -91,6 +93,7 @@ const fieldCls = "h-9 px-3 rounded-lg border border-border bg-background text-[1
 // page" — chacun avec ses propres filtres de recherche dédiés (référence,
 // nom, date/période).
 export default function PrestataireFinanceView() {
+  const { clientActif } = useClientSociete();
   const [onglet, setOnglet] = useState<Onglet>("lots");
   const [detailReleve, setDetailReleve] = useState<ReleveDetail | null>(null);
 
@@ -129,24 +132,27 @@ export default function PrestataireFinanceView() {
   useEffect(() => { rafraichir(); getMoiPrestataire().then((p) => setTpsAssujetti(p.tpsAssujetti)); }, []);
 
   const lotsFiltres = useMemo(() => (lots ?? []).filter((l) =>
-    l.clientNom.toLowerCase().includes(filtreLots.souscripteur.trim().toLowerCase())
-    && periodeDansIntervalle(l.periode, filtreLots.du, filtreLots.au)), [lots, filtreLots]);
+    (!clientActif || l.clientId === clientActif.id)
+    && l.clientNom.toLowerCase().includes(filtreLots.souscripteur.trim().toLowerCase())
+    && periodeDansIntervalle(l.periode, filtreLots.du, filtreLots.au)), [lots, filtreLots, clientActif]);
   const lancerRechercheLots = () => setFiltreLots({ souscripteur: lotsSouscripteur, du: lotsDu, au: lotsAu });
   const reinitialiserLots = () => { setLotsSouscripteur(""); setLotsDu(""); setLotsAu(""); setFiltreLots({ souscripteur: "", du: "", au: "" }); };
   const rechercheLotsActive = filtreLots.souscripteur || filtreLots.du || filtreLots.au;
 
   const relevesFiltres = useMemo(() => (releves ?? []).filter((r) =>
-    r.numero.toLowerCase().includes(filtreReleves.reference.trim().toLowerCase())
+    (!clientActif || r.client.nom === clientActif.nom)
+    && r.numero.toLowerCase().includes(filtreReleves.reference.trim().toLowerCase())
     && r.client.nom.toLowerCase().includes(filtreReleves.souscripteur.trim().toLowerCase())
-    && periodeDansIntervalle(r.periode, filtreReleves.du, filtreReleves.au)), [releves, filtreReleves]);
+    && periodeDansIntervalle(r.periode, filtreReleves.du, filtreReleves.au)), [releves, filtreReleves, clientActif]);
   const lancerRechercheReleves = () => setFiltreReleves({ reference: relevesReference, souscripteur: relevesSouscripteur, du: relevesDu, au: relevesAu });
   const reinitialiserReleves = () => { setRelevesReference(""); setRelevesSouscripteur(""); setRelevesDu(""); setRelevesAu(""); setFiltreReleves({ reference: "", souscripteur: "", du: "", au: "" }); };
   const rechercheRelevesActive = filtreReleves.reference || filtreReleves.souscripteur || filtreReleves.du || filtreReleves.au;
 
   const facturesFiltrees = useMemo(() => (factures ?? []).filter((f) =>
-    referenceCorrespond(f.referenceFacture, filtreFactures.reference)
+    (!clientActif || !f.societeNom || f.societeNom === clientActif.nom)
+    && referenceCorrespond(f.referenceFacture, filtreFactures.reference)
     && (filtreFactures.nom.trim() === "" || f.lignes.some((l) => l.assureNom.toLowerCase().includes(filtreFactures.nom.trim().toLowerCase())))
-    && dansPeriode(f.dateReception, filtreFactures.du, filtreFactures.au)), [factures, filtreFactures]);
+    && dansPeriode(f.dateReception, filtreFactures.du, filtreFactures.au)), [factures, filtreFactures, clientActif]);
   const lancerRechercheFactures = () => setFiltreFactures({ reference: facturesReference, nom: facturesNom, du: facturesDu, au: facturesAu });
   const reinitialiserFactures = () => { setFacturesReference(""); setFacturesNom(""); setFacturesDu(""); setFacturesAu(""); setFiltreFactures({ reference: "", nom: "", du: "", au: "" }); };
   const rechercheFacturesActive = filtreFactures.reference || filtreFactures.nom || filtreFactures.du || filtreFactures.au;
@@ -367,6 +373,7 @@ export default function PrestataireFinanceView() {
   return (
     <div className="p-6 space-y-5">
       <h1 className="text-[1.2rem] font-bold text-foreground uppercase tracking-wide">Gestion financière</h1>
+      <SocieteSwitcherInline />
 
       <div className="flex border border-border rounded-lg overflow-hidden text-[12px] w-fit">
         {ONGLETS.map((o) => (

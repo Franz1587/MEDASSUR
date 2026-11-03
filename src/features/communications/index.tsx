@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Send, Plus, Mail, MessageSquare, Phone, Paperclip, Info, Reply } from "lucide-react";
+import { Send, Plus, Mail, MessageSquare, Phone, Paperclip, Info, Reply, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/shared/Badge";
 import { Btn } from "@/components/shared/Btn";
@@ -67,6 +67,11 @@ export default function CommunicationsView() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleRenvoyer = (c: Communication) => {
+    setForm({ canal: c.canal, destinataireType: c.destinataireType, destinataireNom: c.destinataireNom, destinataireContact: c.destinataireContact, objet: c.objet ?? "", contenu: c.contenu });
+    setShowCreate(true);
   };
 
   const handleEnregistrerRetour = async (id: string) => {
@@ -137,17 +142,20 @@ export default function CommunicationsView() {
                       )}
                     </div>
                   </div>
-                  {!c.retour && (
-                    retourOuvert === c.id ? (
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <input value={retourSaisie} onChange={(e) => setRetourSaisie(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleEnregistrerRetour(c.id); }} placeholder="Réponse reçue…" className="h-8 px-2 rounded-md border border-border bg-background text-[12px] text-foreground w-48" autoFocus />
-                        <button type="button" onClick={() => handleEnregistrerRetour(c.id)} className="h-8 px-2.5 rounded-md bg-primary text-primary-foreground text-[11.5px]">OK</button>
-                        <button type="button" onClick={() => { setRetourOuvert(null); setRetourSaisie(""); }} className="text-[11px] text-muted-foreground hover:text-foreground">Annuler</button>
-                      </div>
-                    ) : (
-                      <button type="button" onClick={() => { setRetourOuvert(c.id); setRetourSaisie(""); }} className="text-[11.5px] text-primary hover:underline inline-flex items-center gap-1 flex-shrink-0 whitespace-nowrap"><Reply className="w-3.5 h-3.5" />Enregistrer un retour</button>
-                    )
-                  )}
+                  <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                    <button type="button" onClick={() => handleRenvoyer(c)} className="text-[11.5px] text-primary hover:underline inline-flex items-center gap-1 whitespace-nowrap"><RotateCcw className="w-3.5 h-3.5" />Renvoyer</button>
+                    {!c.retour && (
+                      retourOuvert === c.id ? (
+                        <div className="flex items-center gap-1.5">
+                          <input value={retourSaisie} onChange={(e) => setRetourSaisie(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleEnregistrerRetour(c.id); }} placeholder="Réponse reçue…" className="h-8 px-2 rounded-md border border-border bg-background text-[12px] text-foreground w-48" autoFocus />
+                          <button type="button" onClick={() => handleEnregistrerRetour(c.id)} className="h-8 px-2.5 rounded-md bg-primary text-primary-foreground text-[11.5px]">OK</button>
+                          <button type="button" onClick={() => { setRetourOuvert(null); setRetourSaisie(""); }} className="text-[11px] text-muted-foreground hover:text-foreground">Annuler</button>
+                        </div>
+                      ) : (
+                        <button type="button" onClick={() => { setRetourOuvert(c.id); setRetourSaisie(""); }} className="text-[11.5px] text-primary hover:underline inline-flex items-center gap-1 whitespace-nowrap"><Reply className="w-3.5 h-3.5" />Enregistrer un retour</button>
+                      )
+                    )}
+                  </div>
                 </div>
               </div>
             );

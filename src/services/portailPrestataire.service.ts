@@ -39,6 +39,7 @@ export interface ClientSociete {
   id: string;
   nom: string;
   type: string; // Courtier | Mutuelle | Compagnie
+  logo?: string | null;
 }
 
 export async function getMesClients(): Promise<ClientSociete[]> {

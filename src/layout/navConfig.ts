@@ -88,7 +88,7 @@ export type View =
   | "membreRemboursement" | "membreReseauSoins" | "membreCarnetSante" | "membreHistorique" | "membreFamille"
   | "membreDelegations"
   // Suivi de santé (2026-11) : rendez-vous, constantes, accès au dossier médical.
-  | "membreRendezVous" | "membreSuiviSante" | "membreAccesDossier" | "medecinRendezVous" | "prestataireRendezVous"
+  | "membreRendezVous" | "membreSuiviSante" | "membreAccesDossier" | "medecinRendezVous" | "prestataireRendezVous" | "prestataireCalendrier"
   // Portail prestataire (2026-08) — écran externe dédié au prestataire
   // médical (User.prestataireId), modelé sur des captures de référence (voir
   // demande utilisateur : captures fournies à dupliquer). prestataireDashboard reste
@@ -222,6 +222,7 @@ export const viewIcons: Record<View, React.ElementType> = {
   membreAccesDossier: ShieldCheck,
   medecinRendezVous: CalendarClock,
   prestataireRendezVous: CalendarClock,
+  prestataireCalendrier: CalendarClock,
   prestataireDashboard: Home,
   prestatairePatients: Users2,
   prestatairePrestations: Building2,
@@ -312,6 +313,7 @@ export const viewLabels: Record<View, string> = {
   membreAccesDossier: "Accès à mon dossier",
   medecinRendezVous: "Rendez-vous",
   prestataireRendezVous: "Rendez-vous",
+  prestataireCalendrier: "Calendrier RDV",
   prestataireDashboard: "Accueil",
   prestatairePatients: "Patients",
   prestatairePrestations: "Prestations",

@@ -115,12 +115,22 @@ function PortalShellCore({ meta }: { meta: PortalMeta }) {
   // des modules corrigé la même session) — recalculer l'ordre d'affichage
   // ICI, à chaque rendu, corrige donc aussi bien les comptes déjà créés que
   // les futurs, sans backfill.
+  // File d'attente (prestataireRendezVous) : réservée au médecin uniquement —
+  // voir demande 2026-11 "seul le médecin doit avoir ça".
+  const isPortalMedecin = isPrestataire && (
+    currentUser?.email?.startsWith("medecin@") || currentUser?.email?.startsWith("pharmacien@")
+  );
   const modules = useMemo(() => {
-    if (!modulesBruts.includes("messagerie")) return modulesBruts;
-    const sansMessagerie = modulesBruts.filter((m) => m !== "messagerie");
+    let base = modulesBruts;
+    // Médecin : file d'attente ✓, calendrier RDV ✗ (il a sa propre vue)
+    if (isPrestataire && !isPortalMedecin) base = base.filter((m) => m !== "prestataireRendezVous");
+    // Accueil/facturation : calendrier RDV ✓, file d'attente ✗
+    if (isPrestataire && isPortalMedecin) base = base.filter((m) => m !== "prestataireCalendrier");
+    if (!base.includes("messagerie")) return base;
+    const sansMessagerie = base.filter((m) => m !== "messagerie");
     const avantDernier = Math.max(0, sansMessagerie.length - 1);
     return [...sansMessagerie.slice(0, avantDernier), "messagerie" as View, ...sansMessagerie.slice(avantDernier)];
-  }, [modulesBruts]);
+  }, [modulesBruts, isPrestataire, isPortalMedecin]);
   // Persistance de la vue (2026-10) — même principe que SanteAdminConsole :
   // sessionStorage survit au hard refresh et est scopée à l'onglet.
   // La clé est dérivée du path du portail (ex. "medassur-view--portal-client")
