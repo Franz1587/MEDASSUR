@@ -10,6 +10,9 @@ import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 export class CommunicationsController {
   constructor(private readonly service: CommunicationsService) {}
 
+  @Get("config")
+  config() { return this.service.config(); }
+
   @Get()
   findAll(@Query("canal") canal?: string, @Query("destinataireType") destinataireType?: string, @Query("declencheur") declencheur?: string) {
     return this.service.findAll({ canal, destinataireType, declencheur });

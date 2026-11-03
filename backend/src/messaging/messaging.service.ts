@@ -20,11 +20,11 @@ export class MessagingService {
   constructor(private parametresEntreprise: ParametresEntrepriseService) {}
 
   get actif(): boolean {
-    return !!process.env.ZAVUDEV_API_KEY;
+    return !!process.env.ZAVU_API_KEY;
   }
 
   private getClient(): Zavudev | null {
-    const apiKey = process.env.ZAVUDEV_API_KEY;
+    const apiKey = process.env.ZAVU_API_KEY;
     if (!apiKey) return null;
     if (!this.client) this.client = new Zavudev({ apiKey });
     return this.client;

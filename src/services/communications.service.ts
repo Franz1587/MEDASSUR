@@ -7,6 +7,10 @@ export interface CommunicationsFiltre {
   declencheur?: string;
 }
 
+export async function getCommunicationsConfig(): Promise<{ smsWhatsappActif: boolean }> {
+  return http.get<{ smsWhatsappActif: boolean }>("/communications/config");
+}
+
 export async function getCommunications(filtre?: CommunicationsFiltre): Promise<Communication[]> {
   const params = new URLSearchParams();
   if (filtre?.canal) params.set("canal", filtre.canal);

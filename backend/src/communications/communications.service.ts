@@ -19,6 +19,8 @@ const UPLOADS_COMMUNICATIONS_DIR = path.join(UPLOADS_ROOT, "communications");
 export class CommunicationsService {
   constructor(private prisma: PrismaService, private notifications: NotificationsService, private storage: StorageService, private messaging: MessagingService) {}
 
+  config() { return { smsWhatsappActif: this.messaging.actif }; }
+
   findAll(filtres?: { canal?: string; destinataireType?: string; declencheur?: string }) {
     return this.prisma.communication.findMany({
       where: { canal: filtres?.canal, destinataireType: filtres?.destinataireType, declencheur: filtres?.declencheur },

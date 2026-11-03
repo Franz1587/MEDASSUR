@@ -7,7 +7,7 @@ import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Pagination } from "@/components/shared/Pagination";
 import { usePagination } from "@/hooks/usePagination";
 import {
-  getCommunications, envoyerCommunication, enregistrerRetourCommunication, pieceJointeCommunicationUrl,
+  getCommunications, getCommunicationsConfig, envoyerCommunication, enregistrerRetourCommunication, pieceJointeCommunicationUrl,
   type EnvoyerCommunicationInput,
 } from "@/services/communications.service";
 import type { Communication } from "@/types/communications";
@@ -45,10 +45,12 @@ export default function CommunicationsView() {
   const [submitting, setSubmitting] = useState(false);
   const [retourOuvert, setRetourOuvert] = useState<string | null>(null);
   const [retourSaisie, setRetourSaisie] = useState("");
+  const [smsWhatsappActif, setSmsWhatsappActif] = useState<boolean | null>(null);
 
   const refresh = () => getCommunications({ canal: filtreCanal || undefined, destinataireType: filtreType || undefined }).then(setCommunications);
 
   useEffect(() => { refresh(); }, [filtreCanal, filtreType]);
+  useEffect(() => { getCommunicationsConfig().then((c) => setSmsWhatsappActif(c.smsWhatsappActif)).catch(() => setSmsWhatsappActif(false)); }, []);
 
   const handleEnvoyer = async () => {
     if (!form.destinataireNom.trim() || !form.destinataireContact.trim() || !form.contenu.trim()) {
@@ -93,10 +95,18 @@ export default function CommunicationsView() {
         actions={<Btn variant="primary" onClick={() => { setForm(emptyForm()); setShowCreate(true); }}><Plus className="w-4 h-4" />Nouveau message</Btn>}
       />
 
-      <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 flex items-start gap-2">
-        <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-        <p className="text-[12px] text-foreground">Aucun fournisseur Email/SMS/WhatsApp n'est encore connecté à l'application — chaque envoi ci-dessous est <span className="font-semibold">simulé</span> et journalisé, prêt à devenir un envoi réel une fois un fournisseur branché. La présence d'un compte WhatsApp associé à un numéro n'est pas vérifiable sans un tel fournisseur.</p>
-      </div>
+      {smsWhatsappActif === false && (
+        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 flex items-start gap-2">
+          <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <p className="text-[12px] text-foreground">Aucun fournisseur SMS/WhatsApp n'est encore connecté — chaque envoi ci-dessous est <span className="font-semibold">simulé</span> et journalisé, prêt à devenir un envoi réel une fois un fournisseur branché.</p>
+        </div>
+      )}
+      {smsWhatsappActif === true && (
+        <div className="mb-4 rounded-lg border border-blue-500/30 bg-blue-500/5 px-3 py-2.5 flex items-start gap-2">
+          <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+          <p className="text-[12px] text-foreground">SMS et WhatsApp actifs via Zavu. Les envois Email restent <span className="font-semibold">simulés</span> (aucun fournisseur email configuré).</p>
+        </div>
+      )}
 
       <div className="flex items-center gap-3 mb-4">
         <select value={filtreCanal} onChange={(e) => setFiltreCanal(e.target.value)} className={`${fieldCls} w-44`}>
