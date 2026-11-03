@@ -20,6 +20,7 @@ import {
   type MedecinPrestataireOption,
 } from "@/services/portailPrestataire.service";
 import { IdentificationAssure } from "./IdentificationAssure";
+import { useClientSociete } from "./ClientSocieteContext";
 import { GROUPES_ACTES, PRESTATION_HANDOFF_KEY, TYPES_PRESTATION_LABELS, type PrestationHandoff } from "./prestationTypes";
 
 // "dd/mm/yyyy" — même repère que partout ailleurs dans l'app.
@@ -92,6 +93,7 @@ type Vue = "liste" | "identification" | "creation" | "detail";
 // PortailPrestataireController) — visible et traitable côté interne comme
 // côté portail assuré, sans synchronisation supplémentaire.
 export default function PrestatairePrestationsView() {
+  const { clientActif } = useClientSociete();
   const [vue, setVue] = useState<Vue>("liste");
   const [prestations, setPrestations] = useState<Prestation[] | null>(null);
   const [detail, setDetail] = useState<Prestation | null>(null);
@@ -199,7 +201,7 @@ export default function PrestatairePrestationsView() {
   // (voir plus bas) — évite d'avoir deux implémentations qui divergent.
   const chargerApercu = async (assureId: string, typePrestationLigne: string, montant: number, acteMedicalId?: string, quantite?: number) => {
     try {
-      return await apercuLignePrestation({ assureId, typePrestation: typePrestationLigne, montant, acteMedicalId, quantite });
+      return await apercuLignePrestation({ assureId, typePrestation: typePrestationLigne, montant, acteMedicalId, quantite, clientSocieteId: clientActif?.id });
     } catch {
       return null;
     }
@@ -315,7 +317,7 @@ export default function PrestatairePrestationsView() {
     setEnvoi(true);
     try {
       const cree = await creerPrestation({
-        assureId: patient.id, typePrestation, date,
+        assureId: patient.id, typePrestation, date, clientSocieteId: clientActif?.id,
         lignes: lignesForm.map((l) => ({ acteMedicalId: l.acteMedicalId, montant: l.montant, quantite: l.quantite, natureMaladie, medecinId: medecinId ?? undefined })),
       });
       toast.success("Prestation enregistrée.");

@@ -129,8 +129,9 @@ interface ApiPatientDetail extends Omit<PatientDetail, "contrat"> {
   };
 }
 
-export async function getPatient(id: string): Promise<PatientDetail> {
-  const p = await http.get<ApiPatientDetail>(`/portail-prestataire/patients/${id}`);
+export async function getPatient(id: string, clientSocieteId?: string): Promise<PatientDetail> {
+  const params = clientSocieteId ? `?clientSocieteId=${encodeURIComponent(clientSocieteId)}` : "";
+  const p = await http.get<ApiPatientDetail>(`/portail-prestataire/patients/${id}${params}`);
   return {
     ...p,
     contrat: {
@@ -235,7 +236,7 @@ interface ApiApercuLignePrestation {
   messagePlafond?: string | null;
 }
 
-export async function apercuLignePrestation(payload: { assureId: string; typePrestation: string; montant: number; acteMedicalId?: string; quantite?: number }): Promise<ApercuLignePrestation> {
+export async function apercuLignePrestation(payload: { assureId: string; typePrestation: string; montant: number; acteMedicalId?: string; quantite?: number; clientSocieteId?: string }): Promise<ApercuLignePrestation> {
   const a = await http.post<ApiApercuLignePrestation>("/portail-prestataire/prestations/apercu", payload);
   return {
     tauxRemboursement: a.tauxRemboursement != null ? toNumber(a.tauxRemboursement) : undefined,
@@ -349,6 +350,7 @@ export interface CreatePrestationInput {
   assureId: string;
   typePrestation: string;
   date: string;
+  clientSocieteId?: string;
   lignes: LignePrestationInput[];
 }
 
@@ -436,6 +438,7 @@ export interface CreateDevisInput {
   assureId: string;
   type: string;
   dateDemande: string;
+  clientSocieteId?: string;
   lignes: LigneDevisInput[];
 }
 

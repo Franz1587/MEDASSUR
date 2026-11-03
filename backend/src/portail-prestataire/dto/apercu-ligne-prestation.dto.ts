@@ -30,4 +30,8 @@ export class ApercuLignePrestationDto {
   @IsNumber()
   @Min(1)
   quantite?: number;
+
+  @IsOptional()
+  @IsString()
+  clientSocieteId?: string;
 }

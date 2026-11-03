@@ -16,6 +16,7 @@ import {
   type DevisMedical, type PatientDetail, type LigneDevisInput,
 } from "@/services/portailPrestataire.service";
 import { IdentificationAssure } from "./IdentificationAssure";
+import { useClientSociete } from "./ClientSocieteContext";
 import { GROUPES_ACTES } from "./prestationTypes";
 
 function decisionVariant(d: string): BadgeVariant {
@@ -48,6 +49,7 @@ type Vue = "liste" | "identification" | "creation" | "detail";
 // un devis déposé ici est une vraie AccordPrealable, visible immédiatement
 // dans la file de décision interne (origine "Portail Prestataire").
 export default function PrestataireDevisView() {
+  const { clientActif } = useClientSociete();
   const [vue, setVue] = useState<Vue>("liste");
   const [liste, setListe] = useState<DevisMedical[] | null>(null);
   const [detail, setDetail] = useState<DevisMedical | null>(null);
@@ -166,7 +168,7 @@ export default function PrestataireDevisView() {
     }
     setEnvoi(true);
     try {
-      const cree = await creerDevis({ assureId: patient.id, type, dateDemande, lignes: lignesForm });
+      const cree = await creerDevis({ assureId: patient.id, type, dateDemande, clientSocieteId: clientActif?.id, lignes: lignesForm });
       if (ordonnance.length > 0) await uploaderOrdonnanceDevis(cree.id, ordonnance);
       if (devisFichier.length > 0) await uploaderPieceDevis(cree.id, devisFichier);
       toast.success("Devis envoyé à l'assurance.");

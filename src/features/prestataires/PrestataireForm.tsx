@@ -1,11 +1,15 @@
-import { useState } from "react";
-import { X, MapPin, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { X, MapPin, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Combobox } from "@/components/shared/Combobox";
 import { DateInput } from "@/components/shared/DateInput";
 import { SPECIALITES_SANTE } from "@/lib/specialitesSante";
 import { GROUPES_ACTES, CATEGORIES_GARANTIES } from "@/features/portail-prestataire/prestationTypes";
-import { createPrestataire, updatePrestataire, geolocaliserPrestataire, type PrestataireUpsertInput } from "@/services/prestataires.service";
+import {
+  createPrestataire, updatePrestataire, geolocaliserPrestataire,
+  getAccesSocietesPrestataire, ajouterAccesSocietePrestataire, retirerAccesSocietePrestataire,
+  type PrestataireUpsertInput, type AccesSocietePrestataire,
+} from "@/services/prestataires.service";
 import type { Prestataire } from "@/types/prestataires";
 
 const fieldCls = "w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground";
@@ -53,6 +57,37 @@ export default function PrestataireForm({ prestataire, onClose, onSaved }: { pre
 
   const [localisation, setLocalisation] = useState(prestataire);
   const [geolocalisation, setGeolocalisation] = useState(false);
+  const [accesSocietes, setAccesSocietes] = useState<AccesSocietePrestataire[]>([]);
+  const [nouvellesSocieteId, setNouvellesSocieteId] = useState("");
+
+  useEffect(() => {
+    if (estEdition && prestataire?.id) {
+      getAccesSocietesPrestataire(prestataire.id).then(setAccesSocietes).catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prestataire?.id]);
+
+  const ajouterSociete = async () => {
+    if (!prestataire?.id || !nouvellesSocieteId.trim()) return;
+    try {
+      await ajouterAccesSocietePrestataire(prestataire.id, nouvellesSocieteId.trim());
+      const maj = await getAccesSocietesPrestataire(prestataire.id);
+      setAccesSocietes(maj);
+      setNouvellesSocieteId("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ajout impossible.");
+    }
+  };
+
+  const retirerSociete = async (acces: AccesSocietePrestataire) => {
+    if (!prestataire?.id) return;
+    try {
+      await retirerAccesSocietePrestataire(prestataire.id, acces.societeId);
+      setAccesSocietes((v) => v.filter((a) => a.id !== acces.id));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Suppression impossible.");
+    }
+  };
 
   const handleGeolocaliser = async () => {
     if (!prestataire) return;
@@ -282,6 +317,40 @@ export default function PrestataireForm({ prestataire, onClose, onSaved }: { pre
               </div>
             )}
           </div>
+          {estEdition && (
+            <div>
+              <p className="text-[12px] font-semibold text-primary uppercase tracking-wide mb-3">Sociétés clientes</p>
+              <p className="text-[11px] text-muted-foreground mb-3">Sociétés d'assurance (autres que la société d'origine) dont les assurés peuvent être pris en charge par ce prestataire.</p>
+              {accesSocietes.length > 0 && (
+                <div className="space-y-1 mb-3">
+                  {accesSocietes.map((a) => (
+                    <div key={a.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-border bg-secondary/20 text-[12.5px]">
+                      <div>
+                        <span className="font-medium text-foreground">{a.nom}</span>
+                        {a.type && <span className="ml-2 text-muted-foreground">{a.type}</span>}
+                        <span className="ml-2 text-[10.5px] text-muted-foreground font-mono">{a.societeId}</span>
+                      </div>
+                      <button type="button" onClick={() => retirerSociete(a)} className="ml-2 text-muted-foreground hover:text-destructive flex-shrink-0">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input
+                  value={nouvellesSocieteId}
+                  onChange={(e) => setNouvellesSocieteId(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && ajouterSociete()}
+                  placeholder="ID de la société cliente…"
+                  className="flex-1 h-9 px-3 rounded-lg border border-border bg-background text-[12.5px] text-foreground font-mono"
+                />
+                <button type="button" onClick={ajouterSociete} disabled={!nouvellesSocieteId.trim()} className="h-9 px-3 rounded-lg border border-border text-[12.5px] text-primary hover:bg-primary/10 disabled:opacity-50 inline-flex items-center gap-1.5">
+                  <Plus className="w-3.5 h-3.5" />Ajouter
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="px-5 py-4 border-t border-border flex items-center justify-end gap-2 flex-shrink-0">

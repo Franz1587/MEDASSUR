@@ -84,7 +84,7 @@ export function IdentificationAssure({ onNouvellePrestation, titreAction = "Nouv
   useEffect(() => {
     if (!patientDirect) return;
     setChargementDetail(true);
-    getPatient(patientDirect)
+    getPatient(patientDirect, clientActif?.id)
       .then(setSelectionne)
       .catch((err) => toast.error(err instanceof Error ? err.message : "Fiche indisponible."))
       .finally(() => setChargementDetail(false));
@@ -103,7 +103,7 @@ export function IdentificationAssure({ onNouvellePrestation, titreAction = "Nouv
     }
     setChargementDetail(true);
     try {
-      setSelectionne(await getPatient(membre.id));
+      setSelectionne(await getPatient(membre.id, clientActif?.id));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Fiche indisponible.");
     } finally {

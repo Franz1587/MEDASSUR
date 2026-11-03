@@ -95,6 +95,27 @@ export class PortailPrestataireController {
     return TenantContext.run(clientSocieteId, fn, userId);
   }
 
+  private async getSocietesAccessibles(prestataireId: string, homeSocieteId: string | null): Promise<string[]> {
+    const acces = await this.prisma.portailSocieteAcces.findMany({ where: { prestataireId }, select: { societeId: true } });
+    const ids = acces.map((a) => a.societeId);
+    if (homeSocieteId && !ids.includes(homeSocieteId)) ids.unshift(homeSocieteId);
+    return ids;
+  }
+
+  private async societeDeLaFacture(factureId: string): Promise<string | null> {
+    const f = await TenantContext.run(null, () =>
+      this.prisma.facture.findUnique({ where: { id: factureId }, select: { societeId: true } })
+    );
+    return f?.societeId ?? null;
+  }
+
+  private async societeDeLAccord(accordId: string): Promise<string | null> {
+    const a = await TenantContext.run(null, () =>
+      this.prisma.accordPrealable.findUnique({ where: { id: accordId }, select: { societeId: true } })
+    );
+    return a?.societeId ?? null;
+  }
+
   // Liste des sociétés MEDASSUR+ que ce prestataire peut servir (2026-10) —
   // sa propre société + celles listées dans PortailSocieteAcces. Appelé au
   // démarrage du portail pour afficher le sélecteur "Pour quel client ?".
@@ -157,11 +178,17 @@ export class PortailPrestataireController {
   @Get("dashboard")
   async dashboard(@Req() req: PortailPrestataireRequest) {
     const prestataireId = this.prestataireIdDe(req);
-    const [prestataire, factures] = await Promise.all([
+    const [prestataire, societeIds] = await Promise.all([
       this.prisma.prestataire.findUnique({ where: { id: prestataireId } }),
-      this.prisma.facture.findMany({ where: { prestataireId }, include: { lignes: true } }),
+      this.getSocietesAccessibles(prestataireId, req.user.societeId),
     ]);
     if (!prestataire) throw new NotFoundException("Établissement introuvable");
+    const lots = await Promise.all(
+      societeIds.map((sid) => TenantContext.run(sid, () =>
+        this.prisma.facture.findMany({ where: { prestataireId }, include: { lignes: true } })
+      ))
+    );
+    const factures = lots.flat();
     const enSaisie = factures.filter((f) => f.statut === "En saisie").length;
     const soumises = factures.filter((f) => f.statut === "Soumise").length;
     const montantTotal = factures.reduce((s, f) => s + f.lignes.reduce((s2, l) => s2 + Number(l.montant), 0), 0);
@@ -253,72 +280,81 @@ export class PortailPrestataireController {
   // établissement (voir Prestataire.garantiesVisibles, configuré côté
   // interne — écran Prestataires).
   @Get("patients/:id")
-  async patient(@Param("id") id: string, @Req() req: PortailPrestataireRequest) {
-    const [assure, prestataire] = await Promise.all([
-      this.prisma.assureSante.findUnique({
-        where: { id },
-        include: { contrat: { include: { garanties: true, client: true, compagnie: true } } },
-      }),
-      this.prisma.prestataire.findUnique({ where: { id: this.prestataireIdDe(req) } }),
-    ]);
-    if (!assure) throw new NotFoundException(`Assuré ${id} introuvable`);
-    // Blocage patient désactivé (2026-08) — voir demande utilisateur :
-    // "lorsqu'on veut identifier un assuré, s'il est déjà désactivé, on
-    // doit avoir un message d'erreur disant 'Désolé, prestation impossible
-    // pour ce patient car il n'est plus couvert'". Contrôle défensif ici
-    // (le front bloque déjà plus tôt depuis la liste de famille, voir
-    // IdentificationAssure.tsx) — vaut aussi pour tout appel direct par id.
-    if (assure.statut !== "Actif") throw new ForbiddenException("Désolé, prestation impossible pour ce patient car il n'est plus couvert.");
-    const garantiesAutorisees = prestataire?.garantiesVisibles ?? [];
-    const estAyantDroit = assure.typeAssure !== "AS";
+  async patient(@Param("id") id: string, @Query("clientSocieteId") clientSocieteId: string | undefined, @Req() req: PortailPrestataireRequest) {
+    const prestataireId = this.prestataireIdDe(req);
+    return this.avecClientSociete(prestataireId, req.user.societeId, clientSocieteId, req.user.userId, async () => {
+      const [assure, prestataire] = await Promise.all([
+        this.prisma.assureSante.findUnique({
+          where: { id },
+          include: { contrat: { include: { garanties: true, client: true, compagnie: true } } },
+        }),
+        this.prisma.prestataire.findUnique({ where: { id: prestataireId } }),
+      ]);
+      if (!assure) throw new NotFoundException(`Assuré ${id} introuvable`);
+      // Blocage patient désactivé (2026-08) — voir demande utilisateur :
+      // "lorsqu'on veut identifier un assuré, s'il est déjà désactivé, on
+      // doit avoir un message d'erreur disant 'Désolé, prestation impossible
+      // pour ce patient car il n'est plus couvert'". Contrôle défensif ici
+      // (le front bloque déjà plus tôt depuis la liste de famille, voir
+      // IdentificationAssure.tsx) — vaut aussi pour tout appel direct par id.
+      if (assure.statut !== "Actif") throw new ForbiddenException("Désolé, prestation impossible pour ce patient car il n'est plus couvert.");
+      const garantiesAutorisees = prestataire?.garantiesVisibles ?? [];
+      const estAyantDroit = assure.typeAssure !== "AS";
 
-    // Résumé Ambulatoire/Hospitalisation/Chambre, par secteur (2026-08) —
-    // voir demande utilisateur : "j'ai demandé de faire apparaître QUE 3
-    // rubriques Ambulatoire, Hospitalisation et Chambre. Le taux de la
-    // chambre est aussi de 100% puisqu'elle fait partie de la rubrique
-    // hospitalisation" — remplace ENTIÈREMENT le tableau de garanties
-    // détaillé (jamais un ajout au-dessus de la liste existante).
-    // Garantie.tauxAssure ne varie pas par secteur — le VRAI taux appliqué
-    // au calcul d'une PriseEnCharge vient des 8 champs secteur du Contrat
-    // (voir SanteService.tauxParSecteur, même logique que le calcul réel).
-    const tauxAmbulatoire = this.sante.tauxParSecteur(false, prestataire?.secteur, estAyantDroit, assure.contrat);
-    const tauxHospitalisation = this.sante.tauxParSecteur(true, prestataire?.secteur, estAyantDroit, assure.contrat);
-    const chambre = assure.contrat.garanties.find((g) => g.categorie === "Hospitalisation" && /h[ée]bergement|chambre/i.test(g.libelle));
+      // Résumé Ambulatoire/Hospitalisation/Chambre, par secteur (2026-08) —
+      // voir demande utilisateur : "j'ai demandé de faire apparaître QUE 3
+      // rubriques Ambulatoire, Hospitalisation et Chambre. Le taux de la
+      // chambre est aussi de 100% puisqu'elle fait partie de la rubrique
+      // hospitalisation" — remplace ENTIÈREMENT le tableau de garanties
+      // détaillé (jamais un ajout au-dessus de la liste existante).
+      const tauxAmbulatoire = this.sante.tauxParSecteur(false, prestataire?.secteur, estAyantDroit, assure.contrat);
+      const tauxHospitalisation = this.sante.tauxParSecteur(true, prestataire?.secteur, estAyantDroit, assure.contrat);
+      const chambre = assure.contrat.garanties.find((g) => g.categorie === "Hospitalisation" && /h[ée]bergement|chambre/i.test(g.libelle));
 
-    const autorise = (categorie: string) => garantiesAutorisees.length === 0 || garantiesAutorisees.includes(categorie);
-    const garanties: { id: string; categorie: string; libelle: string; tauxApplicable: number | null; plafondMontant: null; plafondTexte: string | null; plafondPeriode: null }[] = [];
-    if (tauxAmbulatoire !== null && autorise("Consultation/Divers")) {
-      garanties.push({ id: "resume-ambulatoire", categorie: "Consultation/Divers", libelle: "Ambulatoire", tauxApplicable: tauxAmbulatoire, plafondMontant: null, plafondTexte: null, plafondPeriode: null });
-    }
-    if (tauxHospitalisation !== null && autorise("Hospitalisation")) {
-      garanties.push({ id: "resume-hospitalisation", categorie: "Hospitalisation", libelle: "Hospitalisation", tauxApplicable: tauxHospitalisation, plafondMontant: null, plafondTexte: null, plafondPeriode: null });
-      // Chambre = même taux que Hospitalisation, elle en fait partie (voir
-      // demande utilisateur) — seul le plafond lui est spécifique. Le
-      // libellé source ("50 000 F CFA BTAM") est un renvoi au tarif
-      // interne ; voir demande utilisateur : "il ne faut pas écrire...
-      // BTAM mais plutôt .../JOUR" — l'unité réellement parlante pour un
-      // plafond de chambre est journalière, pas la référence tarifaire.
-      const plafondChambre = chambre?.plafond?.replace(/\s*BTAM\s*$/i, "/JOUR") ?? null;
-      if (chambre) garanties.push({ id: "resume-chambre", categorie: "Hospitalisation", libelle: "Chambre", tauxApplicable: tauxHospitalisation, plafondMontant: null, plafondTexte: plafondChambre, plafondPeriode: null });
-    }
+      const autorise = (categorie: string) => garantiesAutorisees.length === 0 || garantiesAutorisees.includes(categorie);
+      const garanties: { id: string; categorie: string; libelle: string; tauxApplicable: number | null; plafondMontant: null; plafondTexte: string | null; plafondPeriode: null }[] = [];
+      if (tauxAmbulatoire !== null && autorise("Consultation/Divers")) {
+        garanties.push({ id: "resume-ambulatoire", categorie: "Consultation/Divers", libelle: "Ambulatoire", tauxApplicable: tauxAmbulatoire, plafondMontant: null, plafondTexte: null, plafondPeriode: null });
+      }
+      if (tauxHospitalisation !== null && autorise("Hospitalisation")) {
+        garanties.push({ id: "resume-hospitalisation", categorie: "Hospitalisation", libelle: "Hospitalisation", tauxApplicable: tauxHospitalisation, plafondMontant: null, plafondTexte: null, plafondPeriode: null });
+        const plafondChambre = chambre?.plafond?.replace(/\s*BTAM\s*$/i, "/JOUR") ?? null;
+        if (chambre) garanties.push({ id: "resume-chambre", categorie: "Hospitalisation", libelle: "Chambre", tauxApplicable: tauxHospitalisation, plafondMontant: null, plafondTexte: plafondChambre, plafondPeriode: null });
+      }
 
-    return {
-      ...assure,
-      contrat: { ...assure.contrat, garanties },
-    };
+      return { ...assure, contrat: { ...assure.contrat, garanties } };
+    });
   }
 
   @Get("prestations")
   async prestations(@Req() req: PortailPrestataireRequest) {
-    const factures = await this.factures.findAll({ prestataireId: this.prestataireIdDe(req) });
-    return Promise.all(factures.map(async (f) => ({ ...f, statutReel: await this.statutReelFacture(f.id) })));
+    const prestataireId = this.prestataireIdDe(req);
+    const societeIds = await this.getSocietesAccessibles(prestataireId, req.user.societeId);
+    const lots = await Promise.all(
+      societeIds.map(async (sid) => {
+        const [societe, factures] = await Promise.all([
+          this.prisma.societeAssurance.findUnique({ where: { id: sid }, select: { nom: true } }),
+          TenantContext.run(sid, () => this.factures.findAll({ prestataireId })),
+        ]);
+        return Promise.all(
+          factures.map(async (f) => ({
+            ...f, societeNom: societe?.nom ?? sid,
+            statutReel: await TenantContext.run(sid, () => this.statutReelFacture(f.id)),
+          }))
+        );
+      })
+    );
+    return lots.flat();
   }
 
   @Get("prestations/:id")
   async prestation(@Param("id") id: string, @Req() req: PortailPrestataireRequest) {
-    const facture = await this.factures.findOne(id);
-    if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
-    return { ...facture, statutReel: await this.statutReelFacture(id) };
+    const societeId = await this.societeDeLaFacture(id);
+    return TenantContext.run(societeId, async () => {
+      const facture = await this.factures.findOne(id);
+      if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
+      return { ...facture, statutReel: await this.statutReelFacture(id) };
+    });
   }
 
   // Décompte, exemplaire Prestataire (2026-08) — voir demande utilisateur :
@@ -333,9 +369,12 @@ export class PortailPrestataireController {
   // pas depuis le visualiseur actuel.
   @Get("prestations/:id/facture")
   async factureImprimable(@Param("id") id: string, @Req() req: PortailPrestataireRequest, @Res() res: Response) {
-    const facture = await this.factures.findOne(id);
-    if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
-    return this.documents.renderDecompteFacture(id, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId }, undefined, "Prestataire");
+    const societeId = await this.societeDeLaFacture(id);
+    return TenantContext.run(societeId, async () => {
+      const facture = await this.factures.findOne(id);
+      if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
+      return this.documents.renderDecompteFacture(id, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId }, undefined, "Prestataire");
+    });
   }
 
   // Aperçu de calcul, en direct pendant la saisie (2026-08) — voir demande
@@ -347,9 +386,11 @@ export class PortailPrestataireController {
   @Post("prestations/apercu")
   async apercuLignePrestation(@Body() dto: ApercuLignePrestationDto, @Req() req: PortailPrestataireRequest) {
     const prestataireId = this.prestataireIdDe(req);
-    const assure = await this.prisma.assureSante.findUnique({ where: { id: dto.assureId } });
-    if (!assure) throw new NotFoundException(`Assuré ${dto.assureId} introuvable`);
-    return this.sante.calculerPartAssuranceLigne(dto.assureId, assure.contratId, dto.typePrestation, dto.montant, prestataireId, undefined, dto.acteMedicalId, dto.quantite ?? 1);
+    return this.avecClientSociete(prestataireId, req.user.societeId, dto.clientSocieteId, req.user.userId, async () => {
+      const assure = await this.prisma.assureSante.findUnique({ where: { id: dto.assureId } });
+      if (!assure) throw new NotFoundException(`Assuré ${dto.assureId} introuvable`);
+      return this.sante.calculerPartAssuranceLigne(dto.assureId, assure.contratId, dto.typePrestation, dto.montant, prestataireId, undefined, dto.acteMedicalId, dto.quantite ?? 1);
+    });
   }
 
   // Nouvelle prestation (2026-08) — voir demande utilisateur, capture de
@@ -360,24 +401,20 @@ export class PortailPrestataireController {
   @Post("prestations")
   async creerPrestation(@Body() dto: CreatePrestationMedicaleDto, @Req() req: PortailPrestataireRequest) {
     const prestataireId = this.prestataireIdDe(req);
-    const assure = await this.prisma.assureSante.findUnique({ where: { id: dto.assureId } });
-    if (!assure) throw new NotFoundException(`Assuré ${dto.assureId} introuvable`);
+    return this.avecClientSociete(prestataireId, req.user.societeId, dto.clientSocieteId, req.user.userId, async () => {
+      const assure = await this.prisma.assureSante.findUnique({ where: { id: dto.assureId } });
+      if (!assure) throw new NotFoundException(`Assuré ${dto.assureId} introuvable`);
 
-    const facture = await this.factures.create({
-      prestataireId, contratId: assure.contratId, dateReception: dto.date,
-      referenceFacture: await this.factures.genererReferencePortail(prestataireId),
+      const facture = await this.factures.create({
+        prestataireId, contratId: assure.contratId, dateReception: dto.date,
+        referenceFacture: await this.factures.genererReferencePortail(prestataireId),
+      });
+      for (const ligne of dto.lignes) {
+        // exigerAffection: false (2026-09) — voir même commentaire plus haut.
+        await this.factures.ajouterLigne(facture.id, { ...ligne, assureId: dto.assureId, typePrestation: dto.typePrestation, datePrestation: dto.date }, { exigerAffection: false });
+      }
+      return this.factures.findOne(facture.id);
     });
-    for (const ligne of dto.lignes) {
-      // exigerAffection: false (2026-09) — voir demande utilisateur : "il ne
-      // faut pas que l'agent de l'accueil ait la possibilité de renseigner
-      // les codes d'affections, cela strictement réservé au médecin
-      // traitant" — l'écran ne l'envoie plus du tout (voir Prestations.tsx),
-      // ce champ ne peut donc plus jamais être obligatoire depuis ce portail
-      // (repéré en testant réellement le flux de bout en bout : la création
-      // échouait systématiquement sans ce correctif).
-      await this.factures.ajouterLigne(facture.id, { ...ligne, assureId: dto.assureId, typePrestation: dto.typePrestation, datePrestation: dto.date }, { exigerAffection: false });
-    }
-    return this.factures.findOne(facture.id);
   }
 
   // Ajout d'une ligne à une facture déjà saisie (2026-08) — voir demande
@@ -386,13 +423,15 @@ export class PortailPrestataireController {
   // (aucun ré-identification à faire, c'est toujours le même patient).
   @Post("prestations/:id/lignes")
   async ajouterLignePrestation(@Param("id") id: string, @Body() dto: AjouterLignePrestationDto, @Req() req: PortailPrestataireRequest) {
-    const facture = await this.factures.findOne(id);
-    if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
-    const assureId = facture.lignes[0]?.assureId;
-    if (!assureId) throw new NotFoundException("Impossible de déterminer le bénéficiaire de cette facture.");
-    // exigerAffection: false — voir même commentaire que creerPrestation ci-dessus.
-    await this.factures.ajouterLigne(id, { ...dto, assureId }, { exigerAffection: false });
-    return this.factures.findOne(id);
+    const societeId = await this.societeDeLaFacture(id);
+    return TenantContext.run(societeId, async () => {
+      const facture = await this.factures.findOne(id);
+      if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
+      const assureId = facture.lignes[0]?.assureId;
+      if (!assureId) throw new NotFoundException("Impossible de déterminer le bénéficiaire de cette facture.");
+      await this.factures.ajouterLigne(id, { ...dto, assureId }, { exigerAffection: false });
+      return this.factures.findOne(id);
+    });
   }
 
   // Annulation d'une facture entière (2026-08) — voir demande utilisateur :
@@ -407,9 +446,12 @@ export class PortailPrestataireController {
   // .apercu/.creer, filtre statut != "Annulée").
   @Patch("prestations/:id/annuler")
   async annulerPrestation(@Param("id") id: string, @Body() dto: AnnulerLigneFactureDto, @Req() req: PortailPrestataireRequest) {
-    const facture = await this.factures.findOne(id);
-    if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
-    return this.factures.annuler(id, dto.motif);
+    const societeId = await this.societeDeLaFacture(id);
+    return TenantContext.run(societeId, async () => {
+      const facture = await this.factures.findOne(id);
+      if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
+      return this.factures.annuler(id, dto.motif);
+    });
   }
 
   // Modification d'une ligne (2026-08) — voir demande utilisateur : "dans
@@ -423,9 +465,12 @@ export class PortailPrestataireController {
   async modifierLignePrestation(
     @Param("id") id: string, @Param("ligneId") ligneId: string, @Body() dto: UpdateFactureLigneDto, @Req() req: PortailPrestataireRequest,
   ) {
-    const facture = await this.factures.findOne(id);
-    if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
-    return this.factures.modifierLigne(id, ligneId, dto);
+    const societeId = await this.societeDeLaFacture(id);
+    return TenantContext.run(societeId, async () => {
+      const facture = await this.factures.findOne(id);
+      if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
+      return this.factures.modifierLigne(id, ligneId, dto);
+    });
   }
 
   // Annulation d'une ligne (2026-08) — voir demande utilisateur : "on doit
@@ -436,9 +481,12 @@ export class PortailPrestataireController {
   async annulerLignePrestation(
     @Param("id") id: string, @Param("ligneId") ligneId: string, @Body() dto: AnnulerLigneFactureDto, @Req() req: PortailPrestataireRequest,
   ) {
-    const facture = await this.factures.findOne(id);
-    if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
-    return this.factures.annulerLigne(id, ligneId, dto.motif);
+    const societeId = await this.societeDeLaFacture(id);
+    return TenantContext.run(societeId, async () => {
+      const facture = await this.factures.findOne(id);
+      if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
+      return this.factures.annulerLigne(id, ligneId, dto.motif);
+    });
   }
 
   // Feuille de soins / feuille d'examen (2026-08) — voir demande
@@ -450,16 +498,22 @@ export class PortailPrestataireController {
   // la ligne qu'il vient de saisir.
   @Get("prestations/:id/lignes/:ligneId/feuille-soins")
   async feuilleSoinsLigne(@Param("id") id: string, @Param("ligneId") ligneId: string, @Req() req: PortailPrestataireRequest, @Res() res: Response) {
-    const facture = await this.factures.findOne(id);
-    if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
-    return this.documents.renderFeuilleSoinsLigne(ligneId, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId, masquerPrixPharmacie: await this.masquerPrixPharmacieDe(req) });
+    const societeId = await this.societeDeLaFacture(id);
+    return TenantContext.run(societeId, async () => {
+      const facture = await this.factures.findOne(id);
+      if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
+      return this.documents.renderFeuilleSoinsLigne(ligneId, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId, masquerPrixPharmacie: await this.masquerPrixPharmacieDe(req) });
+    });
   }
 
   @Get("prestations/:id/lignes/:ligneId/feuille-examen")
   async feuilleExamenLigne(@Param("id") id: string, @Param("ligneId") ligneId: string, @Req() req: PortailPrestataireRequest, @Res() res: Response) {
-    const facture = await this.factures.findOne(id);
-    if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
-    return this.documents.renderFeuilleExamenLigne(ligneId, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId, masquerPrixPharmacie: await this.masquerPrixPharmacieDe(req) });
+    const societeId = await this.societeDeLaFacture(id);
+    return TenantContext.run(societeId, async () => {
+      const facture = await this.factures.findOne(id);
+      if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
+      return this.documents.renderFeuilleExamenLigne(ligneId, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId, masquerPrixPharmacie: await this.masquerPrixPharmacieDe(req) });
+    });
   }
 
   // Historique des modifications (2026-08) — voir demande utilisateur :
@@ -471,9 +525,12 @@ export class PortailPrestataireController {
   // rater aucune modification faite côté interne sur cette même facture.
   @Get("prestations/:id/historique")
   async historiquePrestation(@Param("id") id: string, @Req() req: PortailPrestataireRequest) {
-    const facture = await this.factures.findOne(id);
-    if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
-    return this.auditLog.findAll({ entiteId: id });
+    const societeId = await this.societeDeLaFacture(id);
+    return TenantContext.run(societeId, async () => {
+      const facture = await this.factures.findOne(id);
+      if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
+      return this.auditLog.findAll({ entiteId: id });
+    });
   }
 
   // Télétransmission (2026-08) — voir demande utilisateur, capture de
@@ -483,10 +540,13 @@ export class PortailPrestataireController {
   // synchronisation supplémentaire nécessaire (même base de données).
   @Post("prestations/:id/teletransmettre")
   async teletransmettre(@Param("id") id: string, @Req() req: PortailPrestataireRequest) {
-    const facture = await this.factures.findOne(id);
-    if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
-    if (facture.statut === "Annulée") throw new ForbiddenException("Cette prestation est annulée.");
-    return this.factures.update(id, { statut: "Soumise" });
+    const societeId = await this.societeDeLaFacture(id);
+    return TenantContext.run(societeId, async () => {
+      const facture = await this.factures.findOne(id);
+      if (facture.prestataireId !== this.prestataireIdDe(req)) throw new ForbiddenException(`Prestation ${id} inaccessible`);
+      if (facture.statut === "Annulée") throw new ForbiddenException("Cette prestation est annulée.");
+      return this.factures.update(id, { statut: "Soumise" });
+    });
   }
 
   // Devis / demande de prise en charge (2026-08) — voir demande
@@ -500,55 +560,64 @@ export class PortailPrestataireController {
   // AccordPrealable.origine).
   @Get("devis")
   async devis(@Req() req: PortailPrestataireRequest) {
-    return this.accordPrealable.findAll({ prestataireId: this.prestataireIdDe(req) });
+    const prestataireId = this.prestataireIdDe(req);
+    const societeIds = await this.getSocietesAccessibles(prestataireId, req.user.societeId);
+    const lots = await Promise.all(
+      societeIds.map(async (sid) => {
+        const [societe, devis] = await Promise.all([
+          this.prisma.societeAssurance.findUnique({ where: { id: sid }, select: { nom: true } }),
+          TenantContext.run(sid, () => this.accordPrealable.findAll({ prestataireId })),
+        ]);
+        return devis.map((d) => ({ ...d, societeNom: societe?.nom ?? sid }));
+      })
+    );
+    return lots.flat();
   }
 
   @Post("devis")
   async creerDevis(@Body() dto: CreateDevisMedicalDto, @Req() req: PortailPrestataireRequest) {
     const prestataireId = this.prestataireIdDe(req);
-    const prestataire = await this.prisma.prestataire.findUnique({ where: { id: prestataireId } });
-    if (!prestataire) throw new NotFoundException("Établissement introuvable");
-    const cree = await this.accordPrealable.create(
-      { assureId: dto.assureId, type: dto.type, description: "", dateDemande: dto.dateDemande, prestataire: prestataire.nom, prestataireId, lignes: dto.lignes, origine: "Portail Prestataire" },
-      req.user.userId,
-    );
-    // Déclenchement automatique (2026-08) — voir demande utilisateur : "les
-    // prise en charge de type hospitalisation [sont] beaucoup plus demandées
-    // par les prestataires médicaux" — même déclenchement que côté portail
-    // assuré (PortailMembreController), mais ici c'est le compte du
-    // prestataire qui reçoit la conversation IA puisque c'est lui qui a
-    // déposé la demande.
-    if (dto.type === "Hospitalisation") {
-      this.agentIa.demarrerDemandeHospitalisation(req.user.userId, { id: cree.id, prestataire: prestataire.nom }).catch(() => undefined);
-    }
-    return cree;
+    return this.avecClientSociete(prestataireId, req.user.societeId, dto.clientSocieteId, req.user.userId, async () => {
+      const prestataire = await this.prisma.prestataire.findUnique({ where: { id: prestataireId } });
+      if (!prestataire) throw new NotFoundException("Établissement introuvable");
+      const cree = await this.accordPrealable.create(
+        { assureId: dto.assureId, type: dto.type, description: "", dateDemande: dto.dateDemande, prestataire: prestataire.nom, prestataireId, lignes: dto.lignes, origine: "Portail Prestataire" },
+        req.user.userId,
+      );
+      if (dto.type === "Hospitalisation") {
+        this.agentIa.demarrerDemandeHospitalisation(req.user.userId, { id: cree.id, prestataire: prestataire.nom }).catch(() => undefined);
+      }
+      return cree;
+    });
   }
 
-  private async verifierDevisAppartientA(id: string, prestataireId: string) {
-    const accord = await this.accordPrealable.findOne(id);
+  private async verifierDevisAppartientA(id: string, prestataireId: string): Promise<string | null> {
+    const societeId = await this.societeDeLAccord(id);
+    const accord = await TenantContext.run(societeId, () => this.accordPrealable.findOne(id));
     if (accord.prestataireId !== prestataireId) throw new ForbiddenException(`Devis ${id} inaccessible`);
+    return societeId;
   }
 
   @Post("devis/:id/ordonnance")
   @UseInterceptors(FileFieldsInterceptor(CHAMPS_PIECES, { storage: memoryStorage(), limits: { fileSize: TAILLE_MAX_PIECE } }))
   async uploaderOrdonnanceDevis(@Param("id") id: string, @UploadedFiles() recues: PiecesRecues, @Req() req: PortailPrestataireRequest) {
     const file = (await reunirEnUnFichier(piecesRecues(recues))) as Express.Multer.File;
-    await this.verifierDevisAppartientA(id, this.prestataireIdDe(req));
-    return this.accordPrealable.uploadDocument(id, "ordonnance", file);
+    const societeId = await this.verifierDevisAppartientA(id, this.prestataireIdDe(req));
+    return TenantContext.run(societeId, () => this.accordPrealable.uploadDocument(id, "ordonnance", file));
   }
 
   @Post("devis/:id/devis")
   @UseInterceptors(FileFieldsInterceptor(CHAMPS_PIECES, { storage: memoryStorage(), limits: { fileSize: TAILLE_MAX_PIECE } }))
   async uploaderPieceDevis(@Param("id") id: string, @UploadedFiles() recues: PiecesRecues, @Req() req: PortailPrestataireRequest) {
     const file = (await reunirEnUnFichier(piecesRecues(recues))) as Express.Multer.File;
-    await this.verifierDevisAppartientA(id, this.prestataireIdDe(req));
-    return this.accordPrealable.uploadDocument(id, "devis", file);
+    const societeId = await this.verifierDevisAppartientA(id, this.prestataireIdDe(req));
+    return TenantContext.run(societeId, () => this.accordPrealable.uploadDocument(id, "devis", file));
   }
 
   @Get("devis/:id/certificat")
   async certificatDevis(@Param("id") id: string, @Req() req: PortailPrestataireRequest, @Res() res: Response) {
-    await this.verifierDevisAppartientA(id, this.prestataireIdDe(req));
-    return this.documents.renderCertificatPriseEnCharge(id, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId });
+    const societeId = await this.verifierDevisAppartientA(id, this.prestataireIdDe(req));
+    return TenantContext.run(societeId, () => this.documents.renderCertificatPriseEnCharge(id, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId }));
   }
 
   // Relevé de facture (2026-08) — voir demande utilisateur : "dans l'onglet

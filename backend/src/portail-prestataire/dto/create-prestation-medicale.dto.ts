@@ -48,6 +48,10 @@ export class CreatePrestationMedicaleDto {
   @IsString()
   date: string;
 
+  @IsOptional()
+  @IsString()
+  clientSocieteId?: string;
+
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })

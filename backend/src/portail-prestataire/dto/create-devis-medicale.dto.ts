@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsArray, IsIn, IsString, ValidateNested } from "class-validator";
+import { IsArray, IsIn, IsOptional, IsString, ValidateNested } from "class-validator";
 import { AccordPrealableLigneDto } from "../../accord-prealable/dto/create-accord-prealable.dto";
 
 // Devis / demande de prise en charge (2026-08) — voir demande utilisateur :
@@ -25,6 +25,10 @@ export class CreateDevisMedicalDto {
   // AccordPrealableService.create gère déjà nativement un tableau vide
   // (repli sur dto.description/dto.montantDevis) — voir aussi le champ
   // "facultatif" déjà affiché côté formulaire (Devis.tsx).
+  @IsOptional()
+  @IsString()
+  clientSocieteId?: string;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => AccordPrealableLigneDto)
