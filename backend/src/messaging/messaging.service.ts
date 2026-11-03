@@ -92,7 +92,8 @@ export class MessagingService {
     const senderId = process.env.ZAVU_SENDER_ID;
     try {
       const texteSigne = await this.signer(texte);
-      await client.messages.send({ to, text: texteSigne, channel: canal, ...(senderId ? { "Zavu-Sender": senderId } : {}) });
+      const rep = await client.messages.send({ to, text: texteSigne, channel: canal, ...(senderId ? { "Zavu-Sender": senderId } : {}) });
+      this.logger.log(`Zavu OK → id=${(rep as any)?.id ?? "?"} status=${(rep as any)?.status ?? "?"} channel=${(rep as any)?.channel ?? canal} to=${to}`);
       return true;
     } catch (err) {
       // Jamais bloquant pour le workflow appelant (voir en-tête du fichier).
