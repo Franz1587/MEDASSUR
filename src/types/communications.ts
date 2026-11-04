@@ -13,7 +13,7 @@ export interface Communication {
   objet?: string;
   contenu: string;
   pieceJointe?: string;
-  statut: "Simulé" | "Échec";
+  statut: "Simulé" | "Échec" | "Envoyé" | "Reçu";
   declencheur: string;
   retour?: string;
   retourDate?: string;

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Palette, Save, Building2, Trash2, X, Plus } from "lucide-react";
+import { Palette, Save, Building2, Trash2, X, Plus, Bell, Pencil, Play, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
@@ -8,8 +8,10 @@ import {
   pageGardeStatistiquesUrl, uploadPageGardeStatistiques, deletePageGardeStatistiques,
 } from "@/services/parametresEntreprise.service";
 import { getModelesCarte } from "@/services/modelesCarte.service";
+import { getNiveauxRelance, upsertNiveauRelance, deleteNiveauRelance, declencherRelances } from "@/services/relances.service";
 import type { ParametresEntreprise } from "@/types/parametresEntreprise";
 import type { ModeleCarte } from "@/types/modeleCarte";
+import type { NiveauRelance } from "@/types/relances";
 
 const fieldCls = "w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground";
 const labelCls = "text-[12px] text-muted-foreground mb-1.5";
@@ -22,6 +24,15 @@ export default function ParametresEntrepriseView() {
   const [pageGardeBusy, setPageGardeBusy] = useState(false);
   const [ccInput, setCcInput] = useState("");
   const ccRef = useRef<HTMLInputElement>(null);
+
+  // Relances renouvellement
+  const [niveaux, setNiveaux] = useState<NiveauRelance[]>([]);
+  const [niveauEdit, setNiveauEdit] = useState<Partial<NiveauRelance> | null>(null);
+  const [declenchement, setDeclenchement] = useState(false);
+
+  useEffect(() => {
+    getNiveauxRelance().then(setNiveaux).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     getParametresEntreprise().then(setForm);
@@ -334,6 +345,92 @@ export default function ParametresEntrepriseView() {
           </button>
         </div>
         <p className="text-[10.5px] text-muted-foreground">Enregistrez ensuite via le bouton en haut de la page. L'adresse <strong>o.lekogo@laruchexcellence.com</strong> est utilisée par défaut si aucune adresse n'est définie ici.</p>
+      </div>
+
+      {/* Section relances renouvellement */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-[13px] font-semibold text-foreground flex items-center gap-2"><Bell className="w-4 h-4 text-primary" />Relances renouvellement automatiques</h3>
+          <div className="flex gap-2">
+            <Btn variant="outline" onClick={() => setNiveauEdit({ ordre: (niveaux.length + 1), joursAvantEcheance: 30, objet: "Rappel : votre contrat {{police}} expire dans {{jours}} jours", corps: "Bonjour {{nom}},\n\nVotre contrat n°{{police}} arrive à échéance le {{echeance}}.\n\nMerci de nous contacter pour procéder au renouvellement.\n\nCordialement,\nARIANA — MEDASSUR+", actif: true })}>
+              <Plus className="w-3.5 h-3.5" />Ajouter un niveau
+            </Btn>
+            <Btn variant="outline" disabled={declenchement} onClick={async () => {
+              try { setDeclenchement(true); const r = await declencherRelances(); toast.success(`${r.envoyees} relance(s) envoyée(s), ${r.ignorees} ignorée(s).`); }
+              catch { toast.error("Erreur lors du déclenchement."); }
+              finally { setDeclenchement(false); }
+            }}>
+              {declenchement ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}Déclencher maintenant
+            </Btn>
+          </div>
+        </div>
+        <p className="text-[11px] text-muted-foreground -mt-2">
+          Chaque niveau déclenche un email automatique aux souscripteurs dont le contrat arrive à échéance dans le délai indiqué. Le cron tourne quotidiennement à 10h (Gabon). Variables disponibles dans les modèles : <code className="text-[10px] bg-secondary px-1 rounded">{"{{nom}} {{police}} {{echeance}} {{jours}}"}</code>
+        </p>
+        <div className="space-y-2">
+          {niveaux.length === 0 && <p className="text-[12px] text-muted-foreground italic">Aucun niveau configuré — ajoutez un premier niveau ci-dessus.</p>}
+          {niveaux.map((n) => (
+            <div key={n.id} className="flex items-start justify-between gap-3 border border-border rounded-lg px-4 py-3 bg-background">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[11px] font-semibold text-primary bg-primary/10 rounded-full px-2 py-0.5">J-{n.joursAvantEcheance}</span>
+                  <span className="text-[12px] font-medium text-foreground truncate">{n.objet}</span>
+                  {!n.actif && <span className="text-[10px] text-muted-foreground">(inactif)</span>}
+                </div>
+                <p className="text-[11px] text-muted-foreground line-clamp-2 whitespace-pre-line">{n.corps}</p>
+              </div>
+              <div className="flex gap-1 shrink-0">
+                <button type="button" onClick={() => setNiveauEdit(n)} className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"><Pencil className="w-3.5 h-3.5" /></button>
+                <button type="button" onClick={async () => {
+                  if (!confirm(`Supprimer le niveau J-${n.joursAvantEcheance} ?`)) return;
+                  await deleteNiveauRelance(n.id);
+                  setNiveaux((v) => v.filter((x) => x.id !== n.id));
+                  toast.success("Niveau supprimé.");
+                }} className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Formulaire inline d'édition/création d'un niveau */}
+        {niveauEdit && (
+          <div className="border border-primary/40 rounded-xl p-4 space-y-3 bg-primary/5">
+            <h4 className="text-[12px] font-semibold">{niveauEdit.id ? "Modifier le niveau" : "Nouveau niveau"}</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <div className={labelCls}>Jours avant échéance</div>
+                <input type="number" min={1} value={niveauEdit.joursAvantEcheance ?? 30} onChange={(e) => setNiveauEdit((v) => ({ ...v, joursAvantEcheance: Number(e.target.value) }))} className={fieldCls} />
+              </label>
+              <label className="block">
+                <div className={labelCls}>Ordre d'affichage</div>
+                <input type="number" min={1} value={niveauEdit.ordre ?? 1} onChange={(e) => setNiveauEdit((v) => ({ ...v, ordre: Number(e.target.value) }))} className={fieldCls} />
+              </label>
+            </div>
+            <label className="block">
+              <div className={labelCls}>Sujet de l'email</div>
+              <input value={niveauEdit.objet ?? ""} onChange={(e) => setNiveauEdit((v) => ({ ...v, objet: e.target.value }))} className={fieldCls} />
+            </label>
+            <label className="block">
+              <div className={labelCls}>Corps de l'email</div>
+              <textarea value={niveauEdit.corps ?? ""} onChange={(e) => setNiveauEdit((v) => ({ ...v, corps: e.target.value }))} className={`${fieldCls} min-h-[120px] resize-y`} />
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={niveauEdit.actif ?? true} onChange={(e) => setNiveauEdit((v) => ({ ...v, actif: e.target.checked }))} className="rounded border-border" />
+              <span className="text-[12px] text-foreground">Actif</span>
+            </label>
+            <div className="flex gap-2 justify-end">
+              <Btn variant="outline" onClick={() => setNiveauEdit(null)}>Annuler</Btn>
+              <Btn variant="primary" onClick={async () => {
+                try {
+                  const saved = await upsertNiveauRelance(niveauEdit as NiveauRelance);
+                  setNiveaux((v) => niveauEdit.id ? v.map((x) => x.id === saved.id ? saved : x) : [...v, saved].sort((a, b) => a.ordre - b.ordre));
+                  setNiveauEdit(null);
+                  toast.success("Niveau enregistré.");
+                } catch { toast.error("Erreur d'enregistrement."); }
+              }}><Save className="w-3.5 h-3.5" />Enregistrer</Btn>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

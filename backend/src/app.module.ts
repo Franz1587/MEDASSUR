@@ -48,6 +48,7 @@ import { LettresClesModule } from "./lettres-cles/lettres-cles.module";
 import { FacturesModule } from "./factures/factures.module";
 import { RemboursementsModule } from "./remboursements/remboursements.module";
 import { CommunicationsModule } from "./communications/communications.module";
+import { RelancesModule } from "./relances/relances.module";
 import { BanquesModule } from "./banques/banques.module";
 import { AgencesModule } from "./agences/agences.module";
 import { ReglementComptableModule } from "./reglement-comptable/reglement-comptable.module";
@@ -124,6 +125,7 @@ import { ImportLibreModule } from "./import-libre/import-libre.module";
     FacturesModule,
     RemboursementsModule,
     CommunicationsModule,
+    RelancesModule,
     BanquesModule,
     AgencesModule,
     ReglementComptableModule,

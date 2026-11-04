@@ -339,6 +339,8 @@ model SocieteAssurance {
   portailAccesPrestataires PortailSocieteAcces[]
   transactions             Transaction[]
   compteReglements         CompteReglement[]
+  niveauxRelance           NiveauRelance[]
+  relancesEnvoyees         RelanceEnvoyee[]
 
   @@index([planAbonnementId])
 }
@@ -546,6 +548,42 @@ model Communication {
 
   @@index([destinataireType, destinataireId])
   @@index([canal])
+  @@index([societeId])
+}
+
+// Niveaux de relance renouvellement (2026-11) — paramétrables par société :
+// J-90, J-60, J-30, J-15 avant l'échéance du contrat. Le cron quotidien
+// (RelancesService) envoie un email personnalisé par souscripteur.
+model NiveauRelance {
+  id                 String   @id @default(cuid())
+  societeId          String
+  societe            SocieteAssurance @relation(fields: [societeId], references: [id])
+  ordre              Int      // 1 = premier, 2 = second… (tri d'affichage)
+  joursAvantEcheance Int      // ex: 90, 60, 30, 15
+  objet              String   // Sujet de l'email : accepte {{nom}}, {{police}}, {{jours}}
+  corps              String   @db.Text // Corps : {{nom}}, {{police}}, {{echeance}}, {{jours}}
+  actif              Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  relancesEnvoyees   RelanceEnvoyee[]
+  @@unique([societeId, ordre])
+  @@index([societeId])
+}
+
+// Historique des relances envoyées (2026-11) — une entrée par contrat × niveau.
+// La contrainte unique empêche de renvoyer le même niveau au même contrat.
+model RelanceEnvoyee {
+  id              String           @id @default(cuid())
+  societeId       String
+  societe         SocieteAssurance @relation(fields: [societeId], references: [id])
+  contratId       String
+  contrat         Contrat          @relation(fields: [contratId], references: [id])
+  niveauRelanceId String
+  niveauRelance   NiveauRelance    @relation(fields: [niveauRelanceId], references: [id])
+  sentAt          DateTime         @default(now())
+  statut          String           // "Envoyé" | "Simulé" | "Erreur"
+  communicationId String?          // id de la Communication créée pour le journal
+  @@unique([contratId, niveauRelanceId])
   @@index([societeId])
 }
 
@@ -1390,6 +1428,7 @@ model Contrat {
   demandesClient    DemandeClient[]
   encaissements     EncaissementPrime[]
   quittancesLibres  QuittanceLibre[]
+  relancesEnvoyees  RelanceEnvoyee[]
 
   @@unique([compagnieId, numeroPolice])
 
