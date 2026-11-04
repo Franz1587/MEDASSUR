@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Reply, ReplyAll, Forward, MoreHorizontal, Archive, Trash2, Flag, MailOpen, Mail, FileText, Download,
-  ExternalLink, Inbox, Pencil, MessageSquare, Phone, ArrowLeft, CornerDownRight,
+  ExternalLink, Inbox, Pencil, MessageSquare, Phone, ArrowLeft, CornerDownRight, Maximize2, X,
 } from "lucide-react";
 import { Badge } from "@/components/shared/Badge";
 import { nomPieceJointe, pieceJointeCommunicationUrl } from "@/services/communications.service";
@@ -47,9 +47,11 @@ interface Props {
   onSupprimerDefinitif: () => void;
   onModifierBrouillon: () => void;
   onOuvrir: (id: string) => void;
+  onAgrandir?: () => void;
+  enFenetre?: boolean;
 }
 
-export function LecteurMessage({ c, fil, onRetour, onRepondre, onMaj, onSupprimerDefinitif, onModifierBrouillon, onOuvrir }: Props) {
+export function LecteurMessage({ c, fil, onRetour, onRepondre, onMaj, onSupprimerDefinitif, onModifierBrouillon, onOuvrir, onAgrandir, enFenetre }: Props) {
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -73,12 +75,24 @@ export function LecteurMessage({ c, fil, onRetour, onRepondre, onMaj, onSupprime
     <article className="h-full flex flex-col min-h-0" aria-label="Message">
       <div className="px-5 pt-4 pb-3 border-b border-border">
         <div className="flex items-start gap-2">
-          {onRetour && (
+          {onRetour && !enFenetre && (
             <button type="button" onClick={onRetour} aria-label="Retour à la liste" className="lg:hidden h-9 w-9 -ml-2 rounded-lg inline-flex items-center justify-center text-foreground hover:bg-secondary/50">
               <ArrowLeft className="w-4 h-4" aria-hidden />
             </button>
           )}
-          <h2 className="text-[19px] font-semibold text-foreground leading-snug break-words flex-1">{c.objet || (c.canal === "Email" ? "(sans objet)" : `Message ${c.canal}`)}</h2>
+          <h2 className={`${enFenetre ? "text-[22px]" : "text-[19px]"} font-semibold text-foreground leading-snug break-words flex-1`}>{c.objet || (c.canal === "Email" ? "(sans objet)" : `Message ${c.canal}`)}</h2>
+          {onAgrandir && (
+            <button type="button" onClick={onAgrandir} aria-label="Ouvrir dans une fenêtre" title="Ouvrir dans une fenêtre"
+              className="hidden sm:inline-flex h-9 w-9 rounded-lg items-center justify-center text-muted-foreground hover:bg-secondary/50 hover:text-foreground">
+              <Maximize2 className="w-4 h-4" aria-hidden />
+            </button>
+          )}
+          {enFenetre && onRetour && (
+            <button type="button" onClick={onRetour} aria-label="Fermer la fenêtre" title="Fermer (Échap)"
+              className="h-9 w-9 rounded-lg inline-flex items-center justify-center text-muted-foreground hover:bg-secondary/50 hover:text-foreground">
+              <X className="w-5 h-5" aria-hidden />
+            </button>
+          )}
         </div>
 
         <div className="mt-3 flex flex-wrap items-start gap-3">
@@ -168,7 +182,7 @@ export function LecteurMessage({ c, fil, onRetour, onRepondre, onMaj, onSupprime
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0 bg-secondary/20 p-4">
-        <div className="max-w-[880px] mx-auto bg-card rounded-xl border border-border shadow-sm flex flex-col min-h-full">
+        <div className={`${enFenetre ? "max-w-[1080px]" : "max-w-[880px]"} mx-auto bg-card rounded-xl border border-border shadow-sm flex flex-col min-h-full`}>
           <CorpsMessage c={c} />
           {c.retour && (
             <div className="mx-6 mb-5 mt-1 rounded-lg border border-green-500/30 bg-green-500/5 px-4 py-3">

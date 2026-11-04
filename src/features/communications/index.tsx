@@ -91,6 +91,7 @@ export default function CommunicationsView() {
   const [selectionId, setSelectionId] = useState<string | null>(null);
   const [fil, setFil] = useState<Communication[]>([]);
   const [composer, setComposer] = useState<{ cle: number; initial: BrouillonInitial } | null>(null);
+  const [fenetreLecture, setFenetreLecture] = useState(false);
   const [signature, setSignature] = useState({ email: "", sms: "" });
   const [editionSignature, setEditionSignature] = useState(false);
   const [voletReplie, setVoletReplie] = useState(false);
@@ -270,6 +271,9 @@ export default function CommunicationsView() {
     });
   };
 
+  // Toute rédaction s'ouvre dans la grande fenêtre ; la fenêtre de lecture lui cède la place.
+  useEffect(() => { if (composer) setFenetreLecture(false); }, [composer]);
+
   const fermerComposer = (actualiser: boolean) => {
     setComposer(null);
     if (actualiser) charger(true);
@@ -400,7 +404,7 @@ export default function CommunicationsView() {
         </nav>
 
         {/* Liste des messages */}
-        <section aria-label={`Liste : ${libelleDossier}`} className={`${selection || composer ? "hidden lg:flex" : "flex"} flex-col bg-card border border-border rounded-xl overflow-hidden min-h-0`}>
+        <section aria-label={`Liste : ${libelleDossier}`} className={`${selection ? "hidden lg:flex" : "flex"} flex-col bg-card border border-border rounded-xl overflow-hidden min-h-0`}>
           <div className="px-3 pt-3 pb-2 border-b border-border space-y-2">
             <div className="lg:hidden grid grid-cols-2 gap-2">
               <select aria-label="Dossier" value={dossier} onChange={(e) => { setDossier(e.target.value as DossierCommunication); setSelectionId(null); }}
@@ -466,6 +470,8 @@ export default function CommunicationsView() {
                     <li key={m.id}>
                       {entete && <p className="px-4 pt-3 pb-1 text-[11.5px] font-semibold text-muted-foreground bg-secondary/20">{entete}</p>}
                       <button type="button" data-id={m.id} onClick={() => (m.statut === "Brouillon" ? (setSelectionId(m.id), continuerBrouillon(m)) : ouvrir(m.id))}
+                        onDoubleClick={() => { if (m.statut !== "Brouillon") setFenetreLecture(true); }}
+                        title={m.statut === "Brouillon" ? undefined : "Double-cliquez pour ouvrir dans une fenêtre"}
                         aria-current={actif ? "true" : undefined}
                         className={`w-full text-left flex gap-3 px-3 py-2.5 border-b border-border/60 border-l-[3px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary
                           ${actif ? "bg-primary/10 border-l-primary" : nonLu ? "border-l-primary hover:bg-secondary/40" : "border-l-transparent hover:bg-secondary/40"}`}>
@@ -504,13 +510,12 @@ export default function CommunicationsView() {
         </section>
 
         {/* Volet de lecture / rédaction */}
-        <section aria-label="Lecture" className={`${selection || composer ? "flex" : "hidden lg:flex"} flex-col bg-card border border-border rounded-xl overflow-hidden min-h-[520px] lg:min-h-0`}>
-          {composer ? (
-            <Composer key={composer.cle} initial={composer.initial} suggestions={suggestions} signature={signature} onFerme={fermerComposer} />
-          ) : selection ? (
+        <section aria-label="Lecture" className={`${selection ? "flex" : "hidden lg:flex"} flex-col bg-card border border-border rounded-xl overflow-hidden min-h-[520px] lg:min-h-0`}>
+          {selection && selection.statut !== "Brouillon" ? (
             <LecteurMessage
               c={selection} fil={fil}
               onRetour={() => setSelectionId(null)}
+              onAgrandir={() => setFenetreLecture(true)}
               onRepondre={(mode) => repondre(mode)}
               onMaj={(maj) => majSelection(maj)}
               onSupprimerDefinitif={() => supprimer()}
@@ -529,6 +534,27 @@ export default function CommunicationsView() {
         </section>
       </div>
 
+      {fenetreLecture && selection && selection.statut !== "Brouillon" && !composer && (
+        <Fenetre titre={selection.objet || "Message"} onFerme={() => setFenetreLecture(false)} fermerSurFond>
+          <LecteurMessage
+            c={selection} fil={fil} enFenetre
+            onRetour={() => setFenetreLecture(false)}
+            onRepondre={(mode) => repondre(mode)}
+            onMaj={(maj) => majSelection(maj)}
+            onSupprimerDefinitif={() => supprimer()}
+            onModifierBrouillon={() => continuerBrouillon()}
+            onOuvrir={ouvrir}
+          />
+        </Fenetre>
+      )}
+
+      {composer && (
+        // Pas de fermeture sur le fond ni Échap : le bouton Fermer enregistre le brouillon.
+        <Fenetre titre={composer.initial.titre}>
+          <Composer key={composer.cle} initial={composer.initial} suggestions={suggestions} signature={signature} onFerme={fermerComposer} />
+        </Fenetre>
+      )}
+
       {editionSignature && (
         <EditionSignature
           initiale={signature}
@@ -536,6 +562,25 @@ export default function CommunicationsView() {
           onEnregistre={(s) => { setSignature({ email: nettoyerHtml(s.email), sms: s.sms }); setEditionSignature(false); }}
         />
       )}
+    </div>
+  );
+}
+
+// Grande fenêtre « bulle » pour lire ou rédiger confortablement (plein écran sur mobile).
+function Fenetre({ titre, onFerme, fermerSurFond, children }: { titre: string; onFerme?: () => void; fermerSurFond?: boolean; children: React.ReactNode }) {
+  useEffect(() => {
+    if (!onFerme) return;
+    const echap = (e: KeyboardEvent) => { if (e.key === "Escape") onFerme(); };
+    window.addEventListener("keydown", echap);
+    return () => window.removeEventListener("keydown", echap);
+  }, [onFerme]);
+  return (
+    <div className="fixed inset-0 z-[80] bg-black/45 flex items-center justify-center sm:p-4 md:p-6"
+      onMouseDown={(e) => { if (fermerSurFond && onFerme && e.target === e.currentTarget) onFerme(); }}>
+      <div role="dialog" aria-modal="true" aria-label={titre}
+        className="w-full h-[100dvh] sm:h-[94vh] max-w-[1200px] bg-card sm:border border-border sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-150">
+        {children}
+      </div>
     </div>
   );
 }

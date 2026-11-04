@@ -243,18 +243,18 @@ export function Composer({ initial, suggestions, signature, onFerme }: {
           className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium inline-flex items-center gap-1.5 hover:opacity-90 disabled:opacity-60">
           {occupe === "envoi" ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Send className="w-4 h-4" aria-hidden />}Envoyer
         </button>
-        <button type="button" onClick={() => inputFichier.current?.click()}
+        <button type="button" onClick={() => inputFichier.current?.click()} aria-label="Joindre un fichier" title="Joindre un fichier"
           className="h-9 px-3 rounded-lg border border-border text-[13px] text-foreground inline-flex items-center gap-1.5 hover:bg-secondary/40">
-          <Paperclip className="w-4 h-4" aria-hidden />Joindre un fichier
+          <Paperclip className="w-4 h-4" aria-hidden /><span className="hidden sm:inline">Joindre un fichier</span>
         </button>
         <input ref={inputFichier} type="file" multiple hidden onChange={(e) => { if (e.target.files) ajouterFichiers(e.target.files); e.target.value = ""; }} />
-        <button type="button" onClick={() => enregistrer()} disabled={!!occupe}
+        <button type="button" onClick={() => enregistrer()} disabled={!!occupe} aria-label="Enregistrer le brouillon" title="Enregistrer le brouillon"
           className="h-9 px-3 rounded-lg border border-border text-[13px] text-foreground inline-flex items-center gap-1.5 hover:bg-secondary/40 disabled:opacity-60">
-          {occupe === "brouillon" ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Save className="w-4 h-4" aria-hidden />}Enregistrer
+          {occupe === "brouillon" ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Save className="w-4 h-4" aria-hidden />}<span className="hidden sm:inline">Enregistrer</span>
         </button>
-        <button type="button" onClick={ignorer}
+        <button type="button" onClick={ignorer} aria-label="Ignorer le message" title="Ignorer le message"
           className="h-9 px-3 rounded-lg border border-border text-[13px] text-foreground inline-flex items-center gap-1.5 hover:bg-secondary/40">
-          <Trash2 className="w-4 h-4" aria-hidden />Ignorer
+          <Trash2 className="w-4 h-4" aria-hidden /><span className="hidden sm:inline">Ignorer</span>
         </button>
         <div className="ml-auto flex items-center gap-1 rounded-lg border border-border p-0.5" role="radiogroup" aria-label="Canal d'envoi">
           {CANAUX.map((c) => (

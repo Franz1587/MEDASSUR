@@ -66,7 +66,7 @@ export function EditeurRiche({ initialHtml, onChange, minHeight = 260, ariaLabel
   const sep = <span className="w-px h-5 bg-border mx-1" aria-hidden />;
 
   return (
-    <div className="border border-border rounded-lg bg-background flex flex-col min-h-0">
+    <div className="flex-1 border border-border rounded-lg bg-background flex flex-col min-h-0">
       <div role="toolbar" aria-label="Mise en forme" className="flex flex-wrap items-center gap-0.5 px-1.5 py-1 border-b border-border bg-secondary/20">
         {outil("Annuler (Ctrl+Z)", Undo2, () => cmd("undo"))}
         {outil("Rétablir (Ctrl+Y)", Redo2, () => cmd("redo"))}
