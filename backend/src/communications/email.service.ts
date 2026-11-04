@@ -25,15 +25,22 @@ export class EmailService {
     return this.transporter;
   }
 
-  async envoyer(to: string, subject: string, text: string): Promise<boolean> {
+  async envoyer(to: string, subject: string, text: string, fromName = "MEDASSUR"): Promise<boolean> {
     const t = this.getTransporter();
     if (!t) { this.logger.debug("SMTP non configuré — email ignoré."); return false; }
+    const from = process.env.SMTP_USER!;
     try {
       const info = await t.sendMail({
-        from: `"MEDASSUR+" <${process.env.SMTP_USER}>`,
+        from: `"${fromName}" <${from}>`,
+        replyTo: `"${fromName}" <${from}>`,
         to,
-        subject: subject || "Message MEDASSUR+",
+        subject: subject || `Message de ${fromName}`,
         text,
+        // En-têtes de désinscription requis par Gmail pour les envois en masse
+        headers: {
+          "List-Unsubscribe": `<mailto:${from}?subject=unsubscribe>`,
+          "X-Mailer": "MEDASSUR",
+        },
       });
       this.logger.log(`Email OK → messageId=${info.messageId} to=${to}`);
       return true;
