@@ -78,8 +78,11 @@ export class EmailPollerService implements OnModuleDestroy, OnModuleInit {
       try {
         const messages = client.fetch({ seen: false }, { envelope: true, source: true });
         for await (const msg of messages as AsyncIterable<any>) {
-          await this.traiterMessage(msg);
+          // Marquer \Seen avant le traitement : traiterMessage peut durer >1 min (ARIANA + PDF),
+          // et le cron suivant relit les non-lus → doublon. On accepte de perdre un message
+          // si le process crashe après le flag mais avant le traitement (cas très rare).
           await client.messageFlagsAdd({ uid: msg.uid }, ["\\Seen"], { uid: true });
+          await this.traiterMessage(msg);
         }
       } finally {
         lock.release();
