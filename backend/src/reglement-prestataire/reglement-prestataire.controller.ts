@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
-import type { Request } from "express";
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
+import type { Request, Response } from "express";
+import { envoyerExport, formatExport } from "../lib/export-tableau.util";
 import { ReglementPrestataireService } from "./reglement-prestataire.service";
 import { GenererBordereauDto } from "./dto/generer-bordereau.dto";
 import { PayerBordereauDto } from "./dto/payer-bordereau.dto";
@@ -49,6 +50,28 @@ export class ReglementPrestataireController {
   ) {
     return this.service.historique({ prestataireId, du, au, numeroReglement, referenceDecompte, assure, referenceReglementComptable },
       page ? Math.max(1, Number(page) || 1) : undefined, Math.min(500, Math.max(1, Number(taille) || 25)));
+  }
+
+  // Exports multiformat (xlsx, csv, pdf, docx) — déclarés avant ":id".
+  @Get("export")
+  async exporter(
+    @Res() res: Response, @Query("format") format?: string, @Query("niveau") niveau?: string,
+    @Query("prestataireId") prestataireId?: string, @Query("du") du?: string, @Query("au") au?: string,
+    @Query("statut") statut?: string, @Query("bordereauId") bordereauId?: string,
+  ) {
+    const tableau = await this.service.exporter({ prestataireId, du, au, statut, bordereauId }, niveau === "lignes" ? "lignes" : "reglements");
+    return envoyerExport(res, formatExport(format), tableau);
+  }
+
+  @Get("historique/export")
+  async exporterHistorique(
+    @Res() res: Response, @Query("format") format?: string,
+    @Query("prestataireId") prestataireId?: string, @Query("du") du?: string, @Query("au") au?: string,
+    @Query("numeroReglement") numeroReglement?: string, @Query("referenceDecompte") referenceDecompte?: string,
+    @Query("assure") assure?: string, @Query("referenceReglementComptable") referenceReglementComptable?: string,
+  ) {
+    const tableau = await this.service.exporterHistorique({ prestataireId, du, au, numeroReglement, referenceDecompte, assure, referenceReglementComptable });
+    return envoyerExport(res, formatExport(format), tableau);
   }
 
   @Get(":id")

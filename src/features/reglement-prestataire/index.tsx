@@ -11,7 +11,8 @@ import { DateInput } from "@/components/shared/DateInput";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { fmtM } from "@/lib/format";
 import { getBordereaux, validerBordereau, rejeterBordereau, payerBordereau, getHistoriqueReglements } from "@/services/reglement.service";
-import { openReglement, openHistoriqueReglements } from "@/services/documents.service";
+import { openReglement, openHistoriqueReglements, exporterReglements, exporterHistoriqueReglements } from "@/services/documents.service";
+import { ExportMenu } from "@/components/shared/ExportMenu";
 import { getPrestataires } from "@/services/prestataires.service";
 import { initierPayout } from "@/services/ebilling.service";
 import GenererReglementModal from "./GenererReglementModal";
@@ -170,6 +171,10 @@ export default function ReglementPrestataireView() {
   const [tailleBdx, setTailleBdx] = useState(25);
   const [totalBdx, setTotalBdx] = useState(0);
   const [recherchant, setRecherchant] = useState(false);
+  const [expPrestataireId, setExpPrestataireId] = useState("");
+  const [expDu, setExpDu] = useState("");
+  const [expAu, setExpAu] = useState("");
+  const [expStatut, setExpStatut] = useState("");
 
   const refresh = async (page = pageBdx, taille = tailleBdx) => {
     const r = await getBordereaux(page, taille);
@@ -268,9 +273,14 @@ export default function ReglementPrestataireView() {
                 <Search className="w-4 h-4" />{recherchant ? "Recherche…" : "Rechercher"}
               </Btn>
               {historique && (
-                <Btn variant="ghost" onClick={() => openHistoriqueReglements(filtresHistorique)}>
-                  <Printer className="w-4 h-4" />Imprimer / télécharger l'état
-                </Btn>
+                <>
+                  <Btn variant="ghost" onClick={() => openHistoriqueReglements(filtresHistorique)}>
+                    <Printer className="w-4 h-4" />Imprimer l'état
+                  </Btn>
+                  <ExportMenu label="Exporter l'historique" aGauche contenus={[{ id: "historique", label: "Historique ligne par ligne" }]}
+                    aide="Selon les critères ci-dessus, toutes pages confondues."
+                    onExporter={(_c, format) => exporterHistoriqueReglements(filtresHistorique, format)} />
+                </>
               )}
             </div>
 
@@ -343,9 +353,39 @@ export default function ReglementPrestataireView() {
         </div>
 
         <div className="bg-card border border-border rounded-xl overflow-x-auto">
-          <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+          <div className="px-4 py-3 border-b border-border flex items-center gap-2 flex-wrap">
             <FileStack className="w-4 h-4 text-primary" />
             <h3 className="font-semibold text-foreground text-sm">Règlements établis ({totalBdx.toLocaleString("fr-FR")})</h3>
+            <div className="ml-auto">
+              <ExportMenu
+                label="Exporter les règlements"
+                contenus={[
+                  { id: "reglements", label: "Liste des règlements", description: "Une ligne par règlement : période, montants, statut, paiement." },
+                  { id: "lignes", label: "Détail des prestations réglées", description: "Une ligne par prestation : facture, assuré, date de soin, net à payer." },
+                ]}
+                onExporter={(niveau, format) => exporterReglements({ prestataireId: expPrestataireId || undefined, du: expDu || undefined, au: expAu || undefined, statut: expStatut || undefined }, niveau, format)}
+              >
+                <div className="space-y-2.5">
+                  <label className="block">
+                    <div className="text-[12px] font-semibold text-muted-foreground mb-1">Prestataire</div>
+                    <Combobox options={prestataires} value={prestataires.find((p) => p.id === expPrestataireId) ?? null}
+                      onChange={(p) => setExpPrestataireId(p?.id ?? "")} getLabel={(p) => p.nom} getSubLabel={(p) => p.ville} getId={(p) => p.id}
+                      allowClear clearLabel="Tous" />
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block"><div className="text-[12px] font-semibold text-muted-foreground mb-1">Établis du</div><DateInput value={expDu} onChange={setExpDu} className={fieldCls} /></label>
+                    <label className="block"><div className="text-[12px] font-semibold text-muted-foreground mb-1">au</div><DateInput value={expAu} onChange={setExpAu} className={fieldCls} /></label>
+                  </div>
+                  <label className="block">
+                    <div className="text-[12px] font-semibold text-muted-foreground mb-1">Statut</div>
+                    <select value={expStatut} onChange={(e) => setExpStatut(e.target.value)} className={fieldCls}>
+                      <option value="">Tous</option>
+                      {Object.keys(statutVariant).map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </label>
+                </div>
+              </ExportMenu>
+            </div>
           </div>
           <table className="w-full text-sm">
             <thead>

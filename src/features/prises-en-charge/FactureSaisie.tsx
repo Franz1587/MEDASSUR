@@ -19,7 +19,8 @@ import { getActesMedicaux } from "@/services/acteMedical.service";
 import { getAccordsPrealablesContrat } from "@/services/accordPrealable.service";
 import { getLettresCles } from "@/services/lettresCles.service";
 import { getCodesAffection, type CodeAffection } from "@/services/codesAffection.service";
-import { openDecompteFacture } from "@/services/documents.service";
+import { openDecompteFacture, exporterFactures } from "@/services/documents.service";
+import { ExportMenu } from "@/components/shared/ExportMenu";
 import { OPTIONS_NATURE_MALADIE, type NatureMaladie } from "@/lib/natureMaladie";
 import { MOTIFS_REJET_FACTURE, MOTIF_REJET_AUTRE, mapMotifRejet } from "@/lib/motifsRejet";
 import type { Facture, FactureLigne, ApercuLigne } from "@/types/facture";
@@ -445,6 +446,9 @@ export default function FactureSaisie({ factureId, onClose, onChanged }: { factu
           </div>
           <div className="flex items-center gap-2">
             <Btn variant="ghost" onClick={handleImprimer}><Printer className="w-4 h-4" />Décompte</Btn>
+            <ExportMenu label="Exporter" contenus={[{ id: "lignes", label: "Détail de la facture" }]}
+              aide="Toutes les lignes saisies : assuré, date de soin, acte, frais réel, net à payer."
+              onExporter={(niveau, format) => exporterFactures({ factureId }, niveau, format)} />
             <button type="button" onClick={handleClose} className="h-8 w-8 rounded-lg border border-border text-muted-foreground hover:text-foreground inline-flex items-center justify-center"><X className="w-4 h-4" /></button>
           </div>
         </div>

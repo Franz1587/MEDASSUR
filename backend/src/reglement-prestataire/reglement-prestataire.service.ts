@@ -6,6 +6,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { GenererBordereauDto } from "./dto/generer-bordereau.dto";
 import { PayerBordereauDto } from "./dto/payer-bordereau.dto";
 import { montantNetPrisesEnCharge } from "../lib/montant-net.util";
+import { nomSocieteCourante, type TableauExport } from "../lib/export-tableau.util";
+import { referenceLisible } from "../factures/reference-facture.util";
 
 function parseDateFr(s?: string | null): Date | null {
   if (!s) return null;
@@ -483,5 +485,109 @@ export class ReglementPrestataireService {
       }
     }
     return { lignes: pageLignes, exercices, total: lignes.length, page, taille };
+  }
+
+  // Export multiformat : liste des règlements établis, ou détail ligne par ligne
+  // des prestations réglées (pour un prestataire, une période ou un seul règlement).
+  async exporter(filtres: { prestataireId?: string; du?: string; au?: string; statut?: string; bordereauId?: string }, niveau: "reglements" | "lignes"): Promise<TableauExport> {
+    const du = parseDateFr(filtres.du), au = parseDateFr(filtres.au);
+    const bordereaux = (await this.prisma.bordereauReglement.findMany({
+      where: { id: filtres.bordereauId, prestataireId: filtres.prestataireId, statut: filtres.statut || undefined },
+      select: {
+        id: true, numero: true, periode: true, nbPrisesEnCharge: true, montantTotal: true, montantValide: true, statut: true,
+        dateReception: true, datePaiement: true, referenceVirement: true,
+        prestataire: { select: { nom: true } },
+        lettreCheque: { select: { numeroCheque: true, banque: { select: { nom: true } } } },
+      },
+      orderBy: { dateReception: "desc" },
+    })).filter((b) => {
+      const d = parseDateFr(b.dateReception);
+      return !(du && d && d < du) && !(au && d && d > au);
+    });
+    const prestataire = filtres.prestataireId ? bordereaux[0]?.prestataire.nom ?? (await this.prisma.prestataire.findUnique({ where: { id: filtres.prestataireId }, select: { nom: true } }))?.nom : undefined;
+    const criteres = [
+      filtres.bordereauId && bordereaux[0] && `Règlement n° ${bordereaux[0].numero} — ${bordereaux[0].prestataire.nom}`,
+      !filtres.bordereauId && prestataire && `Prestataire : ${prestataire}`,
+      filtres.du && `du ${filtres.du}`, filtres.au && `au ${filtres.au}`, filtres.statut && `statut ${filtres.statut}`,
+    ].filter(Boolean).join(" · ");
+    const societe = await nomSocieteCourante(this.prisma);
+    const suffixe = `${filtres.bordereauId && bordereaux[0] ? `-${bordereaux[0].numero}` : prestataire ? `-${prestataire}` : ""}-${new Date().toISOString().slice(0, 10)}`;
+
+    if (niveau === "reglements") {
+      return {
+        titre: "Règlements établis", societe, total: true, nomFichier: `Reglements${suffixe}`,
+        sousTitre: `${bordereaux.length} règlement(s)${criteres ? ` — ${criteres}` : ""}`,
+        colonnes: [
+          { titre: "N° règlement" }, { titre: "Prestataire", largeur: 2 }, { titre: "Période", largeur: 1.5 }, { titre: "Établi le" },
+          { titre: "Lignes", type: "nombre", largeur: 0.6 }, { titre: "Montant total", type: "montant" }, { titre: "Net validé", type: "montant" },
+          { titre: "Statut" }, { titre: "Payé le" }, { titre: "Référence paiement", largeur: 1.6 },
+        ],
+        lignes: bordereaux.map((b) => [
+          b.numero, b.prestataire.nom, b.periode, b.dateReception, b.nbPrisesEnCharge, Number(b.montantTotal),
+          b.montantValide != null ? Number(b.montantValide) : null, b.statut, b.datePaiement ?? "",
+          b.lettreCheque ? `Chèque n° ${b.lettreCheque.numeroCheque} — ${b.lettreCheque.banque.nom}` : b.referenceVirement ?? "",
+        ]),
+      };
+    }
+
+    const numeros = new Map(bordereaux.map((b) => [b.id, b]));
+    const lignes = [];
+    const ids = [...numeros.keys()];
+    for (let i = 0; i < ids.length; i += 5000) {
+      lignes.push(...await this.prisma.priseEnCharge.findMany({
+        where: { bordereauId: { in: ids.slice(i, i + 5000) } },
+        select: {
+          bordereauId: true, date: true, type: true, montant: true, baseRemboursement: true, montantTps: true, statut: true,
+          assure: { select: { nom: true, prenom: true, matricule: true } },
+          facture: { select: { referenceFacture: true, dateReception: true } },
+          acteMedical: { select: { libelle: true } },
+        },
+        orderBy: [{ bordereauId: "asc" }, { date: "asc" }],
+      }));
+    }
+    return {
+      titre: filtres.bordereauId ? "Détail du règlement" : "Détail des prestations réglées", societe, total: true,
+      nomFichier: `Detail-reglements${suffixe}`,
+      sousTitre: `${lignes.length} ligne(s) sur ${bordereaux.length} règlement(s)${criteres ? ` — ${criteres}` : ""}`,
+      colonnes: [
+        { titre: "N° règlement" }, { titre: "Prestataire", largeur: 1.6 }, { titre: "Facture", largeur: 1.6 }, { titre: "Réception" },
+        { titre: "Assuré", largeur: 1.6 }, { titre: "Matricule" }, { titre: "Date de soin" }, { titre: "Acte / prestation", largeur: 1.8 },
+        { titre: "Frais réel", type: "montant" }, { titre: "Base remb.", type: "montant" }, { titre: "TPS", type: "montant" },
+        { titre: "Net à payer", type: "montant" }, { titre: "Statut ligne" }, { titre: "Statut règlement" },
+      ],
+      lignes: lignes.map((l) => {
+        const b = numeros.get(l.bordereauId!)!;
+        return [
+          b.numero, b.prestataire.nom, l.facture ? referenceLisible(l.facture.referenceFacture) : "", l.facture?.dateReception ?? "",
+          [l.assure.nom, l.assure.prenom].filter(Boolean).join(" "), l.assure.matricule ?? "", l.date, l.acteMedical?.libelle ?? l.type,
+          Number(l.montant), l.baseRemboursement != null ? Number(l.baseRemboursement) : null, l.montantTps != null ? Number(l.montantTps) : null,
+          montantNetPrisesEnCharge([l]), l.statut, b.statut,
+        ];
+      }),
+    };
+  }
+
+  // Historique des factures par exercice — mêmes filtres que l'écran, toutes les lignes.
+  async exporterHistorique(filtres: Parameters<ReglementPrestataireService["historique"]>[0]): Promise<TableauExport> {
+    const { lignes } = await this.historique(filtres);
+    const societe = await nomSocieteCourante(this.prisma);
+    const prestataire = filtres.prestataireId ? lignes[0]?.prestataireNom : undefined;
+    const criteres = [prestataire && `Prestataire : ${prestataire}`, filtres.du && `du ${filtres.du}`, filtres.au && `au ${filtres.au}`,
+      filtres.numeroReglement && `règlement ${filtres.numeroReglement}`, filtres.assure && `assuré « ${filtres.assure} »`].filter(Boolean).join(" · ");
+    return {
+      titre: "Historique des factures réglées", societe, total: true,
+      nomFichier: `Historique-reglements${prestataire ? `-${prestataire}` : ""}-${new Date().toISOString().slice(0, 10)}`,
+      sousTitre: `${lignes.length} ligne(s)${criteres ? ` — ${criteres}` : ""}`,
+      colonnes: [
+        { titre: "Exercice", largeur: 0.7 }, { titre: "Date de soin" }, { titre: "Assuré", largeur: 1.7 }, { titre: "Prestataire", largeur: 1.6 },
+        { titre: "Facture", largeur: 1.6 }, { titre: "N° décompte" }, { titre: "N° sinistre" }, { titre: "N° règlement" },
+        { titre: "Règlement comptable", largeur: 1.6 }, { titre: "Frais réel", type: "montant" }, { titre: "Remboursé", type: "montant" }, { titre: "Statut" },
+      ],
+      lignes: lignes.map((l) => [
+        l.exercice, l.date, l.assureNom, l.prestataireNom, l.factureReference ? referenceLisible(l.factureReference) : "",
+        l.decompteNumero ?? "", l.numeroSinistre ?? "", l.bordereauNumero ?? "",
+        l.numeroCheque ? `Chèque n° ${l.numeroCheque} — ${l.banqueNom}` : "", l.montant, l.montantRembourse, l.bordereauStatut ?? "",
+      ]),
+    };
   }
 }

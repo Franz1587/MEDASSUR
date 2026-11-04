@@ -6,6 +6,8 @@ import { Badge } from "@/components/shared/Badge";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { Combobox } from "@/components/shared/Combobox";
+import { ExportMenu } from "@/components/shared/ExportMenu";
+import { exporterFactures } from "@/services/documents.service";
 import { DateInput } from "@/components/shared/DateInput";
 import { useShellNavigation } from "@/layout/ShellNavigationContext";
 import { fmtM } from "@/lib/format";
@@ -431,9 +433,20 @@ export default function PrisesEnChargeView() {
                   <input value={filtreReference} onChange={(e) => setFiltreReference(e.target.value)} placeholder="n° facture, nom, prénom ou matricule du patient…" className={fieldCls} />
                 </label>
               </div>
-              <Btn variant="primary" onClick={() => refreshFactures(1)} disabled={recherchant}>
-                <Search className="w-4 h-4" />{recherchant ? "Recherche…" : "Rechercher"}
-              </Btn>
+              <div className="flex flex-wrap items-center gap-2">
+                <Btn variant="primary" onClick={() => refreshFactures(1)} disabled={recherchant}>
+                  <Search className="w-4 h-4" />{recherchant ? "Recherche…" : "Rechercher"}
+                </Btn>
+                <ExportMenu
+                  label="Exporter les factures" aGauche
+                  contenus={[
+                    { id: "factures", label: "Liste des factures", description: "Une ligne par facture : frais réels, TPS, rejets, net à payer, règlement." },
+                    { id: "lignes", label: "Détail des factures saisies", description: "Une ligne par prestation : assuré, date de soin, acte, frais réel, net à payer." },
+                  ]}
+                  aide={`Selon les filtres ci-dessus${filtrePrestataireId ? ` (prestataire : ${prestataires.find((p) => p.id === filtrePrestataireId)?.nom ?? ""})` : ""}, toutes pages confondues.`}
+                  onExporter={(niveau, format) => exporterFactures(filtresFacturesActuels, niveau, format)}
+                />
+              </div>
             </div>
           </div>
 

@@ -10,6 +10,8 @@ import { ApercuLigneDto } from "./dto/apercu-ligne.dto";
 import { CreateFactureLigneDto } from "../sante/dto/create-facture-ligne.dto";
 import { UpdateFactureLigneDto } from "../sante/dto/update-facture-ligne.dto";
 import { agenceDeSaisie } from "../lib/agence-saisie.util";
+import { nomSocieteCourante, type TableauExport } from "../lib/export-tableau.util";
+import { referenceLisible } from "./reference-facture.util";
 
 // select ciblé (2026-09, était include: {contrat:true, ...} en entier) —
 // voir demande utilisateur : "je veux la rapidité, la fluidité" ; mesuré en
@@ -82,7 +84,30 @@ function genererAcronymePrestataire(nom: string): string {
   return acronyme || "PRS";
 }
 
-type FiltresFactures = { prestataireId?: string; contratId?: string; clientId?: string; statut?: string; reference?: string; du?: string; au?: string; gestionnaireId?: string };
+type FiltresFactures = { prestataireId?: string; contratId?: string; clientId?: string; statut?: string; reference?: string; du?: string; au?: string; gestionnaireId?: string; factureId?: string };
+
+// Export : uniquement les champs imprimés (pas de GED ni d'identifiants techniques).
+const SELECT_EXPORT = {
+  referenceFacture: true, dateReception: true, statut: true,
+  prestataire: { select: { nom: true } },
+  contrat: { select: { numeroPolice: true, client: { select: { nom: true } }, compagnie: { select: { nom: true } } } },
+  numerosSupplementaires: { select: { numero: true } },
+  lignes: {
+    select: {
+      date: true, type: true, montant: true, baseRemboursement: true, montantTps: true, resteACharge: true, tauxRemboursement: true,
+      statut: true, motifRejet: true, montantRejete: true, nSinistre: true, natureMaladie: true, codeAffection: true, quantite: true,
+      assure: { select: { nom: true, prenom: true, matricule: true } },
+      acteMedical: { select: { libelle: true } },
+      bordereau: { select: { numero: true } },
+    },
+    orderBy: { date: "asc" as const },
+  },
+} satisfies Prisma.FactureSelect;
+
+const num = (v: Prisma.Decimal | number | null | undefined) => (v === null || v === undefined ? null : Number(v));
+// Net à payer d'une ligne : base de remboursement − TPS ; montant déclaré si la base n'est pas encore calculée.
+const netLigne = (l: { statut: string; montant: Prisma.Decimal; baseRemboursement: Prisma.Decimal | null; montantTps: Prisma.Decimal | null }) =>
+  l.statut === "Rejeté" || l.statut === "Annulé" ? 0 : (num(l.baseRemboursement) ?? Number(l.montant)) - (num(l.montantTps) ?? 0);
 
 @Injectable()
 export class FacturesService {
@@ -101,6 +126,7 @@ export class FacturesService {
   // société, quel que soit le filtre demandé par l'appelant.
   private whereFactures(filtres?: FiltresFactures) {
     return {
+      id: filtres?.factureId,
       prestataireId: filtres?.prestataireId, contratId: filtres?.contratId, statut: filtres?.statut,
       gestionnaireId: filtres?.gestionnaireId,
       contrat: { estTest: false, ...(filtres?.clientId ? { clientId: filtres.clientId } : {}) },
@@ -167,6 +193,65 @@ export class FacturesService {
     const ids = legeres.filter((f) => this.dansPeriode(f.dateReception, filtres)).map((f) => f.id);
     const items = await this.prisma.facture.findMany({ where: { id: { in: ids.slice((page - 1) * taille, page * taille) } }, select: SELECT_FACTURE, orderBy });
     return { items, total: ids.length, page, taille };
+  }
+
+  // Export de l'écran Factures (mêmes filtres que la liste, toutes les pages) :
+  // « factures » = une ligne par facture, « lignes » = détail de chaque prestation saisie.
+  async exporter(filtres: FiltresFactures, niveau: "factures" | "lignes"): Promise<TableauExport> {
+    const factures = (await this.prisma.facture.findMany({ where: this.whereFactures(filtres), select: SELECT_EXPORT, orderBy: { createdAt: "desc" } }))
+      .filter((f) => this.dansPeriode(f.dateReception, filtres));
+    const prestataire = filtres.prestataireId ? factures[0]?.prestataire.nom ?? (await this.prisma.prestataire.findUnique({ where: { id: filtres.prestataireId }, select: { nom: true } }))?.nom : undefined;
+    const criteres = [
+      prestataire && `Prestataire : ${prestataire}`,
+      filtres.du && `du ${filtres.du}`, filtres.au && `au ${filtres.au}`,
+      filtres.statut && `statut ${filtres.statut}`, filtres.reference && `recherche « ${filtres.reference} »`,
+    ].filter(Boolean).join(" · ");
+    const societe = await nomSocieteCourante(this.prisma);
+    const ref = (f: (typeof factures)[number]) => [referenceLisible(f.referenceFacture), ...f.numerosSupplementaires.map((n) => n.numero)].join(" / ");
+    const suffixe = `${prestataire ? `-${prestataire}` : ""}-${new Date().toISOString().slice(0, 10)}`;
+
+    if (niveau === "factures") {
+      return {
+        titre: "Liste des factures", societe, total: true, nomFichier: `Factures${suffixe}`,
+        sousTitre: `${factures.length} facture(s)${criteres ? ` — ${criteres}` : ""}`,
+        colonnes: [
+          { titre: "Référence", largeur: 1.8 }, { titre: "Réception" }, { titre: "Prestataire", largeur: 1.8 }, { titre: "Souscripteur", largeur: 1.8 },
+          { titre: "Police" }, { titre: "Compagnie", largeur: 1.4 }, { titre: "Lignes", type: "nombre", largeur: 0.6 },
+          { titre: "Frais réels", type: "montant" }, { titre: "Base remb.", type: "montant" }, { titre: "TPS", type: "montant" },
+          { titre: "Rejeté", type: "montant" }, { titre: "Net à payer", type: "montant" }, { titre: "Statut" }, { titre: "Règlement(s)" },
+        ],
+        lignes: factures.map((f) => {
+          const actives = f.lignes.filter((l) => l.statut !== "Annulé");
+          const somme = (g: (l: (typeof actives)[number]) => number) => actives.reduce((s, l) => s + g(l), 0);
+          return [
+            ref(f), f.dateReception, f.prestataire.nom, f.contrat.client.nom, f.contrat.numeroPolice ?? "", f.contrat.compagnie.nom, actives.length,
+            somme((l) => Number(l.montant)), somme((l) => num(l.baseRemboursement) ?? 0), somme((l) => num(l.montantTps) ?? 0),
+            somme((l) => num(l.montantRejete) ?? (l.statut === "Rejeté" ? Number(l.montant) : 0)), somme(netLigne), f.statut,
+            [...new Set(actives.map((l) => l.bordereau?.numero).filter(Boolean))].join(", "),
+          ];
+        }),
+      };
+    }
+
+    return {
+      titre: "Détail des factures saisies", societe, total: true, nomFichier: `Detail-factures${suffixe}`,
+      sousTitre: `${factures.length} facture(s), ${factures.reduce((s, f) => s + f.lignes.length, 0)} ligne(s)${criteres ? ` — ${criteres}` : ""}`,
+      colonnes: [
+        { titre: "Facture", largeur: 1.6 }, { titre: "Réception" }, { titre: "Prestataire", largeur: 1.5 }, { titre: "Souscripteur", largeur: 1.5 },
+        { titre: "Assuré", largeur: 1.6 }, { titre: "Matricule" }, { titre: "Date de soin" }, { titre: "Acte / prestation", largeur: 1.8 },
+        { titre: "Qté", type: "nombre", largeur: 0.5 }, { titre: "Frais réel", type: "montant" }, { titre: "Taux" },
+        { titre: "Base remb.", type: "montant" }, { titre: "TPS", type: "montant" }, { titre: "Net à payer", type: "montant" },
+        { titre: "Reste à charge", type: "montant" }, { titre: "Rejeté", type: "montant" }, { titre: "Motif rejet", largeur: 1.4 },
+        { titre: "Statut" }, { titre: "N° sinistre" }, { titre: "Règlement" },
+      ],
+      lignes: factures.flatMap((f) => f.lignes.map((l) => [
+        ref(f), f.dateReception, f.prestataire.nom, f.contrat.client.nom,
+        [l.assure.nom, l.assure.prenom].filter(Boolean).join(" "), l.assure.matricule ?? "", l.date,
+        l.acteMedical?.libelle ?? l.type, l.quantite ?? null, Number(l.montant), l.tauxRemboursement != null ? `${Number(l.tauxRemboursement)} %` : "",
+        num(l.baseRemboursement), num(l.montantTps), netLigne(l), num(l.resteACharge), num(l.montantRejete),
+        l.motifRejet ?? "", l.statut, l.nSinistre ?? "", l.bordereau?.numero ?? "",
+      ])),
+    };
   }
 
   // Factures éligibles à un nouveau règlement — écran de génération

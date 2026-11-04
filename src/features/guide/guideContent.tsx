@@ -391,13 +391,14 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "factures",
     titre: "Factures",
-    sources: ["src/features/sinistres"],
+    sources: ["src/features/prises-en-charge"],
     majLe: "2026-09-19",
     sections: [
       {
         titre: "De la facture prestataire au règlement : le cycle complet",
         texte: [
           "L'écran « Factures » (onglet « Factures (n) », à côté de « Remboursements (n) » pour les déclarations faites par l'assuré lui-même) recense les factures des prestataires. Un panneau de recherche filtre par Prestataire, Souscripteur, Contrat, Statut, période de réception et référence.",
+          "Le bouton « Exporter les factures », à côté de « Rechercher », extrait toutes les factures correspondant aux filtres (toutes pages confondues) en Excel, CSV, PDF ou Word : soit la « Liste des factures » (une ligne par facture : frais réels, TPS, rejets, net à payer, règlement), soit le « Détail des factures saisies » (une ligne par prestation : assuré, matricule, date de soin, acte, frais réel, net à payer). Choisissez un prestataire dans le filtre pour extraire ses seules factures. Dans une facture ouverte, le bouton « Exporter » extrait le détail de cette facture.",
         ],
         image: img("05-factures.png"),
         etapes: [
@@ -450,7 +451,7 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "prise-en-charge",
     titre: "Prise en charge (entente préalable)",
-    sources: ["src/features/prises-en-charge", "src/features/accord-prealable"],
+    sources: ["src/features/accord-prealable"],
     majLe: "2026-09-19",
     sections: [
       {
@@ -519,6 +520,7 @@ export const chapitresInterne: GuideChapitre[] = [
         titre: "Regrouper des factures validées en un règlement, puis les payer",
         texte: [
           "L'écran « Règlement » combine un historique consultable (« Historique des factures par exercice », filtrable par prestataire/banque/compagnie/période/référence) et la liste des « Règlements établis » (bordereaux), avec leurs statuts Reçu/En validation/Validé/Payé/Rejeté.",
+          "Exports en Excel, CSV, PDF ou Word : « Exporter l'historique » reprend toutes les lignes de la recherche ; « Exporter les règlements » (en-tête de la liste) permet de choisir un prestataire, une période et un statut, puis la « Liste des règlements » ou le « Détail des prestations réglées » (facture, assuré, date de soin, frais réel, net à payer) ; dans un règlement ouvert, « Exporter » extrait son détail.",
         ],
         image: img("reglement-prestataire-01-liste.png"),
         etapes: [

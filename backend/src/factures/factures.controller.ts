@@ -1,5 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
-import type { Request } from "express";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
+import type { Request, Response } from "express";
+import { envoyerExport, formatExport } from "../lib/export-tableau.util";
 import { FacturesService } from "./factures.service";
 import { CreateFactureDto } from "./dto/create-facture.dto";
 import { UpdateFactureDto } from "./dto/update-facture.dto";
@@ -28,6 +29,19 @@ export class FacturesController {
     // `page` présent → pagination serveur ({ items, total }) ; sinon liste (compatibilité).
     if (page) return this.service.findPage(filtres, Math.max(1, Number(page) || 1), Math.min(500, Math.max(1, Number(taille) || 20)));
     return this.service.findAll(filtres);
+  }
+
+  // Export multiformat (xlsx, csv, pdf, docx) de la liste ou du détail des lignes.
+  @Get("export")
+  async exporter(
+    @Res() res: Response,
+    @Query("format") format?: string, @Query("niveau") niveau?: string,
+    @Query("prestataireId") prestataireId?: string, @Query("contratId") contratId?: string,
+    @Query("clientId") clientId?: string, @Query("statut") statut?: string, @Query("reference") reference?: string,
+    @Query("du") du?: string, @Query("au") au?: string, @Query("factureId") factureId?: string,
+  ) {
+    const tableau = await this.service.exporter({ prestataireId, contratId, clientId, statut, reference, du, au, factureId }, niveau === "lignes" ? "lignes" : "factures");
+    return envoyerExport(res, formatExport(format), tableau);
   }
 
   // Déclarée avant ":id" pour que Nest ne capture pas "eligibles-reglement"

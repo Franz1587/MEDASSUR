@@ -97,6 +97,25 @@ export async function openStaticDocument(url: string, filename?: string): Promis
 
 export type DocumentFormat = "pdf" | "xlsx" | "docx";
 
+// Exports multiformat (xlsx, csv, pdf, docx) — PDF ouvert dans la visionneuse, le reste téléchargé.
+function requete(params: Record<string, string | undefined>): string {
+  const p = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => { if (v) p.set(k, v); });
+  return p.toString();
+}
+
+export function exporterFactures(filtres: Record<string, string | undefined>, niveau: string, format: string): Promise<void> {
+  return openDocument(`/factures/export?${requete({ ...filtres, niveau, format })}`);
+}
+
+export function exporterReglements(filtres: { prestataireId?: string; du?: string; au?: string; statut?: string; bordereauId?: string }, niveau: string, format: string): Promise<void> {
+  return openDocument(`/reglement-prestataire/export?${requete({ ...filtres, niveau, format })}`);
+}
+
+export function exporterHistoriqueReglements(filtres: Record<string, string | undefined>, format: string): Promise<void> {
+  return openDocument(`/reglement-prestataire/historique/export?${requete({ ...filtres, format })}`);
+}
+
 export function openQuittance(contratId: string, format: DocumentFormat = "pdf"): Promise<void> {
   return openDocument(`/documents/quittance/${contratId}?format=${format}`);
 }

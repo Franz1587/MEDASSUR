@@ -9,7 +9,8 @@ import { Btn } from "@/components/shared/Btn";
 import { Combobox } from "@/components/shared/Combobox";
 import { fmtM } from "@/lib/format";
 import { getBordereau, validerBordereau, rejeterBordereau, payerBordereau, definirMedecinBordereau } from "@/services/reglement.service";
-import { openReglement } from "@/services/documents.service";
+import { openReglement, exporterReglements } from "@/services/documents.service";
+import { ExportMenu } from "@/components/shared/ExportMenu";
 import { getMedecins, type Medecin } from "@/services/medecins.service";
 import type { BordereauReglementDetail } from "@/types/reglement";
 
@@ -145,7 +146,12 @@ export default function ReglementDetail({ bordereauId, onClose, onChanged }: { b
         </div>
 
         <div className="px-5 py-4 border-t border-border flex items-center justify-between flex-shrink-0">
-          <Btn variant="ghost" onClick={() => openReglement(bordereau.id)}><Printer className="w-4 h-4" />Imprimer</Btn>
+          <div className="flex items-center gap-2">
+            <Btn variant="ghost" onClick={() => openReglement(bordereau.id)}><Printer className="w-4 h-4" />Imprimer</Btn>
+            <ExportMenu label="Exporter" versLeHaut aGauche contenus={[{ id: "lignes", label: "Détail du règlement" }]}
+              aide="Toutes les prestations réglées : facture, assuré, date de soin, frais réel, net à payer."
+              onExporter={(niveau, format) => exporterReglements({ bordereauId: bordereau.id }, niveau, format)} />
+          </div>
           <div className="flex items-center gap-2">
             {bordereau.statut === "Reçu" && (
               <>
