@@ -36,6 +36,7 @@
     "compression": "^1.8.2",
     "docx": "^9.7.1",
     "exceljs": "^4.4.0",
+    "imapflow": "^2.10.0",
     "nodemailer": "^10.3.1",
     "passport": "0.7.0",
     "passport-jwt": "4.0.1",
