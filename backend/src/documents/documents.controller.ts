@@ -188,6 +188,11 @@ export class DocumentsController {
     return this.documentsService.renderOffreSante(id, req.user.userId, res);
   }
 
+  @Post("offre-sante/:appelOffresId/envoyer-email")
+  envoyerOffreEmail(@Param("appelOffresId") id: string, @Body() body: { to: string }, @Req() req: StaffRequest) {
+    return this.documentsService.envoyerOffreParEmail(id, body.to, req.user.userId);
+  }
+
   @Get("fiche-prestataire/:id")
   fichePrestataire(@Param("id") id: string, @Res() res: Response) {
     return this.documentsService.renderFichePrestataire(id, res);

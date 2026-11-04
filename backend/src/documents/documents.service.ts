@@ -29,6 +29,7 @@ import { RenouvellementsService } from "../renouvellements/renouvellements.servi
 import { AccordPrealableService } from "../accord-prealable/accord-prealable.service";
 import { PrestatairesService } from "../prestataires/prestataires.service";
 import { AppelOffresService } from "../appel-offres/appel-offres.service";
+import { EmailService } from "../communications/email.service";
 import { DocumentSignatureService } from "./document-signature.service";
 import { UPLOADS_ROOT, ASSETS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
@@ -389,6 +390,7 @@ export class DocumentsService {
     private renouvellements: RenouvellementsService, private accordPrealable: AccordPrealableService,
     private prestataires: PrestatairesService, private storage: StorageService,
     private documentSignature: DocumentSignatureService, private appelOffres: AppelOffresService,
+    private email: EmailService,
   ) {}
 
   // Charge une image (logo/page de garde/modèle de carte/photo) depuis
@@ -5181,6 +5183,17 @@ export class DocumentsService {
   async archiverOffreAriana(appelOffresId: string, userId?: string) {
     const { offre, ao, ids } = await this.offreDeAppelOffres(appelOffresId, userId);
     return this.archiverOffre(offre, { appelOffresId, clientNom: ao.clientNom, origine: "ARIANA", cotationIds: ids, userId });
+  }
+
+  // Envoi de l'offre par email (2026-11) — génère le PDF, l'attache à l'email
+  // et l'envoie à l'adresse fournie via le même SMTP que CommunicationsService.
+  async envoyerOffreParEmail(appelOffresId: string, to: string, userId?: string): Promise<{ ok: boolean }> {
+    const { offre, ao } = await this.offreDeAppelOffres(appelOffresId, userId);
+    const nomFichier = `Offre-sante-${ao.clientNom.replace(/[^a-zA-Z0-9]/g, "-").replace(/-+/g, "-")}.pdf`;
+    const sujet = `Proposition santé MEDASSUR+ — ${ao.clientNom}`;
+    const corps = `Bonjour,\n\nVeuillez trouver ci-joint notre proposition d'assurance santé pour ${ao.clientNom}.\n\nPour toute question, n'hésitez pas à nous contacter.\n\nCordialement,\nL'équipe MEDASSUR+`;
+    const ok = await this.email.envoyer(to, sujet, corps, "MEDASSUR+", [{ filename: nomFichier, content: offre.pdf, contentType: "application/pdf" }]);
+    return { ok };
   }
 
   private async offreDeAppelOffres(appelOffresId: string, userId?: string) {

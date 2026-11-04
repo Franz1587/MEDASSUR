@@ -24,7 +24,7 @@ export interface AppelOffres {
   prospectId: string;
   // Nom de fichier sous backend/uploads/logos-prospects/ — voir
   // uploadProspectLogo() dans crm.service.ts.
-  prospect: { id: string; nom: string; logo: string | null };
+  prospect: { id: string; nom: string; logo: string | null; contactEmail?: string | null; contactNom?: string | null };
   clientNom: string;
   cahierCharges: string;
   garantiesDemandees: string;

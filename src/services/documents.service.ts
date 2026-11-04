@@ -218,6 +218,10 @@ export function archiverOffreAriana(appelOffresId: string): Promise<OffreGeneree
   return http.post<OffreGeneree>(`/documents/offre-sante/${appelOffresId}/archiver`, {});
 }
 
+export function envoyerOffreParEmail(appelOffresId: string, to: string): Promise<{ ok: boolean }> {
+  return http.post<{ ok: boolean }>(`/documents/offre-sante/${appelOffresId}/envoyer-email`, { to });
+}
+
 export function openReseauSoins(): Promise<void> {
   return openDocument("/documents/reseau-soins");
 }

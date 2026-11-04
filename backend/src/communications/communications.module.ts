@@ -10,6 +10,6 @@ import { EmailPollerService } from "./email-poller.service";
   imports: [NotificationsModule],
   providers: [CommunicationsService, EmailService, EmailPollerService],
   controllers: [CommunicationsController, ZavuWebhookController],
-  exports: [CommunicationsService],
+  exports: [CommunicationsService, EmailService],
 })
 export class CommunicationsModule {}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, FileDown, Plus, Save, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, FileDown, Mail, Plus, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Btn } from "@/components/shared/Btn";
 import { Badge } from "@/components/shared/Badge";
@@ -7,7 +7,7 @@ import { Combobox } from "@/components/shared/Combobox";
 import { fmtM } from "@/lib/format";
 import { updateCotation } from "@/services/cotation.service";
 import { enregistrerParametresOffre, getParametresOffre } from "@/services/appelOffres.service";
-import { openOffreSante } from "@/services/documents.service";
+import { openOffreSante, envoyerOffreParEmail } from "@/services/documents.service";
 import { HistoriqueOffres } from "@/features/cotation/HistoriqueOffres";
 import type { Compagnie } from "@/types/compagnies";
 import type { ContenuOffre, Cotation, ParametresOffre, SectionGaranties } from "@/types/cotation";
@@ -190,12 +190,15 @@ export function RelectureCotationModal({ cotation, compagnies, onClose, onSaved 
   );
 }
 
-export function OffreSantePanel({ appelOffresId, cotations }: { appelOffresId: string; cotations: Cotation[] }) {
+export function OffreSantePanel({ appelOffresId, cotations, prospectEmail }: { appelOffresId: string; cotations: Cotation[]; prospectEmail?: string }) {
   const analysees = useMemo(() => cotations.filter((c) => c.contenuOffre), [cotations]);
   const [params, setParams] = useState<ParametresOffre | null>(null);
   const [ouvert, setOuvert] = useState(false);
   const [busy, setBusy] = useState(false);
   const [versionHistorique, setVersionHistorique] = useState(0);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailDest, setEmailDest] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   useEffect(() => { setParams(null); getParametresOffre(appelOffresId).then(setParams).catch(() => toast.error("Paramètres de l'offre indisponibles.")); }, [appelOffresId]);
 
@@ -213,6 +216,24 @@ export function OffreSantePanel({ appelOffresId, cotations }: { appelOffresId: s
     const ids = compagnies.map(([id]) => id);
     [ids[i], ids[i + d]] = [ids[i + d], ids[i]];
     set({ ordreCompagnies: ids });
+  };
+
+  const ouvrirEmailModal = () => { setEmailDest(prospectEmail ?? ""); setShowEmailModal(true); };
+
+  const handleEnvoyerEmail = async () => {
+    if (!emailDest.trim()) return;
+    setSendingEmail(true);
+    try {
+      await enregistrerParametresOffre(appelOffresId, { ...(params ?? {}), ordreCompagnies: compagnies.map(([id]) => id) } as ParametresOffre);
+      const r = await envoyerOffreParEmail(appelOffresId, emailDest.trim());
+      if (r.ok) toast.success(`Offre envoyée à ${emailDest.trim()}.`);
+      else toast.error("SMTP non configuré — email non envoyé.");
+      setShowEmailModal(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Envoi impossible.");
+    } finally {
+      setSendingEmail(false);
+    }
   };
 
   const generer = async () => {
@@ -243,6 +264,7 @@ export function OffreSantePanel({ appelOffresId, cotations }: { appelOffresId: s
         </div>
         <div className="flex items-center gap-2">
           <Btn variant="secondary" onClick={() => setOuvert((o) => !o)}>{ouvert ? "Masquer les paramètres" : "Paramètres"}</Btn>
+          <Btn variant="secondary" onClick={ouvrirEmailModal}><Mail className="w-4 h-4" />Envoyer par email</Btn>
           <Btn variant="primary" onClick={generer} disabled={busy || !params}><FileDown className="w-4 h-4" />{busy ? "Génération…" : "Générer l'offre (PDF)"}</Btn>
         </div>
       </div>
@@ -307,6 +329,36 @@ export function OffreSantePanel({ appelOffresId, cotations }: { appelOffresId: s
         </div>
       )}
       <div className="mt-4"><HistoriqueOffres appelOffresId={appelOffresId} version={versionHistorique} /></div>
+
+      {showEmailModal && (
+        <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-card border border-border rounded-xl shadow-2xl">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+              <h3 className="text-[15px] font-semibold text-foreground">Envoyer l'offre par email</h3>
+              <button type="button" onClick={() => setShowEmailModal(false)} className="h-8 px-3 rounded-lg border border-border text-[12px] text-foreground hover:bg-secondary/40">Fermer</button>
+            </div>
+            <div className="p-5 space-y-3">
+              <label className="block">
+                <div className="text-[12px] text-muted-foreground mb-1.5">Adresse email du destinataire</div>
+                <input
+                  type="email" value={emailDest} onChange={(e) => setEmailDest(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleEnvoyerEmail(); }}
+                  placeholder="contact@entreprise.ga" autoFocus
+                  className="w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground"
+                />
+              </label>
+              <p className="text-[11.5px] text-muted-foreground">Le PDF de l'offre sera généré et joint automatiquement à l'email.</p>
+            </div>
+            <div className="px-5 py-4 border-t border-border flex items-center justify-end gap-2">
+              <button type="button" onClick={() => setShowEmailModal(false)} className="h-9 px-4 rounded-lg border border-border text-[13px] text-foreground hover:bg-secondary/40">Annuler</button>
+              <button type="button" disabled={sendingEmail || !emailDest.trim()} onClick={handleEnvoyerEmail}
+                className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-[13px] hover:opacity-90 disabled:opacity-60 inline-flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5" />{sendingEmail ? "Envoi…" : "Envoyer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -25,7 +25,7 @@ export class EmailService {
     return this.transporter;
   }
 
-  async envoyer(to: string, subject: string, text: string, fromName = "MEDASSUR"): Promise<boolean> {
+  async envoyer(to: string, subject: string, text: string, fromName = "MEDASSUR", attachments?: { filename: string; content: Buffer; contentType: string }[]): Promise<boolean> {
     const t = this.getTransporter();
     if (!t) { this.logger.debug("SMTP non configuré — email ignoré."); return false; }
     const from = process.env.SMTP_USER!;
@@ -56,9 +56,8 @@ export class EmailService {
         subject: sujet,
         text,
         html,
-        headers: {
-          "List-Unsubscribe": `<mailto:${from}?subject=unsubscribe>`,
-        },
+        headers: { "List-Unsubscribe": `<mailto:${from}?subject=unsubscribe>` },
+        ...(attachments?.length ? { attachments: attachments.map((a) => ({ filename: a.filename, content: a.content, contentType: a.contentType })) } : {}),
       });
       this.logger.log(`Email OK → messageId=${info.messageId} to=${to}`);
       return true;

@@ -376,7 +376,7 @@ export default function AppelOffresView() {
                 </div>
               </div>
 
-              <OffreSantePanel appelOffresId={selected.id} cotations={selected.cotations} />
+              <OffreSantePanel appelOffresId={selected.id} cotations={selected.cotations} prospectEmail={selected.prospect.contactEmail ?? undefined} />
 
               <div className="bg-card border border-border rounded-xl p-5">
                 <div className="flex items-center justify-between mb-3">
