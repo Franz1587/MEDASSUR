@@ -34,4 +34,6 @@ export interface ParametresEntreprise {
   // fichier sous uploads/pages-garde-statistiques/ (voir
   // DocumentsService.renderStatistiques pour son usage).
   statistiquesPageGarde?: string | null;
+  // Adresses email en copie systématique sur chaque réponse ARIANA (2026-11).
+  arianaEmailCc?: string[];
 }

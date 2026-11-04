@@ -7,9 +7,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { EmailService } from "./email.service";
 
-// CC systématique sur toutes les réponses ARIANA — le gestionnaire La Ruche
-// reçoit une copie de chaque échange initié par l'IA depuis contacts@medassur.cloud.
-const ARIANA_EMAIL_CC = "o.lekogo@laruchexcellence.com";
+// CC par défaut si arianaEmailCc n'est pas encore saisi en DB.
+const ARIANA_EMAIL_CC_DEFAULT = "o.lekogo@laruchexcellence.com";
 
 // Polling IMAP contacts@medassur.cloud (2026-11) — toutes les minutes.
 // Emails entrants → ARIANA (plein accès aux outils : stats, réseau de soins,
@@ -123,31 +122,37 @@ export class EmailPollerService implements OnModuleDestroy, OnModuleInit {
     }
 
     // Nouveau message entrant — ARIANA prend la main
+    // societeId explicite : le poller tourne hors requête HTTP, TenantContext est vide.
     const commId = randomUUID();
     await this.prisma.communication.create({
       data: {
         id: commId, canal: "Email", destinataireType: "Prospect",
         destinataireNom: fromNom, destinataireContact: fromAddress,
         objet: subject, contenu: texte, statut: "Reçu", declencheur: "Webhook",
+        ...(this.societeId ? { societeId: this.societeId } : {}),
       },
     });
     this.logger.log(`Email entrant enregistré (id=${commId}) depuis ${fromAddress}`);
 
     // ARIANA répond uniquement pour La Ruche Excellence (societeId résolu au démarrage)
     if (!this.societeId || !this.agentIa) return;
+    // Lire les CC paramétrés en DB (peut avoir changé depuis le démarrage)
+    const params = await this.prisma.parametresEntreprise.findUnique({ where: { id: this.societeId }, select: { arianaEmailCc: true } });
+    const cc = params?.arianaEmailCc?.length ? params.arianaEmailCc : [ARIANA_EMAIL_CC_DEFAULT];
     const reponseAriana = await this.agentIa.repondreAEmail(fromAddress, fromNom, subject, texte, this.societeId).catch((err) => {
       this.logger.error("repondreAEmail échoué", err instanceof Error ? err.message : String(err));
       return null;
     });
     if (reponseAriana?.texte) {
       const sujetReponse = subject.startsWith("Re:") ? subject : `Re: ${subject}`;
-      const ok = await this.email.envoyer(fromAddress, sujetReponse, reponseAriana.texte, "Ariana — MEDASSUR+", reponseAriana.attachments, ARIANA_EMAIL_CC);
+      const ok = await this.email.envoyer(fromAddress, sujetReponse, reponseAriana.texte, "Ariana — MEDASSUR+", reponseAriana.attachments, cc);
       const statut = ok ? "Envoyé" : "Simulé";
       await this.prisma.communication.create({
         data: {
           id: randomUUID(), canal: "Email", destinataireType: "Prospect",
           destinataireNom: fromNom, destinataireContact: fromAddress,
           objet: sujetReponse, contenu: reponseAriana.texte, statut, declencheur: "ARIANA",
+          ...(this.societeId ? { societeId: this.societeId } : {}),
         },
       });
       this.logger.log(`ARIANA a répondu à ${fromAddress} (statut=${statut}, piecesJointes=${reponseAriana.attachments.length})`);

@@ -1997,6 +1997,10 @@ model ParametresEntreprise {
   // Absent = page de garde générée par défaut (comportement historique).
   statistiquesPageGarde String?
 
+  // Adresses email mises en copie systématique sur chaque réponse ARIANA
+  // (2026-11) — paramétrables depuis l'onglet Paramétrage de l'entreprise.
+  arianaEmailCc String[] @default([])
+
   updatedAt         DateTime @updatedAt
 }
 

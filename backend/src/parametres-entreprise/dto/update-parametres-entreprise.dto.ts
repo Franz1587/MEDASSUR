@@ -1,4 +1,4 @@
-import { IsOptional, IsString, Matches } from "class-validator";
+import { IsArray, IsEmail, IsOptional, IsString, Matches } from "class-validator";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
@@ -84,4 +84,10 @@ export class UpdateParametresEntrepriseDto {
   @IsOptional()
   @IsString()
   carteVersoQrExplication?: string;
+
+  // Adresses en copie systématique sur chaque réponse ARIANA (2026-11).
+  @IsOptional()
+  @IsArray()
+  @IsEmail({}, { each: true })
+  arianaEmailCc?: string[];
 }

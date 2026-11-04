@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Palette, Save, Building2, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Palette, Save, Building2, Trash2, X, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
@@ -20,6 +20,8 @@ export default function ParametresEntrepriseView() {
   const [modeles, setModeles] = useState<ModeleCarte[]>([]);
   const [logoBusy, setLogoBusy] = useState(false);
   const [pageGardeBusy, setPageGardeBusy] = useState(false);
+  const [ccInput, setCcInput] = useState("");
+  const ccRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getParametresEntreprise().then(setForm);
@@ -283,6 +285,55 @@ export default function ParametresEntrepriseView() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Section ARIANA — copies email paramétrables (2026-11) */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+        <h3 className="text-[13px] font-semibold text-foreground">ARIANA — Copies email automatiques</h3>
+        <p className="text-[11px] text-muted-foreground -mt-2">
+          Toute réponse envoyée par ARIANA par email sera automatiquement mise en copie (CC) à ces adresses. Utile pour garder le gestionnaire ou le courtier en copie de chaque échange.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {(form.arianaEmailCc ?? []).map((addr) => (
+            <span key={addr} className="inline-flex items-center gap-1.5 bg-secondary text-foreground text-[12px] rounded-full px-3 py-1">
+              {addr}
+              <button type="button" onClick={() => set("arianaEmailCc", (form.arianaEmailCc ?? []).filter((a) => a !== addr))} className="text-muted-foreground hover:text-destructive">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            ref={ccRef}
+            type="email"
+            value={ccInput}
+            onChange={(e) => setCcInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault();
+                const v = ccInput.trim().toLowerCase();
+                if (v && !form.arianaEmailCc?.includes(v)) set("arianaEmailCc", [...(form.arianaEmailCc ?? []), v]);
+                setCcInput("");
+              }
+            }}
+            placeholder="adresse@exemple.com puis Entrée"
+            className={`${fieldCls} flex-1`}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const v = ccInput.trim().toLowerCase();
+              if (v && !form.arianaEmailCc?.includes(v)) set("arianaEmailCc", [...(form.arianaEmailCc ?? []), v]);
+              setCcInput("");
+              ccRef.current?.focus();
+            }}
+            className="h-9 px-3 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium hover:opacity-90 inline-flex items-center gap-1"
+          >
+            <Plus className="w-3.5 h-3.5" />Ajouter
+          </button>
+        </div>
+        <p className="text-[10.5px] text-muted-foreground">Enregistrez ensuite via le bouton en haut de la page. L'adresse <strong>o.lekogo@laruchexcellence.com</strong> est utilisée par défaut si aucune adresse n'est définie ici.</p>
       </div>
     </div>
   );
