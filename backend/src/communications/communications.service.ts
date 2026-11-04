@@ -5,6 +5,7 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { MessagingService } from "../messaging/messaging.service";
+import { EmailService } from "./email.service";
 import { EnvoyerCommunicationDto } from "./dto/envoyer-communication.dto";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
@@ -17,9 +18,9 @@ const UPLOADS_COMMUNICATIONS_DIR = path.join(UPLOADS_ROOT, "communications");
 // (rétrocompat). Email non encore branché sur un fournisseur → toujours "Simulé".
 @Injectable()
 export class CommunicationsService {
-  constructor(private prisma: PrismaService, private notifications: NotificationsService, private storage: StorageService, private messaging: MessagingService) {}
+  constructor(private prisma: PrismaService, private notifications: NotificationsService, private storage: StorageService, private messaging: MessagingService, private email: EmailService) {}
 
-  config() { return { smsWhatsappActif: this.messaging.actif }; }
+  config() { return { smsWhatsappActif: this.messaging.actif, emailActif: this.email.actif }; }
 
   findAll(filtres?: { canal?: string; destinataireType?: string; declencheur?: string }) {
     return this.prisma.communication.findMany({
@@ -39,12 +40,15 @@ export class CommunicationsService {
   // ZAVU_API_KEY configurée ; Email toujours simulé (fournisseur email non
   // encore branché). Statut retourné : "Envoyé" si l'appel Zavu a abouti,
   // "Simulé" sinon (clé absente, numéro invalide, ou canal Email).
-  private async envoyerReel(canal: string, contact: string, contenu: string): Promise<"Envoyé" | "Simulé"> {
-    if (canal === "Email") return "Simulé";
+  private async envoyerReel(canal: string, contact: string, objet: string | undefined, contenu: string): Promise<"Envoyé" | "Simulé"> {
+    if (canal === "Email") {
+      if (!this.email.actif) return "Simulé";
+      const ok = await this.email.envoyer(contact, objet || "Message MEDASSUR+", contenu);
+      return ok ? "Envoyé" : "Simulé";
+    }
     if (!this.messaging.actif) return "Simulé";
-    // "auto" pour SMS aussi : Zavu tente WhatsApp (sender Ariana valide) puis
-    // retombe sur SMS carrier — SMS pur échoue sur Airtel Gabon ("Invalid
-    // sender phone number" depuis le numéro US +14302830369 de Zavu).
+    // "auto" : Zavu tente WhatsApp puis retombe sur SMS — SMS pur échoue sur
+    // Airtel Gabon (numéro US +14302830369 rejeté). Voir diagnostic 2026-11-03.
     const canalZavu = canal === "WhatsApp" ? "whatsapp" : "auto";
     const ok = await this.messaging.envoyer(contact, contenu, canalZavu as "auto" | "sms" | "whatsapp");
     return ok ? "Envoyé" : "Simulé";
@@ -52,7 +56,7 @@ export class CommunicationsService {
 
   async envoyer(dto: EnvoyerCommunicationDto, auteurId?: string) {
     const destinataireContact = await this.resoudreContact(dto);
-    const statut = await this.envoyerReel(dto.canal, destinataireContact, dto.contenu);
+    const statut = await this.envoyerReel(dto.canal, destinataireContact, dto.objet, dto.contenu);
     return this.prisma.communication.create({
       data: {
         id: randomUUID(), canal: dto.canal, destinataireType: dto.destinataireType, destinataireId: dto.destinataireId,
@@ -144,7 +148,7 @@ export class CommunicationsService {
       // jamais deviné si le pays n'est pas reconnu (voir telephoneAvecIndicatif).
       const telephone = telephoneAvecIndicatif(brut, p.pays) ?? brut;
       const contenu = `Bonjour, un nouveau contrat vient d'être activé (${nomClientDeclencheur}). Veuillez trouver ci-joint la liste actualisée des clients MEDASSUR+ avec leurs taux de couverture et plafond de chambre.`;
-      const statut = await this.envoyerReel("SMS", telephone, contenu);
+      const statut = await this.envoyerReel("SMS", telephone, undefined, contenu);
       await this.prisma.communication.create({
         data: {
           id: randomUUID(), canal: "SMS", destinataireType: "Prestataire", destinataireId: p.id,

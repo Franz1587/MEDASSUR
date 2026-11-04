@@ -3,10 +3,11 @@ import { CommunicationsService } from "./communications.service";
 import { CommunicationsController } from "./communications.controller";
 import { ZavuWebhookController } from "./zavu-webhook.controller";
 import { NotificationsModule } from "../notifications/notifications.module";
+import { EmailService } from "./email.service";
 
 @Module({
   imports: [NotificationsModule],
-  providers: [CommunicationsService],
+  providers: [CommunicationsService, EmailService],
   controllers: [CommunicationsController, ZavuWebhookController],
   exports: [CommunicationsService],
 })

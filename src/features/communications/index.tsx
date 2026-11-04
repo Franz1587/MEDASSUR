@@ -46,11 +46,12 @@ export default function CommunicationsView() {
   const [retourOuvert, setRetourOuvert] = useState<string | null>(null);
   const [retourSaisie, setRetourSaisie] = useState("");
   const [smsWhatsappActif, setSmsWhatsappActif] = useState<boolean | null>(null);
+  const [emailActif, setEmailActif] = useState<boolean | null>(null);
 
   const refresh = () => getCommunications({ canal: filtreCanal || undefined, destinataireType: filtreType || undefined }).then(setCommunications);
 
   useEffect(() => { refresh(); }, [filtreCanal, filtreType]);
-  useEffect(() => { getCommunicationsConfig().then((c) => setSmsWhatsappActif(c.smsWhatsappActif)).catch(() => setSmsWhatsappActif(false)); }, []);
+  useEffect(() => { getCommunicationsConfig().then((c) => { setSmsWhatsappActif(c.smsWhatsappActif); setEmailActif(c.emailActif); }).catch(() => { setSmsWhatsappActif(false); setEmailActif(false); }); }, []);
 
   const handleEnvoyer = async () => {
     if (!form.destinataireNom.trim() || !form.destinataireContact.trim() || !form.contenu.trim()) {
@@ -63,7 +64,7 @@ export default function CommunicationsView() {
       setShowCreate(false);
       setForm(emptyForm());
       refresh();
-      toast.success(result.statut === "Envoyé" ? "Message envoyé via Zavu." : "Message journalisé (simulé — fournisseur inactif).");
+      toast.success(result.statut === "Envoyé" ? "Message envoyé." : "Message journalisé (simulé — fournisseur inactif).");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Envoi impossible.");
     } finally {
@@ -95,16 +96,14 @@ export default function CommunicationsView() {
         actions={<Btn variant="primary" onClick={() => { setForm(emptyForm()); setShowCreate(true); }}><Plus className="w-4 h-4" />Nouveau message</Btn>}
       />
 
-      {smsWhatsappActif === false && (
-        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 flex items-start gap-2">
-          <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-          <p className="text-[12px] text-foreground">Aucun fournisseur SMS/WhatsApp n'est encore connecté — chaque envoi ci-dessous est <span className="font-semibold">simulé</span> et journalisé, prêt à devenir un envoi réel une fois un fournisseur branché.</p>
-        </div>
-      )}
-      {smsWhatsappActif === true && (
+      {(smsWhatsappActif !== null || emailActif !== null) && (
         <div className="mb-4 rounded-lg border border-blue-500/30 bg-blue-500/5 px-3 py-2.5 flex items-start gap-2">
           <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-          <p className="text-[12px] text-foreground">SMS et WhatsApp actifs via Zavu. Les envois Email restent <span className="font-semibold">simulés</span> (aucun fournisseur email configuré).</p>
+          <p className="text-[12px] text-foreground">
+            {emailActif ? <>Email actif via <span className="font-semibold">contacts@medassur.cloud</span>.</> : <>Email <span className="font-semibold">simulé</span> (SMTP non configuré).</>}
+            {" "}
+            {smsWhatsappActif ? <>SMS/WhatsApp actifs via Zavu.</> : <>SMS/WhatsApp <span className="font-semibold">simulés</span> (Zavu sans couverture Gabon).</>}
+          </p>
         </div>
       )}
 

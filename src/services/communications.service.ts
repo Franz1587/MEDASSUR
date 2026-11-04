@@ -7,8 +7,8 @@ export interface CommunicationsFiltre {
   declencheur?: string;
 }
 
-export async function getCommunicationsConfig(): Promise<{ smsWhatsappActif: boolean }> {
-  return http.get<{ smsWhatsappActif: boolean }>("/communications/config");
+export async function getCommunicationsConfig(): Promise<{ smsWhatsappActif: boolean; emailActif: boolean }> {
+  return http.get<{ smsWhatsappActif: boolean; emailActif: boolean }>("/communications/config");
 }
 
 export async function getCommunications(filtre?: CommunicationsFiltre): Promise<Communication[]> {
