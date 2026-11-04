@@ -1,14 +1,14 @@
-import { api } from "./api";
+import { http } from "@/lib/http";
 import type { NiveauRelance, RelanceEnvoyee } from "@/types/relances";
 
-export const getNiveauxRelance = (): Promise<NiveauRelance[]> => api.get("/relances/niveaux").then((r) => r.data);
+export const getNiveauxRelance = (): Promise<NiveauRelance[]> => http.get<NiveauRelance[]>("/relances/niveaux");
 
 export const upsertNiveauRelance = (dto: Partial<NiveauRelance>): Promise<NiveauRelance> =>
-  api.post("/relances/niveaux", dto).then((r) => r.data);
+  http.post<NiveauRelance>("/relances/niveaux", dto);
 
-export const deleteNiveauRelance = (id: string): Promise<void> => api.delete(`/relances/niveaux/${id}`);
+export const deleteNiveauRelance = (id: string): Promise<void> => http.delete(`/relances/niveaux/${id}`);
 
-export const getHistoriqueRelances = (): Promise<RelanceEnvoyee[]> => api.get("/relances/historique").then((r) => r.data);
+export const getHistoriqueRelances = (): Promise<RelanceEnvoyee[]> => http.get<RelanceEnvoyee[]>("/relances/historique");
 
 export const declencherRelances = (): Promise<{ envoyees: number; ignorees: number }> =>
-  api.post("/relances/declencher").then((r) => r.data);
+  http.post<{ envoyees: number; ignorees: number }>("/relances/declencher");
