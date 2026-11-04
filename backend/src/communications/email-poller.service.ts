@@ -6,7 +6,10 @@ import { ImapFlow } from "imapflow";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { EmailService } from "./email.service";
-import { ParametresEntrepriseService } from "../parametres-entreprise/parametres-entreprise.service";
+
+// CC systématique sur toutes les réponses ARIANA — le gestionnaire La Ruche
+// reçoit une copie de chaque échange initié par l'IA depuis contacts@medassur.cloud.
+const ARIANA_EMAIL_CC = "o.lekogo@laruchexcellence.com";
 
 // Polling IMAP contacts@medassur.cloud (2026-11) — toutes les minutes.
 // Emails entrants → ARIANA (plein accès aux outils : stats, réseau de soins,
@@ -22,11 +25,14 @@ export class EmailPollerService implements OnModuleDestroy, OnModuleInit {
   // Upgrader vers un import de module si ARIANA email nécessite un scope de tenant.
   private agentIa: import("../messagerie/agent-ia.service").MessagerieAgentIaService | null = null;
 
+  // societeId La Ruche Excellence résolu au démarrage (jamais depuis TenantContext :
+  // le poller tourne hors requête HTTP, l'AsyncLocalStorage est vide).
+  private societeId: string | null = null;
+
   constructor(
     private prisma: PrismaService,
     private notifications: NotificationsService,
     private email: EmailService,
-    private parametresEntreprise: ParametresEntrepriseService,
     private moduleRef: ModuleRef,
   ) {}
 
@@ -36,6 +42,18 @@ export class EmailPollerService implements OnModuleDestroy, OnModuleInit {
       this.agentIa = this.moduleRef.get(MessagerieAgentIaService, { strict: false });
     } catch {
       this.logger.warn("MessagerieAgentIaService indisponible — réponses ARIANA désactivées.");
+    }
+    // Résoudre La Ruche Excellence une seule fois (première société non-bootstrap
+    // dont le nom contient "Ruche").
+    const p = await this.prisma.parametresEntreprise.findFirst({
+      where: { nom: { contains: "Ruche", mode: "insensitive" } },
+      select: { id: true, nom: true },
+    });
+    if (p) {
+      this.societeId = p.id;
+      this.logger.log(`ARIANA email → société : ${p.nom} (${p.id})`);
+    } else {
+      this.logger.warn("Société La Ruche introuvable — ARIANA email désactivée.");
     }
   }
 
@@ -112,18 +130,15 @@ export class EmailPollerService implements OnModuleDestroy, OnModuleInit {
     });
     this.logger.log(`Email entrant enregistré (id=${commId}) depuis ${fromAddress}`);
 
-    // ARIANA répond automatiquement avec accès aux outils complets
-    const p = await this.parametresEntreprise.findOne().catch(() => null);
-    const societeId = p?.id ?? null;
-    const reponseAriana = this.agentIa
-      ? await this.agentIa.repondreAEmail(fromAddress, fromNom, subject, texte, societeId).catch((err) => {
-          this.logger.error("repondreAEmail échoué", err instanceof Error ? err.message : String(err));
-          return null;
-        })
-      : null;
+    // ARIANA répond uniquement pour La Ruche Excellence (societeId résolu au démarrage)
+    if (!this.societeId || !this.agentIa) return;
+    const reponseAriana = await this.agentIa.repondreAEmail(fromAddress, fromNom, subject, texte, this.societeId).catch((err) => {
+      this.logger.error("repondreAEmail échoué", err instanceof Error ? err.message : String(err));
+      return null;
+    });
     if (reponseAriana?.texte) {
       const sujetReponse = subject.startsWith("Re:") ? subject : `Re: ${subject}`;
-      const ok = await this.email.envoyer(fromAddress, sujetReponse, reponseAriana.texte, "Ariana — MEDASSUR+", reponseAriana.attachments);
+      const ok = await this.email.envoyer(fromAddress, sujetReponse, reponseAriana.texte, "Ariana — MEDASSUR+", reponseAriana.attachments, ARIANA_EMAIL_CC);
       const statut = ok ? "Envoyé" : "Simulé";
       await this.prisma.communication.create({
         data: {
