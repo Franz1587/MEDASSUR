@@ -15,6 +15,8 @@ export const chapitresAssure: GuideChapitre[] = [
   {
     id: "membreDashboard",
     titre: "Accueil",
+    sources: ["src/features/portail-membre", "src/features/membre", "src/features/suivi-sante"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Vue d'ensemble de votre couverture",
@@ -33,6 +35,8 @@ export const chapitresAssure: GuideChapitre[] = [
   {
     id: "membreCarte",
     titre: "Ma carte",
+    sources: ["src/features/portail-membre", "src/features/membre", "src/features/suivi-sante"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Consulter votre carte d'assurance et celle de votre famille",
@@ -49,6 +53,8 @@ export const chapitresAssure: GuideChapitre[] = [
   {
     id: "membreGaranties",
     titre: "Mes garanties",
+    sources: ["src/features/portail-membre", "src/features/membre", "src/features/suivi-sante"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Consulter les taux et plafonds de votre contrat",
@@ -65,6 +71,8 @@ export const chapitresAssure: GuideChapitre[] = [
   {
     id: "membrePriseEnCharge",
     titre: "Prise en charge",
+    sources: ["src/features/portail-membre", "src/features/membre", "src/features/suivi-sante"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Suivre vos demandes d'entente préalable",
@@ -104,6 +112,8 @@ export const chapitresAssure: GuideChapitre[] = [
   {
     id: "membreRemboursement",
     titre: "Remboursement",
+    sources: ["src/features/portail-membre", "src/features/membre", "src/features/suivi-sante"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Demander et suivre un remboursement de frais avancés",
@@ -138,6 +148,8 @@ export const chapitresAssure: GuideChapitre[] = [
   {
     id: "membreReseauSoins",
     titre: "Réseau de soins",
+    sources: ["src/features/portail-membre", "src/features/membre", "src/features/suivi-sante"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Trouver un prestataire conventionné",
@@ -160,6 +172,8 @@ export const chapitresAssure: GuideChapitre[] = [
   {
     id: "membreCarnetSante",
     titre: "E-carnet Santé",
+    sources: ["src/features/portail-membre", "src/features/membre", "src/features/suivi-sante"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Retrouver et compléter vos ordonnances et comptes rendus d'examens",
@@ -186,6 +200,8 @@ export const chapitresAssure: GuideChapitre[] = [
   {
     id: "membreHistorique",
     titre: "Historique de soins",
+    sources: ["src/features/portail-membre", "src/features/membre", "src/features/suivi-sante"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Consulter tous les soins de votre foyer",
@@ -212,6 +228,8 @@ export const chapitresAssure: GuideChapitre[] = [
   {
     id: "membreFamille",
     titre: "Ma famille",
+    sources: ["src/features/portail-membre", "src/features/membre", "src/features/suivi-sante"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Voir le détail de chaque membre de votre foyer",
@@ -233,6 +251,8 @@ export const chapitresAssure: GuideChapitre[] = [
   {
     id: "membreDelegations",
     titre: "Accès famille",
+    sources: ["src/features/portail-membre", "src/features/membre", "src/features/suivi-sante"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Donner à un ayant droit son propre accès au portail",
@@ -263,6 +283,8 @@ export const chapitresAssure: GuideChapitre[] = [
   {
     id: "messagerie",
     titre: "Messagerie",
+    sources: ["src/features/messagerie"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Échanger directement avec l'assurance",
@@ -289,6 +311,8 @@ export const chapitresAssure: GuideChapitre[] = [
   {
     id: "mon-profil",
     titre: "Mon profil",
+    sources: ["src/features/portail-membre", "src/features/membre", "src/features/suivi-sante"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Gérer vos informations, votre mot de passe et votre signature",

@@ -17,6 +17,8 @@ export const chapitresPrestataire: GuideChapitre[] = [
   {
     id: "prestataireDashboard",
     titre: "Accueil",
+    sources: ["src/features/portail-prestataire"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Point d'entrée du portail établissement",
@@ -33,6 +35,8 @@ export const chapitresPrestataire: GuideChapitre[] = [
   {
     id: "prestatairePatients",
     titre: "Patients",
+    sources: ["src/features/portail-prestataire"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Retrouver un patient déjà servi",
@@ -65,6 +69,8 @@ export const chapitresPrestataire: GuideChapitre[] = [
   {
     id: "prestatairePrestations",
     titre: "Prestations",
+    sources: ["src/features/portail-prestataire"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Liste des prestations financières (factures)",
@@ -104,6 +110,8 @@ export const chapitresPrestataire: GuideChapitre[] = [
   {
     id: "prestataireTraiterBon",
     titre: "Traiter un bon",
+    sources: ["src/features/portail-prestataire"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Dématérialisation du circuit ordonnance / bon d'examen",
@@ -147,6 +155,8 @@ export const chapitresPrestataire: GuideChapitre[] = [
   {
     id: "prestataireContacts",
     titre: "Contacts & Interloc.",
+    sources: ["src/features/portail-prestataire"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Rubrique pas encore développée",
@@ -162,6 +172,8 @@ export const chapitresPrestataire: GuideChapitre[] = [
   {
     id: "prestataireDevis",
     titre: "Devis",
+    sources: ["src/features/portail-prestataire"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Demander une entente préalable / prise en charge",
@@ -196,6 +208,8 @@ export const chapitresPrestataire: GuideChapitre[] = [
   {
     id: "prestataireFinance",
     titre: "Gestion financière",
+    sources: ["src/features/portail-prestataire"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Regrouper les factures en relevés et suivre les règlements",
@@ -225,6 +239,8 @@ export const chapitresPrestataire: GuideChapitre[] = [
   {
     id: "prestataireLogistique",
     titre: "Logistique",
+    sources: ["src/features/portail-prestataire"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Rubrique pas encore développée",
@@ -240,6 +256,8 @@ export const chapitresPrestataire: GuideChapitre[] = [
   {
     id: "messagerie",
     titre: "Messagerie",
+    sources: ["src/features/messagerie"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Échanger directement avec MEDASSUR+",
@@ -262,6 +280,8 @@ export const chapitresPrestataire: GuideChapitre[] = [
   {
     id: "mon-profil",
     titre: "Mon profil",
+    sources: ["src/features/portail-prestataire"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Vos informations, votre mot de passe et votre signature électronique",

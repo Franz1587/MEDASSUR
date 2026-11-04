@@ -16,6 +16,10 @@ export interface GuideSection {
 export interface GuideChapitre {
   id: string;
   titre: string;
+  // Code de l'écran documenté et date de dernière mise à jour du chapitre :
+  // `npm run guide:verifier` signale le chapitre dès que ce code change après majLe.
+  sources?: string[];
+  majLe?: string; // AAAA-MM-JJ
   sections: GuideSection[];
 }
 
@@ -42,6 +46,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "accueil",
     titre: "Tableau de bord",
+    sources: ["src/features/dashboard"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Vue d'ensemble du portefeuille",
@@ -59,6 +65,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "prospection",
     titre: "Prospection (CRM)",
+    sources: ["src/features/crm"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Suivre un prospect du premier contact jusqu'à la signature",
@@ -87,6 +95,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "souscripteurs",
     titre: "Souscripteurs",
+    sources: ["src/features/clients"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Gérer vos clients (entreprises et particuliers)",
@@ -111,6 +121,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "appels-offres",
     titre: "Appels d'Offres",
+    sources: ["src/features/appel-offres"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Répondre à un appel d'offres jusqu'à la proposition finale",
@@ -143,6 +155,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "cotation",
     titre: "Cotation",
+    sources: ["src/features/cotation"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Chiffrer une offre auprès d'une ou plusieurs compagnies",
@@ -172,6 +186,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "contrats",
     titre: "Contrats",
+    sources: ["src/features/contrats"],
+    majLe: "2026-11-04",
     sections: [
       {
         titre: "Créer et faire vivre une police Maladie ou Assistance",
@@ -210,6 +226,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "renouvellements",
     titre: "Renouvellements",
+    sources: ["src/features/renouvellements"],
+    majLe: "2026-11-04",
     sections: [
       {
         titre: "Relancer et transformer une échéance en renouvellement",
@@ -234,6 +252,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "avenants",
     titre: "Quittances et Avenants",
+    sources: ["src/features/avenants"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Ajuster un contrat en 3 étapes : Créer → Valider → Appliquer",
@@ -262,6 +282,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "demandes-client",
     titre: "Demandes client",
+    sources: ["src/features/demandes-client"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Traiter les demandes d'incorporation/retrait venues du portail client",
@@ -285,6 +307,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "resiliations",
     titre: "Résiliations",
+    sources: ["src/features/resiliations"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Résilier un contrat en 3 étapes : Demander → Valider → Rendre effective",
@@ -309,6 +333,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "participants",
     titre: "Participants",
+    sources: ["src/features/participants"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Affilier un assuré et gérer sa famille",
@@ -337,6 +363,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "facture-production",
     titre: "Facture Production",
+    sources: ["src/features/facture-production"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Facturer une compagnie sur son papier en-tête",
@@ -363,6 +391,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "factures",
     titre: "Factures",
+    sources: ["src/features/sinistres"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "De la facture prestataire au règlement : le cycle complet",
@@ -420,6 +450,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "prise-en-charge",
     titre: "Prise en charge (entente préalable)",
+    sources: ["src/features/prises-en-charge", "src/features/accord-prealable"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Autoriser un soin avant qu'il ne soit dispensé",
@@ -454,6 +486,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "prestataires",
     titre: "Prestataires",
+    sources: ["src/features/prestataires"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Gérer le réseau de soins conventionné",
@@ -478,6 +512,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "reglement-prestataire",
     titre: "Règlement",
+    sources: ["src/features/reglement-prestataire"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Regrouper des factures validées en un règlement, puis les payer",
@@ -504,6 +540,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "comptabilite",
     titre: "Comptabilité",
+    sources: ["src/features/comptabilite"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Journal général et lettrage clients/fournisseurs",
@@ -528,6 +566,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "reglement-comptable",
     titre: "Règlement comptable",
+    sources: ["src/features/reglement-comptable"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Émettre les lettres-chèques aux prestataires",
@@ -552,6 +592,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "etat-tps",
     titre: "État TPS",
+    sources: ["src/features/etat-tps"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Consulter la TPS prélevée par prestataire",
@@ -565,6 +607,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "bordereau-sinistres",
     titre: "Bordereau Sinistres",
+    sources: ["src/features/bordereau-sinistres"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Réclamer le fonds de roulement à une compagnie",
@@ -578,6 +622,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "bordereau-production",
     titre: "Bordereau Production",
+    sources: ["src/features/bordereau-production"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "États CIMA d'émission de primes et commissions",
@@ -591,6 +637,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "bordereau-encaissement",
     titre: "Bordereau Encaissement",
+    sources: ["src/features/bordereau-encaissement"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Enregistrer les primes réellement encaissées",
@@ -611,6 +659,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "commissions",
     titre: "Commissions",
+    sources: ["src/features/commissions"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Suivre et reverser les commissions du courtier",
@@ -630,6 +680,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "recouvrement",
     titre: "Recouvrement",
+    sources: ["src/features/recouvrement"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Gérer les impayés et leurs relances",
@@ -654,6 +706,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "tresorerie",
     titre: "Trésorerie",
+    sources: ["src/features/tresorerie"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Suivre les comptes bancaires et rapprocher les flux",
@@ -678,6 +732,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "fonds-de-roulement",
     titre: "Fonds de Roulement",
+    sources: ["src/features/fonds-de-roulement"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Suivre les fonds d'auto-gestion santé par contrat",
@@ -702,6 +758,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "honoraires",
     titre: "Honoraires de Gestion",
+    sources: ["src/features/honoraires"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Facturer les honoraires de gestion (sinistres × taux)",
@@ -728,6 +786,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "ged",
     titre: "GED & Documents",
+    sources: ["src/features/ged"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Classer un document automatiquement par IA",
@@ -751,6 +811,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "ia",
     titre: "Assistant IA",
+    sources: ["src/features/ia"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Poser une question à l'assistant intelligent",
@@ -764,6 +826,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "rapports",
     titre: "Reporting & KPIs",
+    sources: ["src/features/rapports"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Télécharger le rapport de pilotage",
@@ -777,6 +841,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "journal-operations",
     titre: "Journal des opérations",
+    sources: ["src/features/journal-operations"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Auditer qui a fait quoi",
@@ -790,6 +856,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "suivi-agents",
     titre: "Suivi de production par agent",
+    sources: ["src/features/suivi-agents"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Comparer l'activité des gestionnaires",
@@ -803,6 +871,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "courrier-maladie",
     titre: "Courrier Maladie",
+    sources: ["src/features/courrier-maladie"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Rédiger et imprimer un courrier officiel",
@@ -827,6 +897,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "messagerie",
     titre: "Messagerie",
+    sources: ["src/features/messagerie"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Assistant IA et reprise par un agent humain",
@@ -850,6 +922,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "communications",
     titre: "Communications",
+    sources: ["src/features/communications"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Journal des envois Email / SMS / WhatsApp",
@@ -876,6 +950,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "administration",
     titre: "Gestion des utilisateurs",
+    sources: ["src/features/admin"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Comptes, rôles et droits par fonctionnalité",
@@ -904,6 +980,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "parametres-entreprise",
     titre: "Paramètres de l'entreprise",
+    sources: ["src/features/parametres-entreprise"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Identité, logo, modèle de carte et matricule",
@@ -935,6 +1013,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "compagnies",
     titre: "Compagnies",
+    sources: ["src/features/compagnies"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Paramétrer une compagnie porteuse de risque",
@@ -959,6 +1039,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "auto-gestion",
     titre: "Auto-Gestion",
+    sources: ["src/features/autogestion"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Placer un souscripteur en auto-gestion santé",
@@ -972,6 +1054,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "cartes-assurance",
     titre: "Cartes d'assurance",
+    sources: ["src/features/cartes-assurance"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Générer les cartes recto/verso d'un contrat",
@@ -1002,6 +1086,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "garanties-catalogue",
     titre: "Catalogue de garanties",
+    sources: ["src/features/garanties-catalogue"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Constituer la bibliothèque de rubriques réutilisables",
@@ -1015,6 +1101,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "actes-medicaux",
     titre: "Catalogue des actes médicaux",
+    sources: ["src/features/actes-medicaux"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Nomenclature des actes et leur tarification",
@@ -1028,6 +1116,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "professionnels-sante",
     titre: "Professionnel de santé",
+    sources: ["src/features/medecins"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Répertorier les médecins et leurs structures d'exercice",
@@ -1052,6 +1142,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "lettres-cles",
     titre: "Lettres clés (nomenclature)",
+    sources: ["src/features/lettres-cles"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Coder la tarification des actes (ex. KC, KA)",
@@ -1065,6 +1157,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "modeles-courrier",
     titre: "Modèles de courrier",
+    sources: ["src/features/modeles-courrier"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Préparer des trames de courrier réutilisables",
@@ -1078,6 +1172,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "fraude",
     titre: "Contrôle fraude",
+    sources: ["src/features/fraude"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Évaluer le score de risque d'un assuré",
@@ -1091,6 +1187,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "regles-consignes",
     titre: "Procédures",
+    sources: ["src/features/regles-consignes"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Publier des consignes visibles côté portail client",
@@ -1103,6 +1201,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "banques",
     titre: "Banques",
+    sources: ["src/features/banques"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Référentiel des banques utilisées pour les règlements",
@@ -1127,6 +1227,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "import-donnees",
     titre: "Import de données",
+    sources: ["src/features/import-donnees"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Reprendre un portefeuille existant en masse",
@@ -1154,6 +1256,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "statistiques",
     titre: "Statistiques",
+    sources: ["src/features/statistiques"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Arrêté de situation par contrat et par période",
@@ -1177,6 +1281,8 @@ export const chapitresInterne: GuideChapitre[] = [
   {
     id: "profil",
     titre: "Profil utilisateur & signature électronique",
+    sources: ["src/portals/MonProfilModal.tsx", "src/components/shared/SignatureManager.tsx"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Vos coordonnées, votre mot de passe, votre signature",
@@ -1203,6 +1309,8 @@ export const chapitresSuperAdmin: GuideChapitre[] = [
   {
     id: "sa-accueil",
     titre: "Tableau de bord Super Admin",
+    sources: ["src/features/super-admin"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Vue 360° de la plateforme",
@@ -1217,6 +1325,8 @@ export const chapitresSuperAdmin: GuideChapitre[] = [
   {
     id: "sa-societes",
     titre: "Sociétés",
+    sources: ["src/features/super-admin"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Créer et administrer une société cliente",
@@ -1245,6 +1355,8 @@ export const chapitresSuperAdmin: GuideChapitre[] = [
   {
     id: "sa-plans",
     titre: "Plans d'abonnement",
+    sources: ["src/features/super-admin"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Offres commerciales proposées aux sociétés",
@@ -1269,6 +1381,8 @@ export const chapitresSuperAdmin: GuideChapitre[] = [
   {
     id: "sa-modeles-carte",
     titre: "Modèles de carte",
+    sources: ["src/features/super-admin"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Maquettes de carte d'assurance réutilisables",
@@ -1293,6 +1407,8 @@ export const chapitresSuperAdmin: GuideChapitre[] = [
   {
     id: "sa-tarification",
     titre: "Tarification",
+    sources: ["src/features/super-admin"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Grille tarifaire et rubriques de facturation",
@@ -1306,6 +1422,8 @@ export const chapitresSuperAdmin: GuideChapitre[] = [
   {
     id: "sa-performance",
     titre: "Performance & Usage",
+    sources: ["src/features/super-admin"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Suivi d'utilisation de la plateforme",

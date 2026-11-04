@@ -5,6 +5,8 @@ export const chapitresGlobal: GuideChapitre[] = [
   {
     id: "global-premiers-pas",
     titre: "Premiers pas",
+    sources: ["src/layout", "src/features/sante/admin", "src/portals/PortalShell.tsx"],
+    majLe: "2026-09-27",
     sections: [
       {
         titre: "Identifier votre compte et accéder au bon espace",
@@ -34,6 +36,8 @@ export const chapitresGlobal: GuideChapitre[] = [
   {
     id: "global-navigation",
     titre: "Navigation générale",
+    sources: ["src/layout", "src/features/sante/admin", "src/portals/PortalShell.tsx"],
+    majLe: "2026-09-27",
     sections: [
       {
         titre: "Comprendre les écrans, les filtres et les actions de base",
@@ -63,6 +67,8 @@ export const chapitresGlobal: GuideChapitre[] = [
   {
     id: "global-interne",
     titre: "Espace interne / société",
+    sources: ["src/layout", "src/features/sante/admin", "src/portals/PortalShell.tsx"],
+    majLe: "2026-09-27",
     sections: [
       {
         titre: "Le cœur de la gestion opérationnelle",
@@ -78,6 +84,8 @@ export const chapitresGlobal: GuideChapitre[] = [
   {
     id: "global-externes",
     titre: "Portails externes",
+    sources: ["src/layout", "src/features/sante/admin", "src/portals/PortalShell.tsx"],
+    majLe: "2026-09-27",
     sections: [
       {
         titre: "Le bon portail selon votre profil",
@@ -93,6 +101,8 @@ export const chapitresGlobal: GuideChapitre[] = [
   {
     id: "global-mobile",
     titre: "Application mobile",
+    sources: ["src/layout", "src/features/sante/admin", "src/portals/PortalShell.tsx"],
+    majLe: "2026-09-27",
     sections: [
       {
         titre: "Le même service, mobilisé au quotidien",

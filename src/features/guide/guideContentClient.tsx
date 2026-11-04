@@ -19,6 +19,8 @@ export const chapitresClient: GuideChapitre[] = [
   {
     id: "portailDashboard",
     titre: "Tableau de bord",
+    sources: ["src/features/portail-client"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Vue d'ensemble de votre contrat maladie",
@@ -36,6 +38,8 @@ export const chapitresClient: GuideChapitre[] = [
   {
     id: "portailContrats",
     titre: "Mes contrats",
+    sources: ["src/features/portail-client"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Consulter la liste de vos polices",
@@ -76,6 +80,8 @@ export const chapitresClient: GuideChapitre[] = [
   {
     id: "portailParticipants",
     titre: "Mes Bénéficiaires",
+    sources: ["src/features/portail-client"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Consulter vos bénéficiaires, regroupés par famille",
@@ -104,6 +110,8 @@ export const chapitresClient: GuideChapitre[] = [
   {
     id: "portailDemandes",
     titre: "Mes demandes",
+    sources: ["src/features/portail-client"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Demander une incorporation ou un retrait",
@@ -136,6 +144,8 @@ export const chapitresClient: GuideChapitre[] = [
   {
     id: "portailReseauSoins",
     titre: "Réseau de soins",
+    sources: ["src/features/portail-client"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Trouver un prestataire conventionné",
@@ -158,6 +168,8 @@ export const chapitresClient: GuideChapitre[] = [
   {
     id: "portailReglesConsignes",
     titre: "Procédures",
+    sources: ["src/features/portail-client"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Consulter les règles d'utilisation de votre assurance",
@@ -174,6 +186,8 @@ export const chapitresClient: GuideChapitre[] = [
   {
     id: "portailUtilisateurs",
     titre: "Utilisateurs & droits",
+    sources: ["src/features/portail-client"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Donner accès au portail à vos collaborateurs",
@@ -206,6 +220,8 @@ export const chapitresClient: GuideChapitre[] = [
   {
     id: "messagerie",
     titre: "Messagerie",
+    sources: ["src/features/messagerie"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Échanger directement avec votre assureur",
@@ -233,6 +249,8 @@ export const chapitresClient: GuideChapitre[] = [
   {
     id: "portailStatistiques",
     titre: "Statistiques",
+    sources: ["src/features/portail-client"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Analyser la consommation de votre contrat",
@@ -271,6 +289,8 @@ export const chapitresClient: GuideChapitre[] = [
   {
     id: "mon-profil",
     titre: "Mon profil",
+    sources: ["src/features/portail-client"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Gérer vos informations, votre mot de passe et votre signature",

@@ -13,6 +13,8 @@ export const chapitresMedecin: GuideChapitre[] = [
   {
     id: "medecinDashboard",
     titre: "Tableau de bord",
+    sources: ["src/features/portail-medecin"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Vue d'ensemble de votre activité",
@@ -29,6 +31,8 @@ export const chapitresMedecin: GuideChapitre[] = [
   {
     id: "medecinFileAttente",
     titre: "File d'attente",
+    sources: ["src/features/portail-medecin"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Les assurés qui vous attendent, sans jamais les rechercher vous-même",
@@ -50,6 +54,8 @@ export const chapitresMedecin: GuideChapitre[] = [
   {
     id: "prestataireMedecinPrescripteur",
     titre: "Consultation",
+    sources: ["src/features/portail-medecin"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Rédiger le dossier clinique et l'e-ordonnance",
@@ -83,6 +89,8 @@ export const chapitresMedecin: GuideChapitre[] = [
   {
     id: "medecinDossiersPatients",
     titre: "Mes Dossiers Patients",
+    sources: ["src/features/portail-medecin"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Retrouver l'historique médical complet d'un patient déjà reçu",
@@ -104,6 +112,8 @@ export const chapitresMedecin: GuideChapitre[] = [
   {
     id: "medecinHistoriquePrestations",
     titre: "Historique des prestations",
+    sources: ["src/features/portail-medecin"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Toutes vos consultations, en une seule liste chronologique",
@@ -118,6 +128,8 @@ export const chapitresMedecin: GuideChapitre[] = [
   {
     id: "messagerie",
     titre: "Messagerie",
+    sources: ["src/features/messagerie"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Échanger directement avec MEDASSUR+",
@@ -142,6 +154,8 @@ export const chapitresMedecin: GuideChapitre[] = [
   {
     id: "mon-profil",
     titre: "Mon profil",
+    sources: ["src/features/portail-medecin"],
+    majLe: "2026-09-19",
     sections: [
       {
         titre: "Vos informations, votre mot de passe et votre signature électronique",

@@ -6,7 +6,9 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "guide:verifier": "node scripts/guide-verifier.cjs",
+    "guide:captures": "node scripts/guide-captures.cjs"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "1.2.3",
@@ -69,6 +71,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "4.7.0",
+    "playwright-core": "1.63.0",
     "tailwindcss": "4.1.12",
     "typescript": "5.9",
     "vite": "6.3.5"
