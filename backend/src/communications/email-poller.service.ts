@@ -113,6 +113,22 @@ export class EmailPollerService implements OnModuleDestroy, OnModuleInit {
 
     if (!fromAddress) return;
 
+    // Déduplication robuste : si un email entrant (même adresse + même sujet) a déjà été
+    // enregistré en DB dans les dernières 24h, on l'ignore même si \Seen n'a pas persisté.
+    const dejaTraite = await this.prisma.communication.findFirst({
+      where: {
+        destinataireContact: fromAddress,
+        objet: subject,
+        statut: "Reçu",
+        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        ...(this.societeId ? { societeId: this.societeId } : {}),
+      },
+    });
+    if (dejaTraite) {
+      this.logger.log(`Email doublon ignoré (fromAddress=${fromAddress}, sujet="${subject}")`);
+      return;
+    }
+
     // Réponse à une communication sortante récente → enregistrer comme retour, pas de réponse ARIANA
     const limite = new Date(Date.now() - 72 * 60 * 60 * 1000);
     const sortante = await this.prisma.communication.findFirst({
