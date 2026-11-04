@@ -6558,6 +6558,31 @@ export class DocumentsService {
       return null;
     }
   }
+
+  // Méthodes "buffer" pour ARIANA (email/WhatsApp) — reuses renderStatistiques
+  // via un PassThrough au lieu de res HTTP, sans dupliquer la logique de rendu.
+  async genererStatistiquesBuffer(contratId: string, du?: string, au?: string): Promise<{ buffer: Buffer; filename: string }> {
+    const { PassThrough } = await import("stream");
+    const pt = new PassThrough();
+    const buffers: Buffer[] = [];
+    let filename = "Statistiques.pdf";
+    pt.on("data", (b: Buffer) => buffers.push(b));
+    const done = new Promise<void>((resolve, reject) => { pt.on("end", resolve); pt.on("error", reject); });
+    const fakeRes = Object.assign(pt, {
+      setHeader(_name: string, val: unknown) {
+        if (typeof val === "string") { const m = val.match(/filename="([^"]+)"/); if (m) filename = m[1]; }
+      },
+    });
+    await this.renderStatistiques(contratId, du, au, "pdf", fakeRes as any, undefined);
+    await done;
+    return { buffer: Buffer.concat(buffers), filename };
+  }
+
+  async genererReseauSoinsBuffer(): Promise<Buffer> {
+    const p = await this.parametresEntreprise.findOne();
+    const logoImage = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
+    return this.reseauSoinsPdf(p, logoImage);
+  }
 }
 
 // Rang au sein d'une famille : assuré principal, puis conjoint(e), puis

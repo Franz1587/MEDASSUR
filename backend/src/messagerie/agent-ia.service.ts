@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { PassThrough } from "stream";
+import { randomUUID } from "crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { Injectable, Logger } from "@nestjs/common";
 import type { Response } from "express";
@@ -18,6 +19,7 @@ import { resoudreCategorieConsommation } from "../portail-membre/portail-membre.
 import { PushNotificationsService } from "../notifications/push-notifications.service";
 import { GedService } from "../ged/ged.service";
 import { GedAnalyseService } from "../ged/ged-analyse.service";
+import { MessagingService } from "../messaging/messaging.service";
 
 const UPLOADS_MESSAGERIE_DIR = path.join(UPLOADS_ROOT, "messagerie");
 // Même dossier que AccordPrealableService.uploadDocument (voir ce fichier,
@@ -484,6 +486,7 @@ export class MessagerieAgentIaService {
     private pushNotifications: PushNotificationsService,
     private ged: GedService,
     private gedAnalyse: GedAnalyseService,
+    private messaging: MessagingService,
   ) {}
 
   private getClient(): Anthropic | null {
@@ -583,6 +586,39 @@ export class MessagerieAgentIaService {
         OUTIL_ANALYSER_DOCUMENT_GED,
       );
     }
+    outils.push(
+      {
+        name: "generer_statistiques_pdf",
+        description: "Génère le rapport statistiques (PDF) du contrat pour une période donnée. À utiliser quand quelqu'un demande les statistiques d'un contrat (par numéro de police ou par nom du client). Le PDF sera joint automatiquement à la réponse email ou affiché comme pièce jointe dans la messagerie.",
+        input_schema: {
+          type: "object",
+          properties: {
+            numeroPolice: { type: "string", description: "Numéro de police du contrat (ex. 2024/NSIA/001). Prioritaire sur clientNom." },
+            clientNom: { type: "string", description: "Nom du souscripteur/client si le numéro de police est inconnu." },
+            du: { type: "string", description: "Date de début de la période, format YYYY-MM-DD ou JJ/MM/AAAA (facultatif, défaut : début de l'exercice)." },
+            au: { type: "string", description: "Date de fin de la période, format YYYY-MM-DD ou JJ/MM/AAAA (facultatif, défaut : aujourd'hui)." },
+          },
+          required: [],
+        },
+      },
+      {
+        name: "obtenir_reseau_de_soins",
+        description: "Génère le PDF du Réseau de Soins (liste des prestataires conventionnés). Le PDF sera joint à la réponse email ou comme pièce jointe dans la messagerie.",
+        input_schema: { type: "object", properties: {} },
+      },
+      {
+        name: "envoyer_whatsapp",
+        description: "Envoie un message texte WhatsApp à un numéro de téléphone gabonais. À utiliser quand l'interlocuteur demande à recevoir une information par WhatsApp. Ne peut pas envoyer de pièces jointes — pour des fichiers PDF, utilise plutôt generer_statistiques_pdf ou obtenir_reseau_de_soins qui les joignent à l'email ou à la conversation.",
+        input_schema: {
+          type: "object",
+          properties: {
+            numero: { type: "string", description: "Numéro de téléphone gabonais du destinataire (format +24107XXXXXXX ou 07XXXXXXX)." },
+            message: { type: "string", description: "Texte du message à envoyer (max 1500 caractères)." },
+          },
+          required: ["numero", "message"],
+        },
+      },
+    );
     if (ctx.prestataireId) {
       outils.push(
         {
@@ -1344,6 +1380,61 @@ export class MessagerieAgentIaService {
         this.apprendreDeLaResolution(conversationId).catch(() => undefined);
         return { ok: true };
       }
+      case "generer_statistiques_pdf": {
+        const numPolice = args.numeroPolice ? String(args.numeroPolice) : null;
+        const clientNom = args.clientNom ? String(args.clientNom) : null;
+        const du = args.du ? String(args.du) : undefined;
+        const au = args.au ? String(args.au) : undefined;
+        const contrat = await this.prisma.contrat.findFirst({
+          where: {
+            ...(numPolice ? { numeroPolice: { contains: numPolice, mode: "insensitive" as const } } : {}),
+            ...(!numPolice && clientNom ? { client: { nom: { contains: clientNom, mode: "insensitive" as const } } } : {}),
+            ...(ctx.societeId ? { societeId: ctx.societeId } : {}),
+          },
+          select: { id: true, numeroPolice: true },
+        });
+        if (!contrat) return { erreur: "Contrat introuvable. Précise le numéro de police ou le nom du client." };
+        try {
+          const { buffer, filename } = await this.documents.genererStatistiquesBuffer(contrat.id, du, au);
+          if (conversationId) {
+            // Mode messagerie : sauvegarde en tant que pièce jointe de message
+            const nomFichier = `stats-${randomUUID()}-${filename}`;
+            const dest = path.join(UPLOADS_MESSAGERIE_DIR, nomFichier);
+            fs.mkdirSync(UPLOADS_MESSAGERIE_DIR, { recursive: true });
+            fs.writeFileSync(dest, buffer);
+            await this.prisma.message.create({ data: { conversationId, auteurId: null, auteurType: "IA", contenu: `📊 Statistiques — ${filename}`, pieceJointe: nomFichier } });
+            await this.prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
+          }
+          // __buffer (email mode) : callers set pdfAttachments to collect it
+          return { ok: true, contrat: contrat.numeroPolice, periode: `${du ?? "début"} → ${au ?? "aujourd'hui"}`, __pdfBuffer: buffer, __pdfFilename: filename };
+        } catch (err) {
+          return { erreur: "Erreur lors de la génération des statistiques.", detail: err instanceof Error ? err.message : String(err) };
+        }
+      }
+      case "obtenir_reseau_de_soins": {
+        try {
+          const buffer = await this.documents.genererReseauSoinsBuffer();
+          const filename = "Reseau-de-Soins.pdf";
+          if (conversationId) {
+            const nomFichier = `reseau-${randomUUID()}-${filename}`;
+            const dest = path.join(UPLOADS_MESSAGERIE_DIR, nomFichier);
+            fs.mkdirSync(UPLOADS_MESSAGERIE_DIR, { recursive: true });
+            fs.writeFileSync(dest, buffer);
+            await this.prisma.message.create({ data: { conversationId, auteurId: null, auteurType: "IA", contenu: `📋 Réseau de Soins — ${filename}`, pieceJointe: nomFichier } });
+            await this.prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
+          }
+          return { ok: true, __pdfBuffer: buffer, __pdfFilename: filename };
+        } catch (err) {
+          return { erreur: "Erreur lors de la génération du réseau de soins.", detail: err instanceof Error ? err.message : String(err) };
+        }
+      }
+      case "envoyer_whatsapp": {
+        const numero = String(args.numero ?? "");
+        const message = String(args.message ?? "").slice(0, 1500);
+        if (!numero || !message) return { erreur: "Numéro et message requis." };
+        const ok = await this.messaging.envoyer(numero, message, "whatsapp");
+        return ok ? { ok: true } : { erreur: "Envoi WhatsApp échoué (numéro invalide ou service indisponible)." };
+      }
       default:
         return { erreur: `Outil inconnu: ${nom}` };
     }
@@ -1758,5 +1849,66 @@ export class MessagerieAgentIaService {
     } catch (err) {
       this.logger.warn(`Apprentissage post-résolution échoué pour ${conversationId}: ${err instanceof Error ? err.message : err}`);
     }
+  }
+
+  // Réponse ARIANA à un email entrant (sans Conversation persistante).
+  // shortcut: outils nécessitant ctx.assureSanteId ou ctx.prestataireId
+  // renvoyent "Non disponible" pour les emails d'expéditeurs non authentifiés ;
+  // acceptable — l'email entrant est toujours d'un interlocuteur externe
+  // non authentifié. Remplacer par une recherche de compte sur email si
+  // besoin de personnalisation complète.
+  async repondreAEmail(
+    from: string, fromNom: string, subject: string, body: string, societeId?: string | null,
+  ): Promise<{ texte: string | null; attachments: { filename: string; content: Buffer; contentType: string }[] }> {
+    const client = this.getClient();
+    if (!client) return { texte: null, attachments: [] };
+
+    const parametres = await this.prisma.parametresEntreprise.findUnique({ where: { id: societeId ?? "societe-bootstrap" } });
+    const nomEntreprise = parametres?.nom?.trim() || "MEDASSUR+";
+    const ctx: OutilContexte = { demandeurId: "", demandeurRole: "", assureSanteId: null, prestataireId: null, nomEntreprise, societeId: societeId ?? null };
+
+    const attachments: { filename: string; content: Buffer; contentType: string }[] = [];
+    const messages: Anthropic.MessageParam[] = [
+      { role: "user", content: `De : ${fromNom} <${from}>\nObjet : ${subject}\n\n${body}` },
+    ];
+
+    const outils = this.outilsDisponibles(ctx);
+    let texteReponse: string | null = null;
+    let tour = 0;
+
+    while (tour < 10) {
+      tour++;
+      const reponse = await client.messages.create({
+        model: "claude-haiku-4-5", max_tokens: 800,
+        system: construireSystemPrompt(nomEntreprise),
+        tools: outils, messages,
+      });
+
+      const blocsTexte = reponse.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("\n").trim();
+      const blocsOutils = reponse.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+
+      if (blocsTexte) texteReponse = blocsTexte;
+      if (reponse.stop_reason !== "tool_use" || blocsOutils.length === 0) break;
+
+      messages.push({ role: "assistant", content: reponse.content });
+      const resultats: Anthropic.ToolResultBlockParam[] = [];
+      for (const bloc of blocsOutils) {
+        // Passer conversationId vide → les outils PDF sauvegardent en mémoire
+        const resultat = await this.executerOutil(bloc.name, (bloc.input as Record<string, unknown>) ?? {}, ctx, "");
+        // Collecter les PDF générés comme pièces jointes email
+        if (resultat && typeof resultat === "object") {
+          const r = resultat as Record<string, unknown>;
+          if (r.__pdfBuffer instanceof Buffer && typeof r.__pdfFilename === "string") {
+            attachments.push({ filename: r.__pdfFilename, content: r.__pdfBuffer, contentType: "application/pdf" });
+            delete r.__pdfBuffer;
+            delete r.__pdfFilename;
+          }
+        }
+        resultats.push({ type: "tool_result", tool_use_id: bloc.id, content: JSON.stringify(resultat) });
+      }
+      messages.push({ role: "user", content: resultats });
+    }
+
+    return { texte: texteReponse, attachments };
   }
 }
