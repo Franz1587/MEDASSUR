@@ -2,29 +2,36 @@ import { randomUUID } from "crypto";
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { ImapFlow } from "imapflow";
+import Anthropic from "@anthropic-ai/sdk";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { EmailService } from "./email.service";
+import { ParametresEntrepriseService } from "../parametres-entreprise/parametres-entreprise.service";
 
-// Polling IMAP contacts@medassur.cloud (2026-11) — toutes les 5 min.
-// Emails entrants → Communication "Reçu" + notification interne aux gestionnaires.
+// Polling IMAP contacts@medassur.cloud (2026-11) — toutes les minutes.
+// Emails entrants → ARIANA génère une réponse automatique + envoie par email
+// + enregistre les deux (entrant + réponse) dans Communications.
 // Si l'email est une réponse à une communication sortante récente (même expéditeur,
-// 72h), on l'enregistre comme retour sur cette communication (même pattern Zavu webhook).
+// 72h), on l'enregistre comme retour sans réponse ARIANA (dialogue déjà en cours).
 @Injectable()
 export class EmailPollerService implements OnModuleDestroy {
   private readonly logger = new Logger(EmailPollerService.name);
-  private client: ImapFlow | null = null;
+  private anthropic: Anthropic | null = null;
 
-  constructor(private prisma: PrismaService, private notifications: NotificationsService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+    private email: EmailService,
+    private parametresEntreprise: ParametresEntrepriseService,
+  ) {}
 
   get actif(): boolean {
     return !!(process.env.SMTP_USER && process.env.SMTP_PASS);
   }
 
-  async onModuleDestroy() {
-    await this.client?.logout().catch(() => undefined);
-  }
+  async onModuleDestroy() { /* connexions IMAP fermées après chaque poll */ }
 
-  @Cron("*/5 * * * *")
+  @Cron("* * * * *")
   async pollInbox() {
     if (!this.actif) return;
     const host = process.env.IMAP_HOST ?? "imap.hostinger.com";
@@ -37,11 +44,9 @@ export class EmailPollerService implements OnModuleDestroy {
       await client.connect();
       const lock = await client.getMailboxLock("INBOX");
       try {
-        // Lire uniquement les non-lus
         const messages = client.fetch({ seen: false }, { envelope: true, source: true });
         for await (const msg of messages as AsyncIterable<any>) {
           await this.traiterMessage(msg);
-          // Marquer comme lu pour ne pas le retraiter
           await client.messageFlagsAdd({ uid: msg.uid }, ["\\Seen"], { uid: true });
         }
       } finally {
@@ -61,13 +66,11 @@ export class EmailPollerService implements OnModuleDestroy {
     const fromNom = from?.name || fromAddress;
     const subject = msg.envelope.subject ?? "(sans objet)";
     const date = msg.envelope.date ?? new Date();
-
-    // Extraire le texte brut du source MIME (simpliste : prendre la partie lisible)
     const texte = this.extraireTexte(msg.source);
 
     if (!fromAddress) return;
 
-    // Chercher une communication sortante récente vers cet expéditeur (72h)
+    // Réponse à une communication sortante récente → enregistrer comme retour, pas de réponse ARIANA
     const limite = new Date(Date.now() - 72 * 60 * 60 * 1000);
     const sortante = await this.prisma.communication.findFirst({
       where: { destinataireContact: fromAddress, canal: "Email", createdAt: { gte: limite }, statut: "Envoyé" },
@@ -75,40 +78,85 @@ export class EmailPollerService implements OnModuleDestroy {
     });
 
     if (sortante) {
-      // Réponse à une communication sortante
       if (!sortante.retour) {
         await this.prisma.communication.update({ where: { id: sortante.id }, data: { retour: texte, retourDate: date } });
         if (sortante.auteurId) {
           await this.notifications.create("Gestionnaire", sortante.auteurId, `Réponse email de ${fromNom} : ${texte.slice(0, 100)}`).catch(() => undefined);
         }
-        this.logger.log(`Email entrant rattaché à communication ${sortante.id} (retour de ${fromAddress})`);
+        this.logger.log(`Email retour rattaché à communication ${sortante.id}`);
       }
-    } else {
-      // Nouveau message entrant (pas une réponse connue)
-      const id = randomUUID();
+      return;
+    }
+
+    // Nouveau message entrant — ARIANA prend la main
+    const commId = randomUUID();
+    await this.prisma.communication.create({
+      data: {
+        id: commId, canal: "Email", destinataireType: "Prospect",
+        destinataireNom: fromNom, destinataireContact: fromAddress,
+        objet: subject, contenu: texte, statut: "Reçu", declencheur: "Webhook",
+      },
+    });
+    this.logger.log(`Email entrant enregistré (id=${commId}) depuis ${fromAddress}`);
+
+    // ARIANA répond automatiquement
+    const reponseAriana = await this.genererReponseAriana(fromNom, subject, texte);
+    if (reponseAriana) {
+      const sujetReponse = subject.startsWith("Re:") ? subject : `Re: ${subject}`;
+      const ok = await this.email.envoyer(fromAddress, sujetReponse, reponseAriana, "Ariana — MEDASSUR+");
+      const statut = ok ? "Envoyé" : "Simulé";
       await this.prisma.communication.create({
         data: {
-          id, canal: "Email", destinataireType: "Prospect",
+          id: randomUUID(), canal: "Email", destinataireType: "Prospect",
           destinataireNom: fromNom, destinataireContact: fromAddress,
-          objet: subject, contenu: texte,
-          statut: "Reçu", declencheur: "Webhook",
+          objet: sujetReponse, contenu: reponseAriana, statut, declencheur: "ARIANA",
         },
       });
-      // Notifier tous les gestionnaires actifs (shortcut: notifie le premier trouvé, à étendre si multi-gestionnaire)
-      const gestionnaire = await this.prisma.user.findFirst({ where: { roleId: { startsWith: "gestionnaire_" } }, select: { id: true } });
-      if (gestionnaire) {
-        await this.notifications.create("Gestionnaire", gestionnaire.id, `Nouveau email entrant de ${fromNom} <${fromAddress}> : ${subject}`).catch(() => undefined);
-      }
-      this.logger.log(`Email entrant enregistré depuis ${fromAddress} (id=${id})`);
+      this.logger.log(`ARIANA a répondu à ${fromAddress} (statut=${statut})`);
+    }
+
+    // Notification interne
+    const gestionnaire = await this.prisma.user.findFirst({ where: { roleId: { startsWith: "gestionnaire_" } }, select: { id: true } });
+    if (gestionnaire) {
+      await this.notifications.create("Gestionnaire", gestionnaire.id,
+        `Email entrant de ${fromNom} <${fromAddress}>${reponseAriana ? " — ARIANA a répondu" : ""} : ${subject}`
+      ).catch(() => undefined);
     }
   }
 
-  // Extraction texte brut simpliste depuis source MIME brut
-  // shortcut: ignore les pièces jointes et l'HTML complexe, suffit pour 99% des réponses
+  private getAnthropicClient(): Anthropic | null {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return null;
+    if (!this.anthropic) this.anthropic = new Anthropic({ apiKey });
+    return this.anthropic;
+  }
+
+  private async genererReponseAriana(fromNom: string, subject: string, texte: string): Promise<string | null> {
+    const client = this.getAnthropicClient();
+    if (!client) {
+      this.logger.debug("ANTHROPIC_API_KEY non configurée — réponse ARIANA ignorée.");
+      return null;
+    }
+    try {
+      const p = await this.parametresEntreprise.findOne();
+      const systemPrompt = `Tu es Ariana, conseillère clients de ${p.nom} (courtier en assurance santé au Gabon). Tu réponds aux emails entrants adressés à contacts@medassur.cloud de façon professionnelle, chaleureuse et concise. Tu signes toujours "Ariana, Conseillère Clients — ${p.nom}". Si la demande dépasse tes connaissances (sinistre complexe, accord préalable spécifique, modification de contrat), tu indiques qu'un gestionnaire va prendre contact. Ne promets jamais de délais précis. Ne cite jamais de montants ou garanties que tu ne connais pas. Réponds en français uniquement.`;
+      const msg = await client.messages.create({
+        model: "claude-haiku-4-5",
+        max_tokens: 500,
+        system: systemPrompt,
+        messages: [{ role: "user", content: `De : ${fromNom}\nObjet : ${subject}\n\n${texte}` }],
+      });
+      const bloc = msg.content.find((b) => b.type === "text");
+      return bloc && bloc.type === "text" ? bloc.text.trim() : null;
+    } catch (err) {
+      this.logger.error("Échec génération réponse ARIANA", err instanceof Error ? err.message : String(err));
+      return null;
+    }
+  }
+
   private extraireTexte(source?: Buffer): string {
     if (!source) return "";
     const raw = source.toString("utf8");
-    // Chercher content-type text/plain
     const idx = raw.toLowerCase().indexOf("content-type: text/plain");
     if (idx >= 0) {
       const apres = raw.slice(idx);
@@ -120,7 +168,6 @@ export class EmailPollerService implements OnModuleDestroy {
         return texte.replace(/\r\n/g, "\n").trim().slice(0, 2000);
       }
     }
-    // Fallback : extraire les lignes lisibles (pas d'en-têtes MIME)
     return raw
       .split(/\r?\n/)
       .filter((l) => l && !l.startsWith("--") && !l.match(/^[A-Za-z-]+:/))
