@@ -6,6 +6,7 @@ import { ImapFlow } from "imapflow";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { EmailService } from "./email.service";
+import { TenantContext } from "../tenant/tenant-context";
 
 // CC par défaut si arianaEmailCc n'est pas encore saisi en DB.
 const ARIANA_EMAIL_CC_DEFAULT = "o.lekogo@laruchexcellence.com";
@@ -27,6 +28,10 @@ export class EmailPollerService implements OnModuleDestroy, OnModuleInit {
   // societeId La Ruche Excellence résolu au démarrage (jamais depuis TenantContext :
   // le poller tourne hors requête HTTP, l'AsyncLocalStorage est vide).
   private societeId: string | null = null;
+  // Garde doublon : empêche deux invocations cron de traiter le même inbox en parallèle.
+  private polling = false;
+  // UIDs traités dans cette session (évite le retraitement si \Seen ne persiste pas immédiatement).
+  private processedUids = new Set<number>();
 
   constructor(
     private prisma: PrismaService,
@@ -65,6 +70,8 @@ export class EmailPollerService implements OnModuleDestroy, OnModuleInit {
   @Cron("* * * * *")
   async pollInbox() {
     if (!this.actif) return;
+    if (this.polling) return; // évite les invocations concurrentes
+    this.polling = true;
     const host = process.env.IMAP_HOST ?? "imap.hostinger.com";
     const port = Number(process.env.IMAP_PORT ?? 993);
     const user = process.env.SMTP_USER!;
@@ -77,10 +84,10 @@ export class EmailPollerService implements OnModuleDestroy, OnModuleInit {
       try {
         const messages = client.fetch({ seen: false }, { envelope: true, source: true });
         for await (const msg of messages as AsyncIterable<any>) {
-          // Marquer \Seen avant le traitement : traiterMessage peut durer >1 min (ARIANA + PDF),
-          // et le cron suivant relit les non-lus → doublon. On accepte de perdre un message
-          // si le process crashe après le flag mais avant le traitement (cas très rare).
+          if (this.processedUids.has(msg.uid)) continue; // déjà traité cette session
+          // Marquer \Seen avant le traitement : traiterMessage peut durer >1 min (ARIANA + PDF).
           await client.messageFlagsAdd({ uid: msg.uid }, ["\\Seen"], { uid: true });
+          this.processedUids.add(msg.uid);
           await this.traiterMessage(msg);
         }
       } finally {
@@ -90,6 +97,8 @@ export class EmailPollerService implements OnModuleDestroy, OnModuleInit {
     } catch (err) {
       this.logger.error("Échec polling IMAP", err instanceof Error ? err.message : String(err));
       await client.logout().catch(() => undefined);
+    } finally {
+      this.polling = false;
     }
   }
 
@@ -139,7 +148,11 @@ export class EmailPollerService implements OnModuleDestroy, OnModuleInit {
     // Lire les CC paramétrés en DB (peut avoir changé depuis le démarrage)
     const params = await this.prisma.parametresEntreprise.findUnique({ where: { id: this.societeId }, select: { arianaEmailCc: true } });
     const cc = params?.arianaEmailCc?.length ? params.arianaEmailCc : [ARIANA_EMAIL_CC_DEFAULT];
-    const reponseAriana = await this.agentIa.repondreAEmail(fromAddress, fromNom, subject, texte, this.societeId).catch((err) => {
+    // TenantContext.run : tous les outils ARIANA (génération PDF, stats…)
+    // voient le bon societeId → bon logo/branding sur les documents générés.
+    const reponseAriana = await TenantContext.run(this.societeId, () =>
+      this.agentIa!.repondreAEmail(fromAddress, fromNom, subject, texte, this.societeId)
+    ).catch((err) => {
       this.logger.error("repondreAEmail échoué", err instanceof Error ? err.message : String(err));
       return null;
     });
