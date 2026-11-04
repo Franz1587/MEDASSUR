@@ -6,6 +6,7 @@ import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { Combobox } from "@/components/shared/Combobox";
 import { DateInput } from "@/components/shared/DateInput";
+import { echeanceApresEffet, normaliserEcheance } from "@/lib/echeance";
 import { DerniereModification } from "@/components/shared/DerniereModification";
 import { ImportEnMasseModal } from "@/components/shared/ImportEnMasseModal";
 import { Pagination } from "@/components/shared/Pagination";
@@ -1363,8 +1364,9 @@ export default function ContratsView() {
                       <input value={form.produit ?? ""} onChange={(e) => setForm((v) => ({ ...v, produit: e.target.value }))} className={fieldCls} placeholder="ex. PEC UPEGA COLLEGE 1" />
                       <p className="text-[11px] text-muted-foreground mt-1">Figure sur le Bordereau de Production — laissez vide pour un libellé générique.</p>
                     </label>
-                    <label className="block"><div className={labelCls}>Date d'effet</div><DateInput value={form.dateDebut} onChange={(v) => setForm((f) => ({ ...f, dateDebut: v }))} className={fieldCls} /></label>
-                    <label className="block"><div className={labelCls}>Date d'échéance</div><DateInput value={form.dateFin} onChange={(v) => setForm((f) => ({ ...f, dateFin: v }))} className={fieldCls} /></label>
+                    <label className="block"><div className={labelCls}>Date d'effet</div><DateInput value={form.dateDebut} onChange={(v) => setForm((f) => ({ ...f, dateDebut: v, dateFin: echeanceApresEffet(f.dateDebut, v, f.dateFin) }))} className={fieldCls} /></label>
+                    <label className="block"><div className={labelCls}>Date d'échéance</div><DateInput value={form.dateFin} onChange={(v) => setForm((f) => ({ ...f, dateFin: normaliserEcheance(f.dateDebut, v) }))} className={fieldCls} />
+                      <p className="text-[11px] text-muted-foreground mt-1">Toujours la veille de la date anniversaire (effet 01/03/2026 → échéance 28/02/2027).</p></label>
                     {form.branche === "Assistance" && (
                       <label className="block">
                         <div className={labelCls}>Contrats Maladie liés</div>
@@ -1525,9 +1527,9 @@ export default function ContratsView() {
                           exerciceEnEdition === ex.numero ? (
                             <div key={ex.id} className="flex items-center gap-2 px-3 py-2 text-[12px] bg-primary/5">
                               <span className="flex-shrink-0 text-[11px] font-semibold text-muted-foreground med-num">N°{ex.numero}</span>
-                              <DateInput value={brouillonExercice.dateDebut} onChange={(v) => setBrouillonExercice((b) => ({ ...b, dateDebut: v }))} className="border border-border rounded-md px-2 py-1 bg-background text-[12px] text-foreground flex-1 min-w-0" />
+                              <DateInput value={brouillonExercice.dateDebut} onChange={(v) => setBrouillonExercice((b) => ({ dateDebut: v, dateFin: echeanceApresEffet(b.dateDebut, v, b.dateFin) }))} className="border border-border rounded-md px-2 py-1 bg-background text-[12px] text-foreground flex-1 min-w-0" />
                               <span className="text-muted-foreground flex-shrink-0">→</span>
-                              <DateInput value={brouillonExercice.dateFin} onChange={(v) => setBrouillonExercice((b) => ({ ...b, dateFin: v }))} className="border border-border rounded-md px-2 py-1 bg-background text-[12px] text-foreground flex-1 min-w-0" />
+                              <DateInput value={brouillonExercice.dateFin} onChange={(v) => setBrouillonExercice((b) => ({ ...b, dateFin: normaliserEcheance(b.dateDebut, v) }))} className="border border-border rounded-md px-2 py-1 bg-background text-[12px] text-foreground flex-1 min-w-0" />
                               <button type="button" onClick={enregistrerRecalibrageExercice} disabled={recalibrageEnCours} title="Enregistrer et recalibrer les exercices suivants" className="flex-shrink-0 p-1.5 rounded-md text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-50">
                                 <Check className="w-3.5 h-3.5" />
                               </button>

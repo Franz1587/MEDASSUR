@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { echeanceParDefaut, echeanceValide, lendemain, normaliserEcheance } from "../contrats/echeance.util";
 import type { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { withComputedPrime, type PrimeInput } from "../contrats/prime.util";
@@ -22,13 +23,6 @@ const CHAMPS_PRIME = [
   "montantAccessoires", "tauxCommission",
   "primeNette", "primeTotaleHT", "montantTaxe", "montantCommission",
 ] as const;
-
-function addYears(dateStr: string, years: number): string {
-  const [d, m, y] = dateStr.split("/").map(Number);
-  const date = Number.isFinite(d) && Number.isFinite(m) && Number.isFinite(y) ? new Date(y, m - 1, d) : new Date();
-  date.setFullYear(date.getFullYear() + years);
-  return date.toLocaleDateString("fr-FR");
-}
 
 function veille(dateStr: string): string {
   const [d, m, y] = dateStr.split("/").map(Number);
@@ -71,10 +65,13 @@ export class AvenantsService {
   async create(dto: CreateAvenantDto) {
     const contrat = await this.prisma.contrat.findUnique({ where: { id: dto.contratId } });
     if (!contrat) throw new NotFoundException("Contrat introuvable");
+    if (dto.type === "Renouvellement") {
+      dto.dateFin = dto.dateFin ? normaliserEcheance(dto.dateEffet, dto.dateFin) : echeanceParDefaut(dto.dateEffet);
+    }
 
     const calcule = withComputedPrime({
       dateDebut: dto.type === "Renouvellement" ? dto.dateEffet : contrat.dateDebut,
-      dateFin: dto.type === "Renouvellement" ? (dto.dateFin ?? contrat.dateFin) : contrat.dateFin,
+      dateFin: dto.type === "Renouvellement" ? dto.dateFin! : contrat.dateFin,
       nombreAssuresPrincipaux: dto.nombreAssuresPrincipaux, primeUnitaireAssurePrincipal: dto.primeUnitaireAssurePrincipal,
       nombreConjoints: dto.nombreConjoints, primeUnitaireConjoint: dto.primeUnitaireConjoint,
       nombreEnfants: dto.nombreEnfants, primeUnitaireEnfant: dto.primeUnitaireEnfant,
@@ -141,7 +138,11 @@ export class AvenantsService {
         data: { statut: "Clôturé" },
       });
       const nouvelExercice = contrat.exerciceNumero + 1;
-      const nouvelleDateFin = avenant.dateFin ?? addYears(avenant.dateEffet, 1);
+      // Échéance = veille de l'anniversaire, jamais le même jour que la date d'effet.
+      const nouvelleDateFin = avenant.dateFin ? normaliserEcheance(avenant.dateEffet, avenant.dateFin) : echeanceParDefaut(avenant.dateEffet);
+      if (!echeanceValide(avenant.dateEffet, nouvelleDateFin)) {
+        throw new BadRequestException(`Échéance ${nouvelleDateFin} invalide pour une date d'effet au ${avenant.dateEffet}.`);
+      }
       const contratMaj = await this.prisma.contrat.update({
         where: { id: avenant.contratId },
         data: {
@@ -242,7 +243,8 @@ export class AvenantsService {
         id, contratId, type: "Renouvellement",
         description: `Renouvellement proposé — exercice n°${contrat.exerciceNumero + 1}`,
         primeAvant: contrat.prime, primeApres: contrat.prime,
-        dateEffet: contrat.dateFin, dateFin: addYears(contrat.dateFin, 1),
+        // Le renouvellement démarre le lendemain de l'échéance en cours.
+        dateEffet: lendemain(contrat.dateFin), dateFin: echeanceParDefaut(lendemain(contrat.dateFin)),
         statut: "À renouveler", exerciceNumero: contrat.exerciceNumero,
         nombreAssuresPrincipaux: contrat.nombreAssuresPrincipaux, primeUnitaireAssurePrincipal: contrat.primeUnitaireAssurePrincipal,
         nombreConjoints: contrat.nombreConjoints, primeUnitaireConjoint: contrat.primeUnitaireConjoint,

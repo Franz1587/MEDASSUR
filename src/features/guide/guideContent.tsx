@@ -182,7 +182,7 @@ export const chapitresInterne: GuideChapitre[] = [
         etapes: [
           {
             titre: "Onglet « Informations générales »",
-            texte: "Cliquez sur « Nouveau contrat ». Choisissez la Branche (Maladie/Assistance), le Souscripteur, la Compagnie (ou « Compagnie interne » pour une Mutuelle/Compagnie en auto-gestion), le Numéro de police, le Produit, les dates d'Effet et d'Échéance, la Périodicité (Mensuel/Trimestriel/Semestriel/Annuel), le Statut, le pays de souscription et les extensions de territorialité. Pour un contrat Assistance, vous pouvez le lier à un contrat Maladie existant.",
+            texte: "Cliquez sur « Nouveau contrat ». Choisissez la Branche (Maladie/Assistance), le Souscripteur, la Compagnie (ou « Compagnie interne » pour une Mutuelle/Compagnie en auto-gestion), le Numéro de police, le Produit, les dates d'Effet et d'Échéance (l'échéance est proposée automatiquement et tombe toujours la veille de la date anniversaire : effet 01/03/2026 → échéance 28/02/2027 ; une échéance saisie le jour anniversaire est ramenée à la veille), la Périodicité (Mensuel/Trimestriel/Semestriel/Annuel), le Statut, le pays de souscription et les extensions de territorialité. Pour un contrat Assistance, vous pouvez le lier à un contrat Maladie existant.",
             image: img("contrats-02-nouveau-infos-generales.png"),
           },
           {
@@ -215,6 +215,7 @@ export const chapitresInterne: GuideChapitre[] = [
         titre: "Relancer et transformer une échéance en renouvellement",
         texte: [
           "L'écran « Renouvellements » liste automatiquement les contrats qui arrivent à échéance — ce n'est jamais une saisie manuelle. Les onglets Tous/À renouveler/Relancé/Renouvelé/Perdu filtrent la liste.",
+          "La nouvelle période démarre toujours le lendemain de l'échéance en cours et se termine la veille de sa date anniversaire : un contrat échu le 28/02/2027 est renouvelé du 01/03/2027 au 29/02/2028.",
         ],
         image: img("renouvellements-01-liste.png"),
         etapes: [

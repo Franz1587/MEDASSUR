@@ -17,6 +17,7 @@ import { MouvementsService } from "../mouvements/mouvements.service";
 import { populationDuContrat } from "../mouvements/population-historique.util";
 import { numeroPolice } from "../lib/police.util";
 import { normaliserDateImport } from "../lib/date-import.util";
+import { echeanceValide, normaliserEcheance } from "./echeance.util";
 import { texteBrutDeCellule } from "../lib/excel-cell.util";
 import { correspondApproximativement, meilleurCandidat, motsNonApparies, ressembleAUnParticulier } from "../lib/fuzzy-name-match.util";
 import { genererIdNumerique } from "../lib/numeric-id.util";
@@ -371,6 +372,10 @@ export class ContratsService {
     const imputationAgence = await this.imputerSelonAgence(dto.compagnieId, dto.agenceId);
     dto.compagnieId = imputationAgence.compagnieId ?? dto.compagnieId;
     dto.agenceId = imputationAgence.agenceId ?? undefined;
+    dto.dateFin = normaliserEcheance(dto.dateDebut, dto.dateFin);
+    if (!echeanceValide(dto.dateDebut, dto.dateFin)) {
+      throw new BadRequestException("La date d'échéance doit être postérieure à la date d'effet.");
+    }
     const id = await this.genererIdContrat();
     if (dto.nomCarteSante !== undefined) dto.nomCarteSante = dto.nomCarteSante.trim() || (null as unknown as undefined);
     const data = withComputedPrime(dto);
@@ -651,10 +656,13 @@ export class ContratsService {
     if (!cible) throw new NotFoundException(`Exercice n°${numero} introuvable pour ce contrat.`);
 
     const dateDebut = normaliserDateImport(dto.dateDebut) || dto.dateDebut;
-    const dateFin = normaliserDateImport(dto.dateFin) || dto.dateFin;
+    const dateFin = normaliserEcheance(dateDebut, normaliserDateImport(dto.dateFin) || dto.dateFin);
     const finCorrigee = parseDateFrTranche(dateFin);
     if (!parseDateFrTranche(dateDebut) || !finCorrigee) {
       throw new BadRequestException("Dates invalides — format attendu JJ/MM/AAAA.");
+    }
+    if (!echeanceValide(dateDebut, dateFin)) {
+      throw new BadRequestException("La date d'échéance doit être postérieure à la date d'effet.");
     }
 
     const statutActif = contrat.statut === "Actif" || contrat.statut === "En renouvellement";
@@ -1051,7 +1059,7 @@ export class ContratsService {
       // à /contrats/import avec des dates encore au format Date.toString()
       // reste correctement traduit.
       const dateDebut = normaliserDateImport(ligne.dateDebut) || "01/01/2026";
-      const dateFin = normaliserDateImport(ligne.dateFin) || "31/12/2026";
+      const dateFin = normaliserEcheance(dateDebut, normaliserDateImport(ligne.dateFin) || "31/12/2026");
       const prime = Number(ligne.prime) || 0;
       const statut = normaliserStatutContrat(ligne.statut);
       const periodicite = ["Mensuel", "Trimestriel", "Semestriel", "Annuel"].includes(ligne.periodicite ?? "") ? ligne.periodicite! : "Annuel";
