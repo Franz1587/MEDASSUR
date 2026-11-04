@@ -91,15 +91,14 @@ export class EmailPollerService implements OnModuleDestroy, OnModuleInit {
       orderBy: { createdAt: "desc" },
     });
 
-    if (sortante) {
-      if (!sortante.retour) {
-        await this.prisma.communication.update({ where: { id: sortante.id }, data: { retour: texte, retourDate: date } });
-        if (sortante.auteurId) {
-          await this.notifications.create("Gestionnaire", sortante.auteurId, `Réponse email de ${fromNom} : ${texte.slice(0, 100)}`).catch(() => undefined);
-        }
-        this.logger.log(`Email retour rattaché à communication ${sortante.id}`);
+    if (sortante && !sortante.retour) {
+      // Rattacher comme retour sur le fil sortant — mais continuer le traitement
+      // pour créer une Communication entrante et laisser ARIANA répondre.
+      await this.prisma.communication.update({ where: { id: sortante.id }, data: { retour: texte, retourDate: date } });
+      if (sortante.auteurId) {
+        await this.notifications.create("Gestionnaire", sortante.auteurId, `Réponse email de ${fromNom} : ${texte.slice(0, 100)}`).catch(() => undefined);
       }
-      return;
+      this.logger.log(`Email retour rattaché à communication ${sortante.id}`);
     }
 
     // Nouveau message entrant — ARIANA prend la main
