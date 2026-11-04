@@ -1,8 +1,3 @@
-// Communications externes (2026-08) — voir demande utilisateur : "l'application
-// doit pouvoir rendre possible l'envoi des mails, sms et whatsapp. et
-// recevoir des retours sous forme de notification et message interne."
-// AUCUN fournisseur n'est branché (voir CommunicationsService, backend) —
-// chaque envoi est SIMULÉ, journalisé ici, jamais réellement transmis.
 export interface Communication {
   id: string;
   canal: "Email" | "SMS" | "WhatsApp";
@@ -10,13 +5,37 @@ export interface Communication {
   destinataireId?: string;
   destinataireNom: string;
   destinataireContact: string;
+  cc?: string | null;
   objet?: string;
   contenu: string;
+  contenuHtml?: string | null;
   pieceJointe?: string;
-  statut: "Simulé" | "Échec" | "Envoyé" | "Reçu";
+  piecesJointes: string[];
+  statut: "Simulé" | "Échec" | "Envoyé" | "Reçu" | "Brouillon";
   declencheur: string;
   retour?: string;
   retourDate?: string;
   auteurId?: string;
+  lu: boolean;
+  archive: boolean;
+  supprime: boolean;
+  suivi: boolean;
   createdAt: string;
+}
+
+export type DossierCommunication = "reception" | "envoyes" | "brouillons" | "archive" | "corbeille" | "suivi" | "tous";
+
+export interface CompteursCommunications {
+  reception: number;
+  nonLus: number;
+  envoyes: number;
+  brouillons: number;
+  archive: number;
+  corbeille: number;
+  suivi: number;
+}
+
+export interface SignatureCommunication {
+  signatureEmail?: string | null;
+  signatureSms?: string | null;
 }

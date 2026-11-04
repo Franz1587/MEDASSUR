@@ -352,10 +352,10 @@ export default function ParametresEntrepriseView() {
         <div className="flex items-center justify-between">
           <h3 className="text-[13px] font-semibold text-foreground flex items-center gap-2"><Bell className="w-4 h-4 text-primary" />Relances renouvellement automatiques</h3>
           <div className="flex gap-2">
-            <Btn variant="outline" onClick={() => setNiveauEdit({ ordre: (niveaux.length + 1), joursAvantEcheance: 30, objet: "Rappel : votre contrat {{police}} expire dans {{jours}} jours", corps: "Bonjour {{nom}},\n\nVotre contrat n°{{police}} arrive à échéance le {{echeance}}.\n\nMerci de nous contacter pour procéder au renouvellement.\n\nCordialement,\nARIANA — MEDASSUR+", actif: true })}>
+            <Btn variant="secondary" onClick={() => setNiveauEdit({ ordre: (niveaux.length + 1), joursAvantEcheance: 30, objet: "Rappel : votre contrat {{police}} expire dans {{jours}} jours", corps: "Bonjour {{nom}},\n\nVotre contrat n°{{police}} arrive à échéance le {{echeance}}.\n\nMerci de nous contacter pour procéder au renouvellement.\n\nCordialement,\nARIANA — MEDASSUR+", actif: true })}>
               <Plus className="w-3.5 h-3.5" />Ajouter un niveau
             </Btn>
-            <Btn variant="outline" disabled={declenchement} onClick={async () => {
+            <Btn variant="secondary" disabled={declenchement} onClick={async () => {
               try { setDeclenchement(true); const r = await declencherRelances(); toast.success(`${r.envoyees} relance(s) envoyée(s), ${r.ignorees} ignorée(s).`); }
               catch { toast.error("Erreur lors du déclenchement."); }
               finally { setDeclenchement(false); }
@@ -419,7 +419,7 @@ export default function ParametresEntrepriseView() {
               <span className="text-[12px] text-foreground">Actif</span>
             </label>
             <div className="flex gap-2 justify-end">
-              <Btn variant="outline" onClick={() => setNiveauEdit(null)}>Annuler</Btn>
+              <Btn variant="secondary" onClick={() => setNiveauEdit(null)}>Annuler</Btn>
               <Btn variant="primary" onClick={async () => {
                 try {
                   const saved = await upsertNiveauRelance(niveauEdit as NiveauRelance);

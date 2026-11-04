@@ -25,6 +25,9 @@ model User {
   email        String   @unique
   initiales    String
   passwordHash String
+  // Signatures de messagerie (2026-11) — HTML pour l'email, texte pour SMS/WhatsApp.
+  signatureEmail String?
+  signatureSms   String?
   // Changement de mot de passe imposé (2026-09) — voir demande utilisateur :
   // "la saisie du mot de passe pour la première fois ne demande pas de
   // réinitialiser le mot de passe à la première connexion... pour une
@@ -533,7 +536,16 @@ model Communication {
   objet               String?
   contenu             String
   pieceJointe         String? // nom de fichier sous backend/uploads/communications/
-  statut              String   @default("Simulé") // "Simulé" | "Échec"
+  // Messagerie type Outlook (2026-11) : corps riche, pièces jointes multiples, dossiers.
+  contenuHtml         String?
+  piecesJointes       String[] @default([]) // noms de fichiers sous uploads/communications/
+  cc                  String?
+  messageId           String? // Message-ID IMAP — déduplication des emails entrants
+  lu                  Boolean  @default(true)
+  archive             Boolean  @default(false)
+  supprime            Boolean  @default(false)
+  suivi               Boolean  @default(false)
+  statut              String   @default("Simulé") // "Simulé" | "Échec" | "Envoyé" | "Reçu" | "Brouillon"
   // Déclencheur (2026-08) — "Manuel" (composé depuis l'écran) ou le nom
   // d'une automatisation (ex. "NouveauContrat" — voir CommunicationsService.
   // notifierPrestatairesNouveauContrat), pour distinguer l'activité
@@ -549,6 +561,7 @@ model Communication {
   @@index([destinataireType, destinataireId])
   @@index([canal])
   @@index([societeId])
+  @@index([messageId])
 }
 
 // Niveaux de relance renouvellement (2026-11) — paramétrables par société :

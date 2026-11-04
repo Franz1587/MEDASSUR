@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../communications/email.service";
+import { TenantContext } from "../tenant/tenant-context";
 import { UpsertNiveauRelanceDto } from "./dto/upsert-niveau-relance.dto";
 
 function parseDateFR(s: string): Date | null {
@@ -73,7 +74,8 @@ export class RelancesService {
       distinct: ["societeId"],
     });
     for (const { societeId } of societes) {
-      await this.envoyerRelancesDues(societeId).catch((err) =>
+      // Contexte société : logo/couleurs de la bonne société sur l'email de relance.
+      await TenantContext.run(societeId, () => this.envoyerRelancesDues(societeId)).catch((err) =>
         this.logger.error(`Relances société ${societeId}`, err instanceof Error ? err.message : String(err)),
       );
     }

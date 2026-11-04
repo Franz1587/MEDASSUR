@@ -1,37 +1,44 @@
 import { randomUUID } from "crypto";
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import * as fs from "fs";
+import * as path from "path";
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { ModuleRef } from "@nestjs/core";
 import { Cron } from "@nestjs/schedule";
 import { ImapFlow } from "imapflow";
+import { simpleParser, type ParsedMail, type AddressObject } from "mailparser";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { EmailService } from "./email.service";
 import { TenantContext } from "../tenant/tenant-context";
+import { UPLOADS_ROOT } from "../uploads-dir.util";
 
+const UPLOADS_COMMUNICATIONS_DIR = path.join(UPLOADS_ROOT, "communications");
 // CC par défaut si arianaEmailCc n'est pas encore saisi en DB.
 const ARIANA_EMAIL_CC_DEFAULT = "o.lekogo@laruchexcellence.com";
 
+function adresses(a?: AddressObject | AddressObject[]): string {
+  return (Array.isArray(a) ? a : a ? [a] : []).flatMap((x) => x.value.map((v) => v.address ?? "")).filter(Boolean).join("; ");
+}
+
+async function stocker(nomOrigine: string, contenu: Buffer): Promise<string> {
+  await fs.promises.mkdir(UPLOADS_COMMUNICATIONS_DIR, { recursive: true });
+  const nom = `${randomUUID().slice(0, 6)}-${path.basename(nomOrigine).replace(/[^\p{L}\p{N}._ -]/gu, "_")}`;
+  await fs.promises.writeFile(path.join(UPLOADS_COMMUNICATIONS_DIR, nom), contenu);
+  return nom;
+}
+
 // Polling IMAP contacts@medassur.cloud (2026-11) — toutes les minutes.
-// Emails entrants → ARIANA (plein accès aux outils : stats, réseau de soins,
-// base connaissance) répond + envoie par email avec pièces jointes éventuelles
-// + enregistre les deux (entrant + réponse) dans Communications.
-// Si l'email est une réponse à une communication sortante récente (72h),
-// on l'enregistre comme retour sans réponse ARIANA (dialogue déjà en cours).
+// Chaque email entrant est enregistré (texte, HTML, pièces jointes) dans
+// Communications ; ARIANA répond pour le compte de La Ruche Excellence.
 @Injectable()
-export class EmailPollerService implements OnModuleDestroy, OnModuleInit {
+export class EmailPollerService implements OnModuleInit {
   private readonly logger = new Logger(EmailPollerService.name);
   // shortcut: ModuleRef.get (strict: false) pour éviter la dépendance circulaire
   // CommunicationsModule → MessagerieModule → DocumentsModule → CommunicationsModule.
-  // Upgrader vers un import de module si ARIANA email nécessite un scope de tenant.
   private agentIa: import("../messagerie/agent-ia.service").MessagerieAgentIaService | null = null;
-
-  // societeId La Ruche Excellence résolu au démarrage (jamais depuis TenantContext :
-  // le poller tourne hors requête HTTP, l'AsyncLocalStorage est vide).
+  // Société La Ruche résolue au démarrage : le poller tourne hors requête HTTP.
   private societeId: string | null = null;
-  // Garde doublon : empêche deux invocations cron de traiter le même inbox en parallèle.
   private polling = false;
-  // UIDs traités dans cette session (évite le retraitement si \Seen ne persiste pas immédiatement).
-  private processedUids = new Set<number>();
 
   constructor(
     private prisma: PrismaService,
@@ -47,8 +54,6 @@ export class EmailPollerService implements OnModuleDestroy, OnModuleInit {
     } catch {
       this.logger.warn("MessagerieAgentIaService indisponible — réponses ARIANA désactivées.");
     }
-    // Résoudre La Ruche Excellence une seule fois (première société non-bootstrap
-    // dont le nom contient "Ruche").
     const p = await this.prisma.parametresEntreprise.findFirst({
       where: { nom: { contains: "Ruche", mode: "insensitive" } },
       select: { id: true, nom: true },
@@ -65,30 +70,29 @@ export class EmailPollerService implements OnModuleDestroy, OnModuleInit {
     return !!(process.env.SMTP_USER && process.env.SMTP_PASS);
   }
 
-  async onModuleDestroy() { /* connexions IMAP fermées après chaque poll */ }
-
   @Cron("* * * * *")
   async pollInbox() {
-    if (!this.actif) return;
-    if (this.polling) return; // évite les invocations concurrentes
+    if (!this.actif || this.polling) return;
     this.polling = true;
-    const host = process.env.IMAP_HOST ?? "imap.hostinger.com";
-    const port = Number(process.env.IMAP_PORT ?? 993);
-    const user = process.env.SMTP_USER!;
-    const pass = process.env.SMTP_PASS!;
-
-    const client = new ImapFlow({ host, port, secure: true, auth: { user, pass }, logger: false });
+    const client = new ImapFlow({
+      host: process.env.IMAP_HOST ?? "imap.hostinger.com", port: Number(process.env.IMAP_PORT ?? 993), secure: true,
+      auth: { user: process.env.SMTP_USER!, pass: process.env.SMTP_PASS! }, logger: false,
+    });
     try {
       await client.connect();
       const lock = await client.getMailboxLock("INBOX");
       try {
-        const messages = client.fetch({ seen: false }, { envelope: true, source: true });
-        for await (const msg of messages as AsyncIterable<any>) {
-          if (this.processedUids.has(msg.uid)) continue; // déjà traité cette session
-          // Marquer \Seen avant le traitement : traiterMessage peut durer >1 min (ARIANA + PDF).
-          await client.messageFlagsAdd({ uid: msg.uid }, ["\\Seen"], { uid: true });
-          this.processedUids.add(msg.uid);
-          await this.traiterMessage(msg);
+        // Lecture complète d'abord, traitement ensuite : on ne garde pas le flux IMAP
+        // ouvert pendant les réponses ARIANA (plusieurs dizaines de secondes).
+        const lus: { uid: number; source: Buffer }[] = [];
+        for await (const msg of client.fetch({ seen: false }, { source: true }) as AsyncIterable<{ uid: number; source: Buffer }>) {
+          lus.push({ uid: msg.uid, source: msg.source });
+        }
+        for (const m of lus) {
+          await client.messageFlagsAdd({ uid: m.uid }, ["\\Seen"], { uid: true });
+          // Contexte société : création des Communications, logo/couleurs des emails, outils ARIANA.
+          await TenantContext.run(this.societeId, () => this.traiterMessage(m.source)).catch((err) =>
+            this.logger.error("Traitement email échoué", err instanceof Error ? err.stack : String(err)));
         }
       } finally {
         lock.release();
@@ -102,119 +106,90 @@ export class EmailPollerService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async traiterMessage(msg: any) {
-    const from = msg.envelope.from?.[0];
-    const fromAddress = from?.address ?? "";
-    const fromNom = from?.name || fromAddress;
-    const subject = msg.envelope.subject ?? "(sans objet)";
-    const date = msg.envelope.date ?? new Date();
-    const texte = this.extraireTexte(msg.source);
-
+  private async traiterMessage(source: Buffer) {
+    const mail: ParsedMail = await simpleParser(source);
+    const from = mail.from?.value[0];
+    const fromAddress = (from?.address ?? "").toLowerCase();
     if (!fromAddress) return;
+    const fromNom = from?.name || fromAddress;
+    const subject = mail.subject ?? "(sans objet)";
+    const date = mail.date ?? new Date();
+    const texte = (mail.text ?? "").trim().slice(0, 20000);
+    const messageId = mail.messageId ?? `${fromAddress}|${subject}|${date.toISOString()}`;
 
-    // Déduplication robuste : si un email entrant (même adresse + même sujet) a déjà été
-    // enregistré en DB dans les dernières 24h, on l'ignore même si \Seen n'a pas persisté.
-    const dejaTraite = await this.prisma.communication.findFirst({
-      where: {
-        destinataireContact: fromAddress,
-        objet: subject,
-        statut: "Reçu",
-        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-        ...(this.societeId ? { societeId: this.societeId } : {}),
-      },
-    });
-    if (dejaTraite) {
-      this.logger.log(`Email doublon ignoré (fromAddress=${fromAddress}, sujet="${subject}")`);
+    // Déduplication : même Message-ID déjà enregistré (\Seen pas toujours persisté par Hostinger).
+    if (await this.prisma.communication.findFirst({ where: { messageId }, select: { id: true } })) {
+      this.logger.log(`Email déjà traité ignoré (${messageId})`);
       return;
     }
+    // Lignes antérieures sans Message-ID : même expéditeur + objet dans les 24h.
+    if (await this.prisma.communication.findFirst({
+      where: { messageId: null, destinataireContact: fromAddress, objet: subject, statut: "Reçu", createdAt: { gte: new Date(Date.now() - 86_400_000) } },
+      select: { id: true },
+    })) return;
 
-    // Réponse à une communication sortante récente → enregistrer comme retour, pas de réponse ARIANA
-    const limite = new Date(Date.now() - 72 * 60 * 60 * 1000);
+    const pieces = await Promise.all(
+      mail.attachments.filter((a) => a.contentDisposition !== "inline" || !a.cid).map((a) => stocker(a.filename ?? "piece-jointe", a.content)),
+    );
+
+    // Réponse à un envoi récent : rattachée comme retour sur le message sortant.
     const sortante = await this.prisma.communication.findFirst({
-      where: { destinataireContact: fromAddress, canal: "Email", createdAt: { gte: limite }, statut: "Envoyé" },
+      where: { destinataireContact: { contains: fromAddress, mode: "insensitive" }, canal: "Email", createdAt: { gte: new Date(Date.now() - 72 * 3_600_000) }, statut: "Envoyé", retour: null },
       orderBy: { createdAt: "desc" },
     });
-
-    if (sortante && !sortante.retour) {
-      // Rattacher comme retour sur le fil sortant — mais continuer le traitement
-      // pour créer une Communication entrante et laisser ARIANA répondre.
-      await this.prisma.communication.update({ where: { id: sortante.id }, data: { retour: texte, retourDate: date } });
+    if (sortante) {
+      await this.prisma.communication.update({ where: { id: sortante.id }, data: { retour: texte.slice(0, 2000), retourDate: date } });
       if (sortante.auteurId) {
         await this.notifications.create("Gestionnaire", sortante.auteurId, `Réponse email de ${fromNom} : ${texte.slice(0, 100)}`).catch(() => undefined);
       }
-      this.logger.log(`Email retour rattaché à communication ${sortante.id}`);
     }
 
-    // Nouveau message entrant — ARIANA prend la main
-    // societeId explicite : le poller tourne hors requête HTTP, TenantContext est vide.
-    const commId = randomUUID();
+    const html = typeof mail.html === "string" ? mail.html : null;
     await this.prisma.communication.create({
       data: {
-        id: commId, canal: "Email", destinataireType: "Prospect",
-        destinataireNom: fromNom, destinataireContact: fromAddress,
-        objet: subject, contenu: texte, statut: "Reçu", declencheur: "Webhook",
-        ...(this.societeId ? { societeId: this.societeId } : {}),
+        id: randomUUID(), canal: "Email", destinataireType: "Prospect",
+        destinataireNom: fromNom, destinataireContact: fromAddress, cc: adresses(mail.cc) || null,
+        objet: subject, contenu: texte || "(message vide)", contenuHtml: html,
+        piecesJointes: pieces, pieceJointe: pieces[0] ?? null,
+        statut: "Reçu", declencheur: "Webhook", messageId, lu: false, createdAt: date,
       },
     });
-    this.logger.log(`Email entrant enregistré (id=${commId}) depuis ${fromAddress}`);
+    this.logger.log(`Email entrant enregistré depuis ${fromAddress} (${pieces.length} PJ)`);
 
-    // ARIANA répond uniquement pour La Ruche Excellence (societeId résolu au démarrage)
-    if (!this.societeId || !this.agentIa) return;
-    // Lire les CC paramétrés en DB (peut avoir changé depuis le démarrage)
-    const params = await this.prisma.parametresEntreprise.findUnique({ where: { id: this.societeId }, select: { arianaEmailCc: true } });
-    const cc = params?.arianaEmailCc?.length ? params.arianaEmailCc : [ARIANA_EMAIL_CC_DEFAULT];
-    // TenantContext.run : tous les outils ARIANA (génération PDF, stats…)
-    // voient le bon societeId → bon logo/branding sur les documents générés.
-    const reponseAriana = await TenantContext.run(this.societeId, () =>
-      this.agentIa!.repondreAEmail(fromAddress, fromNom, subject, texte, this.societeId)
-    ).catch((err) => {
-      this.logger.error("repondreAEmail échoué", err instanceof Error ? err.message : String(err));
-      return null;
-    });
-    if (reponseAriana?.texte) {
-      const sujetReponse = subject.startsWith("Re:") ? subject : `Re: ${subject}`;
-      const ok = await this.email.envoyer(fromAddress, sujetReponse, reponseAriana.texte, "Ariana — MEDASSUR+", reponseAriana.attachments, cc);
-      const statut = ok ? "Envoyé" : "Simulé";
-      await this.prisma.communication.create({
-        data: {
-          id: randomUUID(), canal: "Email", destinataireType: "Prospect",
-          destinataireNom: fromNom, destinataireContact: fromAddress,
-          objet: sujetReponse, contenu: reponseAriana.texte, statut, declencheur: "ARIANA",
-          ...(this.societeId ? { societeId: this.societeId } : {}),
-        },
+    // Jamais de réponse automatique à soi-même ni à un répondeur : évite les boucles d'emails.
+    const auto = String(mail.headers.get("auto-submitted") ?? "no").toLowerCase() !== "no"
+      || /mailer-daemon|no-?reply|postmaster/.test(fromAddress)
+      || fromAddress === process.env.SMTP_USER?.toLowerCase();
+    let reponduParAriana = false;
+    if (!auto && this.societeId && this.agentIa) {
+      const params = await this.prisma.parametresEntreprise.findUnique({ where: { id: this.societeId }, select: { arianaEmailCc: true } });
+      const cc = params?.arianaEmailCc?.length ? params.arianaEmailCc : [ARIANA_EMAIL_CC_DEFAULT];
+      const reponse = await this.agentIa.repondreAEmail(fromAddress, fromNom, subject, texte, this.societeId).catch((err) => {
+        this.logger.error("repondreAEmail échoué", err instanceof Error ? err.message : String(err));
+        return null;
       });
-      this.logger.log(`ARIANA a répondu à ${fromAddress} (statut=${statut}, piecesJointes=${reponseAriana.attachments.length})`);
+      if (reponse?.texte) {
+        const sujetReponse = /^re\s*:/i.test(subject) ? subject : `Re: ${subject}`;
+        const ok = await this.email.envoyer(fromAddress, sujetReponse, reponse.texte, "Ariana — MEDASSUR+", reponse.attachments, cc);
+        const piecesAriana = await Promise.all(reponse.attachments.map((a) => stocker(a.filename, a.content)));
+        await this.prisma.communication.create({
+          data: {
+            id: randomUUID(), canal: "Email", destinataireType: "Prospect",
+            destinataireNom: fromNom, destinataireContact: fromAddress, cc: cc.join("; "),
+            objet: sujetReponse, contenu: reponse.texte, statut: ok ? "Envoyé" : "Simulé", declencheur: "ARIANA",
+            piecesJointes: piecesAriana, pieceJointe: piecesAriana[0] ?? null,
+          },
+        });
+        reponduParAriana = true;
+        this.logger.log(`ARIANA a répondu à ${fromAddress} (ok=${ok}, PJ=${piecesAriana.length})`);
+      }
     }
 
-    // Notification interne
     const gestionnaire = await this.prisma.user.findFirst({ where: { roleId: { startsWith: "gestionnaire_" } }, select: { id: true } });
     if (gestionnaire) {
       await this.notifications.create("Gestionnaire", gestionnaire.id,
-        `Email entrant de ${fromNom} <${fromAddress}>${reponseAriana?.texte ? " — ARIANA a répondu" : ""} : ${subject}`
+        `Email entrant de ${fromNom} <${fromAddress}>${reponduParAriana ? " — ARIANA a répondu" : ""} : ${subject}`,
       ).catch(() => undefined);
     }
-  }
-
-  private extraireTexte(source?: Buffer): string {
-    if (!source) return "";
-    const raw = source.toString("utf8");
-    const idx = raw.toLowerCase().indexOf("content-type: text/plain");
-    if (idx >= 0) {
-      const apres = raw.slice(idx);
-      const debut = apres.indexOf("\r\n\r\n");
-      if (debut >= 0) {
-        const corps = apres.slice(debut + 4);
-        const fin = corps.search(/\r\n--/);
-        const texte = fin >= 0 ? corps.slice(0, fin) : corps;
-        return texte.replace(/\r\n/g, "\n").trim().slice(0, 2000);
-      }
-    }
-    return raw
-      .split(/\r?\n/)
-      .filter((l) => l && !l.startsWith("--") && !l.match(/^[A-Za-z-]+:/))
-      .join(" ")
-      .trim()
-      .slice(0, 500);
   }
 }
