@@ -30,6 +30,70 @@ const SELECT_RESEAU = {
   latitude: true, longitude: true,
 } as const;
 
+// ── Détection de doublons de prestataires ─────────────────────────────
+const ABREVIATIONS: Record<string, string> = {
+  ste: "sainte", st: "saint", med: "medical", medic: "medical", chir: "chirurgical", chirur: "chirurgical", dr: "docteur",
+  cab: "cabinet", poly: "polyclinique", labo: "laboratoire", dent: "dentaire", kine: "kinesitherapie", pharma: "pharmacie",
+  pog: "port gentil", lbv: "libreville", hop: "hopital", inst: "instruction", cent: "centre",
+};
+const MOTS_GENERIQUES = new Set((
+  "clinique polyclinique pharmacie cabinet centre center medical medicale medicaux medico chirurgical chirurgicale chururigicale "
+  + "hopital hospitalier universitaire regional laboratoire analyses dentaire kinesitherapie ophtalmologie optique optic optical "
+  + "lunette lunettes vision depot pharmaceutique soins sante structure groupe institut imagerie diagnostic docteur nouvelle "
+  + "central centrale departemental social medecins medecine generale "
+  + "du de la le les des l d sa sarl et en au aux mr mme saint sainte dr "
+  + "libreville port gentil akanda owendo ntoum franceville moanda oyem lambarene mouila tchibanga makokou gabon"
+).split(" "));
+
+export function categorieEtablissement(nom: string): string {
+  const n = sansAccents(nom);
+  if (/pharmac|depot/.test(n)) return "pharmacie";
+  if (/labo|analyse/.test(n)) return "laboratoire";
+  if (/optiq|optic|lunette|vision/.test(n)) return "optique";
+  return "soins";
+}
+function sansAccents(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+export function motsDistinctifs(nom: string): string[] {
+  return sansAccents(nom).replace(/[^a-z0-9]+/g, " ").trim().split(" ")
+    .flatMap((m) => (ABREVIATIONS[m] ?? m).split(" "))
+    .filter((m) => m.length > 1 && !MOTS_GENERIQUES.has(m));
+}
+// Égaux, ou une seule lettre d'écart pour un mot d'au moins 5 lettres (AVICENE / AVICENNE).
+export function motsProches(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.min(a.length, b.length) < 5 || Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, ecarts = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++ecarts > 1) return false;
+    if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+  }
+  return ecarts + (a.length - i) + (b.length - j) <= 1;
+}
+
+// Groupes de fiches probablement identiques : même catégorie d'établissement et mêmes
+// mots distinctifs (un mot de plus ou de moins toléré, ou mots collés : « EDEL WEISS »).
+export function grouperDoublons<T extends { id: string; nom: string }>(fiches: T[]): T[][] {
+  const f = fiches.map((x) => ({ x, cat: categorieEtablissement(x.nom), mots: motsDistinctifs(x.nom) }));
+  const parent = new Map(f.map((e) => [e.x.id, e.x.id]));
+  const racine = (id: string): string => (parent.get(id) === id ? id : racine(parent.get(id)!));
+  for (let i = 0; i < f.length; i++) {
+    for (let j = i + 1; j < f.length; j++) {
+      const a = f[i], b = f[j];
+      if (a.cat !== b.cat || !a.mots.length || !b.mots.length) continue;
+      const [petit, grand] = a.mots.length <= b.mots.length ? [a.mots, b.mots] : [b.mots, a.mots];
+      const colles = petit.join("").length >= 6 && motsProches(petit.join(""), grand.join(""));
+      const inclus = grand.length - petit.length <= 2 && petit.some((m) => m.length >= 4) && petit.every((m) => grand.some((n) => motsProches(m, n)));
+      if (colles || inclus) parent.set(racine(a.x.id), racine(b.x.id));
+    }
+  }
+  const groupes = new Map<string, T[]>();
+  for (const e of f) groupes.set(racine(e.x.id), [...(groupes.get(racine(e.x.id)) ?? []), e.x]);
+  return [...groupes.values()].filter((g) => g.length > 1);
+}
+
 function parseDateFr(s: string): number {
   const [d, m, y] = s.split("/").map(Number);
   return d && m && y ? new Date(y, m - 1, d).getTime() : 0;
@@ -98,70 +162,112 @@ export class PrestatairesService {
   // absorbée puis supprimée.  Toutes les clés étrangères sont redirigées
   // dans une transaction atomique avant la suppression.
   async fusionner(id: string, doublonId: string) {
-    if (id === doublonId) throw new BadRequestException("Impossible de fusionner un prestataire avec lui-même.");
-    const [survivant, doublon] = await Promise.all([this.findOne(id), this.findOne(doublonId)]);
+    const r = await this.fusionnerPlusieurs(id, [doublonId]);
+    return { survivantId: id, nomSurvivant: r.nom, doublonAbsorbe: r.absorbes[0] };
+  }
+
+  // Fusion de doublons : tout ce qui appartient aux fiches absorbées passe sur la
+  // fiche conservée, puis les fiches absorbées sont supprimées (transaction unique).
+  async fusionnerPlusieurs(conserverId: string, absorberIds: string[], options: { nom?: string; ville?: string } = {}) {
+    const ids = [...new Set(absorberIds)].filter((x) => x !== conserverId);
+    if (!ids.length) throw new BadRequestException("Choisissez au moins un doublon à fusionner.");
+    const conserve = await this.findOne(conserverId);
+    const absorbes = await this.prisma.prestataire.findMany({ where: { id: { in: ids } } });
+    if (absorbes.length !== ids.length) throw new NotFoundException("Un des prestataires à fusionner est introuvable.");
+    const nomFinal = options.nom?.trim() || conserve.nom;
+
+    // Champs vides de la fiche conservée complétés depuis les doublons (jamais écrasés).
+    const CHAMPS = ["type", "secteur", "titre", "specialite", "pays", "province", "ville", "telephone", "adresse", "statutConvention",
+      "dateConventionnement", "codeEtablissement", "delaiPaiementMoyen", "scoreQualite", "latitude", "longitude", "tpsDateEffet", "tpsDateArret"] as const;
+    const complements: Record<string, unknown> = {};
+    for (const champ of CHAMPS) {
+      if (conserve[champ] !== null && conserve[champ] !== "") continue;
+      const source = absorbes.find((a) => a[champ] !== null && a[champ] !== "");
+      if (source) complements[champ] = source[champ];
+    }
+    if (options.ville?.trim()) complements.ville = options.ville.trim();
+    const tous = [conserve, ...absorbes];
+    // Compteur de numérotation des factures : le plus élevé, pour ne jamais réémettre un numéro.
+    const compteurFacture = Math.max(...tous.map((p) => p.compteurFacture));
+    const tpsAssujetti = tous.some((p) => p.tpsAssujetti);
+
+    const bilan: Record<string, number> = {};
+    const compter = (cle: string, r: { count: number }) => { if (r.count) bilan[cle] = (bilan[cle] ?? 0) + r.count; };
+    const deplacer = { where: { prestataireId: { in: ids } }, data: { prestataireId: conserverId } };
 
     await this.prisma.$transaction(async (tx) => {
-      // 1. Enregistrer le nom du doublon comme alias du survivant
-      //    (clé unique = societeId + nomOrigine, pas prestataireId)
-      const dejaAlias = await tx.prestataireAlias.findFirst({
-        where: { nomOrigine: doublon.nom, prestataireId: id },
-      });
-      if (!dejaAlias) {
-        await tx.prestataireAlias.create({ data: { nomOrigine: doublon.nom, prestataireId: id } });
+      compter("factures", await tx.facture.updateMany(deplacer));
+      compter("prestations", await tx.priseEnCharge.updateMany(deplacer));
+      compter("ententes préalables", await tx.accordPrealable.updateMany(deplacer));
+      compter("règlements", await tx.bordereauReglement.updateMany(deplacer));
+      compter("lettres chèques", await tx.lettreCheque.updateMany(deplacer));
+      compter("relevés", await tx.relevePrestataire.updateMany(deplacer));
+      compter("documents GED", await tx.gedDocument.updateMany(deplacer));
+      compter("courriers", await tx.courrier.updateMany(deplacer));
+      compter("rendez-vous", await tx.rendezVous.updateMany(deplacer));
+      compter("bons traités", await tx.prescriptionLigneTraitement.updateMany(deplacer));
+      compter("comptes portail", await tx.user.updateMany(deplacer));
+      compter("paiements Mobile Money", await tx.transaction.updateMany(deplacer));
+
+      // Nom recopié en texte sur les prestations et ententes, et dans les factures en attente d'import.
+      await tx.priseEnCharge.updateMany({ where: { prestataireId: conserverId }, data: { prestataire: nomFinal } });
+      await tx.accordPrealable.updateMany({ where: { prestataireId: conserverId }, data: { prestataire: nomFinal } });
+      await tx.factureEnAttente.updateMany({ where: { prestataire: { in: absorbes.map((a) => a.nom) } }, data: { prestataire: nomFinal } });
+
+      // Grille tarifaire : les actes absents de la fiche conservée sont repris, les autres ignorés.
+      const actesConserves = new Set((await tx.grilleTarifaire.findMany({ where: { prestataireId: conserverId }, select: { acte: true } })).map((g) => g.acte));
+      for (const g of await tx.grilleTarifaire.findMany({ where: { prestataireId: { in: ids } } })) {
+        if (actesConserves.has(g.acte)) continue;
+        actesConserves.add(g.acte);
+        await tx.grilleTarifaire.update({ where: { id: g.id }, data: { prestataireId: conserverId } });
       }
 
-      // 2. Récupérer et migrer les aliases du doublon vers le survivant
-      const aliases = await tx.prestataireAlias.findMany({ where: { prestataireId: doublonId } });
-      for (const a of aliases) {
-        const existe = await tx.prestataireAlias.findFirst({
-          where: { nomOrigine: a.nomOrigine, prestataireId: id },
-        });
-        if (!existe) {
-          await tx.prestataireAlias.create({ data: { nomOrigine: a.nomOrigine, prestataireId: id, societeId: a.societeId } });
-        }
+      // Liens uniques (médecin ↔ structure, accès multi-sociétés) : recréés seulement s'ils manquent.
+      for (const l of await tx.medecinPrestataire.findMany({ where: { prestataireId: { in: ids } } })) {
+        const existe = await tx.medecinPrestataire.findUnique({ where: { medecinId_prestataireId: { medecinId: l.medecinId, prestataireId: conserverId } } });
+        if (!existe) await tx.medecinPrestataire.create({ data: { medecinId: l.medecinId, prestataireId: conserverId } });
       }
-      await tx.prestataireAlias.deleteMany({ where: { prestataireId: doublonId } });
-
-      // 3. Tables avec clé étrangère simple — réattribution directe
-      await tx.facture.updateMany({ where: { prestataireId: doublonId }, data: { prestataireId: id } });
-      await tx.priseEnCharge.updateMany({ where: { prestataireId: doublonId }, data: { prestataireId: id } });
-      await tx.accordPrealable.updateMany({ where: { prestataireId: doublonId }, data: { prestataireId: id } });
-      await tx.gedDocument.updateMany({ where: { prestataireId: doublonId }, data: { prestataireId: id } });
-      await tx.user.updateMany({ where: { prestataireId: doublonId }, data: { prestataireId: id } });
-
-      // 4. PortailSocieteAcces — unique (prestataireId, societeId) : insérer
-      //    seulement si la paire n'existe pas déjà chez le survivant.
-      const acces = await tx.portailSocieteAcces.findMany({ where: { prestataireId: doublonId } });
-      for (const a of acces) {
+      for (const a of await tx.portailSocieteAcces.findMany({ where: { prestataireId: { in: ids } } })) {
         await tx.portailSocieteAcces.upsert({
-          where: { prestataireId_societeId: { prestataireId: id, societeId: a.societeId } },
-          create: { prestataireId: id, societeId: a.societeId },
-          update: {},
+          where: { prestataireId_societeId: { prestataireId: conserverId, societeId: a.societeId } },
+          create: { prestataireId: conserverId, societeId: a.societeId }, update: {},
         });
       }
-      await tx.portailSocieteAcces.deleteMany({ where: { prestataireId: doublonId } });
 
-      // 5. MedecinPrestataire — PK composite (medecinId, prestataireId)
-      const liens = await tx.medecinPrestataire.findMany({ where: { prestataireId: doublonId } });
-      for (const l of liens) {
-        const existe = await tx.medecinPrestataire.findUnique({
-          where: { medecinId_prestataireId: { medecinId: l.medecinId, prestataireId: id } },
-        });
-        if (!existe) await tx.medecinPrestataire.create({ data: { medecinId: l.medecinId, prestataireId: id } });
+      // Alias d'import : anciens noms → fiche conservée (les imports futurs la retrouveront).
+      const nomsAlias = new Set([...absorbes.map((a) => a.nom), ...(nomFinal !== conserve.nom ? [conserve.nom] : [])]);
+      for (const a of await tx.prestataireAlias.findMany({ where: { prestataireId: { in: ids } } })) nomsAlias.add(a.nomOrigine);
+      await tx.prestataireAlias.deleteMany({ where: { prestataireId: { in: ids } } });
+      for (const nom of nomsAlias) {
+        if (nom === nomFinal) continue;
+        const existe = await tx.prestataireAlias.findFirst({ where: { nomOrigine: nom } });
+        if (existe) await tx.prestataireAlias.update({ where: { id: existe.id }, data: { prestataireId: conserverId } });
+        else await tx.prestataireAlias.create({ data: { nomOrigine: nom, prestataireId: conserverId } });
       }
-      await tx.medecinPrestataire.deleteMany({ where: { prestataireId: doublonId } });
 
-      // 6. Tables optionnelles (nullable prestataireId)
-      // Transaction, PrescriptionLigneDelivraison si présentes dans le schéma
-      try { await (tx as any).transaction?.updateMany({ where: { prestataireId: doublonId }, data: { prestataireId: id } }); } catch { /* absent */ }
-      try { await (tx as any).prescriptionLigneDelivraison?.updateMany({ where: { prestataireId: doublonId }, data: { prestataireId: id } }); } catch { /* absent */ }
+      await tx.prestataire.update({
+        where: { id: conserverId },
+        data: { ...complements, nom: nomFinal, compteurFacture, tpsAssujetti },
+      });
+      // Les liens restants (cascade) disparaissent avec les fiches absorbées.
+      await tx.prestataire.deleteMany({ where: { id: { in: ids } } });
+    }, { timeout: 120_000 });
 
-      // 7. Supprimer le doublon
-      await tx.prestataire.delete({ where: { id: doublonId } });
+    return { id: conserverId, nom: nomFinal, absorbes: absorbes.map((a) => a.nom), bilan };
+  }
+
+  // Doublons probables : même catégorie d'établissement et mêmes mots distinctifs
+  // (fautes de frappe d'une lettre tolérées, mots génériques et villes ignorés).
+  async doublons() {
+    const ps = await this.prisma.prestataire.findMany({
+      select: { id: true, nom: true, ville: true, type: true, telephone: true, adresse: true, _count: { select: { factures: true, prisesEnCharge: true, bordereaux: true } } },
     });
-
-    return { survivantId: id, nomSurvivant: survivant.nom, doublonAbsorbe: doublon.nom };
+    return grouperDoublons(ps)
+      .map((g) => g
+        .map(({ _count, ...f }) => ({ ...f, nbFactures: _count.factures, nbPrestations: _count.prisesEnCharge, nbReglements: _count.bordereaux }))
+        // En tête : le nom le plus complet (règle demandée), puis le plus d'activité.
+        .sort((x, y) => y.nom.trim().length - x.nom.trim().length || y.nbFactures - x.nbFactures))
+      .sort((a, b) => b.reduce((s, x) => s + x.nbFactures, 0) - a.reduce((s, x) => s + x.nbFactures, 0));
   }
 
   // Comptes portail génériques par poste (2026-09) — voir demande

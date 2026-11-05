@@ -1,4 +1,4 @@
-import { http } from "@/lib/http";
+import { http, invaliderCache } from "@/lib/http";
 import { toNumber } from "@/lib/decimal";
 import type { Prestataire } from "@/types/prestataires";
 
@@ -86,6 +86,20 @@ export async function fusionnerPrestataire(
   doublonId: string,
 ): Promise<{ survivantId: string; nomSurvivant: string; doublonAbsorbe: string }> {
   return http.post(`/prestataires/${survivantId}/fusionner`, { doublonId });
+}
+
+export interface FicheDoublon {
+  id: string; nom: string; ville: string | null; type: string | null; telephone: string | null; adresse: string | null;
+  nbFactures: number; nbPrestations: number; nbReglements: number;
+}
+
+export async function getDoublonsPrestataires(): Promise<FicheDoublon[][]> {
+  invaliderCache("/prestataires");
+  return http.get<FicheDoublon[][]>("/prestataires/doublons");
+}
+
+export async function fusionnerPrestataires(payload: { conserverId: string; absorberIds: string[]; nom?: string; ville?: string }): Promise<{ id: string; nom: string; absorbes: string[]; bilan: Record<string, number> }> {
+  return http.post("/prestataires/fusion", payload);
 }
 
 export async function suspendrePrestataire(id: string, motif: string): Promise<Prestataire> {

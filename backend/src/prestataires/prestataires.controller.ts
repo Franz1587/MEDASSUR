@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { PrestatairesService } from "./prestataires.service";
 import { CreatePrestataireDto } from "./dto/create-prestataire.dto";
@@ -37,6 +37,18 @@ export class PrestatairesController {
   @Post("comptes-portail-manquants")
   creerComptesPortailManquants() {
     return this.prestatairesService.creerComptesPortailManquants();
+  }
+
+  // Doublons probables et fusion groupée — déclarées AVANT ":id".
+  @Get("doublons")
+  doublons() {
+    return this.prestatairesService.doublons();
+  }
+
+  @Post("fusion")
+  fusion(@Body() body: { conserverId: string; absorberIds: string[]; nom?: string; ville?: string }) {
+    if (!body?.conserverId || !Array.isArray(body.absorberIds)) throw new BadRequestException("conserverId et absorberIds requis.");
+    return this.prestatairesService.fusionnerPlusieurs(body.conserverId, body.absorberIds, { nom: body.nom, ville: body.ville });
   }
 
   @Get(":id")

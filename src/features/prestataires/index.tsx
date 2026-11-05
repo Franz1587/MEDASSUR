@@ -17,6 +17,8 @@ import {
 } from "@/services/prestataires.service";
 import { openFichePrestataire, openReseauSoins } from "@/services/documents.service";
 import PrestataireForm from "./PrestataireForm";
+import { DoublonsPrestataires } from "./DoublonsPrestataires";
+import { invaliderCache } from "@/lib/http";
 import { PortailTab } from "./PortailTab";
 import type { Prestataire } from "@/types/prestataires";
 
@@ -187,6 +189,7 @@ export default function PrestatairesView() {
     setSelected(updated);
   };
 
+  const [showDoublons, setShowDoublons] = useState(false);
   const [showFusion, setShowFusion] = useState(false);
   const [doublonId, setDoublonId] = useState<string | null>(null);
   const [fusionEnCours, setFusionEnCours] = useState(false);
@@ -261,6 +264,7 @@ export default function PrestatairesView() {
               {creationEnCours ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
               Créer les comptes portail manquants
             </Btn>
+            <Btn variant="secondary" onClick={() => setShowDoublons(true)}><Merge className="w-4 h-4" />Doublons</Btn>
             <Btn variant="primary" onClick={() => setShowCreate(true)}><Plus className="w-4 h-4" />Nouveau prestataire</Btn>
           </>
         }
@@ -614,6 +618,18 @@ export default function PrestatairesView() {
 
       {showCreate && <PrestataireForm onClose={() => setShowCreate(false)} onSaved={handleSaved} />}
       {showEdit && selected && <PrestataireForm prestataire={selected} onClose={() => setShowEdit(false)} onSaved={handleSaved} />}
+      {showDoublons && (
+        <DoublonsPrestataires
+          prestataires={prestataires}
+          onFerme={() => setShowDoublons(false)}
+          onFusionne={(ids) => {
+            if (selected && ids.includes(selected.id)) setSelected(null);
+            // La fiche conservée a pu changer de nom ou de ville : liste relue.
+            invaliderCache("/prestataires");
+            getPrestataires().then(setPrestataires);
+          }}
+        />
+      )}
     </div>
   );
 }
