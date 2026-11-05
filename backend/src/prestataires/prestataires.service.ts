@@ -193,21 +193,23 @@ export class PrestatairesService {
 
     const bilan: Record<string, number> = {};
     const compter = (cle: string, r: { count: number }) => { if (r.count) bilan[cle] = (bilan[cle] ?? 0) + r.count; };
-    const deplacer = { where: { prestataireId: { in: ids } }, data: { prestataireId: conserverId } };
+    // Objet neuf à chaque appel : le cloisonnement société ajoute societeId au where SUR PLACE,
+    // ce qui casserait les tables sans cette colonne (bons traités, transactions).
+    const d = () => ({ where: { prestataireId: { in: ids } }, data: { prestataireId: conserverId } });
 
     await this.prisma.$transaction(async (tx) => {
-      compter("factures", await tx.facture.updateMany(deplacer));
-      compter("prestations", await tx.priseEnCharge.updateMany(deplacer));
-      compter("ententes préalables", await tx.accordPrealable.updateMany(deplacer));
-      compter("règlements", await tx.bordereauReglement.updateMany(deplacer));
-      compter("lettres chèques", await tx.lettreCheque.updateMany(deplacer));
-      compter("relevés", await tx.relevePrestataire.updateMany(deplacer));
-      compter("documents GED", await tx.gedDocument.updateMany(deplacer));
-      compter("courriers", await tx.courrier.updateMany(deplacer));
-      compter("rendez-vous", await tx.rendezVous.updateMany(deplacer));
-      compter("bons traités", await tx.prescriptionLigneTraitement.updateMany(deplacer));
-      compter("comptes portail", await tx.user.updateMany(deplacer));
-      compter("paiements Mobile Money", await tx.transaction.updateMany(deplacer));
+      compter("factures", await tx.facture.updateMany(d()));
+      compter("prestations", await tx.priseEnCharge.updateMany(d()));
+      compter("ententes préalables", await tx.accordPrealable.updateMany(d()));
+      compter("règlements", await tx.bordereauReglement.updateMany(d()));
+      compter("lettres chèques", await tx.lettreCheque.updateMany(d()));
+      compter("relevés", await tx.relevePrestataire.updateMany(d()));
+      compter("documents GED", await tx.gedDocument.updateMany(d()));
+      compter("courriers", await tx.courrier.updateMany(d()));
+      compter("rendez-vous", await tx.rendezVous.updateMany(d()));
+      compter("bons traités", await tx.prescriptionLigneTraitement.updateMany(d()));
+      compter("comptes portail", await tx.user.updateMany(d()));
+      compter("paiements Mobile Money", await tx.transaction.updateMany(d()));
 
       // Nom recopié en texte sur les prestations et ententes, et dans les factures en attente d'import.
       await tx.priseEnCharge.updateMany({ where: { prestataireId: conserverId }, data: { prestataire: nomFinal } });
