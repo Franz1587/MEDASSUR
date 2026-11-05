@@ -126,7 +126,14 @@ export class PrestatairesService {
   }
 
   async update(id: string, dto: UpdatePrestataireDto) {
-    await this.findOne(id);
+    const avant = await this.findOne(id);
+    // Renommage : l'ancien nom devient un alias, pour que les imports (ARIANA compris)
+    // qui le portent encore rattachent leurs factures à cette fiche.
+    if (dto.nom?.trim() && dto.nom.trim() !== avant.nom) {
+      const existe = await this.prisma.prestataireAlias.findFirst({ where: { nomOrigine: avant.nom } });
+      if (existe) await this.prisma.prestataireAlias.update({ where: { id: existe.id }, data: { prestataireId: id } });
+      else await this.prisma.prestataireAlias.create({ data: { nomOrigine: avant.nom, prestataireId: id } });
+    }
     return this.prisma.prestataire.update({ where: { id }, data: dto, include: INCLUDE_GRILLES });
   }
 
