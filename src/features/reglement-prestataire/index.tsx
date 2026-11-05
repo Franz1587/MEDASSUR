@@ -277,9 +277,16 @@ export default function ReglementPrestataireView() {
                   <Btn variant="ghost" onClick={() => openHistoriqueReglements(filtresHistorique)}>
                     <Printer className="w-4 h-4" />Imprimer l'état
                   </Btn>
-                  <ExportMenu label="Exporter l'historique" aGauche contenus={[{ id: "historique", label: "Historique ligne par ligne" }]}
-                    aide="Selon les critères ci-dessus, toutes pages confondues."
-                    onExporter={(_c, format) => exporterHistoriqueReglements(filtresHistorique, format)} />
+                  <ExportMenu label="Exporter l'historique" aGauche
+                    contenus={[
+                      { id: "historique", label: "Historique ligne par ligne", description: "Exactement les lignes affichées ci-dessous (tous critères)." },
+                      { id: "lignes", label: "Détail des règlements", description: "Une ligne par prestation réglée : facture, assuré, date de soin, frais réel, net à payer." },
+                      { id: "reglements", label: "Liste des règlements", description: "Une ligne par règlement : période, montants, statut, paiement." },
+                    ]}
+                    aide={`Prestataire${histPrestataireId ? ` : ${prestataires.find((p) => p.id === histPrestataireId)?.nom ?? ""}` : "s : tous"}${histDu || histAu ? ` · période ${histDu || "…"} au ${histAu || "…"}` : ""}.`}
+                    onExporter={(contenu, format) => contenu === "historique"
+                      ? exporterHistoriqueReglements(filtresHistorique, format)
+                      : exporterReglements({ prestataireId: histPrestataireId || undefined, du: histDu || undefined, au: histAu || undefined }, contenu, format)} />
                 </>
               )}
             </div>

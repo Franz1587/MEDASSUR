@@ -3605,10 +3605,10 @@ export class DocumentsService {
 
     doc.font("Helvetica").fontSize(8);
     for (const l of lignes) {
-      const rowH = 16;
+      const valeurs = [l.reference, l.dateReception, String(l.nbLignes), fmt(l.net)];
+      const rowH = Math.max(16, ...valeurs.map((v, i) => doc.heightOfString(v, { width: cols[i].w - 8 }) + 8));
       if (y + rowH > doc.page.height - 100) { doc.addPage(); y = 40; }
       cx = left;
-      const valeurs = [l.reference, l.dateReception, String(l.nbLignes), fmt(l.net)];
       for (let i = 0; i < cols.length; i++) { doc.text(valeurs[i], cx + 4, y + 4, { width: cols[i].w - 8, align: i === 0 ? "left" : "right" }); cx += cols[i].w; }
       doc.moveTo(left, y + rowH).lineTo(right, y + rowH).strokeColor("#eee").stroke();
       y += rowH;
@@ -3925,7 +3925,7 @@ export class DocumentsService {
 
     doc.font("Helvetica").fontSize(8);
     for (const r of rows) {
-      const rowH = 15;
+      const rowH = Math.max(15, ...cols.map((c, i) => doc.heightOfString(String(r[i] ?? ""), { width: c.w - 8 }) + 7));
       if (y + rowH > doc.page.height - 50) { doc.addPage(); y = 40; drawHeader(); doc.font("Helvetica").fontSize(8); }
       let cx = left;
       for (let i = 0; i < cols.length; i++) { doc.text(r[i], cx + 4, y + 4, { width: cols[i].w - 8 }); cx += cols[i].w; }
@@ -4018,7 +4018,7 @@ export class DocumentsService {
 
     doc.font("Helvetica").fontSize(8);
     for (const r of rows) {
-      const rowH = 15;
+      const rowH = Math.max(15, ...cols.map((c, i) => doc.heightOfString(String(r[i] ?? "—"), { width: c.w - 8 }) + 7));
       if (y + rowH > doc.page.height - 50) { doc.addPage(); y = 40; drawHeader(); doc.font("Helvetica").fontSize(8); }
       let cx = left;
       for (let i = 0; i < cols.length; i++) { doc.text(String(r[i] ?? "—"), cx + 4, y + 4, { width: cols[i].w - 8 }); cx += cols[i].w; }
@@ -4168,26 +4168,31 @@ export class DocumentsService {
         doc.font("Helvetica-Bold").fontSize(7.5);
         return Math.min(largeurMaxColonne, Math.max(LARGEUR_MIN_COLONNE, maxW + PADDING_CELLULE));
       });
+      // Jamais plus large que la page : colonnes réduites proportionnellement.
+      const brute = colW.reduce((a, b) => a + b, 0);
+      if (brute > width) colW.forEach((w, i) => { colW[i] = (w * width) / brute; });
       const largeurTableau = colW.reduce((a, b) => a + b, 0);
       const droiteTableau = left + largeurTableau;
+      const opts = (i: number) => ({ width: colW[i] - 6, align: (i === 0 ? "left" : "right") as "left" | "right" });
 
-      assurerPlace(18);
-      doc.rect(left, y, largeurTableau, 16).fillColor(p.couleurSecondaire).fill();
+      // Hauteurs selon le contenu : un libellé long passe à la ligne sans chevaucher la ligne suivante.
+      doc.fontSize(7.5).font("Helvetica-Bold");
+      const hEntete = Math.max(16, ...headers.map((h, i) => doc.heightOfString(h, opts(i)) + 8));
+      assurerPlace(hEntete + 2);
+      doc.rect(left, y, largeurTableau, hEntete).fillColor(p.couleurSecondaire).fill();
       let cx = left;
-      doc.fillColor("#fff").fontSize(7.5).font("Helvetica-Bold");
-      for (let i = 0; i < headers.length; i++) { doc.text(headers[i], cx + 3, y + 4, { width: colW[i] - 6, align: i === 0 ? "left" : "right" }); cx += colW[i]; }
-      y += 16;
+      doc.fillColor("#fff");
+      for (let i = 0; i < headers.length; i++) { doc.text(headers[i], cx + 3, y + 4, opts(i)); cx += colW[i]; }
+      y += hEntete;
       doc.font("Helvetica").fontSize(7.5).fillColor("#000");
       for (const row of rows) {
-        assurerPlace(14);
+        const textes = row.map((v) => (typeof v === "number" ? fmt(v) : String(v ?? "")));
+        const h = Math.max(14, ...textes.map((v, i) => doc.heightOfString(v, opts(i)) + 6));
+        assurerPlace(h);
         cx = left;
-        for (let i = 0; i < row.length; i++) {
-          const v = typeof row[i] === "number" ? fmt(row[i] as number) : String(row[i]);
-          doc.text(v, cx + 3, y + 3, { width: colW[i] - 6, align: i === 0 ? "left" : "right" });
-          cx += colW[i];
-        }
-        doc.moveTo(left, y + 14).lineTo(droiteTableau, y + 14).strokeColor("#eee").stroke();
-        y += 14;
+        textes.forEach((v, i) => { doc.text(v, cx + 3, y + 3, opts(i)); cx += colW[i]; });
+        doc.moveTo(left, y + h).lineTo(droiteTableau, y + h).strokeColor("#eee").stroke();
+        y += h;
       }
       y += 6;
     };
@@ -4888,25 +4893,31 @@ export class DocumentsService {
     doc.fillColor("#000");
     y = Math.max(y + 20, 82);
 
+    // Colonnes étirées sur toute la largeur ; chiffres à droite, texte à gauche (titre compris).
+    const echelle = width / cols.reduce((s, c) => s + c.w, 0);
+    const largeurs = cols.map((c) => c.w * echelle);
+    const aDroite = cols.map((_, i) => rows.length > 0 && rows.every((r) => r[i] === "" || r[i] === null || r[i] === undefined || typeof r[i] === "number"));
+    const cellule = (i: number) => ({ width: largeurs[i] - 6, align: (aDroite[i] ? "right" : "left") as "right" | "left" });
+
     const drawHeader = () => {
-      doc.rect(left, y, width, 16).fill(p.couleurPrimaire);
+      doc.fontSize(7).font("Helvetica-Bold");
+      const h = Math.max(16, ...cols.map((c, i) => doc.heightOfString(c.h, cellule(i)) + 8));
+      doc.rect(left, y, width, h).fill(p.couleurPrimaire);
       let cx = left;
-      doc.fillColor("#fff").fontSize(7).font("Helvetica-Bold");
-      for (const c of cols) { doc.text(c.h, cx + 3, y + 4, { width: c.w - 6 }); cx += c.w; }
+      doc.fillColor("#fff");
+      cols.forEach((c, i) => { doc.text(c.h, cx + 3, y + 4, cellule(i)); cx += largeurs[i]; });
       doc.fillColor("#000");
-      y += 16;
+      y += h;
     };
     drawHeader();
     doc.font("Helvetica").fontSize(7);
     for (const row of rows) {
-      const rowH = 13;
+      const textes = cols.map((_, i) => (typeof row[i] === "number" ? fmt(row[i] as number) : String(row[i] ?? "")));
+      // Hauteur = cellule la plus haute : un texte long passe à la ligne sans chevaucher la suivante.
+      const rowH = Math.max(13, ...textes.map((v, i) => doc.heightOfString(v, cellule(i)) + 6));
       if (y + rowH > doc.page.height - 60) { doc.addPage(); y = 40; drawHeader(); doc.font("Helvetica").fontSize(7); }
       let cx = left;
-      for (let i = 0; i < cols.length; i++) {
-        const v = typeof row[i] === "number" ? fmt(row[i] as number) : String(row[i] ?? "");
-        doc.text(v, cx + 3, y + 3, { width: cols[i].w - 6, align: i === 0 ? "left" : "right" });
-        cx += cols[i].w;
-      }
+      textes.forEach((v, i) => { doc.text(v, cx + 3, y + 3, cellule(i)); cx += largeurs[i]; });
       doc.moveTo(left, y + rowH).lineTo(right, y + rowH).strokeColor("#eee").stroke();
       y += rowH;
     }
@@ -5771,7 +5782,7 @@ export class DocumentsService {
       doc.rect(left, y, width, 22).fill("#1f2937");
       doc.font("Helvetica-Bold").fontSize(7.5).fillColor("#fff");
       let cx = left;
-      for (const c of cols) { doc.text(c.h, cx + 4, y + 4, { width: c.w - 8, align: cx === left ? "left" : "right" }); cx += c.w; }
+      cols.forEach((c, i) => { doc.text(c.h, cx + 4, y + 4, { width: c.w - 8, align: i < 3 ? "left" : "right" }); cx += c.w; });
       doc.fillColor("#000");
       y += 22;
     };
@@ -5780,7 +5791,6 @@ export class DocumentsService {
     let totalEngage = 0, totalBase = 0, totalAssure = 0, totalNet = 0;
     doc.font("Helvetica").fontSize(7.5);
     for (const l of lignes) {
-      if (y + 16 > doc.page.height - 50) { doc.addPage(); this.dessinerPiedDePage(doc, p); y = 40; dessinerEntete(); doc.font("Helvetica").fontSize(7.5); }
       const engage = Number(l.montant) - Number(l.montantRejete ?? 0);
       const base = l.baseRemboursement !== null ? Number(l.baseRemboursement) : 0;
       const partAssure = engage - base;
@@ -5788,12 +5798,16 @@ export class DocumentsService {
       const net = base - tps;
       totalEngage += engage; totalBase += base; totalAssure += partAssure; totalNet += net;
       const valeurs = [l.facture ? referenceLisible(l.facture.referenceFacture) : "—", `${l.assure.nom} ${l.assure.prenom ?? ""}`.trim(), l.date, fmt(engage), fmt(base), fmt(partAssure), fmt(net)];
+      // Hauteur selon la cellule la plus haute (référence ou nom renvoyés à la ligne).
+      const rowH = Math.max(16, ...valeurs.map((v, i) => doc.heightOfString(v, { width: cols[i].w - 8 }) + 7));
+      if (y + rowH > doc.page.height - 50) { doc.addPage(); this.dessinerPiedDePage(doc, p); y = 40; dessinerEntete(); doc.font("Helvetica").fontSize(7.5); }
       let cx = left;
       for (let i = 0; i < valeurs.length; i++) {
         doc.text(valeurs[i], cx + 4, y + 4, { width: cols[i].w - 8, align: i < 3 ? "left" : "right" });
         cx += cols[i].w;
       }
-      y += 16;
+      y += rowH;
+      doc.moveTo(left, y).lineTo(right, y).strokeColor("#eee").lineWidth(0.5).stroke();
     }
     doc.moveTo(left, y).lineTo(right, y).strokeColor("#000").lineWidth(0.7).stroke();
     y += 4;
@@ -6008,14 +6022,18 @@ export class DocumentsService {
         // à 0/vide quand la TPS ne s'applique pas réellement.
         const pctTps = TAUX_TPS.toFixed(2).replace(".", ",");
         const premiere = grp[0];
-        const rowH = 18;
+        const nomComplet = `${premiere.assure.nom} ${premiere.assure.prenom ?? ""}`.trim();
+        // Hauteur selon le nom le plus long (retour à la ligne sans chevaucher la ligne suivante).
+        const rowH = Math.max(18,
+          doc.heightOfString(nomComplet, { width: cols[0].w * 0.62 - 6 }) + 8,
+          doc.heightOfString(premiere.assure.nom.split(" ")[0], { width: cols[0].w * 0.36 - 6 }) + 8);
         if (y + rowH > doc.page.height - 220) { doc.addPage(); y = 40; }
         cx = left;
         // "Famille" abrégée au premier mot du nom (comme sur le modèle de
         // référence, "KOKO B.") — même colonne que Bénéficiaire, positionné
         // au même décalage relatif (38 % de la largeur de colonne).
         doc.text(premiere.assure.nom.split(" ")[0], cx + 4, y + 4, { width: cols[0].w * 0.36 - 6 });
-        doc.text(`${premiere.assure.nom} ${premiere.assure.prenom ?? ""}`.trim(), cx + cols[0].w * 0.38, y + 4, { width: cols[0].w * 0.62 - 6 });
+        doc.text(nomComplet, cx + cols[0].w * 0.38, y + 4, { width: cols[0].w * 0.62 - 6 });
         cx += cols[0].w;
         // Référence COMPLÈTE du décompte affichée (2026-09) — voir demande
         // utilisateur : "il faut afficher l'intégralité et faire que ça
@@ -6202,10 +6220,10 @@ export class DocumentsService {
 
     doc.font("Helvetica").fontSize(8);
     for (const l of lignes) {
-      const rowH = 18;
+      const valeurs = [l.police, l.nature, l.echeance, fmt(l.primeTtc), l.compagnie];
+      const rowH = Math.max(18, ...valeurs.map((v, i) => doc.heightOfString(String(v), { width: cols[i].w - 6 }) + 8));
       if (y + rowH > doc.page.height - 160) { doc.addPage(); y = 40; }
       cx = left;
-      const valeurs = [l.police, l.nature, l.echeance, fmt(l.primeTtc), l.compagnie];
       for (let i = 0; i < valeurs.length; i++) { doc.text(String(valeurs[i]), cx + 3, y + 4, { width: cols[i].w - 6, align: i === 3 ? "right" : "left" }); cx += cols[i].w; }
       y += rowH;
       doc.moveTo(left, y).lineTo(right, y).strokeColor("#ccc").lineWidth(0.5).stroke();
