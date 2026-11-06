@@ -4,6 +4,7 @@ import type { Response } from "express";
 import { PrismaService } from "../prisma/prisma.service";
 import { Prisma } from "@prisma/client";
 import { TenantContext } from "../tenant/tenant-context";
+import { resoudreRubriqueContrat } from "../actes-medicaux/rubrique-contrat.util";
 import { ParametresEntrepriseService } from "../parametres-entreprise/parametres-entreprise.service";
 
 function fmt(n: number): string {
@@ -77,12 +78,21 @@ export class DashboardService {
     // PriseEnCharge (une requête brute ne passe pas par le middleware).
     const societeId = TenantContext.getSocieteId();
     const filtreSociete = societeId ? Prisma.sql`AND p."societeId" = ${societeId}` : Prisma.empty;
-    const prisesEnCharge = await this.prisma.$queryRaw<{ date: string; type: string; paye: boolean; n: number; montant: number }[]>`
+    // Acte et type du prestataire joints (2026-11) : la rubrique se résout comme
+    // dans les Statistiques (resoudreRubriqueContrat), jamais sur le texte brut p.type.
+    const prisesEnChargeBrutes = await this.prisma.$queryRaw<{ date: string; type: string; paye: boolean; n: number; montant: number; famille: string | null; categorie: string | null; prestType: string | null }[]>`
       SELECT p.date, p.type, COALESCE(b.statut = 'Payé', false) AS paye, COUNT(*)::int AS n,
-             COALESCE(SUM(COALESCE(p."baseRemboursement", p.montant)), 0)::float8 AS montant
+             COALESCE(SUM(COALESCE(p."baseRemboursement", p.montant)), 0)::float8 AS montant,
+             a.famille AS famille, a."categorieGarantie" AS categorie, pr.type AS "prestType"
       FROM "PriseEnCharge" p LEFT JOIN "BordereauReglement" b ON b.id = p."bordereauId"
+        LEFT JOIN "ActeMedical" a ON a.id = p."acteMedicalId"
+        LEFT JOIN "Prestataire" pr ON pr.id = p."prestataireId"
       WHERE p.statut NOT IN ('Rejeté', 'Annulé') AND p."contratId" = ANY(${contrats.map((c) => c.id)}::text[]) ${filtreSociete}
-      GROUP BY p.date, p.type, paye`;
+      GROUP BY p.date, p.type, paye, a.famille, a."categorieGarantie", pr.type`;
+    const prisesEnCharge = prisesEnChargeBrutes.map((p) => ({
+      ...p,
+      rubrique: resoudreRubriqueContrat([], { type: p.type, prestataireType: p.prestType }, p.famille ? { famille: p.famille, categorieGarantie: p.categorie } : null),
+    }));
 
     // Années disponibles dérivées du résultat contrats (2026-08/2026-10) —
     // jamais une liste figée, jamais une requête séquentielle séparée.
@@ -210,14 +220,14 @@ export class DashboardService {
     const parType = new Map<string, { declares: number; regles: number }>();
     for (const p of prisesEnCharge) {
       if (anneeDe(p.date) === annee && estDateFuture(p.date)) continue;
-      if (!parType.has(p.type)) parType.set(p.type, { declares: 0, regles: 0 });
-      const t = parType.get(p.type)!;
+      if (!parType.has(p.rubrique)) parType.set(p.rubrique, { declares: 0, regles: 0 });
+      const t = parType.get(p.rubrique)!;
       t.declares += p.n;
       if (p.paye) t.regles += p.n;
     }
     const sinistraliteParType = [...parType.entries()]
       .sort((a, b) => b[1].declares - a[1].declares)
-      .slice(0, 5)
+      .slice(0, 6)
       .map(([branche, v]) => ({ branche, "déclarés": v.declares, "réglés": v.regles, pendants: v.declares - v.regles }));
 
     const alertes: { message: string; type: "warning" | "danger"; view: string }[] = [];
