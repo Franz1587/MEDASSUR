@@ -117,28 +117,39 @@ export interface OptionsClasseur {
   contrats: boolean;
   telephones: boolean;
   factures: boolean;
+  identite: boolean;
+  types: boolean;
+  matricules: boolean;
   creerAbsents: boolean;
   produits: "aucun" | "vides" | "tous";
 }
 
 export interface LigneEchantillonClasseur { matricule: string; nom: string; detail: string }
 
+export interface AnalyseFeuilleClasseur {
+  nom: string; role: string; lignes: number;
+  colonnes: { entete: string; sens: string; remplies: number; rapprochees?: number }[];
+  resume: string[];
+}
+
 export interface ResultatClasseur {
   typeDetecte: "classeur";
   planId: string;
   nomFichier: string;
-  feuilles: { nom: string; role: "participants" | "contrats" | "ignorée"; lignes: number; colonnes: string[] }[];
+  feuilles: AnalyseFeuilleClasseur[];
   totaux: {
     lignesParticipants: number; assuresTrouves: number; inchanges: number;
     suspensions: number; reactivations: number; deplacements: number; membresSuivent: number;
     telephonesAjoutes: number; absents: number; prestationsSuivent: number;
+    naissancesAjoutees: number; sexesAjoutes: number; typesCorriges: number; rattachements: number; alignements: number;
     contratsProduitVide: number; contratsProduitEcart: number; contratsSouscripteurEcart: number;
   };
   echantillons: {
     suspensions: LigneEchantillonClasseur[]; reactivations: LigneEchantillonClasseur[]; deplacements: LigneEchantillonClasseur[];
-    telephones: LigneEchantillonClasseur[]; absents: LigneEchantillonClasseur[];
+    telephones: LigneEchantillonClasseur[]; absents: LigneEchantillonClasseur[]; types: LigneEchantillonClasseur[]; alignements: LigneEchantillonClasseur[];
   };
   contrats: { police: string; produitActuel: string; produitFichier: string; souscripteurBase: string; souscripteurFichier: string; ecartSouscripteur: boolean }[];
+  ecarts: { champ: string; nombre: number; exemples: string[]; note?: string }[];
   anomalies: { type: string; libelle: string; nombre: number; exemples: string[] }[];
   constats: string[];
   options: OptionsClasseur;
@@ -147,6 +158,7 @@ export interface ResultatClasseur {
 export interface BilanClasseur {
   statutsModifies: number; deplaces: number; membresDeplaces: number; prestationsRattachees: number;
   facturesRattachees: number; ententesRattachees: number; telephonesAjoutes: number; crees: number; produitsMisAJour: number;
+  naissancesAjoutees: number; sexesAjoutes: number; typesCorriges: number; rattaches: number; alignes: number;
   ignores: number; erreurs: string[];
 }
 

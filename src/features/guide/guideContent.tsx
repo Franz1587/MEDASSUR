@@ -1268,16 +1268,16 @@ export const chapitresInterne: GuideChapitre[] = [
       {
         titre: "Import libre ARIANA : classeurs multi-feuilles",
         texte: [
-          "Le bouton « Import libre — ARIANA » lit un classeur Excel de plusieurs feuilles en entier, sans limite de lignes. Une feuille « Participants » (N° de contrat, matricule, téléphone, prénom, nom, statut) est reconnue à ses colonnes ; une feuille « Synthèse par contrat » (N° de contrat, produit, souscripteur, nombre de participants) corrige les contrats. Rien n'est écrit avant votre confirmation.",
+          "Le bouton « Import libre — ARIANA » lit un classeur Excel de plusieurs feuilles en entier, sans limite de lignes, et analyse chaque feuille face à l'application, quel que soit son contenu. Le rôle d'une feuille est reconnu à ses colonnes : population (une ligne par personne : contrat, matricule, type, statuts, nom, naissance, sexe, téléphone), synthèse par contrat, doublons supprimés (ancien et nouveau matricule), points à vérifier laissés par la source, remarques. Une feuille inconnue est quand même décrite colonne par colonne, mais rien n'en est importé. Rien n'est écrit avant votre confirmation.",
         ],
         etapes: [
           {
             titre: "Lire l'aperçu",
-            texte: "ARIANA affiche les feuilles reconnues, le nombre de statuts à changer, de contrats à corriger, de téléphones à ajouter et de personnes absentes de l'application, avec des exemples dépliables et la liste de ce qu'elle n'a pas pu traiter (contrat introuvable, matricule ambigu, numéro déjà utilisé…).",
+            texte: "Pour chaque feuille, ARIANA indique son rôle, un résumé comparé à l'application (personnes retrouvées ou absentes, contrats reconnus, effectifs incohérents, doublons encore présents…) et, colonne par colonne, ce qu'elle contient, son taux de remplissage et la part retrouvée dans l'application. Une colonne aux titres inconnus est reconnue à son contenu. L'aperçu liste aussi les désaccords (date de naissance, sexe, nom, statut et dates de contrat) et tout ce qu'elle n'a pas pu traiter (contrat introuvable, matricule ambigu, numéro déjà utilisé, ayant droit sans assuré principal identifiable…). Aucun désaccord n'est modifié automatiquement.",
           },
           {
             titre: "Choisir ce qui s'applique",
-            texte: "Chaque famille de corrections se coche ou se décoche : statuts (« Terminé » devient Suspendu, « Actif » réactive ; un assuré Radié n'est jamais touché et un contrat résilié ne réactive personne), contrat de chaque assuré (le classeur fait foi, la famille suit, aucun avenant), affectation au bon contrat des prestations, ententes et factures de ces assurés, téléphones des assurés principaux (un numéro = une famille), création des personnes absentes (désactivée par défaut) et libellé produit des contrats (produits vides seulement, ou tous).",
+            texte: "Chaque famille de corrections se coche ou se décoche : statuts (« Terminé » devient Suspendu, « Actif » réactive ; un assuré Radié n'est jamais touché et un contrat résilié ne réactive personne), contrat de chaque assuré (le classeur fait foi, la famille suit, aucun avenant), affectation au bon contrat des prestations, ententes et factures de ces assurés, date de naissance et sexe manquants (jamais d'écrasement), type AS / CJ / EF avec rattachement des ayants droit à leur assuré principal (famille reconnue par le contrat et le téléphone, désactivé par défaut), alignement des anciens matricules sur le matricule conservé (désactivé par défaut), téléphones des assurés principaux (un numéro = une famille), création des personnes absentes avec leur famille (désactivée par défaut) et libellé produit des contrats (produits vides seulement, ou tous).",
           },
           {
             titre: "Confirmer et vérifier",

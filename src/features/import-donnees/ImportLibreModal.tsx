@@ -210,7 +210,10 @@ function ListeEchantillon({ titre, lignes, total }: { titre: string; lignes: Res
 function PanneauClasseur({ r, options, onOptions }: { r: ResultatClasseur; options: OptionsClasseur; onOptions: (o: OptionsClasseur) => void }) {
   const t = r.totaux;
   const maj = (cle: keyof OptionsClasseur, valeur: boolean) => onOptions({ ...options, [cle]: valeur });
-  const cases: { cle: "statuts" | "contrats" | "telephones" | "factures" | "creerAbsents"; titre: string; aide: string; actif: boolean }[] = [
+  const cases: { cle: "statuts" | "contrats" | "telephones" | "factures" | "identite" | "types" | "matricules" | "creerAbsents"; titre: string; aide: string; actif: boolean }[] = [
+    { cle: "identite", titre: `Compléter ${nf(t.naissancesAjoutees)} date(s) de naissance et ${nf(t.sexesAjoutes)} sexe(s) manquants`, aide: "Seulement les champs vides : une date ou un sexe déjà renseigné n'est jamais écrasé, les désaccords sont listés plus bas.", actif: true },
+    { cle: "types", titre: `Corriger le type AS / CJ / EF de ${nf(t.typesCorriges)} personne(s), dont ${nf(t.rattachements)} à rattacher à leur assuré principal`, aide: "Le type pilote le calcul des primes. Une famille est reconnue quand un seul assuré principal partage le contrat et le téléphone ; sinon la personne est laissée telle quelle.", actif: true },
+    { cle: "matricules", titre: `Aligner ${nf(t.alignements)} matricule(s) sur le matricule conservé`, aide: "Feuille « doublons supprimés » : la personne enregistrée sous l'ancien matricule prend le nouveau ; l'ancien reste recherchable.", actif: true },
     { cle: "statuts", titre: `Mettre à jour les statuts (${nf(t.suspensions)} suspension(s), ${nf(t.reactivations)} réactivation(s))`, aide: "« Terminé » devient Suspendu, « Actif » réactive. Un assuré Radié n'est jamais modifié ; un contrat résilié ou expiré ne réactive personne.", actif: true },
     { cle: "contrats", titre: `Corriger le contrat de ${nf(t.deplacements)} assuré(s) (+ ${nf(t.membresSuivent)} ayant(s) droit)`, aide: "Le classeur fait foi : l'assuré est rattaché au contrat indiqué, avec sa famille. Aucun avenant n'est généré (correction, pas un transfert).", actif: true },
     { cle: "factures", titre: `Affecter au bon contrat les ${nf(t.prestationsSuivent)} prestation(s) de ces assurés, avec leurs factures et ententes`, aide: "Les factures dont toutes les lignes ont changé de contrat suivent aussi. Sans cette case, l'historique reste sur l'ancien contrat.", actif: options.contrats },
@@ -219,11 +222,37 @@ function PanneauClasseur({ r, options, onOptions }: { r: ResultatClasseur; optio
   ];
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-1.5 text-[11px]">
+      <div className="space-y-1.5">
+        <p className="text-[12.5px] font-medium text-foreground">Analyse de chaque feuille, comparée à l'application</p>
         {r.feuilles.map((f) => (
-          <span key={f.nom} className="px-2 py-1 rounded bg-secondary/60 text-foreground">
-            <span className="font-medium">{f.nom}</span> — {f.role === "participants" ? "participants" : f.role === "contrats" ? "contrats" : "non utilisée"}, {nf(f.lignes)} ligne(s)
-          </span>
+          <details key={f.nom} className="rounded-lg border border-border" open={f.role.startsWith("Population")}>
+            <summary className="cursor-pointer px-3 py-2 text-[12.5px] text-foreground">
+              <span className="font-medium">{f.nom}</span> — {f.role}, {nf(f.lignes)} ligne(s)
+            </summary>
+            <div className="border-t border-border/60 px-3 py-2 space-y-2">
+              <ul className="list-disc pl-5 text-[11.5px] text-foreground space-y-0.5">
+                {f.resume.map((l, i) => <li key={i}>{l}</li>)}
+              </ul>
+              <div className="overflow-x-auto max-h-44 overflow-y-auto">
+                <table className="w-full text-[11px]">
+                  <thead><tr className="text-muted-foreground bg-secondary/40 sticky top-0">
+                    <th className="text-left px-2 py-1 font-medium">Colonne</th><th className="text-left px-2 py-1 font-medium">Contenu reconnu</th>
+                    <th className="text-right px-2 py-1 font-medium">Remplie</th><th className="text-right px-2 py-1 font-medium">Retrouvée en base</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-border/50">
+                    {f.colonnes.map((c) => (
+                      <tr key={c.entete}>
+                        <td className="px-2 py-1 text-foreground">{c.entete}</td>
+                        <td className="px-2 py-1 text-muted-foreground">{c.sens}</td>
+                        <td className="px-2 py-1 text-right tabular-nums text-foreground">{c.remplies} %</td>
+                        <td className="px-2 py-1 text-right tabular-nums text-foreground">{c.rapprochees !== undefined ? `${c.rapprochees} %` : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </details>
         ))}
       </div>
 
@@ -267,6 +296,22 @@ function PanneauClasseur({ r, options, onOptions }: { r: ResultatClasseur; optio
       <ListeEchantillon titre="Réactivations" lignes={r.echantillons.reactivations} total={t.reactivations} />
       <ListeEchantillon titre="Téléphones à ajouter" lignes={r.echantillons.telephones} total={t.telephonesAjoutes} />
       <ListeEchantillon titre="Personnes absentes de l'application" lignes={r.echantillons.absents} total={t.absents} />
+      <ListeEchantillon titre="Types à corriger" lignes={r.echantillons.types} total={t.typesCorriges} />
+      <ListeEchantillon titre="Matricules à aligner" lignes={r.echantillons.alignements} total={t.alignements} />
+
+      {r.ecarts.length > 0 && (
+        <details className="rounded-lg border border-border" open>
+          <summary className="cursor-pointer px-3 py-2 text-[12.5px] font-medium text-foreground">Désaccords entre le fichier et l'application ({r.ecarts.reduce((s, e) => s + e.nombre, 0)}) — aucun n'est modifié automatiquement</summary>
+          <div className="border-t border-border/60 px-3 py-2 space-y-2">
+            {r.ecarts.map((e) => (
+              <div key={e.champ} className="text-[11.5px]">
+                <p className="text-foreground"><span className="font-medium">{nf(e.nombre)}</span> — {e.champ}{e.note ? <span className="text-muted-foreground"> ({e.note})</span> : null}</p>
+                <p className="text-muted-foreground">Exemples : {e.exemples.join(" · ")}</p>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
 
       {r.contrats.length > 0 && (
         <details className="rounded-lg border border-border">
@@ -359,7 +404,7 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
   const [fichierEnCours, setFichierEnCours] = useState("");
   const [modeCorrection, setModeCorrection] = useState(false);
   const [typeImport, setTypeImport] = useState<TypeImportLibre>("auto");
-  const [optionsClasseur, setOptionsClasseur] = useState<OptionsClasseur>({ statuts: true, contrats: true, telephones: true, factures: true, creerAbsents: false, produits: "vides" });
+  const [optionsClasseur, setOptionsClasseur] = useState<OptionsClasseur>({ statuts: true, contrats: true, telephones: true, factures: true, identite: true, types: false, matricules: false, creerAbsents: false, produits: "vides" });
 
   if (!ouvert) return null;
 
@@ -372,6 +417,7 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
     if (estClasseur(r)) {
       const t = r.totaux, o = optionsClasseur;
       return s + (o.statuts ? t.suspensions + t.reactivations : 0) + (o.contrats ? t.deplacements : 0) + (o.telephones ? t.telephonesAjoutes : 0)
+        + (o.identite ? t.naissancesAjoutees + t.sexesAjoutes : 0) + (o.types ? t.typesCorriges : 0) + (o.matricules ? t.alignements : 0)
         + (o.creerAbsents ? t.absents : 0) + (o.produits !== "aucun" ? t.contratsProduitVide + (o.produits === "tous" ? t.contratsProduitEcart : 0) : 0);
     }
     if (estPopulation(r)) return s + r.totalNouveaux + r.totalChangementsStatut + r.totalChangementsContrat;
@@ -413,6 +459,9 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
           if (b.deplaces) msgs.push(`${b.deplaces} assuré(s) rattaché(s) au bon contrat${b.membresDeplaces ? ` (+${b.membresDeplaces} ayant(s) droit)` : ""}`);
           if (b.prestationsRattachees) msgs.push(`${b.prestationsRattachees} prestation(s), ${b.facturesRattachees} facture(s) et ${b.ententesRattachees} entente(s) affectée(s)`);
           if (b.statutsModifies) msgs.push(`${b.statutsModifies} statut(s) mis à jour`);
+          if (b.alignes) msgs.push(`${b.alignes} matricule(s) aligné(s)`);
+          if (b.typesCorriges) msgs.push(`${b.typesCorriges} type(s) corrigé(s)${b.rattaches ? ` dont ${b.rattaches} ayant(s) droit rattaché(s)` : ""}`);
+          if (b.naissancesAjoutees || b.sexesAjoutes) msgs.push(`${b.naissancesAjoutees} date(s) de naissance et ${b.sexesAjoutes} sexe(s) complété(s)`);
           if (b.telephonesAjoutes) msgs.push(`${b.telephonesAjoutes} téléphone(s) ajouté(s)`);
           if (b.crees) msgs.push(`${b.crees} personne(s) créée(s)`);
           if (b.produitsMisAJour) msgs.push(`${b.produitsMisAJour} produit(s) de contrat mis à jour`);
