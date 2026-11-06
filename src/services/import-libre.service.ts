@@ -111,7 +111,54 @@ function getToken(): string | null {
 
 export type TypeImportLibre = "auto" | "factures" | "population" | "actes-medicaux" | "souscripteurs" | "contrats" | "assures" | "prises-en-charge" | "reglements";
 
-export type ResultatImportLibre = ResultatApercu | ResultatPopulation | ResultatActesMedicaux;
+// Classeur multi-feuilles (participants + synthèse par contrat) — voir ImportClasseurService.
+export interface OptionsClasseur {
+  statuts: boolean;
+  contrats: boolean;
+  telephones: boolean;
+  factures: boolean;
+  creerAbsents: boolean;
+  produits: "aucun" | "vides" | "tous";
+}
+
+export interface LigneEchantillonClasseur { matricule: string; nom: string; detail: string }
+
+export interface ResultatClasseur {
+  typeDetecte: "classeur";
+  planId: string;
+  nomFichier: string;
+  feuilles: { nom: string; role: "participants" | "contrats" | "ignorée"; lignes: number; colonnes: string[] }[];
+  totaux: {
+    lignesParticipants: number; assuresTrouves: number; inchanges: number;
+    suspensions: number; reactivations: number; deplacements: number; membresSuivent: number;
+    telephonesAjoutes: number; absents: number; prestationsSuivent: number;
+    contratsProduitVide: number; contratsProduitEcart: number; contratsSouscripteurEcart: number;
+  };
+  echantillons: {
+    suspensions: LigneEchantillonClasseur[]; reactivations: LigneEchantillonClasseur[]; deplacements: LigneEchantillonClasseur[];
+    telephones: LigneEchantillonClasseur[]; absents: LigneEchantillonClasseur[];
+  };
+  contrats: { police: string; produitActuel: string; produitFichier: string; souscripteurBase: string; souscripteurFichier: string; ecartSouscripteur: boolean }[];
+  anomalies: { type: string; libelle: string; nombre: number; exemples: string[] }[];
+  constats: string[];
+  options: OptionsClasseur;
+}
+
+export interface BilanClasseur {
+  statutsModifies: number; deplaces: number; membresDeplaces: number; prestationsRattachees: number;
+  facturesRattachees: number; ententesRattachees: number; telephonesAjoutes: number; crees: number; produitsMisAJour: number;
+  ignores: number; erreurs: string[];
+}
+
+export type ResultatImportLibre = ResultatApercu | ResultatPopulation | ResultatActesMedicaux | ResultatClasseur;
+
+export function estClasseur(r: ResultatImportLibre): r is ResultatClasseur {
+  return (r as ResultatClasseur).typeDetecte === "classeur";
+}
+
+export function confirmerClasseur(planId: string, options: OptionsClasseur): Promise<BilanClasseur> {
+  return http.post<BilanClasseur>("/import-libre/confirmer-classeur", { planId, options });
+}
 
 export function estPopulation(r: ResultatImportLibre): r is ResultatPopulation {
   return (r as ResultatPopulation).typeDetecte === "population";

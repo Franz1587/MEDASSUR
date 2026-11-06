@@ -3,10 +3,10 @@ import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, Upload, X, Sparkles } 
 import { toast } from "sonner";
 import { Btn } from "@/components/shared/Btn";
 import {
-  apercuImportLibre, confirmerImportLibre, confirmerPopulation, confirmerActesMedicaux,
-  estPopulation, estActesMedicaux,
+  apercuImportLibre, confirmerImportLibre, confirmerPopulation, confirmerActesMedicaux, confirmerClasseur,
+  estPopulation, estActesMedicaux, estClasseur,
   type LigneApercu, type LignePopulation, type LigneActeMedical,
-  type ResultatApercu, type ResultatPopulation, type ResultatActesMedicaux,
+  type ResultatApercu, type ResultatPopulation, type ResultatActesMedicaux, type ResultatClasseur, type OptionsClasseur,
   type ResultatImportLibre, type TypeImportLibre,
 } from "@/services/import-libre.service";
 
@@ -50,6 +50,7 @@ const LABELS_TYPE: Record<string, string> = {
   factures: "Factures",
   population: "Population (assurés)",
   "actes-medicaux": "Actes médicaux",
+  classeur: "Classeur multi-feuilles",
   souscripteurs: "Souscripteurs",
   contrats: "Contrats",
   assures: "Assurés",
@@ -170,6 +171,150 @@ function TableauActes({ lignes }: { lignes: LigneActeMedical[] }) {
   );
 }
 
+// ── Classeur multi-feuilles (participants + synthèse par contrat) ────────
+
+const nf = (n: number) => n.toLocaleString("fr-FR");
+
+function Indicateur({ valeur, libelle, ton }: { valeur: number; libelle: string; ton: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-secondary/30 px-3 py-2">
+      <p className={`text-[18px] font-semibold tabular-nums ${ton}`}>{nf(valeur)}</p>
+      <p className="text-[11px] text-muted-foreground leading-tight">{libelle}</p>
+    </div>
+  );
+}
+
+function ListeEchantillon({ titre, lignes, total }: { titre: string; lignes: ResultatClasseur["echantillons"]["suspensions"]; total: number }) {
+  if (total === 0) return null;
+  return (
+    <details className="rounded-lg border border-border">
+      <summary className="cursor-pointer px-3 py-2 text-[12.5px] font-medium text-foreground">{titre} ({nf(total)})</summary>
+      <div className="max-h-48 overflow-y-auto border-t border-border/60">
+        <table className="w-full text-[11.5px]">
+          <tbody className="divide-y divide-border/50">
+            {lignes.map((l, i) => (
+              <tr key={i}>
+                <td className="px-2.5 py-1 font-mono text-[10px] text-muted-foreground whitespace-nowrap">{l.matricule}</td>
+                <td className="px-2.5 py-1 text-foreground truncate max-w-[200px]">{l.nom || "—"}</td>
+                <td className="px-2.5 py-1 text-muted-foreground">{l.detail}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {total > lignes.length && <p className="px-3 py-1.5 text-[11px] text-muted-foreground">… et {nf(total - lignes.length)} autre(s), appliqués de la même façon.</p>}
+      </div>
+    </details>
+  );
+}
+
+function PanneauClasseur({ r, options, onOptions }: { r: ResultatClasseur; options: OptionsClasseur; onOptions: (o: OptionsClasseur) => void }) {
+  const t = r.totaux;
+  const maj = (cle: keyof OptionsClasseur, valeur: boolean) => onOptions({ ...options, [cle]: valeur });
+  const cases: { cle: "statuts" | "contrats" | "telephones" | "factures" | "creerAbsents"; titre: string; aide: string; actif: boolean }[] = [
+    { cle: "statuts", titre: `Mettre à jour les statuts (${nf(t.suspensions)} suspension(s), ${nf(t.reactivations)} réactivation(s))`, aide: "« Terminé » devient Suspendu, « Actif » réactive. Un assuré Radié n'est jamais modifié ; un contrat résilié ou expiré ne réactive personne.", actif: true },
+    { cle: "contrats", titre: `Corriger le contrat de ${nf(t.deplacements)} assuré(s) (+ ${nf(t.membresSuivent)} ayant(s) droit)`, aide: "Le classeur fait foi : l'assuré est rattaché au contrat indiqué, avec sa famille. Aucun avenant n'est généré (correction, pas un transfert).", actif: true },
+    { cle: "factures", titre: `Affecter au bon contrat les ${nf(t.prestationsSuivent)} prestation(s) de ces assurés, avec leurs factures et ententes`, aide: "Les factures dont toutes les lignes ont changé de contrat suivent aussi. Sans cette case, l'historique reste sur l'ancien contrat.", actif: options.contrats },
+    { cle: "telephones", titre: `Renseigner ${nf(t.telephonesAjoutes)} numéro(s) de téléphone manquant(s)`, aide: "Assurés principaux uniquement, jamais un numéro déjà renseigné ni déjà porté par une autre famille.", actif: true },
+    { cle: "creerAbsents", titre: `Créer les ${nf(t.absents)} personne(s) absente(s) de l'application`, aide: "Désactivé par défaut : le fichier ne donne ni date de naissance ni lien familial. Création en assuré principal, avec avenant d'incorporation.", actif: true },
+  ];
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-1.5 text-[11px]">
+        {r.feuilles.map((f) => (
+          <span key={f.nom} className="px-2 py-1 rounded bg-secondary/60 text-foreground">
+            <span className="font-medium">{f.nom}</span> — {f.role === "participants" ? "participants" : f.role === "contrats" ? "contrats" : "non utilisée"}, {nf(f.lignes)} ligne(s)
+          </span>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <Indicateur valeur={t.lignesParticipants} libelle="participants lus" ton="text-foreground" />
+        <Indicateur valeur={t.suspensions + t.reactivations} libelle="changements de statut" ton="text-blue-600" />
+        <Indicateur valeur={t.deplacements} libelle="contrats à corriger" ton="text-purple-600" />
+        <Indicateur valeur={t.telephonesAjoutes} libelle="téléphones à ajouter" ton="text-emerald-600" />
+      </div>
+
+      <fieldset className="space-y-1.5">
+        <legend className="text-[12.5px] font-medium text-foreground mb-1">Ce qu'ARIANA va appliquer</legend>
+        {cases.map((c) => (
+          <label key={c.cle} className={`flex items-start gap-3 p-2.5 rounded-lg border border-border bg-secondary/30 ${c.actif ? "cursor-pointer hover:bg-secondary/50" : "opacity-50"}`}>
+            <input type="checkbox" disabled={!c.actif} checked={options[c.cle] && c.actif} onChange={(e) => maj(c.cle, e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-border accent-primary" />
+            <span>
+              <span className="text-[12.5px] font-medium text-foreground block">{c.titre}</span>
+              <span className="text-[11px] text-muted-foreground">{c.aide}</span>
+            </span>
+          </label>
+        ))}
+        {r.contrats.length > 0 && (
+          <label className="flex items-start gap-3 p-2.5 rounded-lg border border-border bg-secondary/30">
+            <span className="mt-0.5 w-4" />
+            <span className="flex-1">
+              <span className="text-[12.5px] font-medium text-foreground block">Libellé produit des contrats (feuille de synthèse)</span>
+              <select aria-label="Mise à jour du libellé produit" value={options.produits} onChange={(e) => onOptions({ ...options, produits: e.target.value as OptionsClasseur["produits"] })}
+                className="mt-1 h-8 px-2 rounded-md border border-border bg-background text-[12px] text-foreground">
+                <option value="aucun">Ne pas modifier</option>
+                <option value="vides">Renseigner seulement les produits vides ({nf(t.contratsProduitVide)})</option>
+                <option value="tous">Remplacer aussi les produits différents ({nf(t.contratsProduitVide + t.contratsProduitEcart)})</option>
+              </select>
+              <span className="block text-[11px] text-muted-foreground mt-1">{nf(t.contratsProduitEcart)} contrat(s) ont un libellé différent dans le classeur : vérifiez le tableau ci-dessous avant de les remplacer.</span>
+            </span>
+          </label>
+        )}
+      </fieldset>
+
+      <ListeEchantillon titre="Changements de contrat" lignes={r.echantillons.deplacements} total={t.deplacements} />
+      <ListeEchantillon titre="Suspensions" lignes={r.echantillons.suspensions} total={t.suspensions} />
+      <ListeEchantillon titre="Réactivations" lignes={r.echantillons.reactivations} total={t.reactivations} />
+      <ListeEchantillon titre="Téléphones à ajouter" lignes={r.echantillons.telephones} total={t.telephonesAjoutes} />
+      <ListeEchantillon titre="Personnes absentes de l'application" lignes={r.echantillons.absents} total={t.absents} />
+
+      {r.contrats.length > 0 && (
+        <details className="rounded-lg border border-border">
+          <summary className="cursor-pointer px-3 py-2 text-[12.5px] font-medium text-foreground">
+            Contrats de la feuille de synthèse ({nf(r.contrats.length)}) — dont {nf(t.contratsSouscripteurEcart)} avec un souscripteur différent
+          </summary>
+          <div className="max-h-56 overflow-auto border-t border-border/60">
+            <table className="w-full text-[11.5px]">
+              <thead><tr className="bg-secondary/40 sticky top-0 text-muted-foreground">
+                <th className="text-left px-2.5 py-1 font-medium">Police</th><th className="text-left px-2.5 py-1 font-medium">Produit (application → classeur)</th><th className="text-left px-2.5 py-1 font-medium">Souscripteur (application → classeur)</th>
+              </tr></thead>
+              <tbody className="divide-y divide-border/50">
+                {r.contrats.map((c) => (
+                  <tr key={c.police} className={c.ecartSouscripteur ? "bg-amber-50/60" : ""}>
+                    <td className="px-2.5 py-1 font-mono text-[10px] whitespace-nowrap text-foreground">{c.police}</td>
+                    <td className="px-2.5 py-1 text-foreground">{c.produitActuel || <em className="text-muted-foreground">vide</em>}{c.produitFichier && c.produitFichier !== c.produitActuel ? <> → <strong>{c.produitFichier}</strong></> : null}</td>
+                    <td className="px-2.5 py-1 text-foreground">{c.souscripteurBase || "—"}{c.ecartSouscripteur ? <> → <strong>{c.souscripteurFichier}</strong> <span className="text-amber-700">(à vérifier)</span></> : null}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="px-3 py-1.5 text-[11px] text-muted-foreground border-t border-border/60">Les souscripteurs ne sont jamais modifiés automatiquement : un écart signale une contradiction à trancher à la main.</p>
+        </details>
+      )}
+
+      {r.anomalies.length > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50/60 p-3 space-y-2">
+          <p className="text-[12.5px] font-medium text-amber-800 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" aria-hidden />Non traité — à vérifier</p>
+          {r.anomalies.map((a) => (
+            <div key={a.type} className="text-[11.5px] text-foreground">
+              <p><span className="font-medium">{nf(a.nombre)}</span> — {a.libelle}</p>
+              <p className="text-muted-foreground">Exemples : {a.exemples.join(" · ")}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {r.constats.length > 0 && (
+        <ul className="list-disc pl-5 text-[11.5px] text-muted-foreground space-y-0.5">
+          {r.constats.slice(0, 20).map((c, i) => <li key={i}>{c}</li>)}
+          {r.constats.length > 20 && <li>… et {r.constats.length - 20} autre(s) constat(s).</li>}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // ── Aperçu générique (Ariana résumé) ─────────────────────────────────────
 
 function ApercuGenerique({ r }: { r: ResultatApercu }) {
@@ -214,6 +359,7 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
   const [fichierEnCours, setFichierEnCours] = useState("");
   const [modeCorrection, setModeCorrection] = useState(false);
   const [typeImport, setTypeImport] = useState<TypeImportLibre>("auto");
+  const [optionsClasseur, setOptionsClasseur] = useState<OptionsClasseur>({ statuts: true, contrats: true, telephones: true, factures: true, creerAbsents: false, produits: "vides" });
 
   if (!ouvert) return null;
 
@@ -223,6 +369,11 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
   // Résumé selon le type détecté
   const totalAction = fichiers.reduce((s, f) => {
     const r = f.resultat;
+    if (estClasseur(r)) {
+      const t = r.totaux, o = optionsClasseur;
+      return s + (o.statuts ? t.suspensions + t.reactivations : 0) + (o.contrats ? t.deplacements : 0) + (o.telephones ? t.telephonesAjoutes : 0)
+        + (o.creerAbsents ? t.absents : 0) + (o.produits !== "aucun" ? t.contratsProduitVide + (o.produits === "tous" ? t.contratsProduitEcart : 0) : 0);
+    }
     if (estPopulation(r)) return s + r.totalNouveaux + r.totalChangementsStatut + r.totalChangementsContrat;
     if (estActesMedicaux(r)) return s + r.totalNouveaux + r.totalMisesAJour;
     return s + (r as ResultatApercu).totalResolues + (r as ResultatApercu).totalMisesAJour;
@@ -257,7 +408,17 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
 
       for (const f of fichiers) {
         const r = f.resultat;
-        if (estPopulation(r)) {
+        if (estClasseur(r)) {
+          const b = await confirmerClasseur(r.planId, optionsClasseur);
+          if (b.deplaces) msgs.push(`${b.deplaces} assuré(s) rattaché(s) au bon contrat${b.membresDeplaces ? ` (+${b.membresDeplaces} ayant(s) droit)` : ""}`);
+          if (b.prestationsRattachees) msgs.push(`${b.prestationsRattachees} prestation(s), ${b.facturesRattachees} facture(s) et ${b.ententesRattachees} entente(s) affectée(s)`);
+          if (b.statutsModifies) msgs.push(`${b.statutsModifies} statut(s) mis à jour`);
+          if (b.telephonesAjoutes) msgs.push(`${b.telephonesAjoutes} téléphone(s) ajouté(s)`);
+          if (b.crees) msgs.push(`${b.crees} personne(s) créée(s)`);
+          if (b.produitsMisAJour) msgs.push(`${b.produitsMisAJour} produit(s) de contrat mis à jour`);
+          if (b.ignores) msgs.push(`${b.ignores} ignoré(s)`);
+          if (b.erreurs.length) toast.warning(`${b.erreurs.length} point(s) à vérifier : ${b.erreurs.slice(0, 3).join(" ")}`);
+        } else if (estPopulation(r)) {
           const lignesAction = r.lignes.filter((l) => !l.erreur && !l.doublon);
           if (lignesAction.length > 0) {
             const res = await confirmerPopulation(lignesAction);
@@ -438,7 +599,9 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
                         {f.nom} — <span className="text-primary">{titre}</span>
                       </p>
                     )}
-                    {estPopulation(r) ? (
+                    {estClasseur(r) ? (
+                      <PanneauClasseur r={r} options={optionsClasseur} onOptions={setOptionsClasseur} />
+                    ) : estPopulation(r) ? (
                       r.lignes.length === 0 ? (
                         <div className="flex items-center gap-2 text-amber-600 bg-amber-50 rounded-lg p-4">
                           <AlertTriangle className="w-5 h-5 shrink-0" />

@@ -9,6 +9,8 @@ import { PrestatairesService } from "../prestataires/prestataires.service";
 import { RUBRIQUES_ACTES, resoudreDesignations } from "../actes-medicaux/resolution-designation.util";
 import { beneficiaireReel, chargerFamilles, scoreNom } from "../import/beneficiaire.util";
 import { RapprochementReprise } from "../import/reprise-correction.util";
+import { ImportClasseurService, type ResultatClasseur } from "./import-classeur.service";
+import { statutDepuisFichier } from "./classeur.util";
 
 // Import libre Ariana (2026-10) — voir demande utilisateur : "elle doit
 // pouvoir traiter les données et dire à quoi ça correspond et ne jamais
@@ -347,6 +349,7 @@ export class ImportLibreService {
     private prisma: PrismaService,
     private factures: FacturesService,
     private prestataires: PrestatairesService,
+    private classeur: ImportClasseurService,
   ) {}
 
   private getAnthropicClient(): Anthropic {
@@ -575,7 +578,8 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
       select: { id: true, statut: true, contratId: true },
     });
 
-    const statutNormalise = l.statutFichier.toLowerCase().includes("termin") || l.statutFichier.toLowerCase().includes("inactif") ? "Inactif" : "Actif";
+    // Vocabulaire réel : Actif | Suspendu (jamais « Inactif » littéral, ni « Radié » déduit d'un fichier).
+    const statutNormalise = statutDepuisFichier(l.statutFichier) ?? "Actif";
 
     if (!assure) {
       // Nouvel assuré
@@ -592,7 +596,7 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
       };
     }
 
-    const changementStatut = assure.statut !== statutNormalise;
+    const changementStatut = assure.statut !== "Radié" && assure.statut !== statutNormalise;
     const changementContrat = contratIdCible !== null && assure.contratId !== contratIdCible;
 
     return {
@@ -908,8 +912,14 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
     file: Express.Multer.File,
     modeCorrection = false,
     type: TypeImportLibre = "auto",
-  ): Promise<ResultatApercu | ResultatPopulation | ResultatActesMedicaux> {
+  ): Promise<ResultatApercu | ResultatPopulation | ResultatActesMedicaux | ResultatClasseur> {
     const ext = path.extname(file.originalname).toLowerCase();
+
+    // Classeur multi-feuilles « participants (+ synthèse par contrat) » : lu en
+    // entier, sans appel externe — voir ImportClasseurService.
+    if (["auto", "population", "contrats", "assures"].includes(type) && this.classeur.detecter(file.buffer, ext)) {
+      return this.classeur.apercu(file.buffer, file.originalname);
+    }
 
     // Détection automatique du type
     let typeFinal = type;
@@ -1158,7 +1168,7 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
         // Assuré existant : mettre à jour statut et/ou contrat
         const update: Record<string, unknown> = {};
         if (l.changementStatut) {
-          update.statut = l.statutFichier.toLowerCase().includes("termin") ? "Inactif" : "Actif";
+          update.statut = statutDepuisFichier(l.statutFichier) ?? "Actif";
         }
         if (l.changementContrat && l.contratIdNouveau) {
           update.contratId = l.contratIdNouveau;
@@ -1184,7 +1194,7 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
               prenom: l.prenom.trim() || undefined,
               matricule: l.matricule.trim(),
               contratId: l.contratId,
-              statut: l.statutFichier.toLowerCase().includes("termin") ? "Inactif" : "Actif",
+              statut: statutDepuisFichier(l.statutFichier) ?? "Actif",
               dateNaissance: l.dateNaissance || undefined,
               sexe: l.sexe || undefined,
               typeAssure: l.typeAssure || "AS",
