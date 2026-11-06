@@ -560,8 +560,9 @@ export class PrestatairesService {
   // forme PrestataireReseau pour ne rien casser côté frontend
   // (src/services/reseauSoins.service.ts, PrestataireReseauDetail.medecins).
   async findOneReseau(id: string) {
-    const p = await this.prisma.prestataire.findUnique({ where: { id }, select: SELECT_RESEAU });
-    if (!p) throw new NotFoundException(`Prestataire ${id} introuvable`);
+    // Même règle que la liste : un prestataire suspendu ou non conventionné n'est pas visible, même par lien direct.
+    const p = await this.prisma.prestataire.findFirst({ where: { id, statutConvention: "Conventionné" }, select: SELECT_RESEAU });
+    if (!p) throw new NotFoundException(`Prestataire ${id} introuvable dans le réseau`);
     const liens = await this.prisma.medecinPrestataire.findMany({
       where: { prestataireId: id, medecin: { actif: true } },
       include: { medecin: true },

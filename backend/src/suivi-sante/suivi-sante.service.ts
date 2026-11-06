@@ -208,7 +208,8 @@ export class SuiviSanteService {
     const medecins = await this.prisma.medecin.findMany({
       where: {
         actif: true,
-        ...(params.prestataireId ? { structures: { some: { prestataireId: params.prestataireId } } } : {}),
+        // Seuls les médecins exerçant dans au moins une structure conventionnée (jamais via une structure suspendue).
+        structures: { some: { prestataire: { statutConvention: "Conventionné" }, ...(params.prestataireId ? { prestataireId: params.prestataireId } : {}) } },
         ...(params.specialite === SPECIALITE_GENERALE
           ? { OR: [{ specialite: null }, { specialite: "" }, { specialite: { contains: "général", mode: "insensitive" } }] }
           : params.specialite ? { specialite: { contains: params.specialite, mode: "insensitive" } } : {}),
@@ -216,7 +217,7 @@ export class SuiviSanteService {
       },
       select: {
         id: true, nom: true, prenom: true, titre: true, specialite: true, telephone: true,
-        structures: { select: { prestataire: { select: { id: true, nom: true, type: true, ville: true, adresse: true, telephone: true, latitude: true, longitude: true } } } },
+        structures: { where: { prestataire: { statutConvention: "Conventionné" } }, select: { prestataire: { select: { id: true, nom: true, type: true, ville: true, adresse: true, telephone: true, latitude: true, longitude: true } } } },
       },
       take: 500,
     });
