@@ -234,15 +234,15 @@ export default function DashboardView() {
           {p.sinistraliteParType.length === 0 ? (
             <p className="text-xs text-muted-foreground py-8 text-center">Aucune prise en charge enregistrée.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={p.sinistraliteParType} barSize={9}>
+            <ResponsiveContainer width="100%" height={Math.max(180, p.sinistraliteParType.length * 44)}>
+              <BarChart data={p.sinistraliteParType} layout="vertical" barSize={9}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(12,43,46,0.09)" />
-                <XAxis dataKey="branche" tick={{ fill: "#537175", fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: "#537175", fontSize: 10 }} axisLine={false} tickLine={false} />
+                <XAxis type="number" tick={{ fill: "#537175", fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="branche" width={140} interval={0} tick={{ fill: "#537175", fontSize: 11 }} axisLine={false} tickLine={false} />
                 <Tooltip {...ChartTooltipStyle} />
-                <Bar dataKey="déclarés" name="Déclarés" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="réglés" name="Réglés" fill="#16A34A" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="pendants" name="Pendants" fill="#DC2626" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="déclarés" name="Déclarés" fill="var(--chart-1)" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="réglés" name="Réglés" fill="#16A34A" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="pendants" name="Pendants" fill="#DC2626" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}

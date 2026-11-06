@@ -4,7 +4,7 @@ import type { Response } from "express";
 import { PrismaService } from "../prisma/prisma.service";
 import { Prisma } from "@prisma/client";
 import { TenantContext } from "../tenant/tenant-context";
-import { resoudreRubriqueContrat } from "../actes-medicaux/rubrique-contrat.util";
+import { resoudreRubriqueContrat, normaliserRubrique } from "../actes-medicaux/rubrique-contrat.util";
 import { ParametresEntrepriseService } from "../parametres-entreprise/parametres-entreprise.service";
 
 function fmt(n: number): string {
@@ -89,10 +89,17 @@ export class DashboardService {
         LEFT JOIN "Prestataire" pr ON pr.id = p."prestataireId"
       WHERE p.statut NOT IN ('Rejeté', 'Annulé') AND p."contratId" = ANY(${contrats.map((c) => c.id)}::text[]) ${filtreSociete}
       GROUP BY p.date, p.type, paye, a.famille, a."categorieGarantie", pr.type`;
-    const prisesEnCharge = prisesEnChargeBrutes.map((p) => ({
-      ...p,
-      rubrique: resoudreRubriqueContrat([], { type: p.type, prestataireType: p.prestType }, p.famille ? { famille: p.famille, categorieGarantie: p.categorie } : null),
-    }));
+    // « Ambulatoire » ne dit rien : si l'acte du catalogue a une vraie famille
+    // (hors DIVERS), c'est elle qui donne la rubrique (Dentisterie, Optique, Imagerie…).
+    const rubriquesVagues = new Set(["Ambulatoire", "Autre", "Non précisé"]);
+    const prisesEnCharge = prisesEnChargeBrutes.map((p) => {
+      let rubrique = resoudreRubriqueContrat([], { type: p.type, prestataireType: p.prestType }, p.famille ? { famille: p.famille, categorieGarantie: p.categorie } : null);
+      if (rubriquesVagues.has(rubrique) && p.famille && p.famille.trim().toUpperCase() !== "DIVERS") {
+        const parFamille = normaliserRubrique(p.famille);
+        if (!rubriquesVagues.has(parFamille)) rubrique = parFamille;
+      }
+      return { ...p, rubrique };
+    });
 
     // Années disponibles dérivées du résultat contrats (2026-08/2026-10) —
     // jamais une liste figée, jamais une requête séquentielle séparée.
@@ -227,7 +234,6 @@ export class DashboardService {
     }
     const sinistraliteParType = [...parType.entries()]
       .sort((a, b) => b[1].declares - a[1].declares)
-      .slice(0, 6)
       .map(([branche, v]) => ({ branche, "déclarés": v.declares, "réglés": v.regles, pendants: v.declares - v.regles }));
 
     const alertes: { message: string; type: "warning" | "danger"; view: string }[] = [];
