@@ -488,7 +488,7 @@ export const chapitresInterne: GuideChapitre[] = [
     id: "prestataires",
     titre: "Prestataires",
     sources: ["src/features/prestataires"],
-    majLe: "2026-09-19",
+    majLe: "2026-11-06",
     sections: [
       {
         titre: "Gérer le réseau de soins conventionné",
@@ -505,6 +505,30 @@ export const chapitresInterne: GuideChapitre[] = [
           {
             titre: "Gérer un prestataire existant",
             texte: "Depuis sa fiche : le bouton « Imprimer la fiche » édite son document signalétique ; le toggle « Public »/« Privé » enregistre immédiatement le secteur (utilisé dans le calcul des remboursements) ; « Localiser » (en édition) géocode son adresse ; « Suspendre le prestataire » (avec motif) ou « Réhabiliter le prestataire » ferme/rouvre son accès au réseau conventionné.",
+          },
+          {
+            titre: "Qui apparaît dans le réseau de soins",
+            texte: "Seuls les prestataires au statut « Conventionné » figurent dans le PDF « Réseau de soins », dans les portails client et assuré (web et mobile), dans le choix d'une structure ou d'un médecin du suivi de santé et dans l'annexe des offres. Un prestataire « Suspendu » ou « En négociation » disparaît de tous ces endroits, y compris par lien direct, tout en restant visible ici pour la gestion et l'historique des factures.",
+          },
+          {
+            titre: "Renommer un prestataire",
+            texte: "Modifier le nom d'une fiche conserve l'ancien nom comme alias : un import (ARIANA, import global, import par contrat) qui porte encore l'ancien nom rattache ses factures à la fiche renommée, sans recréer de prestataire.",
+          },
+        ],
+      },
+      {
+        titre: "Fusionner les doublons",
+        texte: [
+          "Le bouton « Doublons » dresse la liste unique des fiches qui ressemblent à la même structure (noms proches, orthographes différentes, abréviations). Aucune fusion n'est jamais automatique et rien n'est pré-coché.",
+        ],
+        etapes: [
+          {
+            titre: "Fusionner un groupe",
+            texte: "Dans un groupe, choisissez la fiche à conserver (bouton radio), cochez les fiches à absorber, ajustez si besoin le nom et la ville retenus, puis validez. Toutes les données des fiches absorbées (factures, prestations, ententes préalables, règlements, relevés, documents, rendez-vous, comptes portail, grille tarifaire) passent à la fiche conservée ; les anciens noms deviennent des alias d'import.",
+          },
+          {
+            titre: "Écarter un faux doublon",
+            texte: "Si deux fiches sont des structures distinctes, cliquez sur « Pas un doublon » : le groupe n'est plus proposé. « Fusion manuelle » permet de rapprocher deux fiches que la détection n'a pas repérées.",
           },
         ],
       },
@@ -925,23 +949,32 @@ export const chapitresInterne: GuideChapitre[] = [
     id: "communications",
     titre: "Communications",
     sources: ["src/features/communications"],
-    majLe: "2026-09-19",
+    majLe: "2026-11-06",
     sections: [
       {
-        titre: "Journal des envois Email / SMS / WhatsApp",
+        titre: "Messagerie Email / SMS / WhatsApp type Outlook",
         texte: [
-          "L'écran liste tous les messages envoyés (canal, destinataire, déclencheur, statut, contenu), filtrables par canal et par type de destinataire.",
+          "L'écran fonctionne comme un client de messagerie à trois volets : les dossiers à gauche (Boîte de réception, Éléments envoyés, Brouillons, Suivis, Archive, Corbeille, Tous les messages) avec leurs compteurs, la liste des messages au centre, et la lecture à droite. Un filtre par canal (Email, SMS, WhatsApp) et une recherche libre permettent de retrouver un message.",
+          "Les emails reçus arrivent automatiquement dans la Boîte de réception, avec leurs pièces jointes ; les accents des anciens messages mal encodés sont rétablis.",
         ],
         image: img("communications-01-liste.png"),
         etapes: [
           {
-            titre: "Envoyer un message manuel",
-            texte: "Cliquez sur « Nouveau message ». Choisissez le Canal (Email/SMS/WhatsApp), le Type de destinataire, son Nom et son contact (adresse email ou numéro selon le canal), un Objet (email uniquement) et le Message, puis « Envoyer ».",
+            titre: "Lire un message en grand",
+            texte: "Cliquez sur un message pour le lire dans le volet de droite, ou sur « Agrandir » pour l'ouvrir dans une grande fenêtre. Depuis le message : Répondre, Répondre à tous, Transférer, Archiver, Supprimer (Corbeille) ou Marquer pour suivi.",
+          },
+          {
+            titre: "Écrire, répondre ou transférer",
+            texte: "« Nouveau courrier », « Répondre » et « Transférer » ouvrent la même grande fenêtre. Saisissez les destinataires (À, Cc) : des suggestions apparaissent à la frappe et chaque destinataire devient une pastille. Le texte se met en forme avec la barre d'outils (gras, italique, souligné, listes, alignement, liens). Le trombone joint plusieurs fichiers (jusqu'à 20, 25 Mo chacun). « Enregistrer le brouillon » le range dans Brouillons ; « Envoyer » l'expédie avec le logo et les couleurs de votre société.",
             image: img("communications-02-modal.png"),
           },
           {
+            titre: "Signatures",
+            texte: "Dans « Signatures », enregistrez une signature Email et une signature SMS / WhatsApp. Elles s'ajoutent automatiquement à vos messages.",
+          },
+          {
             titre: "Enregistrer une réponse reçue",
-            texte: "Sur un message sans retour encore enregistré, cliquez sur « Enregistrer un retour », tapez la réponse reçue et validez.",
+            texte: "Sur un message sans retour encore enregistré, utilisez « Enregistrer un retour », tapez la réponse reçue et validez.",
           },
         ],
       },
