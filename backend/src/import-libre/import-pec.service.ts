@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { TenantContext } from "../tenant/tenant-context";
 import { normaliserCle } from "./classeur.util";
@@ -44,6 +45,7 @@ export interface ResultatPec {
 
 export interface BilanPec {
   crees: number;
+  creesAccords: number;
   doublonsIgnores: number;
   montantsCorrigés: number;
   erreurs: string[];
@@ -149,12 +151,12 @@ export class ImportPecService {
     const asParMatricule = new Map(toutesAS.map((a) => [a.matricule.trim().toUpperCase(), a]));
 
     const tousPrestataires = await this.prisma.prestataire.findMany({
-      select: { id: true, nom: true, aliases: { select: { alias: true } } },
+      select: { id: true, nom: true, aliases: { select: { nomOrigine: true } } },
     });
     const prestParNom = new Map<string, string>();
     for (const p of tousPrestataires) {
       prestParNom.set(normaliserCle(p.nom), p.id);
-      for (const a of p.aliases) prestParNom.set(normaliserCle(a.alias), p.id);
+      for (const a of p.aliases) prestParNom.set(normaliserCle(a.nomOrigine), p.id);
     }
 
     // PEC déjà importées (par prescriptionRef)
@@ -270,44 +272,88 @@ export class ImportPecService {
     );
 
     const annee = new Date().getFullYear();
-    let crees = 0, doublonsIgnores = 0, montantsCorrigés = 0;
+    let creesAccords = 0, crees = 0, doublonsIgnores = 0, montantsCorrigés = 0;
     const erreurs: string[] = [];
     const societeId = plan.societeId;
 
-    // Préparer les données, par chunks de 500
-    const data: Parameters<typeof this.prisma.priseEnCharge.createMany>[0]["data"] = [];
+    // Grouper par N° PEC pour créer un AccordPrealable par dossier
+    const parPec = new Map<string, ActionPec[]>();
     for (const a of plan.lignes) {
-      if (refExistantes.has(a.prescriptionRef)) { doublonsIgnores++; continue; }
-      if (a.estCorrige) montantsCorrigés++;
-      data.push({
-        id: `IMP-${annee}-${randomUUID().slice(0, 6).toUpperCase()}`,
-        assureId: a.assureId,
-        contratId: a.contratId,
-        prestataire: a.prestataireNom,
-        prestataireId: a.prestataireId ?? undefined,
-        type: a.type,
-        montant: a.fraisReels,
-        baseRemboursement: a.baseRemboursement,
-        date: a.date,
-        modePaiement: "TiersPayant",
-        statut: a.statutMedassur,
-        statutControleMedical: a.statutControleMedical,
-        ...(a.motifRejet ? { motifRejet: a.motifRejet } : {}),
-        prescriptionRef: a.prescriptionRef,
-        ...(societeId ? { societeId } : {}),
-      });
+      const list = parPec.get(a.prescriptionRef) ?? [];
+      list.push(a);
+      parPec.set(a.prescriptionRef, list);
     }
 
-    // Insertion par lots de 500 pour éviter les timeouts
+    const accords: Prisma.AccordPrealableCreateManyInput[] = [];
+    const data: Prisma.PriseEnChargeCreateManyInput[] = [];
+
+    for (const [numPec, lignes] of parPec) {
+      if (refExistantes.has(numPec)) { doublonsIgnores += lignes.length; continue; }
+
+      const first = lignes[0];
+      const accordId = `IMP-${annee}-${randomUUID().slice(0, 8).toUpperCase()}`;
+      const montantTotal = lignes.reduce((s, l) => s + l.baseRemboursement, 0);
+
+      // Toutes les PEC importées sont des dossiers déjà accordés dans l'ancien système
+      accords.push({
+        id: accordId,
+        assureId: first.assureId,
+        contratId: first.contratId,
+        type: first.type,
+        description: `Import antériorité — ${numPec}`,
+        dateDemande: first.date,
+        dateDecision: first.date,
+        statutAnalyseMedicale: "Validé",
+        statutValidationFinanciere: "Validé",
+        decision: "Accordé",
+        montantAutorise: montantTotal,
+        prestataire: first.prestataireNom,
+        ...(first.prestataireId ? { prestataireId: first.prestataireId } : {}),
+        ...(societeId ? { societeId } : {}),
+      });
+
+      for (const a of lignes) {
+        if (a.estCorrige) montantsCorrigés++;
+        data.push({
+          id: `IMP-${annee}-${randomUUID().slice(0, 6).toUpperCase()}`,
+          assureId: a.assureId,
+          contratId: a.contratId,
+          prestataire: a.prestataireNom,
+          prestataireId: a.prestataireId ?? undefined,
+          accordPrealableId: accordId,
+          type: a.type,
+          montant: a.fraisReels,
+          baseRemboursement: a.baseRemboursement,
+          date: a.date,
+          modePaiement: "TiersPayant",
+          statut: "Déclaré",
+          statutControleMedical: "Validé",
+          prescriptionRef: a.prescriptionRef,
+          ...(societeId ? { societeId } : {}),
+        });
+      }
+    }
+
+    // Accords préalables d'abord (clé étrangère des PEC)
+    for (let i = 0; i < accords.length; i += 500) {
+      try {
+        const result = await this.prisma.accordPrealable.createMany({ data: accords.slice(i, i + 500), skipDuplicates: true });
+        creesAccords += result.count;
+      } catch (e) {
+        erreurs.push(`Accords lot ${Math.floor(i / 500) + 1} : ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+
+    // Puis les lignes de prise en charge
     for (let i = 0; i < data.length; i += 500) {
       try {
         const result = await this.prisma.priseEnCharge.createMany({ data: data.slice(i, i + 500), skipDuplicates: true });
         crees += result.count;
       } catch (e) {
-        erreurs.push(`Lot ${Math.floor(i / 500) + 1} : ${e instanceof Error ? e.message : String(e)}`);
+        erreurs.push(`PEC lot ${Math.floor(i / 500) + 1} : ${e instanceof Error ? e.message : String(e)}`);
       }
     }
 
-    return { crees, doublonsIgnores, montantsCorrigés, erreurs };
+    return { crees, creesAccords, doublonsIgnores, montantsCorrigés, erreurs };
   }
 }

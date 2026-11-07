@@ -135,7 +135,7 @@ export interface ResultatPec {
     doublons: EchantillonPec[];
   };
 }
-export interface BilanPec { crees: number; doublonsIgnores: number; montantsCorrigés: number; erreurs: string[] }
+export interface BilanPec { crees: number; creesAccords: number; doublonsIgnores: number; montantsCorrigés: number; erreurs: string[] }
 
 export function estPec(r: ResultatImportLibre): r is ResultatPec {
   return (r as ResultatPec).typeDetecte === "pec";

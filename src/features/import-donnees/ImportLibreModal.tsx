@@ -541,7 +541,8 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
         const r = f.resultat;
         if (estPec(r)) {
           const b = await confirmerPec(r.planId);
-          if (b.crees) msgs.push(`${b.crees} prise(s) en charge importée(s)`);
+          if (b.creesAccords) msgs.push(`${b.creesAccords} dossier(s) de prise en charge créé(s) (certificat disponible)`);
+          if (b.crees) msgs.push(`${b.crees} ligne(s) d'acte importée(s)`);
           if (b.montantsCorrigés) msgs.push(`${b.montantsCorrigés} montant(s) corrigé(s) (part assurance plafonnée aux frais réels)`);
           if (b.doublonsIgnores) msgs.push(`${b.doublonsIgnores} déjà importée(s), ignorée(s)`);
           if (b.erreurs.length) toast.warning(`Erreurs : ${b.erreurs.slice(0, 3).join(" ; ")}`);
