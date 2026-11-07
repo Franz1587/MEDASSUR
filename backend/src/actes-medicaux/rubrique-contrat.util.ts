@@ -38,8 +38,12 @@ const RUBRIQUES_CANONIQUES: { rubrique: string; motsCles: string[] }[] = [
   { rubrique: "Pharmacie", motsCles: ["PHARMA", "MEDICAMENT"] },
   { rubrique: "Analyses Médicale", motsCles: ["ANALYS", "LABO", "BIOLOG"] },
   { rubrique: "Imagerie", motsCles: ["IMAGERIE", "RADIO", "ECHOGRAPH", "SCANNER", "IRM"] },
+  // Consultations avant Actes de Spécialités : "CS OPHTALMOLOGUE" ou
+  // "CONSULTATION SPECIALISTE" sont des consultations, pas des actes. "CS"
+  // est l'abréviation gabonaise standard pour "consultation spécialiste".
+  { rubrique: "Consultations", motsCles: ["CONSULT", "VISITE", " CS "] },
+  // "SPECIALIT" sans "CONSULT" devant → acte (plateau technique, interventions).
   { rubrique: "Actes de Spécialités", motsCles: ["SPECIALIT"] },
-  { rubrique: "Consultations", motsCles: ["CONSULT", "VISITE"] },
   { rubrique: "Petite Chirurgie/Soins", motsCles: ["PETITE CHIRURGIE", "SOINS INFIRMIER", "SOINS"] },
   { rubrique: "Ambulatoire", motsCles: ["AMBU", "FRAIS MEDICAUX"] },
   { rubrique: "Autre", motsCles: ["AUTRE", "PRESTATION", "DIVERS"] },

@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
+import { normaliserRubrique } from "../actes-medicaux/rubrique-contrat.util";
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -61,7 +62,7 @@ export class AccordPrealableService {
     du?: string; au?: string; reference?: string;
     page?: number; perPage?: number;
   }) {
-    const perPage = Math.min(filtres?.perPage ?? 100, 500);
+    const perPage = Math.min(filtres?.perPage ?? 500, 2000);
     const page = Math.max(filtres?.page ?? 1, 1);
     const accords = await this.prisma.accordPrealable.findMany({
       take: perPage,
@@ -105,6 +106,7 @@ export class AccordPrealableService {
     });
     return filtres_.map((a) => ({
       ...a,
+      rubrique: normaliserRubrique(a.type ?? a.description ?? ""),
       facture: a.prisesEnCharge.length > 0,
       montantFacture: a.prisesEnCharge.reduce((s, p) => s + Number(p.montant), 0),
       montantAutoriseSuggere: (Number(a.montantAutorise) || null) as number | null,

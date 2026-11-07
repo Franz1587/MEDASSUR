@@ -1,4 +1,4 @@
-import { http, API_URL, getAccessToken, ecritureHorsLigne } from "@/lib/http";
+import { http, API_URL, getAccessToken, ecritureHorsLigne, withAuthToken } from "@/lib/http";
 import { openDocument } from "@/services/documents.service";
 import { toNumber } from "@/lib/decimal";
 
@@ -270,6 +270,7 @@ export interface MembreAccordPrealable {
   id: string;
   type: string;
   description: string;
+  rubrique?: string;
   dateDemande: string;
   prestataire: string;
   decision: string;
@@ -440,7 +441,7 @@ export async function supprimerBonNumerise(prescriptionId: string): Promise<void
 }
 
 export function urlCarnetSante(fichier: string): string {
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/carnet-sante/${fichier}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/carnet-sante/${fichier}`);
 }
 
 // Abonnement individuel (2026-10) — voir demande utilisateur : "si un

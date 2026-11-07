@@ -2998,7 +2998,11 @@ export class DocumentsService {
     champ(doc, left + 8, y + 34, "Valable jusqu'au:", dateValidite, 90, colW - 98, { boldLabel: true });
     champ(doc, left + colW + 8, y + 8, "Demandeur:", accord.demandeur?.nom ?? "—", 75, colW - 83, { boldLabel: true, boldValeur: true });
     const estAyantDroit = accord.assure.familleId !== null;
-    const tauxCouverture = this.tauxCouvertureParRubrique(accord.lignes, accord.assure.contrat.garanties, estAyantDroit);
+    // Repli si aucune ligne : construire une pseudo-ligne depuis le type/description de l'accord
+    const lignesFallbackTaux = accord.lignes.length > 0
+      ? accord.lignes
+      : [{ acteMedical: null, categorieGarantie: null, description: accord.type ?? accord.description ?? "" }];
+    const tauxCouverture = this.tauxCouvertureParRubrique(lignesFallbackTaux, accord.assure.contrat.garanties, estAyantDroit);
     champ(doc, left + colW + 8, y + 24, "Taux de couverture:", tauxCouverture != null ? `${tauxCouverture} %` : "—", 105, colW - 113, { boldLabel: true });
     y += boxH1 + 10;
 
@@ -3049,7 +3053,10 @@ export class DocumentsService {
     const rubriquesGarantie = Array.from(new Set(
       accord.lignes.map((l) => resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: l.categorieGarantie ?? l.description ?? "" }, l.acteMedical)),
     ));
-    const objetPriseEnCharge = rubriquesGarantie.length > 0 ? rubriquesGarantie.join(", ") : (accord.lignes[0]?.description ?? accord.description);
+    // Repli si aucune ligne : normaliser le type/description de l'accord lui-même
+    const objetPriseEnCharge = rubriquesGarantie.length > 0
+      ? rubriquesGarantie.join(", ")
+      : resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: accord.type ?? accord.description ?? "" }, null);
     doc.font("Helvetica").fontSize(8).text(`Code: ${objetPriseEnCharge}`, left + 8, y + 20, { width: colW - 20 });
     // Coordonnées RÉELLES du prestataire, pas celles du courtier (2026-09)
     // — voir demande utilisateur : "faire remonter toutes les informations
@@ -3057,9 +3064,10 @@ export class DocumentsService {
     // bloc DESTINATAIRE ci-dessus (accord.prestataireRef), jamais p.nom/
     // p.ville/p.pays (les coordonnées de la société utilisatrice, sans
     // rapport avec qui délivre réellement la prestation).
-    doc.text(`Nom: ${accord.prestataireRef?.nom ?? accord.prestataire}`, left + colW + 8, y + 18, { width: colW - 20 });
-    doc.text(`Téléphone: ${accord.prestataireRef?.telephone ?? "—"}`, left + colW + 8, y + 29, { width: colW - 20 });
-    doc.text(`Adresse: ${accord.prestataireRef?.adresse ?? accord.prestataireRef?.ville ?? "—"}`, left + colW + 8, y + 40, { width: colW - 20 });
+    // DELIVRE PAR = la société qui gère l'assurance (LA RUCHE EXCELLENCE), pas le prestataire
+    doc.text(`Nom: ${p.nom}`, left + colW + 8, y + 18, { width: colW - 20 });
+    doc.text(`Téléphone: ${p.telephone ?? "—"}`, left + colW + 8, y + 29, { width: colW - 20 });
+    doc.text(`Adresse: ${p.adresse ?? p.ville ?? "—"}`, left + colW + 8, y + 40, { width: colW - 20 });
     y += boxH3 + 10;
 
     // ── Tableau des actes ─────────────────────────────────────────────

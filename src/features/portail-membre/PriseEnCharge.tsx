@@ -152,7 +152,7 @@ export default function MembrePriseEnChargeView() {
             <div key={d.id} className="bg-card border border-border rounded-2xl p-3.5">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-[13px] font-semibold text-foreground truncate">{d.description}</p>
+                  <p className="text-[13px] font-semibold text-foreground truncate">{d.rubrique ?? d.description}</p>
                   <p className="text-[11.5px] text-muted-foreground mt-0.5">{d.prestataire} · {d.dateDemande}</p>
                 </div>
                 <Badge variant={decisionVariant(d.decision)}>{d.decision}</Badge>
