@@ -8,7 +8,7 @@ import * as XLSX from "xlsx";
 export const MAX_FICHIER_XLSX_OCTETS = 20 * 1024 * 1024;
 export const MAX_CELLULES_FEUILLE = Number(process.env.IMPORT_XLSX_MAX_CELLULES) > 0
   ? Number(process.env.IMPORT_XLSX_MAX_CELLULES)
-  : 200_000;
+  : 300_000;
 
 export function verifierTailleXlsx(buffer: Buffer | Uint8Array): void {
   if (buffer.byteLength > MAX_FICHIER_XLSX_OCTETS) {
