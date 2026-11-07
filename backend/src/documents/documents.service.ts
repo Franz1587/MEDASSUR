@@ -2937,7 +2937,8 @@ export class DocumentsService {
 
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="Certificat-Prise-En-Charge-${accord.id}.pdf"`);
+    const refDoc = accord.prescriptionRef ?? accord.id;
+    res.setHeader("Content-Disposition", `inline; filename="Certificat-Prise-En-Charge-${refDoc}.pdf"`);
     doc.pipe(res);
 
     const left = doc.page.margins.left;
@@ -2992,7 +2993,7 @@ export class DocumentsService {
     encadre(left, y, colW, boxH1);
     encadre(left + colW, y, colW, boxH1);
     doc.font("Helvetica").fontSize(8);
-    champ(doc, left + 8, y + 8, "DOSSIER N°", accord.id, 90, colW - 98, { boldLabel: true });
+    champ(doc, left + 8, y + 8, "DOSSIER N°", refDoc, 90, colW - 98, { boldLabel: true });
     champ(doc, left + 8, y + 22, "Editer le :", fmtDate(dateBase), 90, colW - 98, { boldLabel: true });
     champ(doc, left + 8, y + 34, "Valable jusqu'au:", dateValidite, 90, colW - 98, { boldLabel: true });
     champ(doc, left + colW + 8, y + 8, "Demandeur:", accord.demandeur?.nom ?? "—", 75, colW - 83, { boldLabel: true, boldValeur: true });
@@ -3046,7 +3047,7 @@ export class DocumentsService {
     // tableau de garanties réel du contrat plutôt qu'un rapprochement
     // catalogue indépendant.
     const rubriquesGarantie = Array.from(new Set(
-      accord.lignes.map((l) => resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: l.categorieGarantie ?? l.description ?? "" }, l.acteMedical)),
+      accord.lignes.map((l) => resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: l.categorieGarantie ?? l.type ?? l.description ?? "" }, l.acteMedical)),
     ));
     const objetPriseEnCharge = rubriquesGarantie.length > 0 ? rubriquesGarantie.join(", ") : (accord.lignes[0]?.description ?? accord.description);
     doc.font("Helvetica").fontSize(8).text(`Code: ${objetPriseEnCharge}`, left + 8, y + 20, { width: colW - 20 });
@@ -3146,14 +3147,17 @@ export class DocumentsService {
   // source que l'écran Contrats → Garanties), sur la rubrique de la
   // PREMIÈRE ligne ayant un acte du catalogue rattaché.
   private tauxCouvertureParRubrique(
-    lignes: { acteMedical: { categorieGarantie: string | null } | null; categorieGarantie: string | null }[],
+    lignes: { acteMedical: { categorieGarantie: string | null } | null; categorieGarantie: string | null; type?: string | null }[],
     garanties: { categorie: string; tauxAssure: Prisma.Decimal | null; tauxAyantsDroit: Prisma.Decimal | null }[],
     estAyantDroit: boolean,
   ): number | null {
-    const rubrique = lignes.find((l) => l.acteMedical?.categorieGarantie ?? l.categorieGarantie)?.acteMedical?.categorieGarantie
-      ?? lignes.find((l) => l.categorieGarantie)?.categorieGarantie;
-    if (!rubrique) return null;
-    const garantie = garanties.find((g) => g.categorie === rubrique);
+    const rubriqueCandidate =
+      lignes.find((l) => l.acteMedical?.categorieGarantie)?.acteMedical?.categorieGarantie
+      ?? lignes.find((l) => l.categorieGarantie)?.categorieGarantie
+      ?? lignes.find((l) => l.type)?.type;
+    if (!rubriqueCandidate) return null;
+    const rubrique = normaliserRubrique(rubriqueCandidate);
+    const garantie = garanties.find((g) => normaliserRubrique(g.categorie) === rubrique);
     if (!garantie) return null;
     const taux = estAyantDroit ? (garantie.tauxAyantsDroit ?? garantie.tauxAssure) : garantie.tauxAssure;
     return taux != null ? Number(taux) : null;

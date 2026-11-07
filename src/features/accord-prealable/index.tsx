@@ -861,7 +861,7 @@ export default function AccordPrealableView() {
           <tbody>
             {pagination.pageItems.map((a) => (
               <tr key={a.id} onClick={() => openEdit(a)} className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer">
-                <td className="px-4 py-3 text-xs font-semibold text-primary whitespace-nowrap" style={{ fontFamily: "'DM Mono', monospace" }}>{a.id}</td>
+                <td className="px-4 py-3 text-xs font-semibold text-primary whitespace-nowrap" style={{ fontFamily: "'DM Mono', monospace" }}>{a.prescriptionRef ?? a.id}</td>
                 <td className="px-4 py-3 whitespace-nowrap"><Badge variant="neutral">{a.origine ?? "Agent"}</Badge></td>
                 <td className="px-4 py-3 font-semibold text-foreground whitespace-nowrap">{a.assureNom}</td>
                 <td className="px-4 py-3 text-foreground whitespace-nowrap">{a.prestataire}</td>
