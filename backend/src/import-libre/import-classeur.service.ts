@@ -691,19 +691,31 @@ export class ImportClasseurService {
           typeAssure: a.typeCreation ?? "AS", dateNaissance: a.naissance, sexe: a.sexe, telephone: a.telephone,
           familleId: a.racineAssureId ?? (a.racineMatricule ? idParMatricule.get(a.racineMatricule.toLowerCase()) : undefined),
         });
+        const OPTS = { ignorerAge: true };
         for (const lot of parLots(liste, 50)) {
           try {
-            const r = await this.mouvements.appliquerMouvement(contratId, dateEffet, lot.map(ajout), []);
+            const r = await this.mouvements.appliquerMouvement(contratId, dateEffet, lot.map(ajout), [], OPTS);
             for (const c of r.crees) idParMatricule.set(c.matricule.toLowerCase(), c.id);
             bilan.crees += r.crees.length; touches.add(contratId);
           } catch {
-            // Un lot refusé (ex. limite d'âge) ne bloque pas les autres : reprise une personne à la fois.
+            // Un lot refusé ne bloque pas les autres : reprise une personne à la fois.
             for (const a of lot) {
+              const data = ajout(a);
               try {
-                const r = await this.mouvements.appliquerMouvement(contratId, dateEffet, [ajout(a)], []);
+                const r = await this.mouvements.appliquerMouvement(contratId, dateEffet, [data], [], OPTS);
                 for (const c of r.crees) idParMatricule.set(c.matricule.toLowerCase(), c.id);
                 bilan.crees += r.crees.length; touches.add(contratId);
-              } catch (e) { bilan.ignores++; bilan.erreurs.push(`${libelle} ${a.matricule} (police ${a.policeCible}) : ${e instanceof Error ? e.message : "création impossible"}`); }
+              } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e);
+                // Téléphone déjà utilisé : on réessaie sans (un numéro = une famille).
+                if (data.telephone && /telephone|unique/i.test(msg)) {
+                  try {
+                    const r = await this.mouvements.appliquerMouvement(contratId, dateEffet, [{ ...data, telephone: undefined }], [], OPTS);
+                    for (const c of r.crees) idParMatricule.set(c.matricule.toLowerCase(), c.id);
+                    bilan.crees += r.crees.length; touches.add(contratId);
+                  } catch (e2) { bilan.ignores++; bilan.erreurs.push(`${libelle} ${a.matricule} (police ${a.policeCible}) : ${e2 instanceof Error ? e2.message : "création impossible"}`); }
+                } else { bilan.ignores++; bilan.erreurs.push(`${libelle} ${a.matricule} (police ${a.policeCible}) : ${msg}`); }
+              }
             }
           }
         }

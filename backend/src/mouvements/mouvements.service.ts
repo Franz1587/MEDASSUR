@@ -78,16 +78,18 @@ export class MouvementsService implements OnModuleInit {
     await this.radierHorsLimiteAge();
   }
 
-  async appliquerMouvement(contratId: string, dateEffet: string, ajouts: AjoutMouvement[], retraits: RetraitMouvement[]) {
+  async appliquerMouvement(contratId: string, dateEffet: string, ajouts: AjoutMouvement[], retraits: RetraitMouvement[], opts?: { ignorerAge?: boolean }) {
     const contrat = await this.prisma.contrat.findUnique({ where: { id: contratId } });
     if (!contrat) throw new NotFoundException("Contrat introuvable");
     const primeAvant = Number(contrat.prime);
     const delta = { AS: 0, CJ: 0, EF: 0 };
 
     const dateReference = parseDateFr(dateEffet);
-    for (const a of ajouts) {
-      const erreurAge = verifierAge(contrat, { typeAssure: a.typeAssure ?? (a.familleId ? undefined : "AS"), dateNaissance: a.dateNaissance, scolarise: a.scolarise }, dateReference);
-      if (erreurAge) throw new BadRequestException(erreurAge);
+    if (!opts?.ignorerAge) {
+      for (const a of ajouts) {
+        const erreurAge = verifierAge(contrat, { typeAssure: a.typeAssure ?? (a.familleId ? undefined : "AS"), dateNaissance: a.dateNaissance, scolarise: a.scolarise }, dateReference);
+        if (erreurAge) throw new BadRequestException(erreurAge);
+      }
     }
 
     // Préfixe matricule propre à la société (2026-09) — voir
