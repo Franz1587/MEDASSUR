@@ -124,6 +124,16 @@ export class SanteController {
     return this.service.removeAssure(id);
   }
 
+  @Get("assures/:id/matricules")
+  getMatricules(@Param("id") id: string) {
+    return this.service.getMatricules(id);
+  }
+
+  @Post("assures/:id/matricules")
+  ajouterAncienMatricule(@Param("id") id: string, @Body() body: { matricule: string }) {
+    return this.service.ajouterAncienMatricule(id, body.matricule ?? "");
+  }
+
   @Get("prises-en-charge")
   findPrisesEnCharge(
     @Query("assureIds") assureIds?: string, @Query("contratId") contratId?: string, @Query("gestionnaireId") gestionnaireId?: string,

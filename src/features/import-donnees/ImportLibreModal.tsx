@@ -458,6 +458,15 @@ function PanneauClasseur({ r, options, onOptions }: { r: ResultatClasseur; optio
         )}
       </fieldset>
 
+      {t.absents > 0 && !options.creerAbsents && (
+        <div className="flex items-start gap-2.5 p-3 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30">
+          <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" aria-hidden />
+          <p className="text-[12px] text-amber-800 dark:text-amber-300">
+            <span className="font-semibold">{nf(t.absents)} personne(s) absente(s) ne seront pas importées</span> — cochez &laquo;&nbsp;Créer les absents&nbsp;&raquo; ci-dessus pour les ajouter à l&apos;application.
+          </p>
+        </div>
+      )}
+
       <ListeEchantillon titre="Changements de contrat" lignes={r.echantillons.deplacements} total={t.deplacements} />
       <ListeEchantillon titre="Suspensions" lignes={r.echantillons.suspensions} total={t.suspensions} />
       <ListeEchantillon titre="Réactivations" lignes={r.echantillons.reactivations} total={t.reactivations} />

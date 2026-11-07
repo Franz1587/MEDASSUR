@@ -538,3 +538,18 @@ export async function updatePriseEnCharge(id: string, payload: Partial<PriseEnCh
   const pc = await http.patch<ApiPriseEnCharge>(`/sante/prises-en-charge/${id}`, payload);
   return mapPriseEnCharge(pc);
 }
+
+export interface MatriculeHistorique {
+  id: string;
+  matricule: string;
+  statut: string; // "Actuel" | "Ancien"
+  createdAt: string;
+}
+
+export async function getMatriculeHistory(assureId: string): Promise<MatriculeHistorique[]> {
+  return http.get<MatriculeHistorique[]>(`/sante/assures/${assureId}/matricules`);
+}
+
+export async function ajouterAncienMatriculeAssure(assureId: string, matricule: string): Promise<void> {
+  await http.post(`/sante/assures/${assureId}/matricules`, { matricule });
+}

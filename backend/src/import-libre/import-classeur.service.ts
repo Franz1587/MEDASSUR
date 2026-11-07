@@ -317,6 +317,8 @@ export class ImportClasseurService {
         action.creer = true; action.typeCreation = type;
         action.naissance = l.naissance || undefined; action.sexe = l.sexe;
         if (type === "AS") action.telephone = this.telephoneUtile(l.tel);
+        const voulueCreation = statutDepuisFichier(l.statut);
+        if (voulueCreation === "Suspendu") action.statutVers = "Suspendu";
         assures.push(action);
         continue;
       }
@@ -712,6 +714,13 @@ export class ImportClasseurService {
         await creer(contratId, liste.filter((a) => (a.typeCreation ?? "AS") === "AS"), "Assuré principal");
         await creer(contratId, liste.filter((a) => (a.typeCreation ?? "AS") !== "AS"), "Ayant droit");
       }
+      // Suspension a posteriori : les créés dont le fichier indique "Terminé" naissent "Actif" (mouvements)
+      const aSuspendre = plan.assures
+        .filter((x) => x.creer && x.statutVers === "Suspendu")
+        .map((x) => idParMatricule.get(x.matricule.toLowerCase()))
+        .filter((id): id is string => !!id);
+      if (aSuspendre.length > 0)
+        await this.prisma.assureSante.updateMany({ where: { id: { in: aSuspendre } }, data: { statut: "Suspendu" } });
     }
 
     // 7. Libellé produit des contrats (feuille de synthèse)

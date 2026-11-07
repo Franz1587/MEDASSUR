@@ -168,7 +168,9 @@ export function sexeDepuisFichier(valeur: string): "M" | "F" | undefined {
   return undefined;
 }
 
-export const clePolice = (s: string): string => s.trim().replace(/\s+/g, "").toUpperCase();
+export const clePolice = (s: string): string =>
+  // Normalise les zéros de tête après un préfixe lettre : "R01008491" → "R1008491"
+  s.trim().replace(/\s+/g, "").toUpperCase().replace(/^([A-Z]+)0+(\d)/, "$1$2");
 
 // Jour et mois permutés (05/06/1975 ↔ 06/05/1975) : l'écart de date de naissance le plus fréquent.
 export function dateInversee(a: string, b: string): boolean {

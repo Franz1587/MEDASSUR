@@ -1971,4 +1971,32 @@ export class SanteService {
     }
     return mise;
   }
+
+  // Historique des matricules d'un assuré (tous les formats successifs liés
+  // à la même identité). Utilisé par le profil assuré pour afficher et gérer
+  // les anciens matricules, et par ARIANA pour résoudre les PEC d'un assuré
+  // créé sous un matricule différent dans l'ancien système.
+  async getMatricules(assureId: string): Promise<{ id: string; matricule: string; statut: string; createdAt: Date }[]> {
+    const assure = await this.prisma.assureSante.findUnique({ where: { id: assureId }, select: { identiteId: true } });
+    if (!assure?.identiteId) return [];
+    return this.prisma.matriculeAssuree.findMany({
+      where: { identiteId: assure.identiteId },
+      select: { id: true, matricule: true, statut: true, createdAt: true },
+      orderBy: [{ statut: "asc" }, { createdAt: "desc" }],
+    });
+  }
+
+  async ajouterAncienMatricule(assureId: string, matricule: string): Promise<void> {
+    const mat = matricule.trim();
+    if (!mat) throw new BadRequestException("Matricule vide.");
+    const assure = await this.prisma.assureSante.findUnique({ where: { id: assureId }, select: { identiteId: true, contratId: true } });
+    if (!assure?.identiteId) throw new NotFoundException("Assuré introuvable.");
+    const contrat = await this.prisma.contrat.findUnique({ where: { id: assure.contratId }, select: { societeId: true } });
+    const societeId = contrat?.societeId ?? null;
+    const existant = await this.prisma.matriculeAssuree.findFirst({ where: { societeId, matricule: mat } });
+    if (existant && existant.identiteId !== assure.identiteId)
+      throw new BadRequestException(`Le matricule ${mat} est déjà associé à un autre assuré.`);
+    if (!existant)
+      await this.prisma.matriculeAssuree.create({ data: { societeId, matricule: mat, identiteId: assure.identiteId, statut: "Ancien" } });
+  }
 }

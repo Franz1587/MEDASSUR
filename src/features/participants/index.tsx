@@ -19,8 +19,8 @@ import { useShellNavigation } from "@/layout/ShellNavigationContext";
 import {
   getAssuresSante, rechercherAssuresSante, createAssure, updateAssure, uploadAssurePhoto, deleteAssurePhoto, toggleCarteAssure,
   suspendreAssure, retirerDuContratAssure, basculerAssure, getMouvementsAssure, getPriseEnCharges,
-  assurePhotoUrl, ConflitFamilleError,
-  type AssureUpsertInput, type UpdateAssureInput,
+  assurePhotoUrl, ConflitFamilleError, getMatriculeHistory, ajouterAncienMatriculeAssure,
+  type AssureUpsertInput, type UpdateAssureInput, type MatriculeHistorique,
 } from "@/services/sante.service";
 import { openCarteAssurance, openFeuilleExamen, openFeuilleSoins } from "@/services/documents.service";
 import { getContrats } from "@/services/contrats.service";
@@ -112,6 +112,10 @@ export default function ParticipantsView() {
   const [pecLoading, setPecLoading] = useState(false);
   const [pecOuvert, setPecOuvert] = useState<string | null>(null);
 
+  const [matriculesHistory, setMatriculesHistory] = useState<MatriculeHistorique[]>([]);
+  const [ajouterMatricule, setAjouterMatricule] = useState("");
+  const [ajouterMatriculeErr, setAjouterMatriculeErr] = useState<string | null>(null);
+
   const [mouvements, setMouvements] = useState<MouvementAssure[]>([]);
   const [mouvementsLoading, setMouvementsLoading] = useState(false);
   const [suspendBusy, setSuspendBusy] = useState(false);
@@ -156,6 +160,13 @@ export default function ParticipantsView() {
     getContrats().then(setContrats);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    setMatriculesHistory([]);
+    setAjouterMatricule("");
+    setAjouterMatriculeErr(null);
+    if (selected) getMatriculeHistory(selected.id).then(setMatriculesHistory).catch(() => {});
+  }, [selected?.id]);
 
   const racines = assures.filter((a) => !a.familleId);
   const pagination = usePagination(racines);
@@ -747,6 +758,46 @@ export default function ParticipantsView() {
                       <label className="block"><div className="text-[12px] text-muted-foreground mb-1.5">Numéro fixe</div><input value={editForm.telephoneFixe ?? ""} onChange={(e) => setEditForm((v) => ({ ...v, telephoneFixe: e.target.value }))} className={fieldCls} /></label>
                       <label className="block"><div className="text-[12px] text-muted-foreground mb-1.5">Autre numéro</div><input value={editForm.autreNumero ?? ""} onChange={(e) => setEditForm((v) => ({ ...v, autreNumero: e.target.value }))} className={fieldCls} /></label>
                       <label className="block"><div className="text-[12px] text-muted-foreground mb-1.5">N° Fax</div><input value={editForm.fax ?? ""} onChange={(e) => setEditForm((v) => ({ ...v, fax: e.target.value }))} className={fieldCls} /></label>
+                    </div>
+
+                    <p className={sectionCls}>Historique des matricules</p>
+                    <div className="rounded-lg border border-border p-3 space-y-2">
+                      <div className="flex flex-wrap gap-2">
+                        {matriculesHistory.length === 0
+                          ? <span className="text-[12px] text-muted-foreground">—</span>
+                          : matriculesHistory.map((m) => (
+                              <span key={m.id} className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11.5px] border ${m.statut === "Actuel" ? "border-primary/40 bg-primary/5 text-primary" : "border-border bg-secondary/40 text-muted-foreground"}`} style={{ fontFamily: "'DM Mono', monospace" }}>
+                                {m.matricule}
+                                <span className="text-[10px] opacity-60">{m.statut}</span>
+                              </span>
+                            ))}
+                      </div>
+                      <form className="flex gap-2" onSubmit={async (e) => {
+                        e.preventDefault();
+                        const mat = ajouterMatricule.trim();
+                        if (!mat) return;
+                        try {
+                          setAjouterMatriculeErr(null);
+                          await ajouterAncienMatriculeAssure(selected.id, mat);
+                          setAjouterMatricule("");
+                          const updated = await getMatriculeHistory(selected.id);
+                          setMatriculesHistory(updated);
+                          toast.success("Ancien matricule ajouté.");
+                        } catch (err) {
+                          setAjouterMatriculeErr(err instanceof Error ? err.message : "Erreur.");
+                        }
+                      }}>
+                        <input
+                          value={ajouterMatricule}
+                          onChange={(e) => setAjouterMatricule(e.target.value)}
+                          placeholder="Ancien matricule…"
+                          className="flex-1 h-8 border border-border rounded-lg px-3 bg-background text-[12px] text-foreground"
+                          style={{ fontFamily: "'DM Mono', monospace" }}
+                        />
+                        <button type="submit" className="h-8 px-3 rounded-lg bg-primary text-primary-foreground text-[12px] hover:opacity-90">Ajouter</button>
+                      </form>
+                      {ajouterMatriculeErr && <p className="text-[11px] text-destructive">{ajouterMatriculeErr}</p>}
+                      <p className="text-[11px] text-muted-foreground">Les anciens matricules restent recherchables et permettent à ARIANA de retrouver cet assuré lors de l&apos;import des prises en charge.</p>
                     </div>
 
                     <div className="flex items-center justify-between pt-5 mt-5 border-t border-border">
