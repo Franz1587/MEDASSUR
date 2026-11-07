@@ -1263,7 +1263,7 @@ export const chapitresInterne: GuideChapitre[] = [
     id: "import-donnees",
     titre: "Import de données",
     sources: ["src/features/import-donnees"],
-    majLe: "2026-11-06",
+    majLe: "2026-11-07",
     sections: [
       {
         titre: "Import libre ARIANA : classeurs multi-feuilles",
@@ -1282,6 +1282,23 @@ export const chapitresInterne: GuideChapitre[] = [
           {
             titre: "Confirmer et vérifier",
             texte: "« Confirmer l'import » applique les corrections cochées puis recalcule les primes des contrats touchés. Les souscripteurs ne sont jamais modifiés automatiquement : un souscripteur différent dans la synthèse est signalé « à vérifier ». Un message récapitule ce qui a été fait et les points restants.",
+          },
+        ],
+      },
+      {
+        titre: "Import ARIANA : reprises de prises en charge (entente préalable)",
+        texte: [
+          "ARIANA reconnaît automatiquement un classeur de reprises de prises en charge quand il contient deux feuilles nommées « PEC » et « Actes ». La feuille PEC liste les dossiers (un par ligne : N° PEC, assuré, prestataire, statut, date…) ; la feuille Actes détaille les lignes d'acte correspondantes (N° PEC, désignation, frais réels, parts assurance et patient). Ce format est celui exporté par les anciens systèmes de gestion.",
+          "Correction automatique des montants négatifs : certains anciens systèmes inscrivent le plafond de la garantie comme part assurance même quand les frais réels sont inférieurs, ce qui rend la part patient négative. ARIANA corrige silencieusement chaque ligne concernée en plafonnant la part assurance aux frais réels réellement engagés.",
+        ],
+        etapes: [
+          {
+            titre: "Lire l'aperçu",
+            texte: "L'aperçu affiche : nombre de dossiers PEC et de lignes d'acte, assurés et prestataires retrouvés ou non, montants corrigés, doublons déjà présents dans l'application, répartition par statut (Accordée / Refusée / À traiter). Un tableau liste un échantillon des lignes corrigées et des assurés introuvables. Les doublons sont détectés par N° PEC : un dossier déjà importé est ignoré à la confirmation.",
+          },
+          {
+            titre: "Confirmer",
+            texte: "« Confirmer » crée un dossier de prise en charge (entente préalable) par N° PEC unique, avec décision Accordée — car ces données sont des antériorités réellement accordées. Chaque dossier contient toutes ses lignes d'acte. Depuis l'écran Prise en charge, le bouton « Certificat » génère ensuite le PDF de la prise en charge importée exactement comme pour un dossier saisi en direct dans MedAssur+.",
           },
         ],
       },
