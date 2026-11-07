@@ -144,14 +144,16 @@ export class ImportPecService {
     for (const r of rowsActes) {
       const numPec = String(r[0] ?? "").trim();
       if (!numPec) continue;
-      const fraisReels = parseMontant(r[4]);
-      const partAssurance = parseMontant(r[5]);
-      const partPatient = parseMontant(r[6]);
+      // Colonnes Actes : 0=N°PEC, 1=Bénéficiaire, 2=TypeBénéf, 3=AssuréPrincipal,
+      //   4=Souscripteur, 5=Prestataire, 6=StatutPEC, 7=Acte, 8=FraisRéels, 9=PartAssurance, 10=PartPatient
+      const fraisReels = parseMontant(r[8]);
+      const partAssurance = parseMontant(r[9]);
+      const partPatient = parseMontant(r[10]);
       const estCorrige = partPatient < 0;
       if (estCorrige) montantsNegatifs++;
       const baseRemboursementCorrige = estCorrige ? Math.min(fraisReels, partAssurance) : partAssurance;
       const list = actesByPec.get(numPec) ?? [];
-      list.push({ acte: String(r[3] ?? "").trim(), fraisReels, partAssurance, baseRemboursementCorrige, estCorrige });
+      list.push({ acte: String(r[7] ?? "").trim(), fraisReels, partAssurance, baseRemboursementCorrige, estCorrige });
       actesByPec.set(numPec, list);
       totalActes++;
     }
@@ -207,16 +209,16 @@ export class ImportPecService {
     const nomsInconnus = new Map<string, number>(); // nom original → nombre de lignes
 
     for (const r of rowsPec) {
-      // Colonnes : 0=Ligne, 1=N°PEC, 2=RéfFiche, 3=Statut, 4=Date, 5=Période,
-      //            6=Bénéficiaire, 7=DdnBenef, 8=Contact, 9=TypeBenef, 10=AssuréprincipalRef,
-      //            11=AssurPrincipal, 12=DdnAssure, 13=Souscripteur, 14=Prestataire,
-      //            15=Produit, 16=Validité, 17=TypeGarantie
+      // Colonnes PEC : 0=Ligne, 1=N°PEC(liste), 2=N°PEC(fiche), 3=Statut, 4=Date, 5=Période,
+      //   6=Bénéficiaire, 7=DdnBenef, 8=ContactBenef, 9=TypeBenef, 10=RéfAssuréPrincipal,
+      //   11=NomAssuréPrincipal, 12=DdnAssuré, 13=ContactAssuré, 14=Souscripteur, 15=Prestataire,
+      //   16=Produit, 17=Validité, 18=TypeGarantie, 19=NbActes, 20=TotalFrais, 21=TotalPartAss, 22=TotalPartPat
       const numPec       = String(r[1]  ?? "").trim();
       const statutPec    = String(r[3]  ?? "").trim();
       const dateCreation = parseDatePec(String(r[4] ?? ""));
       const beneficiaire = String(r[6]  ?? "").trim();
-      const souscripteur = String(r[13] ?? "").trim();
-      const nomPrest     = String(r[14] ?? "").trim();
+      const souscripteur = String(r[14] ?? "").trim();
+      const nomPrest     = String(r[15] ?? "").trim();
       const refAssure    = String(r[10] ?? "").trim();
       if (!numPec) continue;
 
