@@ -10,6 +10,7 @@ import { DecisionAccordPrealableDto } from "./dto/decision-accord-prealable.dto"
 import { UpdateAccordPrealableDto } from "./dto/update-accord-prealable.dto";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
+import { sanitizeUpload } from "../storage/upload-security.util";
 import { MessagingService } from "../messaging/messaging.service";
 import { PushNotificationsService } from "../notifications/push-notifications.service";
 
@@ -58,8 +59,13 @@ export class AccordPrealableService {
   async findAll(filtres?: {
     contratId?: string; assureId?: string; assureIds?: string[]; prestataireId?: string; type?: string; decision?: string; origine?: string;
     du?: string; au?: string; reference?: string;
+    page?: number; perPage?: number;
   }) {
+    const perPage = Math.min(filtres?.perPage ?? 100, 500);
+    const page = Math.max(filtres?.page ?? 1, 1);
     const accords = await this.prisma.accordPrealable.findMany({
+      take: perPage,
+      skip: (page - 1) * perPage,
       where: {
         contratId: filtres?.contratId,
         // assureIds (2026-09) — voir demande utilisateur : "même les prises
@@ -77,7 +83,7 @@ export class AccordPrealableService {
         decision: filtres?.decision,
         origine: filtres?.origine,
       },
-      include: { assure: true, prisesEnCharge: true, lignes: { include: { acteMedical: true } } },
+      include: { assure: true, prisesEnCharge: true, lignes: true },
       orderBy: { dateDemande: "desc" },
     });
     const du = parseDateFr(filtres?.du);
@@ -97,12 +103,12 @@ export class AccordPrealableService {
       }
       return true;
     });
-    return Promise.all(filtres_.map(async (a) => ({
+    return filtres_.map((a) => ({
       ...a,
       facture: a.prisesEnCharge.length > 0,
       montantFacture: a.prisesEnCharge.reduce((s, p) => s + Number(p.montant), 0),
-      montantAutoriseSuggere: await this.calculerMontantSuggere(a),
-    })));
+      montantAutoriseSuggere: (Number(a.montantAutorise) || null) as number | null,
+    }));
   }
 
   async findOne(id: string) {
@@ -443,10 +449,9 @@ export class AccordPrealableService {
   async uploadDocument(id: string, type: "ordonnance" | "devis", file: Express.Multer.File) {
     await this.findOne(id);
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
-    const ext = path.extname(file.originalname) || "";
-    const filename = `${id}-${type}-${randomUUID().slice(0, 6)}${ext.toLowerCase()}`;
+    const { storedName: filename, mime } = sanitizeUpload({ originalName: file.originalname, mimetype: file.mimetype, buffer: file.buffer, category: "document" });
     if (this.storage.actif) {
-      await this.storage.upload("accords-prealables", filename, file.buffer, file.mimetype);
+      await this.storage.upload("accords-prealables", filename, file.buffer, mime);
     } else {
       await fs.promises.mkdir(UPLOADS_DOCS_DIR, { recursive: true });
       await fs.promises.writeFile(path.join(UPLOADS_DOCS_DIR, filename), file.buffer);

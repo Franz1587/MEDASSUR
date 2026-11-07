@@ -65,6 +65,9 @@ interface ActionPec {
   date: string;
   fraisReels: number;
   baseRemboursement: number;
+  taux: number;
+  resteACharge: number;
+  acteLibelle: string;
   statutMedassur: string;
   statutControleMedical: string;
   motifRejet?: string;
@@ -102,6 +105,14 @@ function parseMontant(v: unknown): number {
   return isNaN(n) ? 0 : n;
 }
 
+// "CHAMBRE (50)" → { libelle: "CHAMBRE", plafond: 50000 }
+// "(50)" = plafond en milliers de FCFA (voir demande utilisateur 2026-11-07)
+function extrairePlafond(acte: string): { libelle: string; plafond: number | null } {
+  const m = acte.match(/^(.+?)\s*\((\d+)\)\s*$/);
+  if (m) return { libelle: m[1].trim(), plafond: parseInt(m[2]) * 1000 };
+  return { libelle: acte, plafond: null };
+}
+
 function parseDatePec(valeur: string): string {
   // "06/11/2026 14:22:03" → "06/11/2026"  |  "30/05/2026" → "30/05/2026"
   return (valeur || "").split(" ")[0].trim() || "";
@@ -137,8 +148,8 @@ export class ImportPecService {
 
     // ── Lire la feuille Actes ─────────────────────────────────────────────
     const rowsActes = XLSX.utils.sheet_to_json<string[]>(wb.Sheets["Actes"], { header: 1, defval: "", raw: false, blankrows: false }).slice(1);
-    // Map N° PEC → liste d'actes
-    const actesByPec = new Map<string, { acte: string; fraisReels: number; partAssurance: number; baseRemboursementCorrige: number; estCorrige: boolean }[]>();
+    // Map N° PEC → liste d'actes (avec prestataire par ligne)
+    const actesByPec = new Map<string, { acte: string; prestataire: string; fraisReels: number; partAssurance: number; baseRemboursementCorrige: number; estCorrige: boolean }[]>();
     let totalActes = 0;
     let montantsNegatifs = 0;
     for (const r of rowsActes) {
@@ -153,9 +164,26 @@ export class ImportPecService {
       if (estCorrige) montantsNegatifs++;
       const baseRemboursementCorrige = estCorrige ? Math.min(fraisReels, partAssurance) : partAssurance;
       const list = actesByPec.get(numPec) ?? [];
-      list.push({ acte: String(r[7] ?? "").trim(), fraisReels, partAssurance, baseRemboursementCorrige, estCorrige });
+      list.push({ acte: String(r[7] ?? "").trim(), prestataire: String(r[5] ?? "").trim(), fraisReels, partAssurance, baseRemboursementCorrige, estCorrige });
       actesByPec.set(numPec, list);
       totalActes++;
+    }
+
+    // ── Lire la feuille Rubriques (garantie + taux par PEC) ───────────────
+    const rowsRubriques = wb.Sheets["Rubriques"]
+      ? XLSX.utils.sheet_to_json<string[]>(wb.Sheets["Rubriques"], { header: 1, defval: "", raw: false, blankrows: false }).slice(1)
+      : [];
+    // Map N° PEC → garantie principale et taux (première ligne gagne)
+    const garantieByPec = new Map<string, string>();
+    const tauxByPec = new Map<string, number>();
+    for (const r of rowsRubriques) {
+      // Colonnes Rubriques : 0=N°PEC, 1=Bénéficiaire, 2=Souscripteur, 3=Prestataire,
+      //   4=StatutPEC, 5=Garantie, 6=Taux(%)
+      const numPec = String(r[0] ?? "").trim();
+      if (numPec && !garantieByPec.has(numPec)) {
+        garantieByPec.set(numPec, String(r[5] ?? "").trim());
+        tauxByPec.set(numPec, parseMontant(r[6]));
+      }
     }
 
     // ── Données de référence (société courante via middleware) ─────────────
@@ -252,17 +280,28 @@ export class ImportPecService {
       }
 
       const { statut: statutMedassur, statutControleMedical, motifRejet } = statutVersStatutMedassur(statutPec);
+      // Garantie et taux depuis la feuille Rubriques (priorité sur la détection par libellé)
+      const garantiePec = garantieByPec.get(numPec);
+      const tauxPec = tauxByPec.get(numPec) ?? 100;
 
       for (const acte of actes) {
-        // Rubrique depuis le libellé de l'acte (ex. "CHAMBRE (65)" → "Hospitalisation")
-        const type = normaliserRubrique(acte.acte) !== acte.acte
-          ? normaliserRubrique(acte.acte)
-          : "Consultation/Divers";
+        // Prestataire par ligne depuis la feuille Actes (col 5) ; fallback : feuille PEC
+        const prestActeNom = acte.prestataire || nomPrest;
+        const prestActeId = prestParNom.get(normaliserCle(prestActeNom)) ?? prestId ?? null;
+        if (!prestActeId && !prestParNom.has(normaliserCle(prestActeNom)))
+          nomsInconnus.set(prestActeNom, (nomsInconnus.get(prestActeNom) ?? 0) + 1);
+
+        // Type/garantie : Rubriques en priorité, sinon normalisation par libellé d'acte
+        const type = garantiePec || (normaliserRubrique(acte.acte) !== acte.acte ? normaliserRubrique(acte.acte) : "Consultation/Divers");
+        const resteACharge = Math.max(0, acte.fraisReels - acte.baseRemboursementCorrige);
+
         actions.push({
           assureId: assure.id, contratId: assure.contratId,
-          prestataireNom: nomPrest, prestataireId: prestId,
+          prestataireNom: prestActeNom, prestataireId: prestActeId,
           type, date: dateCreation,
           fraisReels: acte.fraisReels, baseRemboursement: acte.baseRemboursementCorrige,
+          taux: tauxPec, resteACharge,
+          acteLibelle: acte.acte,
           statutMedassur, statutControleMedical, motifRejet,
           prescriptionRef: numPec,
           estCorrige: acte.estCorrige,
@@ -390,7 +429,7 @@ export class ImportPecService {
         assureId: first.assureId,
         contratId: first.contratId,
         type: first.type,
-        description: `Import antériorité — ${numPec}`,
+        description: `${first.type} — ${numPec}`,
         dateDemande: first.date,
         dateDecision: first.date,
         statutAnalyseMedicale: "Validé",
@@ -414,6 +453,12 @@ export class ImportPecService {
           type: a.type,
           montant: a.fraisReels,
           baseRemboursement: a.baseRemboursement,
+          ...(a.taux > 0 ? { tauxRemboursement: a.taux / 100 } : {}),
+          ...(a.resteACharge > 0 ? { resteACharge: a.resteACharge } : {}),
+          ...(() => {
+            const { libelle, plafond } = extrairePlafond(a.acteLibelle);
+            return { ...(libelle ? { lettreCleCode: libelle } : {}), ...(plafond ? { plafondApplique: plafond } : {}) };
+          })(),
           date: a.date,
           modePaiement: "TiersPayant",
           statut: "Déclaré",

@@ -13,9 +13,13 @@ import { DecisionAccordPrealableDto } from "./dto/decision-accord-prealable.dto"
 import { UpdateAccordPrealableDto } from "./dto/update-accord-prealable.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { EN_TETE_SIGNATURE } from "../documents/signature-pdf.middleware";
+import { RequireModule } from "../auth/access.decorators";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_SANTE } from "../auth/access-roles";
 
 @Controller("accord-prealable")
 @UseGuards(JwtAuthGuard)
+@RequireModule("accordPrealable", "prisesEnCharge")
 export class AccordPrealableController {
   constructor(private readonly service: AccordPrealableService) {}
 
@@ -29,17 +33,26 @@ export class AccordPrealableController {
     @Query("du") du?: string,
     @Query("au") au?: string,
     @Query("reference") reference?: string,
+    @Query("page") page?: string,
+    @Query("perPage") perPage?: string,
   ) {
-    return this.service.findAll({ contratId, prestataireId, type, decision, origine, du, au, reference });
+    return this.service.findAll({ contratId, prestataireId, type, decision, origine, du, au, reference,
+      page: page ? parseInt(page) : undefined, perPage: perPage ? parseInt(perPage) : undefined });
   }
 
   // Ordonnance électronique pharmacie (2026-10) — routes déclarées AVANT
   // :id pour éviter qu'Express matche "pharmacie" comme un id générique.
+  // Utilisées par le portail prestataire (pharmacie) : le module de la
+  // classe ne s'applique pas à ce rôle, d'où le @RequireModule() vide.
+  @Roles("prestataire_sante", ...ROLES_SANTE)
+  @RequireModule()
   @Get("pharmacie/:code")
   findByCodePharmacie(@Param("code") code: string) {
     return this.service.findByCodePharmacie(code);
   }
 
+  @Roles("prestataire_sante", ...ROLES_SANTE)
+  @RequireModule()
   @Patch("pharmacie/:code/delivrer")
   delivrerParPharmacie(@Param("code") code: string, @Req() req: Request & { user: { prestataireId?: string } }) {
     return this.service.delivrerParPharmacie(code, req.user?.prestataireId ?? "");
@@ -50,11 +63,13 @@ export class AccordPrealableController {
     return this.service.findOne(id);
   }
 
+  @Roles(...ROLES_SANTE)
   @Post()
   create(@Body() dto: CreateAccordPrealableDto, @Req() req: Request & { user: { userId: string } }) {
     return this.service.create(dto, req.user.userId);
   }
 
+  @Roles(...ROLES_SANTE)
   @Patch(":id")
   update(@Param("id") id: string, @Body() dto: UpdateAccordPrealableDto) {
     return this.service.update(id, dto);
@@ -63,11 +78,13 @@ export class AccordPrealableController {
   // Prise en main d'un dossier (2026-09) — voir demande utilisateur :
   // "étendre le fait de prendre en main un dossier aux agents de saisie,
   // gestionnaire sinistre et gestionnaires production".
+  @Roles(...ROLES_SANTE)
   @Patch(":id/prendre")
   prendre(@Param("id") id: string, @Req() req: Request & { user: { userId: string } }) {
     return this.service.prendre(id, req.user.userId);
   }
 
+  @Roles(...ROLES_SANTE)
   @Patch(":id/decision")
   decider(@Param("id") id: string, @Body() dto: DecisionAccordPrealableDto) {
     return this.service.decider(id, dto);
@@ -76,11 +93,13 @@ export class AccordPrealableController {
   // Contrôleur de demande/saisie (2026-08) — voir demande utilisateur :
   // annule un dossier "En attente" détecté en doublon, pour laisser la
   // place à une nouvelle saisie.
+  @Roles(...ROLES_SANTE)
   @Patch(":id/annuler")
   annuler(@Param("id") id: string, @Body("motif") motif?: string) {
     return this.service.annuler(id, motif);
   }
 
+  @Roles(...ROLES_SANTE)
   @Post(":id/ordonnance")
   @UseInterceptors(FileFieldsInterceptor(CHAMPS_PIECES, { storage: memoryStorage(), limits: { fileSize: TAILLE_MAX_PIECE } }))
   async uploadOrdonnance(@Param("id") id: string, @UploadedFiles() recues: PiecesRecues) {
@@ -88,6 +107,7 @@ export class AccordPrealableController {
     return this.service.uploadDocument(id, "ordonnance", file);
   }
 
+  @Roles(...ROLES_SANTE)
   @Post(":id/devis")
   @UseInterceptors(FileFieldsInterceptor(CHAMPS_PIECES, { storage: memoryStorage(), limits: { fileSize: TAILLE_MAX_PIECE } }))
   async uploadDevis(@Param("id") id: string, @UploadedFiles() recues: PiecesRecues) {
