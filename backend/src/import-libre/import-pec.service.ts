@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { lireXlsxSur } from "../import/safe-xlsx.util";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -122,7 +123,7 @@ export class ImportPecService {
   // Détecte si un Buffer Excel est un classeur PEC (feuilles "PEC" + "Actes").
   static detecter(buffer: Buffer): boolean {
     try {
-      const wb = XLSX.read(buffer, { type: "buffer", bookSheets: true });
+      const wb = lireXlsxSur(buffer, { bookSheets: true });
       return wb.SheetNames.includes("PEC") && wb.SheetNames.includes("Actes");
     } catch {
       return false;
@@ -130,7 +131,7 @@ export class ImportPecService {
   }
 
   async apercu(buffer: Buffer, nomFichier: string): Promise<ResultatPec> {
-    const wb = XLSX.read(buffer, { type: "buffer" });
+    const wb = lireXlsxSur(buffer);
     if (!wb.Sheets["PEC"] || !wb.Sheets["Actes"])
       throw new BadRequestException("Le classeur doit contenir les feuilles 'PEC' et 'Actes'.");
 
@@ -164,6 +165,19 @@ export class ImportPecService {
       select: { id: true, matricule: true, contratId: true },
     });
     const asParMatricule = new Map(toutesAS.map((a) => [a.matricule.trim().toUpperCase(), a]));
+
+    // Enrichir avec les anciens matricules (import depuis un ancien système —
+    // le fichier PEC peut référencer l'ancien matricule d'un assuré qui a
+    // depuis été aligné sur son nouveau matricule).
+    const anciensMats = await this.prisma.matriculeAssuree.findMany({
+      where: { identite: { affiliations: { some: { contratId: { in: contratIds } } } } },
+      select: { matricule: true, identite: { select: { affiliations: { where: { contratId: { in: contratIds } }, select: { id: true, matricule: true, contratId: true }, take: 1 } } } },
+    });
+    for (const h of anciensMats) {
+      const assure = h.identite.affiliations[0];
+      if (assure && !asParMatricule.has(h.matricule.trim().toUpperCase()))
+        asParMatricule.set(h.matricule.trim().toUpperCase(), assure);
+    }
 
     const tousPrestataires = await this.prisma.prestataire.findMany({
       select: { id: true, nom: true, aliases: { select: { nomOrigine: true } } },
