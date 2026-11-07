@@ -258,4 +258,16 @@ export async function uploadFile<T>(path: string, file: File, champ = "fichier")
   return res.json() as Promise<T>;
 }
 
+// Les <img>, <a href> et visionneuses ne peuvent pas poser d'en-tête
+// Authorization : les fichiers servis sous /uploads (authentifiés côté
+// backend) reçoivent donc le JWT en `?token=`. Point d'entrée UNIQUE pour
+// toutes les URL de fichiers uploadés (voir les helpers `xxxUrl()` de
+// src/services/). Un lien déjà signé (`sig=`) est laissé intact.
+export function withAuthToken<T extends string | null | undefined>(url: T): T {
+  if (typeof url !== "string" || !url.includes("/uploads/") || /[?&](token|sig)=/.test(url)) return url;
+  const token = getAccessToken();
+  if (!token) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` as T;
+}
+
 export { API_URL };
