@@ -887,7 +887,17 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
       // le type : il est recalculé à l'enregistrement selon le prestataire
       // (un dentiste → Dentisterie), la comparaison ratait et dupliquait.
       const existant = await this.prisma.priseEnCharge.findFirst({
-        where: { assureId: { in: [assure.id, titulaireId] }, date: l.datePrestation, montant: l.montantTotal, facture: { prestataireId, referenceFacture: l.referenceFacture } },
+        where: {
+          assureId: { in: [assure.id, titulaireId] },
+          date: l.datePrestation,
+          montant: l.montantTotal,
+          OR: [
+            { facture: { prestataireId, referenceFacture: l.referenceFacture } },
+            // PEC importée sans facture : même prestataire + factureId null suffit
+            // (date + montant déjà filtrés ci-dessus)
+            { prestataireId, factureId: null },
+          ],
+        },
         select: { id: true, assureId: true, baseRemboursement: true, acteMedical: { select: { libelle: true } } },
       });
       if (existant) {

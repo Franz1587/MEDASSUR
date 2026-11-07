@@ -1067,6 +1067,16 @@ export class SanteService {
         prestataireRef: { select: { type: true } },
       },
     });
+    // Dedup : un import PEC puis un import factures pour le même événement
+    // crée deux lignes (factureId null vs non null). On garde la plus complète
+    // (factureId > null). Clé = assureId + date + montant + prestataire.
+    const seenPec = new Map<string, (typeof lignes)[0]>();
+    for (const l of lignes) {
+      const key = `${l.assureId}|${String(l.date).slice(0, 10)}|${l.montant}|${l.prestataire}`;
+      const prev = seenPec.get(key);
+      if (!prev || (l.factureId && !prev.factureId)) seenPec.set(key, l);
+    }
+    const lignesUniques = [...seenPec.values()];
     // rubrique (2026-09) — voir demande utilisateur : "les statistiques
     // doivent être en harmonie parfaite avec le tableau de garantie du
     // contrat" — pré-résolue ici (même resolver canonique que
@@ -1075,12 +1085,12 @@ export class SanteService {
     // rubrique sans dupliquer la logique côté navigateur. Chaque ligne
     // garde son PROPRE contratId (peut différer d'un membre à l'autre
     // d'une même famille) — garanties chargées par lot, une seule requête.
-    const contratIds = [...new Set(lignes.map((l) => l.contratId))];
+    const contratIds = [...new Set(lignesUniques.map((l) => l.contratId))];
     const contrats = contratIds.length > 0
       ? await this.prisma.contrat.findMany({ where: { id: { in: contratIds } }, select: { id: true, garanties: { select: { categorie: true } } } })
       : [];
     const garantiesParContratId = new Map(contrats.map((c) => [c.id, c.garanties]));
-    return lignes.map((l) => ({ ...l, rubrique: resoudreRubriqueContrat(garantiesParContratId.get(l.contratId) ?? [], { type: l.type, prestataireType: l.prestataireRef?.type }, l.acteMedical) }));
+    return lignesUniques.map((l) => ({ ...l, rubrique: resoudreRubriqueContrat(garantiesParContratId.get(l.contratId) ?? [], { type: l.type, prestataireType: l.prestataireRef?.type }, l.acteMedical) }));
   }
 
   // Vérifie l'enveloppe partagée d'une rubrique de garantie (ex: Dentisterie
