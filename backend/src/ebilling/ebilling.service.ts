@@ -219,6 +219,11 @@ export class EbillingService {
     const statut = statusMap[body.status ?? ''] ?? 'failed';
     const frais = body.fees ?? body.fee_amount ?? undefined;
 
+    // Idempotence : un callback rejoué après succès ne doit pas annuler
+    // un paiement déjà confirmé (statut paid → immuable).
+    const existante = await this.prisma.transaction.findFirst({ where: { reference: ref }, select: { statut: true } });
+    if (existante?.statut === 'paid') return;
+
     await this.prisma.transaction.updateMany({
       where: { reference: ref },
       data: {
@@ -335,6 +340,10 @@ export class EbillingService {
       body.status === 'success' || body.status === 'paid' ? 'paid' : 'failed';
     const frais = body.fees ?? body.fee_amount ?? undefined;
     const now = new Date();
+
+    // Idempotence : même garde que PAYIN — payout paid est immuable.
+    const existante = await this.prisma.transaction.findFirst({ where: { reference: body.reference }, select: { statut: true } });
+    if (existante?.statut === 'paid') return;
 
     await this.prisma.transaction.updateMany({
       where: { reference: body.reference },

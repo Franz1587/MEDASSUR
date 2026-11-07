@@ -14,10 +14,6 @@ const USER_STORAGE_KEY = "medassur-current-user";
 // ouverte ne doit jamais devenir un accès permanent silencieux.
 const ASSISTANCE_RETURN_KEY = "medassur-assistance-return";
 
-// Matches backend/prisma/seed.ts DEMO_PASSWORD — every seeded demo user
-// shares this password, so the "mode démo" role grid can log in for real
-// without asking anyone to type it.
-export const DEMO_PASSWORD = "medassur2024";
 
 export interface AuthUser {
   id: string;
