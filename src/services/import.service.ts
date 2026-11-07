@@ -152,3 +152,8 @@ export interface BilanDoublons {
 }
 export const analyserDoublons = () => http.get<BilanDoublons>("/import/doublons");
 export const nettoyerDoublons = () => http.post<BilanDoublons & { lignesSupprimees: number; facturesSupprimees: number }>("/import/doublons/nettoyer", {});
+
+// Doublons PEC vs factures (voir NettoyageDoublonsService.analyserDoublonsPec).
+export interface BilanDoublonsPec { trouvees: number; accordsTransferes: number; supprimees: number }
+export const analyserDoublonsPec = () => http.get<BilanDoublonsPec>("/import/doublons-pec");
+export const nettoyerDoublonsPec = () => http.post<BilanDoublonsPec>("/import/doublons-pec/nettoyer", {});

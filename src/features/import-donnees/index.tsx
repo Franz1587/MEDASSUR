@@ -8,6 +8,7 @@ import { Combobox } from "@/components/shared/Combobox";
 import { ImportEnMasseModal } from "@/components/shared/ImportEnMasseModal";
 import { ImportLibreModal } from "./ImportLibreModal";
 import { NettoyageDoublons } from "./NettoyageDoublons";
+import { NettoyagePec } from "./NettoyagePec";
 import {
   telechargerModeleImportFactures, apercuImportFactures, confirmerImportFactures, type ImportFactureRow,
   telechargerModeleImportFacturesGlobal, importerFacturesGlobal, type ResultatImportFacturesGlobal,
@@ -249,6 +250,7 @@ export default function ImportDonneesView() {
       </div>
 
       <NettoyageDoublons />
+      <NettoyagePec />
 
       {enAttenteTransfert > 0 && (
         <div className="mb-5 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 space-y-3">

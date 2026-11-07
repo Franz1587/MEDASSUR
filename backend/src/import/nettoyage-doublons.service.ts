@@ -29,6 +29,10 @@ export interface BilanDoublons {
   exemples: { prestataire: string; reference: string; date: string; montant: number; exemplaires: number; gardees: number }[];
 }
 
+export interface BilanDoublonsPec {
+  trouvees: number; accordsTransferes: number; supprimees: number;
+}
+
 @Injectable()
 export class NettoyageDoublonsService {
   constructor(private prisma: PrismaService) {}
@@ -132,5 +136,51 @@ export class NettoyageDoublonsService {
       groupes: nbGroupes, lignesASupprimer: aSupprimer.length, montantASupprimer: aSupprimer.reduce((s, l) => s + (l.statut === "Annulé" ? 0 : l.montant), 0),
       lignesBloquees: bloquees, facturesVidees, exemples, lignesSupprimees, facturesSupprimees,
     };
+  }
+
+  // Doublons PEC vs factures : une même prestation importée via l'import PEC
+  // (factureId null) ET via l'import factures régulier (factureId non null).
+  // On garde la ligne avec factureId et on lui transfère l'accordPrealableId
+  // issu de l'import PEC, puis on supprime la ligne PEC sans facture.
+  async analyserDoublonsPec(supprimer: boolean): Promise<BilanDoublonsPec> {
+    const societeId = TenantContext.getSocieteId();
+    if (!societeId) throw new BadRequestException("Société inconnue");
+
+    // Pour chaque PEC sans facture, trouver une ligne avec facture de même
+    // (assureId, date, montant, prestataire). DISTINCT ON → une seule ligne
+    // avec facture par PEC (la plus récente).
+    const paires = await this.prisma.$queryRaw<{ pecId: string; factId: string; accordId: string | null; factAccordId: string | null }[]>(
+      Prisma.sql`
+        SELECT DISTINCT ON (pec.id)
+          pec.id AS "pecId",
+          fact.id AS "factId",
+          pec."accordPrealableId" AS "accordId",
+          fact."accordPrealableId" AS "factAccordId"
+        FROM "PriseEnCharge" pec
+        JOIN "PriseEnCharge" fact
+          ON fact."assureId" = pec."assureId"
+         AND fact.date = pec.date
+         AND fact.montant = pec.montant
+         AND fact.prestataire = pec.prestataire
+         AND fact."factureId" IS NOT NULL
+         AND fact."societeId" = ${societeId}
+        WHERE pec."factureId" IS NULL
+          AND pec."societeId" = ${societeId}
+        ORDER BY pec.id, fact."createdAt" DESC`
+    );
+
+    if (!supprimer) return { trouvees: paires.length, accordsTransferes: 0, supprimees: 0 };
+
+    // Transférer l'accordPrealableId sur la ligne avec facture si elle n'en a pas.
+    const aTransferer = paires.filter((p) => p.accordId && !p.factAccordId);
+    for (const p of aTransferer) {
+      await this.prisma.priseEnCharge.update({ where: { id: p.factId }, data: { accordPrealableId: p.accordId } });
+    }
+    // Supprimer les lignes PEC orphelines par lots.
+    const ids = [...new Set(paires.map((p) => p.pecId))];
+    for (let i = 0; i < ids.length; i += 5000) {
+      await this.prisma.priseEnCharge.deleteMany({ where: { id: { in: ids.slice(i, i + 5000) } } });
+    }
+    return { trouvees: paires.length, accordsTransferes: aTransferer.length, supprimees: ids.length };
   }
 }

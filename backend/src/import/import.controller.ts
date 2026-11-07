@@ -47,6 +47,23 @@ export class ImportController {
     return this.nettoyage.analyser(true);
   }
 
+  // Doublons PEC vs factures : lignes créées à la fois par un import PEC
+  // (factureId null) et un import factures régulier (factureId non null)
+  // pour le même événement.
+  @Get("doublons-pec")
+  @UseGuards(RolesGuard)
+  @Roles("administrateur", "direction_generale")
+  apercuDoublonsPec() {
+    return this.nettoyage.analyserDoublonsPec(false);
+  }
+
+  @Post("doublons-pec/nettoyer")
+  @UseGuards(RolesGuard)
+  @Roles("administrateur", "direction_generale")
+  nettoyerDoublonsPec() {
+    return this.nettoyage.analyserDoublonsPec(true);
+  }
+
   // ── Factures ─────────────────────────────────────────────────────
   // Le MODÈLE reste léger, indépendant du contrat (2026-08 — voir demande
   // utilisateur : "le fichier doit juste être lié au contrat, pas rempli
