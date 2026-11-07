@@ -534,6 +534,8 @@ export function AdminShell({
               <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive border border-sidebar" />
             )}
             {notifOpen && (
+              <>
+              <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
               <div className="absolute right-0 top-8 w-80 rounded-xl border border-sidebar-border bg-sidebar-accent text-sidebar-foreground shadow-xl z-50">
                 <div className="px-3 py-2 border-b border-sidebar-border/70 flex items-center justify-between">
                   <span className="text-[12px] font-semibold">Notifications {notificationsNonLues.length > 0 && `(${notificationsNonLues.length})`}</span>
@@ -563,6 +565,7 @@ export function AdminShell({
                   ))}
                 </div>
               </div>
+              </>
             )}
           </span>
           <span title="Guide d'utilisateur">
@@ -571,37 +574,41 @@ export function AdminShell({
               onClick={handleOpenGuide}
             />
           </span>
-          <button
-            type="button"
-            onClick={() => setProfileOpen((v) => !v)}
-            className="w-[26px] h-[26px] rounded-full border border-sidebar-border flex items-center justify-center hover:bg-sidebar-accent/70 transition-colors"
-            title="Profil utilisateur"
-          >
-            <UserCircle className="w-[18px] h-[18px]" />
-          </button>
-
-          {profileOpen && (
-            <div className="absolute right-0 top-11 w-56 rounded-xl border border-sidebar-border bg-sidebar-accent text-sidebar-foreground shadow-xl z-50">
-              <div className="px-3 py-2 border-b border-sidebar-border/70">
-                <div className="text-[12px] font-semibold truncate">{currentUser?.nom ?? "Utilisateur"}</div>
-                <div className="text-[11px] text-sidebar-foreground/70 truncate">{currentRole?.label ?? "Profil"}</div>
-              </div>
-              <button
-                type="button"
-                className="w-full text-left px-3 py-2 text-[12px] hover:bg-sidebar/40 transition-colors"
-                onClick={handleOpenProfile}
-              >
-                Profil utilisateur
-              </button>
-              <button
-                type="button"
-                className="w-full text-left px-3 py-2 text-[12px] text-red-200 hover:bg-red-500/20 transition-colors"
-                onClick={logout}
-              >
-                Déconnexion
-              </button>
-            </div>
-          )}
+          <span className="relative">
+            <button
+              type="button"
+              onClick={() => setProfileOpen((v) => !v)}
+              className="w-[26px] h-[26px] rounded-full border border-sidebar-border flex items-center justify-center hover:bg-sidebar-accent/70 transition-colors"
+              title="Profil utilisateur"
+            >
+              <UserCircle className="w-[18px] h-[18px]" />
+            </button>
+            {profileOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
+                <div className="absolute right-0 top-9 w-56 rounded-xl border border-sidebar-border bg-sidebar-accent text-sidebar-foreground shadow-xl z-50">
+                  <div className="px-3 py-2 border-b border-sidebar-border/70">
+                    <div className="text-[12px] font-semibold truncate">{currentUser?.nom ?? "Utilisateur"}</div>
+                    <div className="text-[11px] text-sidebar-foreground/70 truncate">{currentRole?.label ?? "Profil"}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-[12px] hover:bg-sidebar/40 transition-colors"
+                    onClick={handleOpenProfile}
+                  >
+                    Profil utilisateur
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-[12px] text-red-200 hover:bg-red-500/20 transition-colors"
+                    onClick={logout}
+                  >
+                    Déconnexion
+                  </button>
+                </div>
+              </>
+            )}
+          </span>
         </div>
       </div>
 

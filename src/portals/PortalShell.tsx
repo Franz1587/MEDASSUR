@@ -381,6 +381,8 @@ function PortalShellCore({ meta }: { meta: PortalMeta }) {
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-destructive border border-card" />
               )}
               {notifOpen && (
+                <>
+                <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
                 <div className="absolute right-0 top-10 w-80 rounded-xl border border-border bg-card text-foreground shadow-xl z-50">
                   <div className="px-3 py-2 border-b border-border/70 flex items-center justify-between">
                     <span className="text-[12px] font-semibold">Notifications {notificationsNonLues.length > 0 && `(${notificationsNonLues.length})`}</span>
@@ -410,6 +412,7 @@ function PortalShellCore({ meta }: { meta: PortalMeta }) {
                     ))}
                   </div>
                 </div>
+                </>
               )}
             </span>
             <button
