@@ -20,6 +20,7 @@ import { UpdateInformationsMedicalesDto } from "./dto/update-informations-medica
 import { CreateRemboursementMembreDto } from "./dto/create-remboursement-membre.dto";
 import { GrantDelegationDto } from "./dto/grant-delegation.dto";
 import { UpdateDelegationModulesDto } from "./dto/update-delegation-modules.dto";
+import { EnregistrerPushTokenDto } from "./dto/enregistrer-push-token.dto";
 import { resoudreCategorieConsommation, resoudreExercice } from "./portail-membre.util";
 import { RUBRIQUES_PLAFONNEES } from "../sante/dto/create-facture-ligne.dto";
 import { CarnetSanteService } from "./carnet-sante.service";
@@ -92,7 +93,7 @@ export class PortailMembreController {
   // (voir mobile/src/utils/pushNotifications.ts) — un seul jeton par
   // compte pour l'instant (voir User.pushToken).
   @Post("push-token")
-  async enregistrerPushToken(@Body() body: { token?: string }, @Req() req: PortailMembreRequest) {
+  async enregistrerPushToken(@Body() body: EnregistrerPushTokenDto, @Req() req: PortailMembreRequest) {
     const token = (body.token ?? "").trim();
     if (!token) throw new BadRequestException("Jeton manquant.");
     await this.prisma.user.update({ where: { id: req.user.userId }, data: { pushToken: token } });
@@ -198,7 +199,7 @@ export class PortailMembreController {
     const [pecEnAttente, dernierRemboursement, lignes] = await Promise.all([
       this.prisma.accordPrealable.count({ where: { assureId: { in: idsFamille }, decision: "En attente" } }),
       this.prisma.priseEnCharge.findFirst({ where: { assureId: { in: idsFamille }, modePaiement: "Remboursement" }, orderBy: { date: "desc" } }),
-      this.sante.findPrisesEnCharge(idsFamille),
+      this.sante.findPrisesEnCharge(idsFamille, undefined, undefined, true),
     ]);
 
     let totalConsommation = 0;
@@ -279,7 +280,7 @@ export class PortailMembreController {
       this.idsFamilleDe(assureSanteId),
     ]);
     if (!assure) throw new NotFoundException("Assuré introuvable");
-    const lignes = await this.sante.findPrisesEnCharge(idsFamille);
+    const lignes = await this.sante.findPrisesEnCharge(idsFamille, undefined, undefined, true);
     const filtrees = modePaiement ? lignes.filter((l) => l.modePaiement === modePaiement) : lignes;
     const enrichies = filtrees.map((l) => ({
       ...l,

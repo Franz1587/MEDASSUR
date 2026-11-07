@@ -450,6 +450,7 @@ export class ImportPecService {
         decision: "Accordé",
         montantAutorise: montantTotal,
         prestataire: first.prestataireNom,
+        prescriptionRef: numPec,
         ...(first.prestataireId ? { prestataireId: first.prestataireId } : {}),
         ...(societeId ? { societeId } : {}),
       });

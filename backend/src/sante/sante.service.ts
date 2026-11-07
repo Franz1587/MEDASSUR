@@ -22,6 +22,7 @@ import { UpdateFactureLigneDto } from "./dto/update-facture-ligne.dto";
 import { CreateRemboursementLigneDto } from "../remboursements/dto/create-remboursement-ligne.dto";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
+import { sanitizeUpload } from "../storage/upload-security.util";
 
 const UPLOADS_PHOTOS_DIR = path.join(UPLOADS_ROOT, "photos");
 const UPLOADS_REMBOURSEMENTS_DIR = path.join(UPLOADS_ROOT, "remboursements");
@@ -494,21 +495,25 @@ export class SanteService {
   }
 
   async uploadPhoto(id: string, file: Express.Multer.File) {
-    await this.findAssureOne(id);
+    const existant = await this.findAssureOne(id);
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
-    const ext = path.extname(file.originalname) || ".jpg";
-    const filename = `${id}${ext.toLowerCase()}`;
+    const { storedName: filename, mime } = sanitizeUpload({ originalName: file.originalname, mimetype: file.mimetype, buffer: file.buffer, category: "image" });
     if (this.storage.actif) {
-      await this.storage.upload("photos", filename, file.buffer, file.mimetype);
+      await this.storage.upload("photos", filename, file.buffer, mime);
     } else {
       await fs.promises.mkdir(UPLOADS_PHOTOS_DIR, { recursive: true });
       await fs.promises.writeFile(path.join(UPLOADS_PHOTOS_DIR, filename), file.buffer);
     }
-    return this.prisma.assureSante.update({
+    const maj = await this.prisma.assureSante.update({
       where: { id },
       data: { photo: filename },
       include: { contrat: true, membres: true },
     });
+    // Nom aléatoire à chaque envoi : l'ancienne photo n'est plus écrasée, on la supprime.
+    if (existant.photo && existant.photo !== filename) {
+      await fs.promises.unlink(path.join(UPLOADS_PHOTOS_DIR, path.basename(existant.photo))).catch(() => undefined);
+    }
+    return maj;
   }
 
   async deletePhoto(id: string) {
@@ -1024,10 +1029,14 @@ export class SanteService {
   // contratId dénormalisé (voir PriseEnCharge.contratId, posé une fois à la
   // création — reste rattaché au contrat en vigueur au moment des faits même
   // si l'assuré bascule ensuite vers un autre contrat).
-  async findPrisesEnCharge(assureIds?: string[], contratId?: string, gestionnaireId?: string) {
+  async findPrisesEnCharge(assureIds?: string[], contratId?: string, gestionnaireId?: string, portailMode = false) {
     const where: Prisma.PriseEnChargeWhereInput = {
       ...(contratId ? { contratId } : assureIds && assureIds.length > 0 ? { assureId: { in: assureIds } } : {}),
       ...(gestionnaireId ? { gestionnaireId } : {}),
+      // Portail : exclure les TiersPayant non encore facturés (non passés en
+      // facturation) — la PEC n'est une consommation réelle que quand le
+      // prestataire a facturé et que factureId est renseigné.
+      ...(portailMode ? { NOT: { modePaiement: "TiersPayant", factureId: null } } : {}),
     };
     // Identité transverse (voir schema.prisma IdentiteAssuree) : demandées
     // par assuré (portail membre, agent IA...), les prestations de la
@@ -1917,10 +1926,9 @@ export class SanteService {
     const pec = await this.prisma.priseEnCharge.findUnique({ where: { id } });
     if (!pec) throw new NotFoundException(`Prise en charge ${id} introuvable`);
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
-    const ext = path.extname(file.originalname) || "";
-    const filename = `${id}-${type}-${randomUUID().slice(0, 6)}${ext.toLowerCase()}`;
+    const { storedName: filename, mime } = sanitizeUpload({ originalName: file.originalname, mimetype: file.mimetype, buffer: file.buffer, category: "document" });
     if (this.storage.actif) {
-      await this.storage.upload("remboursements", filename, file.buffer, file.mimetype);
+      await this.storage.upload("remboursements", filename, file.buffer, mime);
     } else {
       await fs.promises.mkdir(UPLOADS_REMBOURSEMENTS_DIR, { recursive: true });
       await fs.promises.writeFile(path.join(UPLOADS_REMBOURSEMENTS_DIR, filename), file.buffer);
