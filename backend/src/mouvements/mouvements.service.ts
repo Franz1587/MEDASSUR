@@ -85,10 +85,15 @@ export class MouvementsService implements OnModuleInit {
     const delta = { AS: 0, CJ: 0, EF: 0 };
 
     const dateReference = parseDateFr(dateEffet);
-    if (!opts?.ignorerAge) {
-      for (const a of ajouts) {
-        const erreurAge = verifierAge(contrat, { typeAssure: a.typeAssure ?? (a.familleId ? undefined : "AS"), dateNaissance: a.dateNaissance, scolarise: a.scolarise }, dateReference);
-        if (erreurAge) throw new BadRequestException(erreurAge);
+    // Pré-calcul des violations d'âge : bloquant si ignorerAge=false,
+    // sinon l'assuré est créé en "Suspendu" pour ne pas déclencher
+    // la radiation automatique quotidienne (radierHorsLimiteAge).
+    const horsLimite = new Set<AjoutMouvement>();
+    for (const a of ajouts) {
+      const erreurAge = verifierAge(contrat, { typeAssure: a.typeAssure ?? (a.familleId ? undefined : "AS"), dateNaissance: a.dateNaissance, scolarise: a.scolarise }, dateReference);
+      if (erreurAge) {
+        if (!opts?.ignorerAge) throw new BadRequestException(erreurAge);
+        horsLimite.add(a);
       }
     }
 
@@ -138,7 +143,7 @@ export class MouvementsService implements OnModuleInit {
           fax: a.fax,
           photo: a.photo,
           dateAffiliation: dateEffet,
-          statut: "Actif",
+          statut: horsLimite.has(a) ? "Suspendu" : "Actif",
           numeroAssure: `MED-SAN-${suffix}`,
           qrCode: `QR-MED-${suffix}`,
           statutCarte: "Active",
@@ -422,7 +427,7 @@ export class MouvementsService implements OnModuleInit {
     const aujourdhui = new Date();
     const dateEffet = aujourdhuiFr();
     const actifs = await this.prisma.assureSante.findMany({
-      where: { statut: { not: "Radié" } },
+      where: { statut: "Actif" },
       include: { contrat: true },
     });
 
