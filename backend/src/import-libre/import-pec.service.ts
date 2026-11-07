@@ -101,7 +101,20 @@ function extraireMatricule(refAssure: string): string {
 }
 
 function parseMontant(v: unknown): number {
-  const n = parseFloat(String(v ?? "0").replace(/\s/g, "").replace(",", "."));
+  let s = String(v ?? "0").replace(/\s/g, "").trim();
+  if (!s || s === "-") return 0;
+  const hasComma = s.includes(",");
+  const hasDot   = s.includes(".");
+  if (hasComma && hasDot) {
+    // "1,234.56" (anglais) ou "1.234,56" (français) — dernier séparateur = décimale
+    if (s.lastIndexOf(".") > s.lastIndexOf(",")) s = s.replace(/,/g, "");        // anglais
+    else s = s.replace(/\./g, "").replace(",", ".");                               // français
+  } else if (hasComma) {
+    // "220,000" → virgule suivie de 3 chiffres = séparateur milliers (FCFA)
+    if (/,\d{3}(,|$)/.test(s)) s = s.replace(/,/g, "");
+    else s = s.replace(",", ".");
+  }
+  const n = parseFloat(s);
   return isNaN(n) ? 0 : n;
 }
 
@@ -429,7 +442,7 @@ export class ImportPecService {
         assureId: first.assureId,
         contratId: first.contratId,
         type: first.type,
-        description: `${first.type} — ${numPec}`,
+        description: [...new Set(lignes.map((l) => extrairePlafond(l.acteLibelle).libelle).filter(Boolean))].slice(0, 5).join(", ") || first.type,
         dateDemande: first.date,
         dateDecision: first.date,
         statutAnalyseMedicale: "Validé",
