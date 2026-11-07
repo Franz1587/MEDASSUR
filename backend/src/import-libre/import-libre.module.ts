@@ -6,10 +6,11 @@ import { FacturesModule } from "../factures/factures.module";
 import { PrestatairesModule } from "../prestataires/prestataires.module";
 import { MouvementsModule } from "../mouvements/mouvements.module";
 import { ImportClasseurService } from "./import-classeur.service";
+import { ImportPecService } from "./import-pec.service";
 
 @Module({
   imports: [SanteModule, FacturesModule, PrestatairesModule, MouvementsModule],
-  providers: [ImportLibreService, ImportClasseurService],
+  providers: [ImportLibreService, ImportClasseurService, ImportPecService],
   controllers: [ImportLibreController],
 })
 export class ImportLibreModule {}

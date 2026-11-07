@@ -2732,13 +2732,21 @@ export class DocumentsService {
     });
     if (!pec) throw new NotFoundException(`Prise en charge ${priseEnChargeId} introuvable`);
 
+    // Lignes sœurs : même Facture si tiers payant saisi dans l'appli ;
+    // même prescriptionRef si PEC importée depuis l'ancien système (pas de factureId).
     const soeurs = pec.factureId
       ? await this.prisma.priseEnCharge.findMany({
           where: { factureId: pec.factureId, assureId: pec.assureId, statut: { not: "Annulé" } },
           include: { acteMedical: true },
           orderBy: { createdAt: "asc" },
         })
-      : [pec];
+      : pec.prescriptionRef
+        ? await this.prisma.priseEnCharge.findMany({
+            where: { prescriptionRef: pec.prescriptionRef, assureId: pec.assureId, statut: { not: "Annulé" } },
+            include: { acteMedical: true },
+            orderBy: { createdAt: "asc" },
+          })
+        : [pec];
 
     const estExamen = (famille: string | null | undefined) => GROUPES_EXAMEN.has(groupeDeFamille(famille) ?? "");
     const filtrees = soeurs.filter((l) => estExamen(l.acteMedical?.famille) === (kind === "examen"));

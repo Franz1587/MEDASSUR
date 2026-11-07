@@ -111,6 +111,39 @@ function getToken(): string | null {
 
 export type TypeImportLibre = "auto" | "factures" | "population" | "actes-medicaux" | "souscripteurs" | "contrats" | "assures" | "prises-en-charge" | "reglements";
 
+// ── Classeur PEC (Prises en charge / entente préalable) ──────────────────
+export interface EchantillonPec { ref: string; beneficiaire: string; souscripteur: string; detail: string }
+export interface EchantillonCorrection { ref: string; acte: string; fraisReels: number; ancienne: number; nouvelle: number }
+export interface ResultatPec {
+  typeDetecte: "pec";
+  planId: string;
+  nomFichier: string;
+  totalPec: number;
+  totalActes: number;
+  assuresTrouves: number;
+  assuresNonTrouves: number;
+  prestatairesTouves: number;
+  prestatairesNonTrouves: number;
+  montantsNegatifs: number;
+  doublons: number;
+  actesACreer: number;
+  statuts: Record<string, number>;
+  anomalies: { type: string; nombre: number; exemples: string[] }[];
+  echantillons: {
+    nonTrouves: EchantillonPec[];
+    corriges: EchantillonCorrection[];
+    doublons: EchantillonPec[];
+  };
+}
+export interface BilanPec { crees: number; doublonsIgnores: number; montantsCorrigés: number; erreurs: string[] }
+
+export function estPec(r: ResultatImportLibre): r is ResultatPec {
+  return (r as ResultatPec).typeDetecte === "pec";
+}
+export function confirmerPec(planId: string): Promise<BilanPec> {
+  return http.post<BilanPec>("/import-libre/confirmer-pec", { planId });
+}
+
 // Classeur multi-feuilles (participants + synthèse par contrat) — voir ImportClasseurService.
 export interface OptionsClasseur {
   statuts: boolean;
@@ -162,7 +195,7 @@ export interface BilanClasseur {
   ignores: number; erreurs: string[];
 }
 
-export type ResultatImportLibre = ResultatApercu | ResultatPopulation | ResultatActesMedicaux | ResultatClasseur;
+export type ResultatImportLibre = ResultatApercu | ResultatPopulation | ResultatActesMedicaux | ResultatClasseur | ResultatPec;
 
 export function estClasseur(r: ResultatImportLibre): r is ResultatClasseur {
   return (r as ResultatClasseur).typeDetecte === "classeur";

@@ -4,13 +4,18 @@ import { memoryStorage } from "multer";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { ImportLibreService, LigneApercu, LignePopulation, LigneActeMedical, TypeImportLibre } from "./import-libre.service";
 import { ImportClasseurService, type OptionsClasseur } from "./import-classeur.service";
+import { ImportPecService } from "./import-pec.service";
 
 const LIMITE_FICHIER = 50 * 1024 * 1024; // 50 MB
 
 @Controller("import-libre")
 @UseGuards(JwtAuthGuard)
 export class ImportLibreController {
-  constructor(private readonly service: ImportLibreService, private readonly classeurs: ImportClasseurService) {}
+  constructor(
+    private readonly service: ImportLibreService,
+    private readonly classeurs: ImportClasseurService,
+    private readonly pec: ImportPecService,
+  ) {}
 
   // Aperçu universel — détecte le type si type=auto (défaut)
   @Post("apercu")
@@ -47,6 +52,13 @@ export class ImportLibreController {
   confirmerClasseur(@Body("planId") planId: string, @Body("options") options?: Partial<OptionsClasseur>) {
     if (!planId) throw new BadRequestException("Aperçu manquant — relancez l'analyse du classeur.");
     return this.classeurs.confirmer(planId, options ?? {});
+  }
+
+  // Confirmation PEC (entente préalable) — plan gardé côté serveur
+  @Post("confirmer-pec")
+  confirmerPec(@Body("planId") planId: string) {
+    if (!planId) throw new BadRequestException("Aperçu manquant — relancez l'analyse.");
+    return this.pec.confirmer(planId);
   }
 
   // Confirmation actes médicaux (catalogue)

@@ -10,6 +10,7 @@ import { RUBRIQUES_ACTES, resoudreDesignations } from "../actes-medicaux/resolut
 import { beneficiaireReel, chargerFamilles, scoreNom } from "../import/beneficiaire.util";
 import { RapprochementReprise } from "../import/reprise-correction.util";
 import { ImportClasseurService, type ResultatClasseur } from "./import-classeur.service";
+import { ImportPecService, type ResultatPec } from "./import-pec.service";
 import { statutDepuisFichier } from "./classeur.util";
 
 // Import libre Ariana (2026-10) — voir demande utilisateur : "elle doit
@@ -350,6 +351,7 @@ export class ImportLibreService {
     private factures: FacturesService,
     private prestataires: PrestatairesService,
     private classeur: ImportClasseurService,
+    private pec: ImportPecService,
   ) {}
 
   private getAnthropicClient(): Anthropic {
@@ -912,8 +914,13 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
     file: Express.Multer.File,
     modeCorrection = false,
     type: TypeImportLibre = "auto",
-  ): Promise<ResultatApercu | ResultatPopulation | ResultatActesMedicaux | ResultatClasseur> {
+  ): Promise<ResultatApercu | ResultatPopulation | ResultatActesMedicaux | ResultatClasseur | ResultatPec> {
     const ext = path.extname(file.originalname).toLowerCase();
+
+    // Classeur PEC (feuilles "PEC" + "Actes") — détecté avant le classeur population.
+    if (["auto", "prises-en-charge"].includes(type) && ImportPecService.detecter(file.buffer)) {
+      return this.pec.apercu(file.buffer, file.originalname);
+    }
 
     // Classeur multi-feuilles « participants (+ synthèse par contrat) » : lu en
     // entier, sans appel externe — voir ImportClasseurService.

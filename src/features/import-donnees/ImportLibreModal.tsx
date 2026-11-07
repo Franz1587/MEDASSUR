@@ -3,11 +3,11 @@ import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, Upload, X, Sparkles } 
 import { toast } from "sonner";
 import { Btn } from "@/components/shared/Btn";
 import {
-  apercuImportLibre, confirmerImportLibre, confirmerPopulation, confirmerActesMedicaux, confirmerClasseur,
-  estPopulation, estActesMedicaux, estClasseur,
+  apercuImportLibre, confirmerImportLibre, confirmerPopulation, confirmerActesMedicaux, confirmerClasseur, confirmerPec,
+  estPopulation, estActesMedicaux, estClasseur, estPec,
   type LigneApercu, type LignePopulation, type LigneActeMedical,
   type ResultatApercu, type ResultatPopulation, type ResultatActesMedicaux, type ResultatClasseur, type OptionsClasseur,
-  type ResultatImportLibre, type TypeImportLibre,
+  type ResultatPec, type ResultatImportLibre, type TypeImportLibre,
 } from "@/services/import-libre.service";
 
 // Import libre Ariana (2026-10, étendu 2026-10-31) — PDF, XLS (BIFF8), XLSX,
@@ -204,6 +204,90 @@ function ListeEchantillon({ titre, lignes, total }: { titre: string; lignes: Res
         {total > lignes.length && <p className="px-3 py-1.5 text-[11px] text-muted-foreground">… et {nf(total - lignes.length)} autre(s), appliqués de la même façon.</p>}
       </div>
     </details>
+  );
+}
+
+// ── Panneau PEC ────────────────────────────────────────────────────────────
+function PanneauPec({ r }: { r: ResultatPec }) {
+  const fmtM = (n: number) => n.toLocaleString("fr-FR") + " F";
+  const statutList = Object.entries(r.statuts).sort((a, b) => b[1] - a[1]);
+  return (
+    <div className="space-y-4 text-[13px]">
+      {/* Résumé chiffres clés */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {[
+          { label: "Demandes PEC", val: r.totalPec, cls: "text-foreground" },
+          { label: "Actes à importer", val: r.actesACreer, cls: "text-primary font-semibold" },
+          { label: "Actes avec montant corrigé", val: r.montantsNegatifs, cls: r.montantsNegatifs > 0 ? "text-amber-600 font-semibold" : "text-muted-foreground" },
+          { label: "Assurés non trouvés", val: r.assuresNonTrouves, cls: r.assuresNonTrouves > 0 ? "text-red-600" : "text-muted-foreground" },
+          { label: "Prestataires sans correspondance", val: r.prestatairesNonTrouves, cls: r.prestatairesNonTrouves > 0 ? "text-amber-600" : "text-muted-foreground" },
+          { label: "Déjà importées", val: r.doublons, cls: "text-muted-foreground" },
+        ].map(({ label, val, cls }) => (
+          <div key={label} className="bg-secondary/40 rounded-xl p-3 border border-border/40">
+            <p className="text-muted-foreground text-[11px] mb-0.5">{label}</p>
+            <p className={`text-lg font-bold ${cls}`}>{val.toLocaleString("fr-FR")}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Statuts PEC */}
+      {statutList.length > 0 && (
+        <div className="bg-secondary/30 rounded-xl p-3 border border-border/40">
+          <p className="font-medium text-muted-foreground mb-2">Statuts dans le fichier</p>
+          <div className="flex flex-wrap gap-2">
+            {statutList.map(([s, n]) => (
+              <span key={s} className={`px-2 py-0.5 rounded-full text-[11px] font-medium border ${s.startsWith("ACCORD") ? "bg-emerald-50 text-emerald-700 border-emerald-200" : s.startsWith("REFUS") ? "bg-red-50 text-red-700 border-red-200" : "bg-blue-50 text-blue-700 border-blue-200"}`}>
+                {s} — {n}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Corrections de montants */}
+      {r.echantillons.corriges.length > 0 && (
+        <details className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 rounded-xl p-3">
+          <summary className="cursor-pointer font-medium text-amber-700 dark:text-amber-400">
+            {r.montantsNegatifs} montant(s) corrigé(s) — part assurance plafonnée aux frais réels
+          </summary>
+          <div className="mt-2 space-y-1">
+            <p className="text-[11px] text-amber-600 dark:text-amber-500 mb-2">L'ancien système appliquait le plafond de garantie comme part assurance même quand les frais réels sont inférieurs. La correction : part assurance = min(frais réels, plafond).</p>
+            <table className="w-full text-[11px]">
+              <thead><tr className="text-muted-foreground"><th className="text-left pb-1">PEC</th><th className="text-left pb-1">Acte</th><th className="text-right pb-1">Frais</th><th className="text-right pb-1">Ancienne</th><th className="text-right pb-1">Corrigée</th></tr></thead>
+              <tbody>
+                {r.echantillons.corriges.map((c, i) => (
+                  <tr key={i} className="border-t border-amber-100 dark:border-amber-800">
+                    <td className="py-0.5 pr-2 text-muted-foreground med-num truncate max-w-[80px]">{c.ref.slice(-10)}</td>
+                    <td className="py-0.5 pr-2 truncate max-w-[140px]">{c.acte}</td>
+                    <td className="py-0.5 pr-2 text-right">{fmtM(c.fraisReels)}</td>
+                    <td className="py-0.5 pr-2 text-right text-red-500">{fmtM(c.ancienne)}</td>
+                    <td className="py-0.5 text-right text-emerald-600">{fmtM(c.nouvelle)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+
+      {/* Anomalies */}
+      {r.anomalies.length > 0 && (
+        <div className="space-y-2">
+          {r.anomalies.map((a) => (
+            <details key={a.type} className="bg-secondary/40 border border-border/40 rounded-xl p-3">
+              <summary className="cursor-pointer font-medium text-foreground">
+                <span className="text-red-600 mr-1">⚠</span> {a.type} — {a.nombre}
+              </summary>
+              {a.exemples.length > 0 && (
+                <ul className="mt-1 ml-3 text-[11px] text-muted-foreground space-y-0.5">
+                  {a.exemples.slice(0, 5).map((ex, i) => <li key={i}>{ex}</li>)}
+                </ul>
+              )}
+            </details>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -414,6 +498,7 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
   // Résumé selon le type détecté
   const totalAction = fichiers.reduce((s, f) => {
     const r = f.resultat;
+    if (estPec(r)) return s + r.actesACreer;
     if (estClasseur(r)) {
       const t = r.totaux, o = optionsClasseur;
       return s + (o.statuts ? t.suspensions + t.reactivations : 0) + (o.contrats ? t.deplacements : 0) + (o.telephones ? t.telephonesAjoutes : 0)
@@ -454,7 +539,13 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
 
       for (const f of fichiers) {
         const r = f.resultat;
-        if (estClasseur(r)) {
+        if (estPec(r)) {
+          const b = await confirmerPec(r.planId);
+          if (b.crees) msgs.push(`${b.crees} prise(s) en charge importée(s)`);
+          if (b.montantsCorrigés) msgs.push(`${b.montantsCorrigés} montant(s) corrigé(s) (part assurance plafonnée aux frais réels)`);
+          if (b.doublonsIgnores) msgs.push(`${b.doublonsIgnores} déjà importée(s), ignorée(s)`);
+          if (b.erreurs.length) toast.warning(`Erreurs : ${b.erreurs.slice(0, 3).join(" ; ")}`);
+        } else if (estClasseur(r)) {
           const b = await confirmerClasseur(r.planId, optionsClasseur);
           if (b.deplaces) msgs.push(`${b.deplaces} assuré(s) rattaché(s) au bon contrat${b.membresDeplaces ? ` (+${b.membresDeplaces} ayant(s) droit)` : ""}`);
           if (b.prestationsRattachees) msgs.push(`${b.prestationsRattachees} prestation(s), ${b.facturesRattachees} facture(s) et ${b.ententesRattachees} entente(s) affectée(s)`);
@@ -648,7 +739,9 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
                         {f.nom} — <span className="text-primary">{titre}</span>
                       </p>
                     )}
-                    {estClasseur(r) ? (
+                    {estPec(r) ? (
+                      <PanneauPec r={r} />
+                    ) : estClasseur(r) ? (
                       <PanneauClasseur r={r} options={optionsClasseur} onOptions={setOptionsClasseur} />
                     ) : estPopulation(r) ? (
                       r.lignes.length === 0 ? (
