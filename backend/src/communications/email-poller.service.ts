@@ -11,6 +11,9 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { EmailService } from "./email.service";
 import { TenantContext } from "../tenant/tenant-context";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
+import { nomStockeAvecLibelle, sanitizeInboundAttachment } from "../storage/upload-security.util";
+import { verifierAuthentificationEmail } from "./email-auth.util";
+import { sanitizeHtmlRiche } from "../shared/sanitize-html.util";
 
 const UPLOADS_COMMUNICATIONS_DIR = path.join(UPLOADS_ROOT, "communications");
 // CC par défaut si arianaEmailCc n'est pas encore saisi en DB.
@@ -20,9 +23,14 @@ function adresses(a?: AddressObject | AddressObject[]): string {
   return (Array.isArray(a) ? a : a ? [a] : []).flatMap((x) => x.value.map((v) => v.address ?? "")).filter(Boolean).join("; ");
 }
 
-async function stocker(nomOrigine: string, contenu: Buffer): Promise<string> {
+// Pièce jointe d'un email entrant (contenu non fiable) : nom aléatoire, type
+// vérifié ; un type refusé n'est pas rejeté mais conservé en `.bin`
+// (téléchargement forcé, jamais interprété) — voir sanitizeInboundAttachment.
+async function stocker(nomOrigine: string, contenu: Buffer): Promise<string | null> {
+  const securise = sanitizeInboundAttachment({ originalName: nomOrigine, buffer: contenu });
+  if (!securise) return null;
+  const nom = nomStockeAvecLibelle(securise, nomOrigine);
   await fs.promises.mkdir(UPLOADS_COMMUNICATIONS_DIR, { recursive: true });
-  const nom = `${randomUUID().slice(0, 6)}-${path.basename(nomOrigine).replace(/[^\p{L}\p{N}._ -]/gu, "_")}`;
   await fs.promises.writeFile(path.join(UPLOADS_COMMUNICATIONS_DIR, nom), contenu);
   return nom;
 }
@@ -128,9 +136,9 @@ export class EmailPollerService implements OnModuleInit {
       select: { id: true },
     })) return;
 
-    const pieces = await Promise.all(
+    const pieces = (await Promise.all(
       mail.attachments.filter((a) => a.contentDisposition !== "inline" || !a.cid).map((a) => stocker(a.filename ?? "piece-jointe", a.content)),
-    );
+    )).filter((p): p is string => p !== null);
 
     // Réponse à un envoi récent : rattachée comme retour sur le message sortant.
     const sortante = await this.prisma.communication.findFirst({
@@ -144,7 +152,7 @@ export class EmailPollerService implements OnModuleInit {
       }
     }
 
-    const html = typeof mail.html === "string" ? mail.html : null;
+    const html = typeof mail.html === "string" ? sanitizeHtmlRiche(mail.html) : null;
     await this.prisma.communication.create({
       data: {
         id: randomUUID(), canal: "Email", destinataireType: "Prospect",
@@ -161,35 +169,66 @@ export class EmailPollerService implements OnModuleInit {
       || /mailer-daemon|no-?reply|postmaster/.test(fromAddress)
       || fromAddress === process.env.SMTP_USER?.toLowerCase();
     let reponduParAriana = false;
+    let authEchec: string | null = null;
     if (!auto && this.societeId && this.agentIa) {
-      const params = await this.prisma.parametresEntreprise.findUnique({ where: { id: this.societeId }, select: { arianaEmailCc: true } });
-      const cc = params?.arianaEmailCc?.length ? params.arianaEmailCc : [ARIANA_EMAIL_CC_DEFAULT];
-      const reponse = await this.agentIa.repondreAEmail(fromAddress, fromNom, subject, texte, this.societeId).catch((err) => {
-        this.logger.error("repondreAEmail échoué", err instanceof Error ? err.message : String(err));
-        return null;
-      });
-      if (reponse?.texte) {
-        const sujetReponse = /^re\s*:/i.test(subject) ? subject : `Re: ${subject}`;
-        const ok = await this.email.envoyer(fromAddress, sujetReponse, reponse.texte, "Ariana — MEDASSUR+", reponse.attachments, cc);
-        const piecesAriana = await Promise.all(reponse.attachments.map((a) => stocker(a.filename, a.content)));
-        await this.prisma.communication.create({
-          data: {
-            id: randomUUID(), canal: "Email", destinataireType: "Prospect",
-            destinataireNom: fromNom, destinataireContact: fromAddress, cc: cc.join("; "),
-            objet: sujetReponse, contenu: reponse.texte, statut: ok ? "Envoyé" : "Simulé", declencheur: "ARIANA",
-            piecesJointes: piecesAriana, pieceJointe: piecesAriana[0] ?? null,
-          },
+      // Réponse automatique uniquement si l'expéditeur est AUTHENTIFIÉ (SPF/DKIM/DMARC
+      // alignés sur le domaine From) ET rattaché à un compte/contact connu de la société.
+      const auth = verifierAuthentificationEmail(mail, fromAddress);
+      const expediteur = auth.authentifie
+        ? await this.agentIa.identifierExpediteurEmail(fromAddress, fromNom, this.societeId).catch(() => null)
+        : null;
+      if (!expediteur) {
+        authEchec = auth.authentifie ? "expéditeur inconnu" : `non authentifié (${auth.motif})`;
+        this.logger.warn(`Email de ${fromAddress} sans réponse IA : ${authEchec}`);
+        await this.accuserReceptionGenerique(fromAddress, fromNom);
+      } else {
+        const params = await this.prisma.parametresEntreprise.findUnique({ where: { id: this.societeId }, select: { arianaEmailCc: true } });
+        const cc = params?.arianaEmailCc?.length ? params.arianaEmailCc : [ARIANA_EMAIL_CC_DEFAULT];
+        const reponse = await this.agentIa.repondreAEmail(expediteur, subject, texte).catch((err) => {
+          this.logger.error("repondreAEmail échoué", err instanceof Error ? err.message : String(err));
+          return null;
         });
-        reponduParAriana = true;
-        this.logger.log(`ARIANA a répondu à ${fromAddress} (ok=${ok}, PJ=${piecesAriana.length})`);
+        if (reponse?.texte) {
+          const sujetPropre = subject.replace(/[\r\n]+/g, " ").slice(0, 200);
+          const sujetReponse = /^re\s*:/i.test(sujetPropre) ? sujetPropre : `Re: ${sujetPropre}`;
+          // Destinataire = adresse de l'expéditeur vérifié, jamais une adresse issue du modèle.
+          const ok = await this.email.envoyer(expediteur.adresse, sujetReponse, reponse.texte, "Ariana — MEDASSUR+", reponse.attachments, cc);
+          const piecesAriana = (await Promise.all(reponse.attachments.map((a) => stocker(a.filename, a.content)))).filter((p): p is string => p !== null);
+          await this.prisma.communication.create({
+            data: {
+              id: randomUUID(), canal: "Email", destinataireType: "Prospect",
+              destinataireNom: fromNom, destinataireContact: expediteur.adresse, cc: cc.join("; "),
+              objet: sujetReponse, contenu: reponse.texte, statut: ok ? "Envoyé" : "Simulé", declencheur: "ARIANA",
+              piecesJointes: piecesAriana, pieceJointe: piecesAriana[0] ?? null,
+            },
+          });
+          reponduParAriana = true;
+          this.logger.log(`ARIANA a répondu à ${expediteur.adresse} (ok=${ok}, PJ=${piecesAriana.length})`);
+        }
       }
     }
 
     const gestionnaire = await this.prisma.user.findFirst({ where: { roleId: { startsWith: "gestionnaire_" } }, select: { id: true } });
     if (gestionnaire) {
       await this.notifications.create("Gestionnaire", gestionnaire.id,
-        `Email entrant de ${fromNom} <${fromAddress}>${reponduParAriana ? " — ARIANA a répondu" : ""} : ${subject}`,
+        `Email entrant de ${fromNom} <${fromAddress}>${reponduParAriana ? " — ARIANA a répondu" : ""}${authEchec ? ` — aucune réponse automatique (${authEchec}), accusé de réception générique envoyé, à traiter manuellement` : ""} : ${subject}`,
       ).catch(() => undefined);
     }
+  }
+
+  // Accusé de réception SANS aucune donnée pour un expéditeur inconnu ou non
+  // authentifié ; au plus un par adresse et par heure (anti-backscatter/boucle).
+  private readonly accusesEnvoyes = new Map<string, number>();
+
+  private async accuserReceptionGenerique(adresse: string, nom: string) {
+    const dernier = this.accusesEnvoyes.get(adresse) ?? 0;
+    if (Date.now() - dernier < 3_600_000) return;
+    this.accusesEnvoyes.set(adresse, Date.now());
+    if (this.accusesEnvoyes.size > 5000) this.accusesEnvoyes.clear();
+    await this.email.envoyer(
+      adresse, "Accusé de réception de votre message",
+      "Bonjour,\n\nNous avons bien reçu votre message. Notre équipe le traitera et reviendra vers vous dans les meilleurs délais.\n\nCeci est un accusé de réception automatique.",
+      "MEDASSUR+",
+    ).catch((err) => this.logger.warn(`Accusé de réception échoué pour ${nom} : ${err instanceof Error ? err.message : String(err)}`));
   }
 }
