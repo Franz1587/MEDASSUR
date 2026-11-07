@@ -3047,7 +3047,7 @@ export class DocumentsService {
     // tableau de garanties réel du contrat plutôt qu'un rapprochement
     // catalogue indépendant.
     const rubriquesGarantie = Array.from(new Set(
-      accord.lignes.map((l) => resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: l.categorieGarantie ?? l.type ?? l.description ?? "" }, l.acteMedical)),
+      accord.lignes.map((l) => resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: l.categorieGarantie ?? l.description ?? "" }, l.acteMedical)),
     ));
     const objetPriseEnCharge = rubriquesGarantie.length > 0 ? rubriquesGarantie.join(", ") : (accord.lignes[0]?.description ?? accord.description);
     doc.font("Helvetica").fontSize(8).text(`Code: ${objetPriseEnCharge}`, left + 8, y + 20, { width: colW - 20 });
@@ -3147,14 +3147,14 @@ export class DocumentsService {
   // source que l'écran Contrats → Garanties), sur la rubrique de la
   // PREMIÈRE ligne ayant un acte du catalogue rattaché.
   private tauxCouvertureParRubrique(
-    lignes: { acteMedical: { categorieGarantie: string | null } | null; categorieGarantie: string | null; type?: string | null }[],
+    lignes: { acteMedical: { categorieGarantie: string | null } | null; categorieGarantie: string | null; description: string }[],
     garanties: { categorie: string; tauxAssure: Prisma.Decimal | null; tauxAyantsDroit: Prisma.Decimal | null }[],
     estAyantDroit: boolean,
   ): number | null {
     const rubriqueCandidate =
       lignes.find((l) => l.acteMedical?.categorieGarantie)?.acteMedical?.categorieGarantie
       ?? lignes.find((l) => l.categorieGarantie)?.categorieGarantie
-      ?? lignes.find((l) => l.type)?.type;
+      ?? lignes.find((l) => l.description)?.description;
     if (!rubriqueCandidate) return null;
     const rubrique = normaliserRubrique(rubriqueCandidate);
     const garantie = garanties.find((g) => normaliserRubrique(g.categorie) === rubrique);
