@@ -16,7 +16,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from "@nes
 import { PrismaService } from "../prisma/prisma.service";
 import { ParametresEntrepriseService } from "../parametres-entreprise/parametres-entreprise.service";
 import { groupeDeFamille } from "../actes-medicaux/groupes-actes.util";
-import { resoudreRubriqueContrat } from "../actes-medicaux/rubrique-contrat.util";
+import { resoudreRubriqueContrat, normaliserRubrique } from "../actes-medicaux/rubrique-contrat.util";
 import { StatistiquesService } from "../statistiques/statistiques.service";
 import type { RubriqueId, StatistiquesPayload } from "../statistiques/statistiques.types";
 import { BordereauxService, type BordereauSinistresPayload, type BordereauProductionPayload, type FiltresBordereauSinistres } from "../bordereaux/bordereaux.service";
