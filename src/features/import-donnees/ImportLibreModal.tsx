@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, Upload, X, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Btn } from "@/components/shared/Btn";
@@ -7,8 +7,9 @@ import {
   estPopulation, estActesMedicaux, estClasseur, estPec,
   type LigneApercu, type LignePopulation, type LigneActeMedical,
   type ResultatApercu, type ResultatPopulation, type ResultatActesMedicaux, type ResultatClasseur, type OptionsClasseur,
-  type ResultatPec, type ResultatImportLibre, type TypeImportLibre,
+  type ResultatPec, type ResultatImportLibre, type TypeImportLibre, type PrestatairePecInconnu,
 } from "@/services/import-libre.service";
+import { http } from "@/lib/http";
 
 // Import libre Ariana (2026-10, étendu 2026-10-31) — PDF, XLS (BIFF8), XLSX,
 // CSV, TXT — détection automatique du type (factures / population / actes-médicaux).
@@ -207,8 +208,83 @@ function ListeEchantillon({ titre, lignes, total }: { titre: string; lignes: Res
   );
 }
 
+// ── Mapping prestataires PEC ──────────────────────────────────────────────
+function MappagePrestataires({ inconnus, mapping, onChange }: {
+  inconnus: PrestatairePecInconnu[];
+  mapping: Record<string, string>;
+  onChange: (m: Record<string, string>) => void;
+}) {
+  const [tousPrestataires, setTousPrestataires] = useState<{ id: string; nom: string }[]>([]);
+  const [ouvert, setOuvert] = useState(false);
+
+  useEffect(() => {
+    if (!ouvert || tousPrestataires.length > 0) return;
+    http.get<{ id: string; nom: string }[]>("/prestataires")
+      .then((data) => setTousPrestataires(data.map((p) => ({ id: p.id, nom: p.nom }))))
+      .catch(() => undefined);
+  }, [ouvert]);
+
+  const setMap = (nom: string, id: string) => onChange({ ...mapping, [nom]: id });
+  const delMap = (nom: string) => { const m = { ...mapping }; delete m[nom]; onChange(m); };
+
+  const mapped = inconnus.filter((p) => mapping[p.nom]);
+  const unmapped = inconnus.filter((p) => !mapping[p.nom]);
+
+  return (
+    <details className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 rounded-xl p-3" onToggle={(e) => setOuvert((e.target as HTMLDetailsElement).open)}>
+      <summary className="cursor-pointer font-medium text-amber-700 dark:text-amber-400 flex items-center justify-between">
+        <span><span className="mr-1">⚠</span> Prestataire sans correspondance — {inconnus.reduce((s, p) => s + p.compte, 0)} ligne(s) ({inconnus.length} nom{inconnus.length > 1 ? "s" : ""} unique{inconnus.length > 1 ? "s" : ""})</span>
+        {mapped.length > 0 && <span className="text-[11px] text-emerald-600 font-medium">{mapped.length} mappé{mapped.length > 1 ? "s" : ""}</span>}
+      </summary>
+      <p className="text-[11px] text-amber-600 dark:text-amber-500 mt-2 mb-3">
+        Ces prestataires n'existent pas encore dans MEDASSUR+. Associez-les à un prestataire existant pour créer l'alias (les prochains imports les reconnaîtront automatiquement). Laissez vide pour créer automatiquement.
+      </p>
+      <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+        {inconnus.map((p) => (
+          <div key={p.nom} className="flex items-center gap-2 text-[12px]">
+            <div className="flex-1 min-w-0">
+              <span className="font-medium truncate block" title={p.nom}>{p.nom}</span>
+              <span className="text-muted-foreground">{p.compte} ligne{p.compte > 1 ? "s" : ""}</span>
+            </div>
+            {mapping[p.nom] ? (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-emerald-700 dark:text-emerald-400 text-[11px] max-w-[150px] truncate" title={tousPrestataires.find((x) => x.id === mapping[p.nom])?.nom ?? mapping[p.nom]}>
+                  → {tousPrestataires.find((x) => x.id === mapping[p.nom])?.nom ?? "…"}
+                </span>
+                <button onClick={() => delMap(p.nom)} className="text-muted-foreground hover:text-red-500 text-[10px]" title="Annuler">✕</button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
+                {p.suggestions.slice(0, 2).map((s) => (
+                  <button key={s.id} onClick={() => setMap(p.nom, s.id)}
+                    className="px-2 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800 hover:bg-blue-100 text-[10px] max-w-[120px] truncate" title={s.nom}>
+                    {s.nom}
+                  </button>
+                ))}
+                {tousPrestataires.length > 0 && (
+                  <select
+                    className="text-[11px] border border-border rounded px-1.5 py-0.5 bg-background text-foreground max-w-[130px]"
+                    value=""
+                    onChange={(e) => { if (e.target.value) setMap(p.nom, e.target.value); }}
+                  >
+                    <option value="">Chercher…</option>
+                    {tousPrestataires.map((x) => <option key={x.id} value={x.id}>{x.nom}</option>)}
+                  </select>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {unmapped.length > 0 && (
+        <p className="text-[11px] text-muted-foreground mt-2">{unmapped.length} non mappé{unmapped.length > 1 ? "s" : ""} → seront créés automatiquement.</p>
+      )}
+    </details>
+  );
+}
+
 // ── Panneau PEC ────────────────────────────────────────────────────────────
-function PanneauPec({ r }: { r: ResultatPec }) {
+function PanneauPec({ r, mappingPrestataires, onMappingChange }: { r: ResultatPec; mappingPrestataires: Record<string, string>; onMappingChange: (m: Record<string, string>) => void }) {
   const fmtM = (n: number) => n.toLocaleString("fr-FR") + " F";
   const statutList = Object.entries(r.statuts).sort((a, b) => b[1] - a[1]);
   return (
@@ -271,9 +347,16 @@ function PanneauPec({ r }: { r: ResultatPec }) {
       )}
 
       {/* Anomalies */}
-      {r.anomalies.length > 0 && (
+      {(r.anomalies.length > 0 || r.prestatairesInconnus?.length > 0) && (
         <div className="space-y-2">
-          {r.anomalies.map((a) => (
+          {r.prestatairesInconnus?.length > 0 && (
+            <MappagePrestataires
+              inconnus={r.prestatairesInconnus}
+              mapping={mappingPrestataires}
+              onChange={onMappingChange}
+            />
+          )}
+          {r.anomalies.filter((a) => a.type !== "Prestataire sans correspondance").map((a) => (
             <details key={a.type} className="bg-secondary/40 border border-border/40 rounded-xl p-3">
               <summary className="cursor-pointer font-medium text-foreground">
                 <span className="text-red-600 mr-1">⚠</span> {a.type} — {a.nombre}
@@ -489,10 +572,12 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
   const [modeCorrection, setModeCorrection] = useState(false);
   const [typeImport, setTypeImport] = useState<TypeImportLibre>("auto");
   const [optionsClasseur, setOptionsClasseur] = useState<OptionsClasseur>({ statuts: true, contrats: true, telephones: true, factures: true, identite: true, types: false, matricules: false, creerAbsents: false, produits: "vides" });
+  // Mapping prestataires pour l'import PEC : nom dans le fichier → prestataireId MEDASSUR+
+  const [mappingPec, setMappingPec] = useState<Record<string, string>>({});
 
   if (!ouvert) return null;
 
-  const reset = () => { setEtape("upload"); setFichiers([]); setFichierEnCours(""); setTypeImport("auto"); };
+  const reset = () => { setEtape("upload"); setFichiers([]); setFichierEnCours(""); setTypeImport("auto"); setMappingPec({}); };
   const fermer = () => { reset(); onFermer(); };
 
   // Résumé selon le type détecté
@@ -540,7 +625,7 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
       for (const f of fichiers) {
         const r = f.resultat;
         if (estPec(r)) {
-          const b = await confirmerPec(r.planId);
+          const b = await confirmerPec(r.planId, Object.keys(mappingPec).length > 0 ? mappingPec : undefined);
           if (b.creesAccords) msgs.push(`${b.creesAccords} dossier(s) de prise en charge créé(s) (certificat disponible)`);
           if (b.crees) msgs.push(`${b.crees} ligne(s) d'acte importée(s)`);
           if (b.montantsCorrigés) msgs.push(`${b.montantsCorrigés} montant(s) corrigé(s) (part assurance plafonnée aux frais réels)`);
@@ -741,7 +826,7 @@ export function ImportLibreModal({ ouvert, onFermer }: Props) {
                       </p>
                     )}
                     {estPec(r) ? (
-                      <PanneauPec r={r} />
+                      <PanneauPec r={r} mappingPrestataires={mappingPec} onMappingChange={setMappingPec} />
                     ) : estClasseur(r) ? (
                       <PanneauClasseur r={r} options={optionsClasseur} onOptions={setOptionsClasseur} />
                     ) : estPopulation(r) ? (

@@ -21,6 +21,9 @@ import { randomUUID } from "crypto";
 export interface EchantillonPec { ref: string; beneficiaire: string; souscripteur: string; detail: string }
 export interface EchantillonCorrection { ref: string; acte: string; fraisReels: number; ancienne: number; nouvelle: number }
 
+export interface SuggestionPrestataire { id: string; nom: string }
+export interface PrestatairePecInconnu { nom: string; compte: number; suggestions: SuggestionPrestataire[] }
+
 export interface ResultatPec {
   typeDetecte: "pec";
   planId: string;
@@ -41,6 +44,7 @@ export interface ResultatPec {
     corriges: EchantillonCorrection[];
     doublons: EchantillonPec[];
   };
+  prestatairesInconnus: PrestatairePecInconnu[];
 }
 
 export interface BilanPec {
@@ -73,6 +77,17 @@ const PLANS = new Map<string, PlanPec>();
 const PLAN_TTL_MS = 60 * 60 * 1000; // 1 h
 
 // ── Utilitaires ─────────────────────────────────────────────────────────────
+
+// Scoring fuzzy entre deux noms normalisés (0 = aucun rapport, 1 = identique)
+function scoreFuzzy(a: string, b: string): number {
+  if (a === b) return 1.0;
+  if (a.includes(b) || b.includes(a)) return 0.8;
+  const tA = a.split(" ").filter(Boolean);
+  const tB = new Set(b.split(" ").filter(Boolean));
+  const overlap = tA.filter((t) => tB.has(t)).length;
+  if (tA.length > 0 && overlap / tA.length >= 0.5) return 0.5 + (overlap / tA.length) * 0.3;
+  return 0;
+}
 
 function extraireMatricule(refAssure: string): string {
   // "BNF20240005061-FGVQO / LRX-59305S" → "LRX-59305S"
@@ -175,6 +190,7 @@ export class ImportPecService {
     const echCorriges: EchantillonCorrection[] = [];
     const echDoublons: EchantillonPec[] = [];
     const actions: ActionPec[] = [];
+    const nomsInconnus = new Map<string, number>(); // nom original → nombre de lignes
 
     for (const r of rowsPec) {
       // Colonnes : 0=Ligne, 1=N°PEC, 2=RéfFiche, 3=Statut, 4=Date, 5=Période,
@@ -214,7 +230,10 @@ export class ImportPecService {
 
       // Résoudre prestataire
       const prestId = prestParNom.get(normaliserCle(nomPrest)) ?? null;
-      if (prestId) prestatairesTouves++; else prestatairesNonTrouves++;
+      if (prestId) prestatairesTouves++; else {
+        prestatairesNonTrouves++;
+        nomsInconnus.set(nomPrest, (nomsInconnus.get(nomPrest) ?? 0) + 1);
+      }
 
       const { statut: statutMedassur, statutControleMedical, motifRejet } = statutVersStatutMedassur(statutPec);
 
@@ -238,6 +257,21 @@ export class ImportPecService {
       }
     }
 
+    // Suggestions fuzzy pour les prestataires inconnus (top 50 par volume)
+    const prestatairesInconnus: PrestatairePecInconnu[] = [...nomsInconnus.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 50)
+      .map(([nom, compte]) => {
+        const nNorm = normaliserCle(nom);
+        const suggestions = tousPrestataires
+          .map((p) => ({ id: p.id, nom: p.nom, score: scoreFuzzy(nNorm, normaliserCle(p.nom)) }))
+          .filter((s) => s.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 3)
+          .map(({ id, nom: n }) => ({ id, nom: n }));
+        return { nom, compte, suggestions };
+      });
+
     const planId = randomUUID();
     PLANS.set(planId, { societeId: TenantContext.getSocieteId(), lignes: actions, expiresAt: Date.now() + PLAN_TTL_MS });
 
@@ -249,18 +283,59 @@ export class ImportPecService {
       statuts,
       anomalies: [
         ...(assuresNonTrouves > 0 ? [{ type: "Assuré introuvable", nombre: assuresNonTrouves, exemples: echNonTrouves.slice(0, 5).map((e) => `${e.ref} — ${e.beneficiaire} (${e.detail})`) }] : []),
-        ...(prestatairesNonTrouves > 0 ? [{ type: "Prestataire sans correspondance", nombre: prestatairesNonTrouves, exemples: [] }] : []),
+        ...(prestatairesNonTrouves > 0 ? [{ type: "Prestataire sans correspondance", nombre: prestatairesNonTrouves, exemples: prestatairesInconnus.slice(0, 5).map((p) => `${p.nom} (${p.compte} ligne${p.compte > 1 ? "s" : ""})`) }] : []),
         ...(doublons > 0 ? [{ type: "Déjà importée", nombre: doublons, exemples: echDoublons.map((e) => e.ref) }] : []),
       ],
       echantillons: { nonTrouves: echNonTrouves, corriges: echCorriges, doublons: echDoublons },
+      prestatairesInconnus,
     };
   }
 
-  async confirmer(planId: string): Promise<BilanPec> {
+  async confirmer(planId: string, mappingPrestataires?: Record<string, string>): Promise<BilanPec> {
     const plan = PLANS.get(planId);
     if (!plan || plan.expiresAt < Date.now()) throw new NotFoundException("Plan expiré ou introuvable. Relancez l'aperçu.");
     if (plan.societeId !== TenantContext.getSocieteId()) throw new BadRequestException("Société incohérente.");
     PLANS.delete(planId);
+    const societeId = plan.societeId;
+
+    // Appliquer le mapping et créer les alias + auto-créer les prestataires encore inconnus
+    if (mappingPrestataires && Object.keys(mappingPrestataires).length > 0) {
+      for (const [nomOrigine, prestataireId] of Object.entries(mappingPrestataires)) {
+        await this.prisma.prestataireAlias.upsert({
+          where: { societeId_nomOrigine: { societeId: societeId ?? "", nomOrigine } },
+          create: { nomOrigine, prestataireId, ...(societeId ? { societeId } : {}) },
+          update: { prestataireId },
+        });
+      }
+    }
+    // Noms encore inconnus après mapping → auto-créer (même comportement que import-libre)
+    const nomsAutoCreer = new Set<string>();
+    for (const a of plan.lignes) {
+      if (!a.prestataireId && !(mappingPrestataires?.[a.prestataireNom])) {
+        nomsAutoCreer.add(a.prestataireNom);
+      }
+    }
+    const autoCreated = new Map<string, string>();
+    for (const nom of nomsAutoCreer) {
+      if (!nom) continue;
+      const exist = await this.prisma.prestataire.findFirst({ where: { nom: { equals: nom, mode: "insensitive" } }, select: { id: true } });
+      if (exist) {
+        autoCreated.set(nom, exist.id);
+      } else {
+        const type = /pharma/i.test(nom) ? "Pharmacie" : /labo/i.test(nom) ? "Laboratoire" : "Clinique/Hôpital";
+        const nouveau = await this.prisma.prestataire.create({
+          data: { id: randomUUID(), nom, type, secteur: "Santé", pays: "Gabon", ville: "Libreville", statutConvention: "En négociation" },
+          select: { id: true },
+        });
+        autoCreated.set(nom, nouveau.id);
+      }
+    }
+    // Résoudre chaque ligne non mappée
+    for (const a of plan.lignes) {
+      if (!a.prestataireId) {
+        a.prestataireId = mappingPrestataires?.[a.prestataireNom] ?? autoCreated.get(a.prestataireNom) ?? null;
+      }
+    }
 
     // Recalculer les doublons (ré-import concurrent possible)
     const toutesPrescRef = [...new Set(plan.lignes.map((l) => l.prescriptionRef))];
@@ -274,7 +349,6 @@ export class ImportPecService {
     const annee = new Date().getFullYear();
     let creesAccords = 0, crees = 0, doublonsIgnores = 0, montantsCorrigés = 0;
     const erreurs: string[] = [];
-    const societeId = plan.societeId;
 
     // Grouper par N° PEC pour créer un AccordPrealable par dossier
     const parPec = new Map<string, ActionPec[]>();

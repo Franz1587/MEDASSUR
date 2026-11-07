@@ -56,9 +56,9 @@ export class ImportLibreController {
 
   // Confirmation PEC (entente préalable) — plan gardé côté serveur
   @Post("confirmer-pec")
-  confirmerPec(@Body("planId") planId: string) {
+  confirmerPec(@Body("planId") planId: string, @Body("mappingPrestataires") mappingPrestataires?: Record<string, string>) {
     if (!planId) throw new BadRequestException("Aperçu manquant — relancez l'analyse.");
-    return this.pec.confirmer(planId);
+    return this.pec.confirmer(planId, mappingPrestataires);
   }
 
   // Confirmation actes médicaux (catalogue)

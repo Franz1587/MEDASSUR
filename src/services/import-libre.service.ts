@@ -114,6 +114,9 @@ export type TypeImportLibre = "auto" | "factures" | "population" | "actes-medica
 // ── Classeur PEC (Prises en charge / entente préalable) ──────────────────
 export interface EchantillonPec { ref: string; beneficiaire: string; souscripteur: string; detail: string }
 export interface EchantillonCorrection { ref: string; acte: string; fraisReels: number; ancienne: number; nouvelle: number }
+export interface SuggestionPrestataire { id: string; nom: string }
+export interface PrestatairePecInconnu { nom: string; compte: number; suggestions: SuggestionPrestataire[] }
+
 export interface ResultatPec {
   typeDetecte: "pec";
   planId: string;
@@ -134,14 +137,15 @@ export interface ResultatPec {
     corriges: EchantillonCorrection[];
     doublons: EchantillonPec[];
   };
+  prestatairesInconnus: PrestatairePecInconnu[];
 }
 export interface BilanPec { crees: number; creesAccords: number; doublonsIgnores: number; montantsCorrigés: number; erreurs: string[] }
 
 export function estPec(r: ResultatImportLibre): r is ResultatPec {
   return (r as ResultatPec).typeDetecte === "pec";
 }
-export function confirmerPec(planId: string): Promise<BilanPec> {
-  return http.post<BilanPec>("/import-libre/confirmer-pec", { planId });
+export function confirmerPec(planId: string, mappingPrestataires?: Record<string, string>): Promise<BilanPec> {
+  return http.post<BilanPec>("/import-libre/confirmer-pec", { planId, mappingPrestataires });
 }
 
 // Classeur multi-feuilles (participants + synthèse par contrat) — voir ImportClasseurService.
