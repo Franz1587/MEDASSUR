@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import {
   Bold, Italic, Underline, Strikethrough, List, ListOrdered, IndentDecrease, IndentIncrease,
   AlignLeft, AlignCenter, AlignRight, AlignJustify, Link2, Undo2, Redo2, RemoveFormatting, Highlighter, Baseline, Minus,
@@ -25,7 +26,7 @@ export function EditeurRiche({ initialHtml, onChange, minHeight = 260, ariaLabel
   // Contenu initial posé une seule fois : l'éditeur reste non contrôlé pour garder le curseur.
   useEffect(() => {
     if (ref.current) {
-      ref.current.innerHTML = initialHtml;
+      ref.current.innerHTML = sanitizeHtml(initialHtml);
       onChange(ref.current.innerHTML, ref.current.innerText);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

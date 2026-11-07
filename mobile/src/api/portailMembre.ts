@@ -1,4 +1,4 @@
-import { http, toNumber, uploadFile, uploadFiles, API_URL, type RnFilePart } from "./http";
+import { http, toNumber, uploadFile, uploadFiles, API_URL, withAuthToken, type RnFilePart } from "./http";
 
 // Miroir mobile de src/services/portailMembre.service.ts (web) — MÊME
 // contrat d'API, même backend de production (https://medassur.cloud/api).
@@ -337,7 +337,7 @@ export async function supprimerBonNumerise(prescriptionId: string): Promise<void
 }
 
 export function urlCarnetSante(fichier: string): string {
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/carnet-sante/${fichier}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/carnet-sante/${fichier}`);
 }
 
 // ── Accès famille (délégations) — assuré PRINCIPAL uniquement ─────────

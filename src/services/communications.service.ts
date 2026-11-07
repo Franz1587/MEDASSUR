@@ -1,4 +1,4 @@
-import { http, API_URL, getAccessToken, invaliderCache, runSilently } from "@/lib/http";
+import { http, API_URL, getAccessToken, invaliderCache, runSilently, withAuthToken } from "@/lib/http";
 import type { Communication, CompteursCommunications, DossierCommunication, SignatureCommunication } from "@/types/communications";
 
 export interface CommunicationsFiltre {
@@ -95,10 +95,12 @@ export function enregistrerSignature(s: SignatureCommunication): Promise<Signatu
 // statiquement hors du préfixe /api — même pattern que prospectLogoUrl.
 export function pieceJointeCommunicationUrl(pieceJointe?: string | null): string | undefined {
   if (!pieceJointe) return undefined;
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/communications/${encodeURIComponent(pieceJointe)}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/communications/${encodeURIComponent(pieceJointe)}`);
 }
 
-// Nom affiché : sans le préfixe aléatoire « a1b2c3- » ajouté au stockage.
+// Nom affiché : sans l'UUID de stockage (`uuid__libellé.ext`) ni l'ancien préfixe « a1b2c3- ».
 export function nomPieceJointe(fichier: string): string {
+  const m = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}(?:__(.+?))?(\.[A-Za-z0-9]+)$/.exec(fichier);
+  if (m) return m[1] ? `${m[1]}${m[2]}` : `piece-jointe${m[2]}`;
   return fichier.replace(/^[0-9a-f]{6}-/, "");
 }

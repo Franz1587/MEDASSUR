@@ -1,4 +1,4 @@
-import { http, API_URL, getAccessToken } from "@/lib/http";
+import { http, API_URL, getAccessToken, withAuthToken } from "@/lib/http";
 
 // Messagerie (2026-08) — voir demande utilisateur : "il faut créer pour tous
 // les acteurs ou utilisateur un onglet de Messagerie permettant, aux
@@ -79,5 +79,5 @@ export function marquerConversationLue(conversationId: string): Promise<void> {
 }
 
 export function urlPieceJointeMessagerie(fichier: string): string {
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/messagerie/${fichier}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/messagerie/${fichier}`);
 }

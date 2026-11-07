@@ -1,4 +1,4 @@
-import { http, API_URL, getAccessToken } from "@/lib/http";
+import { http, API_URL, getAccessToken, withAuthToken } from "@/lib/http";
 import { toNumber } from "@/lib/decimal";
 import type { Prospect, ProspectDetail, ProspectHistoriqueEntry, SuggestionsCommissionProspect, StatistiquesProspection } from "@/types/crm";
 
@@ -68,7 +68,7 @@ function mapProspectDetail(p: ApiProspectDetail): ProspectDetail {
 // même pattern que compagnieLogoUrl.
 export function prospectLogoUrl(logo?: string | null): string | undefined {
   if (!logo) return undefined;
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/logos-prospects/${logo}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/logos-prospects/${logo}`);
 }
 
 export interface ProspectUpsertInput {

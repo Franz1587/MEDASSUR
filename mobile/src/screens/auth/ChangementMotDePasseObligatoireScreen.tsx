@@ -7,6 +7,7 @@ import { PrimaryButton } from "../../components/ui";
 import { changerMonMotDePasse } from "../../api/profil";
 import { messageErreur } from "../../api/http";
 import { useKeyboardHeight } from "../../hooks/useKeyboardHeight";
+import { MESSAGE_POLITIQUE_MOT_DE_PASSE, motDePasseConforme } from "../../utils/motDePasse";
 
 // Changement de mot de passe imposé (2026-09) — voir demande utilisateur :
 // "la saisie du mot de passe pour la première fois ne demande pas de
@@ -26,8 +27,8 @@ export function ChangementMotDePasseObligatoireScreen() {
   const keyboardHeight = useKeyboardHeight();
 
   const soumettre = async () => {
-    if (nouveauMdp.length < 8) {
-      Alert.alert("Mot de passe trop court", "Le nouveau mot de passe doit contenir au moins 8 caractères.");
+    if (!motDePasseConforme(nouveauMdp)) {
+      Alert.alert("Mot de passe trop faible", MESSAGE_POLITIQUE_MOT_DE_PASSE);
       return;
     }
     if (nouveauMdp !== confirmationMdp) {

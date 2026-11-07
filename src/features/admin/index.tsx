@@ -128,8 +128,10 @@ function UserDetailModal({ user, initialTab = "infos", modulesAutorises, onClose
         await updateUserModules(user.id, [...selection]);
         toast.success("Utilisateur mis à jour.");
       } else {
-        await createUser({ ...form, initiales: form.initiales.trim() || initiales(form.nom), modules: [...selection] });
-        toast.success(`Utilisateur créé — mot de passe initial : medassur2024.`);
+        const cree = await createUser({ ...form, initiales: form.initiales.trim() || initiales(form.nom), modules: [...selection] });
+        toast.success(cree.motDePasseTemporaire
+          ? `Utilisateur créé — mot de passe temporaire (à communiquer, affiché une seule fois) : ${cree.motDePasseTemporaire}`
+          : "Utilisateur créé — un mot de passe temporaire a été généré.", { duration: 60000 });
       }
       onSaved();
       onClose();

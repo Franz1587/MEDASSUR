@@ -91,8 +91,10 @@ export function SocieteUsersPanel({ societeId, modulesAutorises }: { societeId: 
         await modifierSocieteUserModules(societeId, target.id, [...selection]);
         toast.success("Utilisateur mis à jour.");
       } else {
-        await creerSocieteUser(societeId, { ...form, initiales: form.initiales.trim() || initiales(form.nom), modules: [...selection] });
-        toast.success("Utilisateur créé — mot de passe initial : medassur2024.");
+        const cree = await creerSocieteUser(societeId, { ...form, initiales: form.initiales.trim() || initiales(form.nom), modules: [...selection] });
+        toast.success(cree.motDePasseTemporaire
+          ? `Utilisateur créé — mot de passe temporaire (affiché une seule fois) : ${cree.motDePasseTemporaire}`
+          : "Utilisateur créé — un mot de passe temporaire a été généré.", { duration: 60000 });
       }
       setShowModal(false);
       refresh();

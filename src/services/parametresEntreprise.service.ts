@@ -1,4 +1,4 @@
-import { API_URL, getAccessToken, http } from "@/lib/http";
+import { API_URL, getAccessToken, http, withAuthToken } from "@/lib/http";
 import type { ParametresEntreprise } from "@/types/parametresEntreprise";
 
 export async function getParametresEntreprise(): Promise<ParametresEntreprise> {
@@ -14,7 +14,7 @@ export async function updateParametresEntreprise(payload: Partial<ParametresEntr
 // backend/src/main.ts). Même patron que compagnieLogoUrl.
 export function logoEntrepriseUrl(logo?: string | null): string | undefined {
   if (!logo) return undefined;
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/logos-entreprises/${logo}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/logos-entreprises/${logo}`);
 }
 
 // Logo (2026-09) — voir demande utilisateur : "on doit pouvoir mettre le
@@ -45,7 +45,7 @@ export async function deleteLogoEntreprise(): Promise<ParametresEntreprise> {
 // garde." Même patron que le logo ci-dessus.
 export function pageGardeStatistiquesUrl(fichier?: string | null): string | undefined {
   if (!fichier) return undefined;
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/pages-garde-statistiques/${fichier}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/pages-garde-statistiques/${fichier}`);
 }
 
 export async function uploadPageGardeStatistiques(file: File): Promise<ParametresEntreprise> {

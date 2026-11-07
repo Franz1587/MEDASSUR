@@ -1,4 +1,4 @@
-import { http, API_URL, getAccessToken, ecritureHorsLigne } from "@/lib/http";
+import { http, API_URL, getAccessToken, ecritureHorsLigne, withAuthToken } from "@/lib/http";
 import { toNumber } from "@/lib/decimal";
 import type { AccordPrealable, AccordPrealableLigne } from "@/types/accordPrealable";
 
@@ -102,7 +102,7 @@ function mapAccord(a: ApiAccordPrealable): AccordPrealable {
 // AccordPrealableService.uploadDocument, même principe que
 // sante.service.ts urlPhotoAssure.
 export function urlDocumentAccordPrealable(fichier: string): string {
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/accords-prealables/${fichier}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/accords-prealables/${fichier}`);
 }
 
 async function uploadDocument(id: string, type: "ordonnance" | "devis", file: File): Promise<AccordPrealable> {

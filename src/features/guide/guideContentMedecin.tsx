@@ -162,7 +162,7 @@ export const chapitresMedecin: GuideChapitre[] = [
         texte: [
           "Le popover « Mon profil » s'ouvre en cliquant sur votre avatar (initiales) en haut à droite de l'écran. Il regroupe trois blocs : vos informations personnelles, le changement de mot de passe, et la gestion de votre signature électronique — cette dernière n'apparaît jamais sur l'écran d'accueil, uniquement ici.",
           "Dans le bloc « Informations », vous pouvez modifier votre Nom, votre Téléphone et votre Adresse puis cliquer sur « Enregistrer » ; l'Email (identifiant de connexion) et le Rôle sont affichés mais non modifiables depuis cet écran.",
-          "Dans « Changer de mot de passe », renseignez votre Mot de passe actuel puis le Nouveau mot de passe (au moins 8 caractères) et sa Confirmation, puis cliquez sur « Changer le mot de passe ».",
+          "Dans « Changer de mot de passe », renseignez votre Mot de passe actuel puis le Nouveau mot de passe (au moins 10 caractères, dont 3 types parmi minuscules, majuscules, chiffres et symboles) et sa Confirmation, puis cliquez sur « Changer le mot de passe ».",
         ],
         image: img("medecin-09-mon-profil.png"),
         etapes: [

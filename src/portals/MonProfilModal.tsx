@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { X, User, KeyRound, Save } from "lucide-react";
 import { useAuth } from "@/auth/AuthContext";
+import { MESSAGE_POLITIQUE_MOT_DE_PASSE, motDePasseConforme } from "@/lib/motDePasse";
 import { getMoi } from "@/services/maSignature.service";
 import { modifierMonProfil, changerMonMotDePasse } from "@/services/monProfil.service";
 import { SignatureManager } from "@/components/shared/SignatureManager";
@@ -61,7 +62,7 @@ export function MonProfilModal({ onClose }: { onClose: () => void }) {
 
   const changerMotDePasse = async () => {
     if (!ancienMdp || !nouveauMdp) { toast.error("Renseignez votre mot de passe actuel et le nouveau."); return; }
-    if (nouveauMdp.length < 8) { toast.error("Le nouveau mot de passe doit contenir au moins 8 caractères."); return; }
+    if (!motDePasseConforme(nouveauMdp)) { toast.error(MESSAGE_POLITIQUE_MOT_DE_PASSE); return; }
     if (nouveauMdp !== confirmationMdp) { toast.error("La confirmation ne correspond pas au nouveau mot de passe."); return; }
     setSavingMdp(true);
     try {

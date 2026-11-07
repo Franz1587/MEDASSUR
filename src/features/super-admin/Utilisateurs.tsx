@@ -124,15 +124,19 @@ export default function SuperAdminUtilisateurs() {
         }
         toast.success("Utilisateur mis à jour.");
       } else if (estSuperAdmin) {
-        await createUser({
+        const cree = await createUser({
           ...form, roleId: "super_admin" as never,
           initiales: form.initiales.trim() || initiales(form.nom),
           modules: roles.super_admin.allowedModules,
         });
-        toast.success("Compte Super Admin créé — mot de passe initial : medassur2024.");
+        toast.success(cree.motDePasseTemporaire
+          ? `Compte Super Admin créé — mot de passe temporaire (affiché une seule fois) : ${cree.motDePasseTemporaire}`
+          : "Compte Super Admin créé — un mot de passe temporaire a été généré.", { duration: 60000 });
       } else {
-        await creerSocieteUser(societeChoisie, { ...form, initiales: form.initiales.trim() || initiales(form.nom), modules: [...selection] });
-        toast.success("Utilisateur créé — mot de passe initial : medassur2024.");
+        const cree = await creerSocieteUser(societeChoisie, { ...form, initiales: form.initiales.trim() || initiales(form.nom), modules: [...selection] });
+        toast.success(cree.motDePasseTemporaire
+          ? `Utilisateur créé — mot de passe temporaire (affiché une seule fois) : ${cree.motDePasseTemporaire}`
+          : "Utilisateur créé — un mot de passe temporaire a été généré.", { duration: 60000 });
       }
       setShowModal(false);
       refresh();

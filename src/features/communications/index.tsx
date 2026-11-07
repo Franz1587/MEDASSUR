@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { runSilently } from "@/lib/http";
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { getClients } from "@/services/clients.service";
 import { getPrestataires } from "@/services/prestataires.service";
 import {
@@ -37,17 +38,9 @@ function echapper(s: string) {
 }
 
 // HTML d'un email externe repris dans l'éditeur (même origine que l'app) :
-// retrait des scripts, styles, cadres et gestionnaires d'événements.
+// assaini par liste blanche (voir sanitizeHtml).
 function nettoyerHtml(html: string): string {
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  doc.querySelectorAll("script,style,iframe,object,embed,link,meta,base,form,title").forEach((n) => n.remove());
-  doc.body.querySelectorAll("*").forEach((el) => {
-    for (const attr of Array.from(el.attributes)) {
-      const nom = attr.name.toLowerCase();
-      if (nom.startsWith("on") || ((nom === "href" || nom === "src") && /^\s*javascript:/i.test(attr.value))) el.removeAttribute(attr.name);
-    }
-  });
-  return doc.body.innerHTML;
+  return sanitizeHtml(html);
 }
 
 function normaliserObjet(o?: string) {

@@ -1,4 +1,4 @@
-import { http, API_URL, getAccessToken } from "@/lib/http";
+import { http, API_URL, getAccessToken, withAuthToken } from "@/lib/http";
 import { toNumber } from "@/lib/decimal";
 import type { AppelOffres, AppelOffresUpsertInput, PropositionUpsertInput } from "@/types/appelOffres";
 import type { ContenuOffre, Cotation, ParametresOffre } from "@/types/cotation";
@@ -134,7 +134,7 @@ export async function supprimerDocumentAppelOffres(appelOffresId: string, docume
 // URL de téléchargement d'un document importé, servi statiquement (voir
 // backend/src/main.ts, même pattern que compagnieLogoUrl).
 export function appelOffresDocumentUrl(fichier: string): string {
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/appel-offres/${fichier}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/appel-offres/${fichier}`);
 }
 
 // ARIANA lit une proposition de compagnie importée et crée ses cotations

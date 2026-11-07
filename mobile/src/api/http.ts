@@ -39,6 +39,17 @@ export async function getAccessToken(): Promise<string | null> {
   return stored;
 }
 
+// Les <Image>, Linking.openURL et visionneuses ne posent pas toujours
+// d'en-tête Authorization : les fichiers sous /uploads (authentifiés côté
+// backend) reçoivent le JWT en `?token=`. Point d'entrée UNIQUE pour toutes
+// les URL de fichiers uploadés (équivalent de withAuthToken de src/lib/http.ts
+// côté web). Synchrone : lit le jeton déjà en mémoire (chargé au démarrage
+// par AuthContext via getAccessToken).
+export function withAuthToken<T extends string | null | undefined>(url: T): T {
+  if (typeof url !== "string" || !url.includes("/uploads/") || /[?&](token|sig)=/.test(url) || !cachedToken) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(cachedToken)}` as T;
+}
+
 export class ApiError extends Error {
   status: number;
   body: unknown;

@@ -297,7 +297,7 @@ export const chapitresClient: GuideChapitre[] = [
         texte: [
           "Cliquez sur votre pastille (initiales) en haut à droite de l'écran, puis sur « Mon profil » pour ouvrir cette fenêtre — accessible depuis n'importe quel écran du portail.",
           "La première section affiche vos informations : Nom (modifiable), Email (non modifiable — c'est votre identifiant de connexion), Téléphone, Rôle (non modifiable) et Adresse. Modifiez les champs voulus puis cliquez sur « Enregistrer ».",
-          "La section « Changer de mot de passe » demande le mot de passe actuel puis le nouveau (au moins 8 caractères) et sa confirmation ; cliquez sur « Changer le mot de passe ». Une erreur s'affiche si le mot de passe actuel est incorrect ou si la confirmation ne correspond pas.",
+          "La section « Changer de mot de passe » demande le mot de passe actuel puis le nouveau (au moins 10 caractères, dont 3 types parmi minuscules, majuscules, chiffres et symboles) et sa confirmation ; cliquez sur « Changer le mot de passe ». Une erreur s'affiche si le mot de passe actuel est incorrect ou si la confirmation ne correspond pas.",
           "La section « Signature électronique » permet d'associer une signature à votre compte, ajoutée automatiquement sur les documents qui en ont besoin. Deux façons de l'enregistrer : « Charger un fichier » (une image de votre signature) ou « Signer depuis mon téléphone » — un QR code s'affiche, à scanner avec votre téléphone ; la signature s'enregistre automatiquement dans votre compte dès qu'elle est validée sur l'écran mobile, sans rien avoir à faire de plus ici. Une fois une signature enregistrée, un bouton « Supprimer » permet de la retirer.",
         ],
         image: img("client-17-mon-profil.png"),

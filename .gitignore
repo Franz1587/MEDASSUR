@@ -22,3 +22,31 @@ mobile/builds/
 # Fichier OpenAPI généré (backend/src/export-openapi.ts) — artefact
 # régénérable à tout moment (npm run swagger:export), jamais versionné.
 backend/openapi.json
+
+# Données réelles (santé/PII) et artefacts locaux : jamais versionnés.
+# Pour les fichiers déjà suivis : `git rm -r --cached <chemin>` (voir SECURITY-REMEDIATION.md).
+backend/uploads/
+uploads/
+*.log
+backend/_tmp-*
+backend/*.tmp.js
+~$*
+.env.*
+!.env.example
+!backend/.env.example
+Modèle import pour La Ruche/
+*.tar.gz
+backend/*.pem
+mobile/medassur-*-firebase-adminsdk-*.json
+
+# Documents/captures réels à la racine (feuilles de soins, factures, WhatsApp…)
+WhatsApp Image*
+Screenshot_*
+2026-09-13_*
+Feuille de soins*
+Feuille-Soins*
+Certificat-Prise-En-Charge*
+FACTURE SANTE*
+Import DGDi*
+Lettre-Cheque*
+sempex*

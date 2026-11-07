@@ -1,4 +1,4 @@
-import { http, uploadFile, API_URL } from "@/lib/http";
+import { http, uploadFile, API_URL, withAuthToken } from "@/lib/http";
 import { roles, type RoleId } from "@/auth/roles";
 import type { UserAccount, RoleSummary } from "@/types/admin";
 import type { JetonSignatureQr } from "./maSignature.service";
@@ -30,7 +30,7 @@ export interface UpdateUserInput {
 // même principe que compagnieLogoUrl (src/services/compagnies.service.ts).
 export function userPhotoUrl(photo?: string | null): string | undefined {
   if (!photo) return undefined;
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/photos-users/${photo}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/photos-users/${photo}`);
 }
 
 export async function getUsers(): Promise<UserAccount[]> {
@@ -41,8 +41,9 @@ export async function getUser(id: string): Promise<UserAccount> {
   return http.get<UserAccount>(`/users/${id}`);
 }
 
-export async function createUser(payload: CreateUserInput): Promise<UserAccount> {
-  return http.post<UserAccount>("/users", payload);
+// Le mot de passe temporaire n'est retourné qu'à la création (jamais relisible).
+export async function createUser(payload: CreateUserInput): Promise<UserAccount & { motDePasseTemporaire?: string }> {
+  return http.post<UserAccount & { motDePasseTemporaire?: string }>("/users", payload);
 }
 
 export async function updateUser(id: string, payload: UpdateUserInput): Promise<UserAccount> {

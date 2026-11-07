@@ -28,8 +28,8 @@ export function DocumentViewerScreen() {
   const insets = useSafeAreaInsets();
   // `path` est soit un chemin API relatif (route protégée, générée à la
   // volée — feuille de soins, certificat…), soit une URL absolue vers un
-  // fichier déjà uploadé (ex. urlCarnetSante(), servi publiquement sous
-  // /uploads/ côté backend, sans exiger le header d'autorisation).
+  // fichier déjà uploadé (ex. urlCarnetSante(), servi sous /uploads/ côté
+  // backend : JWT exigé, fourni ici en en-tête ET en ?token= par withAuthToken).
   const uri = /^https?:\/\//i.test(path) ? path : `${API_URL}${path}`;
 
   const [token, setToken] = useState<string | null>(null);

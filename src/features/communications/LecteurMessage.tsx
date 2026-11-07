@@ -4,6 +4,7 @@ import {
   ExternalLink, Inbox, Pencil, MessageSquare, Phone, ArrowLeft, CornerDownRight, Maximize2, X,
 } from "lucide-react";
 import { Badge } from "@/components/shared/Badge";
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { nomPieceJointe, pieceJointeCommunicationUrl } from "@/services/communications.service";
 import type { Communication } from "@/types/communications";
 
@@ -34,7 +35,7 @@ function CorpsMessage({ c }: { c: Communication }) {
   const doc = `<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_blank"><style>
 body{font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1a1a2e;margin:20px 24px;word-wrap:break-word}
 img{max-width:100%;height:auto} table{max-width:100%} blockquote{border-left:2px solid #d1d5db;margin:0;padding-left:12px;color:#4b5563}
-</style></head><body>${c.contenuHtml}</body></html>`;
+</style></head><body>${sanitizeHtml(c.contenuHtml)}</body></html>`;
   return <iframe title={`Contenu : ${c.objet ?? "message"}`} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={doc} className="w-full flex-1 min-h-[360px] bg-white rounded-b-xl border-0" />;
 }
 

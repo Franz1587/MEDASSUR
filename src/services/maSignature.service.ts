@@ -1,4 +1,4 @@
-import { http, uploadFile, API_URL } from "@/lib/http";
+import { http, uploadFile, API_URL, withAuthToken } from "@/lib/http";
 import type { UserAccount } from "@/types/admin";
 
 // Signature électronique — libre-service (2026-09) — voir demande
@@ -11,7 +11,7 @@ import type { UserAccount } from "@/types/admin";
 
 export function signatureUrl(signature?: string | null): string | undefined {
   if (!signature) return undefined;
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/signatures/${signature}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/signatures/${signature}`);
 }
 
 export async function getMoi(): Promise<UserAccount> {

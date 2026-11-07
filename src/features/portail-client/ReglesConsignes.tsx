@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ScrollText, Paperclip, Download } from "lucide-react";
 import { toast } from "sonner";
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { getReglesConsignes, openRegleConsigneDocument } from "@/services/reglesConsignes.service";
 import type { RegleConsigne } from "@/types/reglesConsignes";
 
@@ -36,7 +37,7 @@ export default function PortailReglesConsignesView() {
                 <div className="p-1.5 bg-primary/12 rounded-lg"><ScrollText className="w-4 h-4 text-primary" /></div>
                 <h3 className="text-[14.5px] font-semibold text-foreground">{r.titre}</h3>
               </div>
-              <div className="text-[13px] text-foreground leading-relaxed prose-sm" dangerouslySetInnerHTML={{ __html: r.contenu }} />
+              <div className="text-[13px] text-foreground leading-relaxed prose-sm" dangerouslySetInnerHTML={{ __html: sanitizeHtml(r.contenu) }} />
               {r.fichier && (
                 <button
                   type="button"

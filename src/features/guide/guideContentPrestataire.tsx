@@ -293,7 +293,7 @@ export const chapitresPrestataire: GuideChapitre[] = [
         etapes: [
           {
             titre: "Changer de mot de passe",
-            texte: "Dans la section « Changer de mot de passe », renseignez votre Mot de passe actuel, puis le Nouveau mot de passe (au moins 8 caractères) et sa Confirmation (doit correspondre exactement). Cliquez sur « Changer le mot de passe ». Une erreur s'affiche si le mot de passe actuel est incorrect ou si la confirmation ne correspond pas.",
+            texte: "Dans la section « Changer de mot de passe », renseignez votre Mot de passe actuel, puis le Nouveau mot de passe (au moins 10 caractères, dont 3 types parmi minuscules, majuscules, chiffres et symboles) et sa Confirmation (doit correspondre exactement). Cliquez sur « Changer le mot de passe ». Une erreur s'affiche si le mot de passe actuel est incorrect ou si la confirmation ne correspond pas.",
           },
           {
             titre: "Gérer votre signature électronique",

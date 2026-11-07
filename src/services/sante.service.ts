@@ -1,4 +1,4 @@
-import { http, API_URL, getAccessToken } from "@/lib/http";
+import { http, API_URL, getAccessToken, withAuthToken } from "@/lib/http";
 import { toNumber } from "@/lib/decimal";
 import { calculerAge } from "@/lib/age";
 import type { AssureSante, PriseEnCharge, MouvementAssure } from "@/types/sante";
@@ -139,7 +139,7 @@ export function mapAssure(a: ApiAssureSante): AssureSante {
 // servie statiquement hors du préfixe /api — voir backend/src/main.ts).
 export function assurePhotoUrl(photo?: string | null): string | undefined {
   if (!photo) return undefined;
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/photos/${photo}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/photos/${photo}`);
 }
 
 export async function getAssuresSante(contratId?: string): Promise<AssureSante[]> {

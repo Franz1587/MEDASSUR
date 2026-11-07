@@ -1,5 +1,5 @@
 import ReactNativeBlobUtil from "react-native-blob-util";
-import { http, API_URL, getAccessToken, ApiError, type RnFilePart } from "./http";
+import { http, API_URL, getAccessToken, ApiError, withAuthToken, type RnFilePart } from "./http";
 
 // Miroir mobile de src/services/monProfil.service.ts +
 // src/services/maSignature.service.ts (web) — "Mon profil" en libre-service
@@ -36,7 +36,7 @@ export async function changerMonMotDePasse(ancienMotDePasse: string, nouveauMotD
 
 export function signatureUrl(signature?: string | null): string | undefined {
   if (!signature) return undefined;
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/signatures/${signature}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/signatures/${signature}`);
 }
 
 // Envoi via react-native-blob-util (2026-09) — voir demande utilisateur :

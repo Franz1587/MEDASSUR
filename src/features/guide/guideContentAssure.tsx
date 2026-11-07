@@ -319,7 +319,7 @@ export const chapitresAssure: GuideChapitre[] = [
         texte: [
           "Cliquez sur votre avatar en haut à droite de l'écran (initiales sur fond bleu, à côté de votre nom) pour ouvrir la fenêtre « Mon profil », accessible depuis n'importe quel écran du portail.",
           "La première section permet de modifier votre Nom, votre Téléphone et votre Adresse, puis d'enregistrer via le bouton « Enregistrer ». L'Email (identifiant de connexion) et le Rôle sont affichés mais non modifiables depuis cet écran.",
-          "La section « Changer de mot de passe » demande votre mot de passe actuel puis le nouveau mot de passe (8 caractères minimum) et sa confirmation, avant de cliquer sur « Changer le mot de passe ».",
+          "La section « Changer de mot de passe » demande votre mot de passe actuel puis le nouveau mot de passe (10 caractères minimum, dont 3 types parmi minuscules, majuscules, chiffres et symboles) et sa confirmation, avant de cliquer sur « Changer le mot de passe ».",
           "La section « Signature électronique », en bas, permet de gérer la signature qui sera automatiquement apposée sur les documents où votre signature est requise : « Charger un fichier » pour importer une image de votre signature depuis votre ordinateur, ou « Signer depuis mon téléphone » pour afficher un QR code à scanner — la signature réalisée sur l'écran de votre téléphone s'enregistre alors automatiquement dans votre compte, sans rien à télécharger manuellement. Une fois une signature enregistrée, un bouton « Supprimer » permet de la retirer.",
         ],
         image: img("assure-16-mon-profil.png"),

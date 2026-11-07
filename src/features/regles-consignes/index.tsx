@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ScrollText, Plus, Trash2, Pencil, X, Paperclip, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { RichTextEditor } from "@/components/shared/RichTextEditor";
@@ -110,7 +111,7 @@ export default function ReglesConsignesView() {
                       <h3 className="text-[13.5px] font-semibold text-foreground">{r.titre}</h3>
                       {!r.actif && <span className="text-[10.5px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">Masquée</span>}
                     </div>
-                    <div className="text-[12.5px] text-muted-foreground mt-1.5 line-clamp-3" dangerouslySetInnerHTML={{ __html: r.contenu }} />
+                    <div className="text-[12.5px] text-muted-foreground mt-1.5 line-clamp-3" dangerouslySetInnerHTML={{ __html: sanitizeHtml(r.contenu) }} />
                     {r.fichier && (
                       <button type="button" onClick={() => openRegleConsigneDocument(r.fichier!)} className="inline-flex items-center gap-1.5 text-[11.5px] text-primary hover:underline mt-2">
                         <Paperclip className="w-3.5 h-3.5" />Document joint

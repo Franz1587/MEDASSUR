@@ -1,4 +1,4 @@
-import { http, API_URL, getAccessToken, downloadFile, uploadFile } from "@/lib/http";
+import { http, API_URL, getAccessToken, downloadFile, uploadFile, withAuthToken } from "@/lib/http";
 import type { Client, ClientPortfolio } from "@/types/clients";
 
 // Import en masse (2026-08) — voir demande utilisateur : "créer 50, 100,
@@ -31,7 +31,7 @@ export function confirmerImportClients(rows: ImportClientRow[]): Promise<{ crees
 // pattern que compagnieLogoUrl.
 export function clientLogoUrl(logo?: string | null): string | undefined {
   if (!logo) return undefined;
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/logos-clients/${logo}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/logos-clients/${logo}`);
 }
 
 export interface ClientUpsertInput {

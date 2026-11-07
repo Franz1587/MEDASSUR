@@ -8,6 +8,7 @@ import {
 import { colors, radius, spacing } from "../../theme/colors";
 import { useAuth } from "../../auth/AuthContext";
 import { messageErreur, type RnFilePart } from "../../api/http";
+import { MESSAGE_POLITIQUE_MOT_DE_PASSE, motDePasseConforme } from "../../utils/motDePasse";
 import {
   getMoiCompte, modifierMonProfil, changerMonMotDePasse, signatureUrl, uploaderMaSignature, supprimerMaSignature,
   type UserAccount,
@@ -111,7 +112,7 @@ export function MonProfilScreen() {
 
   const changerMotDePasse = async () => {
     if (!ancienMdp || !nouveauMdp) { Alert.alert("Champs requis", "Renseignez votre mot de passe actuel et le nouveau."); return; }
-    if (nouveauMdp.length < 8) { Alert.alert("Mot de passe trop court", "Le nouveau mot de passe doit contenir au moins 8 caractères."); return; }
+    if (!motDePasseConforme(nouveauMdp)) { Alert.alert("Mot de passe trop faible", MESSAGE_POLITIQUE_MOT_DE_PASSE); return; }
     if (nouveauMdp !== confirmationMdp) { Alert.alert("Confirmation incorrecte", "La confirmation ne correspond pas au nouveau mot de passe."); return; }
     setSavingMdp(true);
     try {

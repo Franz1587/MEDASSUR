@@ -1,4 +1,4 @@
-import { http, uploadFile, API_URL } from "@/lib/http";
+import { http, uploadFile, API_URL, withAuthToken } from "@/lib/http";
 import { openStaticDocument } from "@/services/documents.service";
 import type { RegleConsigne, RegleConsigneUpsertInput } from "@/types/reglesConsignes";
 
@@ -33,7 +33,7 @@ export async function deleteDocumentRegleConsigne(id: string): Promise<RegleCons
 // principe que assurePhotoUrl (src/services/sante.service.ts).
 export function regleConsigneDocumentUrl(fichier?: string | null): string | undefined {
   if (!fichier) return undefined;
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/regles-consignes/${fichier}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/regles-consignes/${fichier}`);
 }
 
 // Ouvre le document joint dans la visionneuse intégrée de l'application —

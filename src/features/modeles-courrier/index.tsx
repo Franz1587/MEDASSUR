@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { FileText, Plus, Trash2, Pencil, X } from "lucide-react";
 import { toast } from "sonner";
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { RichTextEditor } from "@/components/shared/RichTextEditor";
@@ -89,7 +90,7 @@ export default function ModelesCourrierView() {
                   <button type="button" onClick={() => handleDelete(t)} className="h-7 w-7 rounded-lg border border-border text-muted-foreground hover:text-destructive inline-flex items-center justify-center"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
               </div>
-              <div className="text-[12px] text-muted-foreground line-clamp-2" dangerouslySetInnerHTML={{ __html: t.corpsModele }} />
+              <div className="text-[12px] text-muted-foreground line-clamp-2" dangerouslySetInnerHTML={{ __html: sanitizeHtml(t.corpsModele) }} />
             </div>
           ))}
         </div>

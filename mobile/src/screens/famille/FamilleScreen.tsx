@@ -7,7 +7,7 @@ import {
   Screen, ScreenHeader, Badge, EmptyState, LoadingView, ErrorView,
 } from "../../components/ui";
 import { colors, radius, spacing } from "../../theme/colors";
-import { API_URL, messageErreur } from "../../api/http";
+import { API_URL, messageErreur, withAuthToken } from "../../api/http";
 import { getMoi, getMaFamille, type MembreIdentite, type MembreFamilleMembre } from "../../api/portailMembre";
 import type { RootStackParamList } from "../../navigation/types";
 
@@ -21,7 +21,7 @@ const LABEL_TYPE: Record<string, string> = { AS: "Assuré principal", CJ: "Conjo
 // mobile/src/api : reproduit ici localement plutôt que de modifier http.ts.
 function photoUrl(photo?: string | null): string | undefined {
   if (!photo) return undefined;
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/photos/${photo}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/photos/${photo}`);
 }
 
 export interface Personne {

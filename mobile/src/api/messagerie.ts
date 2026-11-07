@@ -1,4 +1,4 @@
-import { http, API_URL, postOffline, uploadFiles, type RnFilePart } from "./http";
+import { http, API_URL, postOffline, uploadFiles, withAuthToken, type RnFilePart } from "./http";
 
 // Miroir mobile de src/services/messagerie.service.ts (web).
 export interface Conversation {
@@ -75,5 +75,5 @@ export function marquerConversationLue(conversationId: string): Promise<void> {
 }
 
 export function urlPieceJointeMessagerie(fichier: string): string {
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/messagerie/${fichier}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/messagerie/${fichier}`);
 }

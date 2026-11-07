@@ -1,4 +1,4 @@
-import { http, API_URL, getAccessToken } from "@/lib/http";
+import { http, API_URL, getAccessToken, withAuthToken } from "@/lib/http";
 import { toNumber } from "@/lib/decimal";
 import type { Cotation, CotationInput } from "@/types/cotation";
 
@@ -76,7 +76,7 @@ export async function deleteCotation(id: string): Promise<{ id: string }> {
 // compagnieLogoUrl/prospectLogoUrl.
 export function cotationLogoUrl(logo?: string | null): string | undefined {
   if (!logo) return undefined;
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/logos-cotations/${logo}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/logos-cotations/${logo}`);
 }
 
 export async function uploadCotationLogo(id: string, file: File): Promise<Cotation> {

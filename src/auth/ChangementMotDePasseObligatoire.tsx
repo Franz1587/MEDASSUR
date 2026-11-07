@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { ShieldAlert } from "lucide-react";
 import { http, messageErreur } from "@/lib/http";
 import { useAuth } from "./AuthContext";
+import { MESSAGE_POLITIQUE_MOT_DE_PASSE, motDePasseConforme } from "@/lib/motDePasse";
 
 const fieldCls = "w-full h-10 px-3 rounded-lg border border-border bg-background text-[13px] text-foreground";
 const labelCls = "text-[11px] text-muted-foreground mb-1";
@@ -24,8 +25,8 @@ export function ChangementMotDePasseObligatoire() {
 
   const soumettre = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (nouveauMotDePasse.length < 8) {
-      toast.error("Le nouveau mot de passe doit contenir au moins 8 caractères.");
+    if (!motDePasseConforme(nouveauMotDePasse)) {
+      toast.error(MESSAGE_POLITIQUE_MOT_DE_PASSE);
       return;
     }
     if (nouveauMotDePasse !== confirmation) {
@@ -63,11 +64,11 @@ export function ChangementMotDePasseObligatoire() {
           </label>
           <label className="block">
             <div className={labelCls}>Nouveau mot de passe</div>
-            <input type="password" value={nouveauMotDePasse} onChange={(e) => setNouveauMotDePasse(e.target.value)} required minLength={8} className={fieldCls} />
+            <input type="password" value={nouveauMotDePasse} onChange={(e) => setNouveauMotDePasse(e.target.value)} required minLength={10} className={fieldCls} />
           </label>
           <label className="block">
             <div className={labelCls}>Confirmer le nouveau mot de passe</div>
-            <input type="password" value={confirmation} onChange={(e) => setConfirmation(e.target.value)} required minLength={8} className={fieldCls} />
+            <input type="password" value={confirmation} onChange={(e) => setConfirmation(e.target.value)} required minLength={10} className={fieldCls} />
           </label>
           <button type="submit" disabled={submitting} className="w-full h-10 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium disabled:opacity-60">
             {submitting ? "Enregistrement…" : "Valider"}

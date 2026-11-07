@@ -194,7 +194,7 @@ export function getSocieteUsers(societeId: string): Promise<SocieteUser[]> {
   return http.get(`/societes/${societeId}/users`);
 }
 
-export function creerSocieteUser(societeId: string, payload: CreerSocieteUserInput): Promise<SocieteUser> {
+export function creerSocieteUser(societeId: string, payload: CreerSocieteUserInput): Promise<SocieteUser & { motDePasseTemporaire?: string }> {
   return http.post(`/societes/${societeId}/users`, payload);
 }
 

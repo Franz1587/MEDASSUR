@@ -1,4 +1,4 @@
-import { http, API_URL, getAccessToken } from "@/lib/http";
+import { http, API_URL, getAccessToken, withAuthToken } from "@/lib/http";
 import { afficherPdf } from "@/lib/pdfViewerBridge";
 import type { GedDocument } from "@/types/ged";
 
@@ -99,5 +99,5 @@ export async function getRapportLiaison(id: string): Promise<RapportLiaisonGed> 
 // urlDocumentAccordPrealable (route générique /uploads/:categorie/:fichier,
 // voir main.ts).
 export function urlDocumentGed(fichier: string): string {
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/ged/${fichier}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/ged/${fichier}`);
 }

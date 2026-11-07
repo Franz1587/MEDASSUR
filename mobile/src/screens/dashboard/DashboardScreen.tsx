@@ -15,14 +15,14 @@ import { useAuth } from "../../auth/AuthContext";
 import { getMembreDashboard, getMoi, getMesPrisesEnChargePrealables, type MembreDashboard } from "../../api/portailMembre";
 import { getNonLus } from "../../api/messagerie";
 import { compterNonVus } from "../../utils/vus";
-import { API_URL, messageErreur } from "../../api/http";
+import { API_URL, messageErreur, withAuthToken } from "../../api/http";
 import type { RootStackParamList, MainTabParamList } from "../../navigation/types";
 
 // URL publique d'une photo uploadée — même règle que assurePhotoUrl() côté
 // web / photoUrl() dans FamilleScreen.tsx.
 function photoUrl(photo?: string | null): string | undefined {
   if (!photo) return undefined;
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/photos/${photo}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/photos/${photo}`);
 }
 
 // Accueil du portail assuré (tableau de bord) — MÊME logique que

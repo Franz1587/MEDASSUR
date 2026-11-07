@@ -1,4 +1,4 @@
-import { http, API_URL, getAccessToken } from "@/lib/http";
+import { http, API_URL, getAccessToken, withAuthToken } from "@/lib/http";
 import { toNumber } from "@/lib/decimal";
 import type {
   Compagnie, AccessoireTranche, SurprimeAge, ClauseAjustement, Territorialite, TauxCouverture, GarantieCatalogueLigne,
@@ -115,7 +115,7 @@ function mapCompagnie(c: ApiCompagnie): Compagnie {
 // statiquement hors du préfixe /api — voir backend/src/main.ts).
 export function compagnieLogoUrl(logo?: string | null): string | undefined {
   if (!logo) return undefined;
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/logos/${logo}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/logos/${logo}`);
 }
 
 export async function getCompagnies(): Promise<Compagnie[]> {

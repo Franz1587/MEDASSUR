@@ -1,11 +1,11 @@
-import { API_URL, getAccessToken, http } from "@/lib/http";
+import { API_URL, getAccessToken, http, withAuthToken } from "@/lib/http";
 import type { ModeleCarte, CreerModeleCarteInput, ModifierModeleCarteInput } from "@/types/modeleCarte";
 
 // URL publique d'une image de modèle de carte uploadée (voir
 // backend/src/modeles-carte/, servie statiquement hors du préfixe /api).
 export function modeleCarteImageUrl(fichier?: string | null): string | undefined {
   if (!fichier) return undefined;
-  return `${API_URL.replace(/\/api\/?$/, "")}/uploads/modeles-carte/${fichier}`;
+  return withAuthToken(`${API_URL.replace(/\/api\/?$/, "")}/uploads/modeles-carte/${fichier}`);
 }
 
 export function getModelesCarte(): Promise<ModeleCarte[]> {

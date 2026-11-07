@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { sanitizeHtml } from "@/lib/sanitizeHtml";
 import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, AlignJustify, List, ListOrdered } from "lucide-react";
 
 interface RichTextEditorProps {
@@ -42,7 +43,7 @@ export function RichTextEditor({ value, onChange, placeholder, className = "" }:
   // modèle, ouverture d'un courrier existant) — jamais à chaque frappe,
   // pour ne pas faire sauter le curseur pendant la saisie.
   useEffect(() => {
-    if (ref.current && ref.current.innerHTML !== value) ref.current.innerHTML = value || "<p><br></p>";
+    if (ref.current && ref.current.innerHTML !== value) ref.current.innerHTML = sanitizeHtml(value) || "<p><br></p>";
   }, [value]);
 
   const exec = (cmd: string, val?: string) => {
