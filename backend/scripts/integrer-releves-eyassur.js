@@ -292,6 +292,7 @@ async function main() {
               data: {
                 id: `BDX-${randomUUID().slice(0, 8).toUpperCase()}`, numero, prestataireId: prest.id,
                 periode: dateRec, nbPrisesEnCharge: aRattacher.length, montantTotal: montantNetPrisesEnCharge(aRattacher),
+                montantValide: montantNetPrisesEnCharge(aRattacher),
                 statut: "Validé", dateReception: dateRec,
                 prisesEnCharge: { connect: aRattacher.map((p) => ({ id: p.id })) },
               },
