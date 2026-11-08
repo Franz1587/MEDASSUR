@@ -3051,7 +3051,15 @@ export class DocumentsService {
     // tableau de garanties réel du contrat plutôt qu'un rapprochement
     // catalogue indépendant.
     const rubriquesGarantie = Array.from(new Set(
-      accord.lignes.map((l) => resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: l.categorieGarantie ?? l.description ?? "" }, l.acteMedical)),
+      accord.lignes.map((l) => {
+        const rBase = resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: l.categorieGarantie ?? l.description ?? "" }, l.acteMedical);
+        if (l.description) {
+          // "CHAMBRE" → Hospitalisation même si categorieGarantie dit "Consultations"
+          const rDesc = normaliserRubrique(l.description);
+          if (rDesc !== l.description.trim() && rDesc !== rBase) return rDesc;
+        }
+        return rBase;
+      }),
     ));
     // Repli si aucune ligne : normaliser le type/description de l'accord lui-même
     const objetPriseEnCharge = rubriquesGarantie.length > 0

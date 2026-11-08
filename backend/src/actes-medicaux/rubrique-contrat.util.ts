@@ -34,7 +34,7 @@ const RUBRIQUES_CANONIQUES: { rubrique: string; motsCles: string[] }[] = [
   { rubrique: "Transport", motsCles: ["TRANSPORT", "AMBULANCE", "EVASAN"] },
   { rubrique: "Orthophonie", motsCles: ["ORTHOPHON"] },
   { rubrique: "Orthoptie", motsCles: ["ORTHOPT"] },
-  { rubrique: "Hospitalisation", motsCles: ["HOSPI", "HOPSI", "HOPITAL", "CHIRURGIE MAJEURE"] },
+  { rubrique: "Hospitalisation", motsCles: ["HOSPI", "HOPSI", "HOPITAL", "CHIRURGIE MAJEURE", "CHAMBRE", "SEJOUR", "NUITEE"] },
   { rubrique: "Pharmacie", motsCles: ["PHARMA", "MEDICAMENT"] },
   { rubrique: "Analyses Médicale", motsCles: ["ANALYS", "LABO", "BIOLOG"] },
   { rubrique: "Imagerie", motsCles: ["IMAGERIE", "RADIO", "ECHOGRAPH", "SCANNER", "IRM"] },
