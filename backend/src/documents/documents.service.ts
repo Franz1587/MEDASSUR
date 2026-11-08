@@ -3051,9 +3051,13 @@ export class DocumentsService {
     // (voir resoudreRubriqueContrat), pour rester en harmonie avec le
     // tableau de garanties réel du contrat plutôt qu'un rapprochement
     // catalogue indépendant.
-    const rubriquesGarantie = Array.from(new Set(
-      accord.lignes.map((l) => {
-        const rBase = resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: l.categorieGarantie ?? l.description ?? "" }, l.acteMedical);
+    // Type du prestataire (ex. "Laboratoire") → override rubrique générique
+    // "Consultation/Divers" en "Analyses Médicale" (voir resoudreRubriqueContrat).
+    const prestataireType = accord.prestataireRef?.type ?? undefined;
+    const pecActives = accord.prisesEnCharge.filter((pec) => pec.statut !== "Annulé");
+    const rubriquesGarantie = Array.from(new Set([
+      ...accord.lignes.map((l) => {
+        const rBase = resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: l.categorieGarantie ?? l.description ?? "", prestataireType }, l.acteMedical);
         if (l.description) {
           // "CHAMBRE" → Hospitalisation même si categorieGarantie dit "Consultations"
           const rDesc = normaliserRubrique(l.description);
@@ -3061,11 +3065,19 @@ export class DocumentsService {
         }
         return rBase;
       }),
-    ));
-    // Repli si aucune ligne : normaliser le type/description de l'accord lui-même
-    const objetPriseEnCharge = rubriquesGarantie.length > 0
-      ? rubriquesGarantie.join(", ")
-      : resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: accord.type ?? accord.description ?? "" }, null);
+      // Quand aucune AccordPrealableLigne n'existe (accords importés), déduire
+      // la rubrique depuis les PrisesEnCharge, avec le type du prestataire
+      // pour lever l'ambiguïté des types génériques ("Consultation/Divers").
+      ...(accord.lignes.length === 0
+        ? pecActives.map((pec) =>
+            resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: pec.type ?? "", prestataireType }, pec.acteMedical)
+          )
+        : []),
+    ]));
+    // Repli si aucune ligne ni PEC : normaliser le type/description de l'accord lui-même
+    const objetPriseEnCharge = rubriquesGarantie.filter((r) => r && r !== "Non précisé").length > 0
+      ? rubriquesGarantie.filter((r) => r && r !== "Non précisé").join(", ")
+      : resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: accord.type ?? accord.description ?? "", prestataireType }, null);
     doc.font("Helvetica").fontSize(8).text(`Code: ${objetPriseEnCharge}`, left + 8, y + 20, { width: colW - 20 });
     // Coordonnées RÉELLES du prestataire, pas celles du courtier (2026-09)
     // — voir demande utilisateur : "faire remonter toutes les informations
@@ -3098,14 +3110,25 @@ export class DocumentsService {
     // et leurs montants réels — frais réels = montant La Ruche + reste à charge).
     // Priorité 2 : lignes de l'accord (saisie lors de la demande).
     // Priorité 3 : description brute de l'accord (fallback texte).
-    const pecActives = accord.prisesEnCharge.filter((p) => p.statut !== "Annulé");
     const lignesTable: { libelle: string; frais: number; remb: number }[] =
       pecActives.length > 0
-        ? pecActives.map((pec) => ({
-            libelle: pec.acteMedical?.libelle ?? pec.type,
-            remb: Number(pec.montant),
-            frais: Number(pec.montant) + Number(pec.resteACharge ?? 0),
-          }))
+        ? pecActives.map((pec) => {
+            // Si acteMedical est lié, son libellé fait foi.
+            // Sinon : pec.type est souvent une catégorie générique (ex. "Consultation/Divers")
+            // et non le nom de l'acte réel. Détecter cela : si normaliserRubrique(type) donne
+            // quelque chose de différent de type lui-même, c'est une catégorie → utiliser
+            // accord.description qui contient le vrai libellé de l'acte (ex. "PEPTIDES
+            // NATRIUMETIQUES, PRELEVEMENT SANGUIN" importé depuis la reprise).
+            const libelleType = pec.type ?? "";
+            const libelleNorm = normaliserRubrique(libelleType);
+            const libelleActe = pec.acteMedical?.libelle
+              ?? (libelleNorm !== libelleType.trim() ? accord.description ?? libelleType : libelleType);
+            return {
+              libelle: libelleActe,
+              remb: Number(pec.montant),
+              frais: Number(pec.montant) + Number(pec.resteACharge ?? 0),
+            };
+          })
         : accord.lignes.length > 0
           ? accord.lignes.map((l) => ({ libelle: l.acteMedical?.libelle ?? l.description, remb: Number(l.plafondReference), frais: Number(l.montantDevis) }))
           : [{ libelle: accord.description ?? "", remb: Number(accord.montantAutorise ?? 0), frais: Number(accord.montantDevis ?? accord.montantAutorise ?? 0) }];
