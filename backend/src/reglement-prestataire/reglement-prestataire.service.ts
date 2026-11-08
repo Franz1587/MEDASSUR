@@ -1,7 +1,7 @@
 import { TenantContext } from "../tenant/tenant-context";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { GenererBordereauDto } from "./dto/generer-bordereau.dto";
 import { PayerBordereauDto } from "./dto/payer-bordereau.dto";
@@ -27,24 +27,33 @@ export class ReglementPrestataireService {
   // renvoyés AVEC toutes leurs lignes = 3 Mo compressés, 7 s) — l'écran
   // n'affiche que nbPrisesEnCharge, jamais les lignes elles-mêmes.
   async findAll(page?: number, taille = 25) {
-    const args = {
-      select: {
-        id: true, numero: true, prestataireId: true, periode: true, nbPrisesEnCharge: true, montantTotal: true, montantValide: true,
-        statut: true, dateReception: true, datePaiement: true, referenceVirement: true, medecinId: true, transactionEbillingId: true,
-        prestataire: { select: { nom: true, telephone: true } },
-        medecin: { select: { nom: true, prenom: true, titre: true } },
-        lettreCheque: { select: { numero: true, numeroCheque: true, banque: { select: { nom: true } } } },
-        // Mobile Money (2026-10) — référence de la Transaction liée
-        transactionEbilling: { select: { reference: true } },
-      },
-      orderBy: { dateReception: "desc" as const },
+    const select = {
+      id: true, numero: true, prestataireId: true, periode: true, nbPrisesEnCharge: true, montantTotal: true, montantValide: true,
+      statut: true, dateReception: true, datePaiement: true, referenceVirement: true, medecinId: true, transactionEbillingId: true,
+      prestataire: { select: { nom: true, telephone: true } },
+      medecin: { select: { nom: true, prenom: true, titre: true } },
+      lettreCheque: { select: { numero: true, numeroCheque: true, banque: { select: { nom: true } } } },
+      // Mobile Money (2026-10) — référence de la Transaction liée
+      transactionEbilling: { select: { reference: true } },
     };
-    if (!page) return this.prisma.bordereauReglement.findMany(args);
+    // dateReception est une chaîne "JJ/MM/AAAA" : tri lexical impossible, on
+    // passe par TO_DATE() pour obtenir l'ordre chronologique réel.
+    const idsOrdonnes = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "BordereauReglement"
+      ORDER BY TO_DATE("dateReception", 'DD/MM/YYYY') DESC NULLS LAST, id DESC
+    `;
+    const ordreIndex = new Map(idsOrdonnes.map((r, i) => [r.id, i]));
+    const trier = (items: { id: string }[]) => items.slice().sort((a, b) => (ordreIndex.get(a.id) ?? 0) - (ordreIndex.get(b.id) ?? 0));
+    if (!page) {
+      const items = await this.prisma.bordereauReglement.findMany({ select });
+      return trier(items);
+    }
+    const pageIds = idsOrdonnes.slice((page - 1) * taille, page * taille).map((r) => r.id);
     const [items, total] = await Promise.all([
-      this.prisma.bordereauReglement.findMany({ ...args, skip: (page - 1) * taille, take: taille }),
+      this.prisma.bordereauReglement.findMany({ where: { id: { in: pageIds } }, select }),
       this.prisma.bordereauReglement.count(),
     ]);
-    return { items, total, page, taille };
+    return { items: trier(items), total, page, taille };
   }
 
   // Détail complet — écran de consultation d'un règlement (voir
@@ -191,55 +200,121 @@ export class ReglementPrestataireService {
   }
 
   /** Validation comptable du bordereau — le montant validé peut différer du montant déclaré en cas de litige. */
+  // Le montant validé doit être ≥ 0 et ≤ montant déclaré (aucune dérogation
+  // explicite n'existe dans le code : un litige ne peut que réduire le net à
+  // payer). La validation est immuable une fois le bordereau "Validé"/"Payé".
   async valider(id: string, montantValide?: number) {
-    const bordereau = await this.findOne(id);
-    if (bordereau.statut === "Payé") throw new BadRequestException("Bordereau déjà payé");
-    return this.prisma.bordereauReglement.update({
-      where: { id },
-      data: { statut: "Validé", montantValide: montantValide ?? Number(bordereau.montantTotal) },
+    let montant: Prisma.Decimal | null = null;
+    if (montantValide !== undefined && montantValide !== null) {
+      const n = Number(montantValide);
+      if (!Number.isFinite(n) || n < 0) throw new BadRequestException("Le montant validé doit être un nombre positif ou nul.");
+      montant = new Prisma.Decimal(n);
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const bordereau = await tx.bordereauReglement.findUnique({ where: { id }, select: { statut: true, montantTotal: true } });
+      if (!bordereau) throw new NotFoundException(`Bordereau ${id} introuvable`);
+      if (bordereau.statut === "Payé") throw new ConflictException("Bordereau déjà payé — il ne peut plus être modifié.");
+      if (bordereau.statut === "Validé") throw new ConflictException("Bordereau déjà validé — la validation ne peut plus être modifiée.");
+      if (montant && montant.gt(bordereau.montantTotal)) {
+        throw new BadRequestException(`Le montant validé (${montant.toString()}) ne peut pas dépasser le montant déclaré (${bordereau.montantTotal.toString()}).`);
+      }
+      const r = await tx.bordereauReglement.updateMany({
+        where: { id, statut: { notIn: ["Validé", "Payé"] } },
+        data: { statut: "Validé", montantValide: montant ?? bordereau.montantTotal },
+      });
+      if (r.count === 0) throw new ConflictException("Le bordereau a été modifié entre-temps — rechargez puis recommencez.");
+      return tx.bordereauReglement.findUniqueOrThrow({ where: { id } });
     });
   }
 
   async rejeter(id: string) {
-    const bordereau = await this.findOne(id);
-    if (bordereau.statut === "Payé") throw new BadRequestException("Bordereau déjà payé");
-    return this.prisma.bordereauReglement.update({ where: { id }, data: { statut: "Rejeté" } });
+    return this.prisma.$transaction(async (tx) => {
+      const bordereau = await tx.bordereauReglement.findUnique({ where: { id }, select: { statut: true } });
+      if (!bordereau) throw new NotFoundException(`Bordereau ${id} introuvable`);
+      if (bordereau.statut === "Payé") throw new BadRequestException("Bordereau déjà payé");
+      const r = await tx.bordereauReglement.updateMany({ where: { id, statut: { not: "Payé" } }, data: { statut: "Rejeté" } });
+      if (r.count === 0) throw new ConflictException("Bordereau déjà payé entre-temps.");
+      return tx.bordereauReglement.findUniqueOrThrow({ where: { id } });
+    });
   }
 
-  /** Marque le bordereau comme payé (virement effectué) — bloc financier/trésorerie. */
+  /**
+   * Marque le bordereau comme payé (virement effectué) — bloc financier/trésorerie.
+   * Atomique : transition conditionnelle Validé → Payé (un second appel
+   * concurrent reçoit un 409) et référence de virement jamais réutilisable
+   * dans la même société (verrou consultatif par référence pour fermer la
+   * course entre deux bordereaux payés simultanément avec la même référence).
+   */
   async payer(id: string, dto: PayerBordereauDto) {
-    const bordereau = await this.findOne(id);
-    if (bordereau.statut !== "Validé") throw new BadRequestException("Le bordereau doit être validé avant paiement");
-    return this.prisma.bordereauReglement.update({
-      where: { id },
-      data: { statut: "Payé", datePaiement: new Date().toLocaleDateString("fr-FR"), referenceVirement: dto.referenceVirement },
+    const reference = dto.referenceVirement?.trim();
+    if (!reference) throw new BadRequestException("La référence de virement est obligatoire.");
+    return this.prisma.$transaction(async (tx) => {
+      const bordereau = await tx.bordereauReglement.findUnique({ where: { id }, select: { statut: true, societeId: true } });
+      if (!bordereau) throw new NotFoundException(`Bordereau ${id} introuvable`);
+      if (bordereau.statut === "Payé") throw new ConflictException("Bordereau déjà payé.");
+      if (bordereau.statut !== "Validé") throw new BadRequestException("Le bordereau doit être validé avant paiement");
+
+      const cleVerrou = `${bordereau.societeId ?? ""}::${reference.toLowerCase()}`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${cleVerrou}))`;
+      const doublon = await tx.bordereauReglement.findFirst({
+        where: { id: { not: id }, societeId: bordereau.societeId, referenceVirement: { equals: reference, mode: "insensitive" } },
+        select: { numero: true },
+      });
+      if (doublon) throw new ConflictException(`La référence de virement « ${reference} » est déjà utilisée par le règlement n° ${doublon.numero}.`);
+
+      const r = await tx.bordereauReglement.updateMany({
+        where: { id, statut: "Validé" },
+        data: { statut: "Payé", datePaiement: new Date().toLocaleDateString("fr-FR"), referenceVirement: reference },
+      });
+      if (r.count === 0) throw new ConflictException("Bordereau déjà payé ou modifié entre-temps.");
+      return tx.bordereauReglement.findUniqueOrThrow({ where: { id } });
     });
   }
 
   // Recalcule montantTotal/nbPrisesEnCharge à partir des PriseEnCharge
-  // réellement rattachées — appelé par FacturesService après toute
-  // modification d'une ligne déjà batchée dans un bordereau (édition de
-  // montant, détachement suite à annulation de facture), pour que le
-  // bordereau reste toujours le reflet exact de ses lignes, y compris s'il
-  // est déjà "Payé" (voir FacturesService.modifierLigne — comportement
-  // demandé explicitement par l'utilisateur, "mise à jour systématique").
-  async recalculerMontantTotal(bordereauId: string) {
-    const bordereau = await this.prisma.bordereauReglement.findUnique({ where: { id: bordereauId }, include: { prisesEnCharge: true } });
+  // réellement rattachées — appelé par FacturesService/RemboursementsService
+  // après toute modification d'une ligne déjà batchée dans un bordereau
+  // (édition de montant, détachement suite à annulation de facture), pour que
+  // le bordereau reste le reflet exact de ses lignes. Un bordereau "Payé"
+  // est désormais immuable : les lignes et totaux ne bougent plus (la
+  // modification est refusée en amont, voir garantirBordereauModifiable, et
+  // ici par sécurité). Accepte le client transactionnel de l'appelant.
+  async recalculerMontantTotal(bordereauId: string, tx?: Prisma.TransactionClient) {
+    const db: Prisma.TransactionClient = tx ?? this.prisma;
+    const bordereau = await db.bordereauReglement.findUnique({ where: { id: bordereauId }, include: { prisesEnCharge: true } });
     if (!bordereau) return;
+    if (bordereau.statut === "Payé") throw this.erreurBordereauPaye(bordereau.numero);
     const montantTotal = montantNetPrisesEnCharge(bordereau.prisesEnCharge);
-    await this.prisma.bordereauReglement.update({
-      where: { id: bordereauId },
+    const r = await db.bordereauReglement.updateMany({
+      where: { id: bordereauId, statut: { not: "Payé" } },
       data: { montantTotal, nbPrisesEnCharge: bordereau.prisesEnCharge.length },
     });
+    if (r.count === 0) throw this.erreurBordereauPaye(bordereau.numero);
+  }
+
+  // Refuse (409) toute modification des lignes/totaux d'un bordereau déjà payé.
+  async garantirBordereauModifiable(bordereauId: string | null | undefined, tx?: Prisma.TransactionClient) {
+    if (!bordereauId) return;
+    const db: Prisma.TransactionClient = tx ?? this.prisma;
+    const bordereau = await db.bordereauReglement.findUnique({ where: { id: bordereauId }, select: { numero: true, statut: true } });
+    if (bordereau?.statut === "Payé") throw this.erreurBordereauPaye(bordereau.numero);
+  }
+
+  private erreurBordereauPaye(numero: string) {
+    return new ConflictException(
+      `Cette ligne appartient au règlement n° ${numero}, déjà payé : elle ne peut plus être modifiée, ajustée ni retirée. `
+      + "Un ajustement doit faire l'objet d'une régularisation distincte.",
+    );
   }
 
   // Retire une ligne d'un bordereau (facture annulée après batching) et
   // recalcule aussitôt le total — appelé uniquement si le bordereau n'est
-  // pas "Payé" (voir FacturesService.annuler, qui bloque avant d'appeler
-  // ceci si un paiement a déjà eu lieu).
-  async detacherLigne(bordereauId: string, ligneId: string) {
-    await this.prisma.priseEnCharge.update({ where: { id: ligneId }, data: { bordereauId: null } });
-    await this.recalculerMontantTotal(bordereauId);
+  // pas "Payé" (refusé sinon, voir recalculerMontantTotal).
+  async detacherLigne(bordereauId: string, ligneId: string, tx?: Prisma.TransactionClient) {
+    const db: Prisma.TransactionClient = tx ?? this.prisma;
+    await this.garantirBordereauModifiable(bordereauId, tx);
+    await db.priseEnCharge.update({ where: { id: ligneId }, data: { bordereauId: null } });
+    await this.recalculerMontantTotal(bordereauId, tx);
   }
 
   // État de prélèvement TPS par prestataire × mois de règlement (2026-08)
