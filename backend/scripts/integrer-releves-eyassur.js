@@ -1,6 +1,10 @@
 /* Intégration des relevés de factures Eyassur (= règlements maladie) dans MEDASSUR+.
  *
- * Usage : node scripts/integrer-releves-eyassur.js <fichier.ndjson> [--limit N] [--chunk N] [--rapport chemin.xlsx]
+ * Usage : node scripts/integrer-releves-eyassur.js <fichier.ndjson> (--societe <id> | --societe-nom "<nom>") [--reprise] [--limit N] [--chunk N] [--rapport chemin.xlsx]
+ *
+ * --societe / --societe-nom : OBLIGATOIRE. Société propriétaire des données : les lignes créées par l'exécution
+ *   (prises en charge, factures, règlements, prestataires créés) lui sont rattachées à la fin du script ;
+ *   sans cela elles n'auraient aucun societeId et seraient invisibles pour ses utilisateurs.
  *
  * 1. Les factures (lignes) de chaque relevé sont importées via le moteur d'import global existant
  *    (ImportService.importerFacturesGlobal : résolution matricule/prestataire, doublons ignorés, FactureEnAttente).
@@ -19,8 +23,10 @@ const { PrismaService } = require("../dist/src/prisma/prisma.service");
 const { montantNetPrisesEnCharge } = require("../dist/src/lib/montant-net.util");
 
 const args = process.argv.slice(2);
-const entree = args.find((a) => !a.startsWith("--"));
+const entree = args.find((a) => /\.ndjson$/i.test(a));
 const opt = (nom, def) => { const i = args.indexOf(nom); return i >= 0 ? args[i + 1] : def; };
+const SOCIETE_ID = opt("--societe", "");
+const SOCIETE_NOM = opt("--societe-nom", "");
 const REPRISE = args.includes("--reprise");
 const FICHIER_RESILIES = path.join(process.env.TEMP || __dirname, "reprise-contrats-resilies.json");
 const LIMITE = Number(opt("--limit", 0)) || 0;
@@ -35,6 +41,7 @@ const motsTries = (s) => norm(s).split(" ").filter(Boolean).sort().join(" ");
 
 async function main() {
   if (!entree) throw new Error("Fichier .ndjson requis.");
+  if (!SOCIETE_ID && !SOCIETE_NOM) throw new Error('Option obligatoire : --societe <id> ou --societe-nom "<nom>" (société propriétaire des données).');
   let releves = fs.readFileSync(entree, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
   const vus = new Set();
   releves = releves.filter((r) => (vus.has(r.ref) ? false : vus.add(r.ref)));
@@ -95,6 +102,15 @@ async function main() {
     return [...cands].sort((a, b) => score(b) - score(a) || (dateFr(b.dateAffiliation) ?? 0) - (dateFr(a.dateAffiliation) ?? 0))[0];
   };
   try {
+    const societe = SOCIETE_ID
+      ? await prisma.societeAssurance.findUnique({ where: { id: SOCIETE_ID }, select: { id: true, nom: true } })
+      : await prisma.societeAssurance.findFirst({ where: { nom: { equals: SOCIETE_NOM, mode: "insensitive" } }, select: { id: true, nom: true } });
+    if (!societe) throw new Error("Société introuvable.");
+    console.log(`Société : ${societe.nom} (${societe.id})`);
+    // L'import s'exécute SANS contexte tenant (le filtrage par société masquerait des lignes déjà présentes et
+    // provoquerait des doublons) ; les lignes créées sont rattachées à la société à la fin, par SQL.
+    const debutRun = new Date();
+    await (async () => {
     // Lignes sans matricule dans Eyassur : bénéficiaire identifié par son nom complet (jamais en cas d'ambiguïté).
     const sansMatricule = releves.flatMap((r) => r.lignes).filter((l) => !String(l.matricule ?? "").trim() && l.beneficiaire?.trim());
     let matriculesRetrouves = 0;
@@ -120,10 +136,36 @@ async function main() {
       if (b) dejaCrees.set(r.ref, b);
     }
 
-    // ── 1. Import des lignes de factures (les lignes déjà présentes sont ignorées/corrigées par le moteur d'import) ──
+    // ── 1. Import des lignes de factures ──
+    // Lignes déjà représentées par une prise en charge existante (même facture, prestataire, date et montant,
+    // en frais réels OU en base remboursée) : jamais renvoyées à l'import, qui en créerait une copie.
+    const lignesLot = lot.flatMap((r) => r.lignes);
+    const prestLot = await importService.resoudrePrestatairesEnLot([...new Set(lignesLot.map((l) => l.prestataire.replace(/\s+/g, " ").trim()))]);
+    const nomPrest = (s) => String(s ?? "").replace(/\s+/g, " ").trim().toUpperCase();
+    const facsLot = await prisma.facture.findMany({ where: { referenceFacture: { in: [...new Set(lignesLot.map((l) => l.reference.trim()))] } }, select: { id: true, referenceFacture: true, prestataire: { select: { nom: true } } } });
+    const facParId = new Map(facsLot.map((f) => [f.id, f]));
+    const pecLot = facsLot.length === 0 ? [] : await prisma.priseEnCharge.findMany({ where: { factureId: { in: facsLot.map((f) => f.id) }, statut: { not: "Annulé" } }, select: { id: true, factureId: true, date: true, montant: true, baseRemboursement: true } });
+    const idxPec = new Map();
+    for (const pe of pecLot) {
+      const f = facParId.get(pe.factureId);
+      for (const m of new Set([Number(pe.montant), Number(pe.baseRemboursement ?? pe.montant)])) {
+        const k = `${nomPrest(f.prestataire.nom)}|${f.referenceFacture}|${pe.date}|${m}`;
+        if (!idxPec.has(k)) idxPec.set(k, []);
+        idxPec.get(k).push(pe);
+      }
+    }
+    const consommees = new Set();
+    const representees = new Set();
+    for (const l of lignesLot) {
+      const prest = prestLot.get(l.prestataire.replace(/\s+/g, " ").trim());
+      if (!prest) continue;
+      const dispo = (idxPec.get(`${nomPrest(prest.nom)}|${l.reference.trim()}|${annee4(jour(l.datePrestation))}|${chiffres(l.aPayer)}`) ?? []).find((pe) => !consommees.has(pe.id));
+      if (dispo) { consommees.add(dispo.id); representees.add(l); }
+    }
     const aImporter = [];
-    for (const r of lot) for (const l of r.lignes) aImporter.push({ releve: r, ligne: l });
+    for (const r of lot) for (const l of r.lignes) if (!representees.has(l)) aImporter.push({ releve: r, ligne: l });
     const resultatImport = new Map(); // ligne Eyassur -> dernier motif de rejet
+    for (const l of representees) resultatImport.set(l, "Déjà importée — ligne déjà présente dans MEDASSUR+.");
     if (aImporter.length > 0) {
       // Police compagnie : pour un matricule porté par plusieurs polices, celle qui couvre la date de la prestation.
       const policeParLigne = new Map();
@@ -196,17 +238,18 @@ async function main() {
       }
     }
     const refs = [...new Set(toutesLignes.map(({ l }) => l.reference.trim()))];
-    const factures = await prisma.facture.findMany({ where: { referenceFacture: { in: refs } }, select: { id: true, referenceFacture: true, prestataireId: true } });
+    const factures = await prisma.facture.findMany({ where: { referenceFacture: { in: refs } }, select: { id: true, referenceFacture: true, prestataire: { select: { nom: true } } } });
     const factureParId = new Map(factures.map((f) => [f.id, f]));
     const pecs = factures.length === 0 ? [] : await prisma.priseEnCharge.findMany({
       where: { factureId: { in: factures.map((f) => f.id) }, statut: { not: "Annulé" } },
-      select: { id: true, factureId: true, assureId: true, date: true, montant: true, baseRemboursement: true, montantTps: true, bordereauId: true, assure: { select: { nom: true, prenom: true } }, bordereau: { select: { id: true, numero: true, statut: true, datePaiement: true } } },
+      select: { id: true, factureId: true, assureId: true, date: true, montant: true, baseRemboursement: true, montantTps: true, bordereauId: true, createdAt: true, assure: { select: { nom: true, prenom: true } }, bordereau: { select: { id: true, numero: true, statut: true, datePaiement: true } } },
+      orderBy: { createdAt: "asc" },
     });
     const indexPec = new Map();
     for (const p of pecs) {
       const f = factureParId.get(p.factureId);
       for (const m of new Set([Number(p.montant), Number(p.baseRemboursement ?? p.montant)])) {
-        const cle = `${f.prestataireId}|${f.referenceFacture}|${p.date}|${m}`;
+        const cle = `${nomPrest(f.prestataire.nom)}|${f.referenceFacture}|${p.date}|${m}`;
         if (!indexPec.has(cle)) indexPec.set(cle, []);
         indexPec.get(cle).push(p);
       }
@@ -220,7 +263,7 @@ async function main() {
       const prest = prestataireParNom.get(l.prestataire.replace(/\s+/g, " ").trim());
       const m = chiffres(l.aPayer);
       const datePrest = annee4(jour(l.datePrestation));
-      const liste = prest ? (indexPec.get(`${prest.id}|${l.reference.trim()}|${datePrest}|${m}`) ?? []) : [];
+      const liste = prest ? (indexPec.get(`${nomPrest(prest.nom)}|${l.reference.trim()}|${datePrest}|${m}`) ?? []) : [];
       const cands = candidats.get(l.matricule.trim().toLowerCase());
       const nomBenef = motsTries(l.beneficiaire);
       const libres = liste.filter((p) => !utilisees.has(p.id));
@@ -310,6 +353,20 @@ async function main() {
   await classeur.xlsx.writeFile(RAPPORT);
   console.log("Synthèse", JSON.stringify(resume, null, 1));
   console.log("Rapport :", RAPPORT);
+    })();
+    // Rattachement à la société des lignes créées par cette exécution (sinon invisibles pour ses utilisateurs).
+    const depuis = debutRun.toISOString().slice(0, -1); // createdAt est stocké en UTC (timestamp sans fuseau)
+    const maj = {
+      priseEnCharge: await prisma.$executeRawUnsafe(`UPDATE "PriseEnCharge" SET "societeId"=$1 WHERE "societeId" IS NULL AND "createdAt" >= $2::timestamp`, societe.id, depuis),
+      factures: await prisma.$executeRawUnsafe(`UPDATE "Facture" SET "societeId"=$1 WHERE "societeId" IS NULL AND "createdAt" >= $2::timestamp`, societe.id, depuis),
+      facturesEnAttente: await prisma.$executeRawUnsafe(`UPDATE "FactureEnAttente" SET "societeId"=$1 WHERE "societeId" IS NULL AND "createdAt" >= $2::timestamp`, societe.id, depuis),
+      reglements: await prisma.$executeRawUnsafe(`UPDATE "BordereauReglement" SET "societeId"=$1 WHERE "societeId" IS NULL AND periode LIKE 'RLV%'`, societe.id),
+      prestataires: await prisma.$executeRawUnsafe(`UPDATE "Prestataire" SET "societeId"=$1 WHERE "societeId" IS NULL AND id IN (SELECT DISTINCT "prestataireId" FROM "PriseEnCharge" WHERE "createdAt" >= $2::timestamp AND "prestataireId" IS NOT NULL)`, societe.id, depuis),
+    };
+    console.log("Rattachées à la société :", JSON.stringify(maj));
+    // Le moteur d'import réinsère les lignes « en attente » à chaque exécution : on supprime les doublons.
+    const doublonsAttente = await prisma.$executeRawUnsafe(`DELETE FROM "FactureEnAttente" WHERE id IN (SELECT id FROM (SELECT id, row_number() OVER (PARTITION BY matricule, prestataire, "referenceFacture", "datePrestation", montant, "dateReception" ORDER BY "createdAt", id) rn FROM "FactureEnAttente") t WHERE rn > 1)`);
+    console.log("Doublons « en attente » supprimés :", doublonsAttente);
   } finally {
     await restaurerResilies();
     await app.close();
