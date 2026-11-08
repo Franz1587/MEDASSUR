@@ -393,7 +393,7 @@ export class PortailMembreController {
   async accordsPrealables(@Req() req: PortailMembreRequest) {
     const assureSanteId = this.assureSanteIdDe(req);
     const idsFamille = await this.idsFamilleDe(assureSanteId);
-    return this.accordPrealable.findAll({ assureIds: idsFamille });
+    return (await this.accordPrealable.findAll({ assureIds: idsFamille })).items;
   }
 
   // Certificat de prise en charge (2026-08) — voir demande utilisateur : "les

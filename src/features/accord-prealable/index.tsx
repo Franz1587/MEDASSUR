@@ -184,6 +184,7 @@ export default function AccordPrealableView() {
   const { shellActionRequest } = useShellNavigation();
   const { currentUser } = useAuth();
   const [accords, setAccords] = useState<AccordPrealable[]>([]);
+  const [totalAccords, setTotalAccords] = useState(0);
   const pagination = usePagination(accords);
   const [assures, setAssures] = useState<AssureSante[]>([]);
   const [actes, setActes] = useState<ActeMedical[]>([]);
@@ -267,7 +268,9 @@ export default function AccordPrealableView() {
   const handleRechercher = async () => {
     setRecherchant(true);
     try {
-      setAccords(await getAccordsPrealables(filtresActuels));
+      const r = await getAccordsPrealables(filtresActuels);
+      setAccords(r.items);
+      setTotalAccords(r.total);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Recherche impossible.");
     } finally {
@@ -504,7 +507,7 @@ export default function AccordPrealableView() {
     setEditPlafondRubrique(""); setEditPlafondDescription(""); setEditPlafondMontant(0);
   };
 
-  const refresh = async () => setAccords(await getAccordsPrealables(filtresActuels));
+  const refresh = async () => { const r = await getAccordsPrealables(filtresActuels); setAccords(r.items); setTotalAccords(r.total); };
 
   // Prise en main d'un dossier (2026-09) — voir demande utilisateur :
   // "étendre le fait de prendre en main un dossier aux agents de saisie,
@@ -762,7 +765,7 @@ export default function AccordPrealableView() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-4">
-        <StatCard title="Total prises en charge établies" value={String(accords.length)} icon={ClipboardCheck} />
+        <StatCard title="Total prises en charge établies" value={String(totalAccords || accords.length)} icon={ClipboardCheck} />
         <div className="bg-card border border-border rounded-xl p-3">
           <p className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide mb-2">Par type</p>
           <div className="flex flex-wrap gap-1.5">

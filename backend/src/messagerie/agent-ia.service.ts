@@ -938,9 +938,9 @@ export class MessagerieAgentIaService {
       }
       case "consulter_mes_dossiers_entente_prealable": {
         const dossiers = ctx.assureSanteId
-          ? await this.accordPrealable.findAll({ assureId: ctx.assureSanteId })
+          ? (await this.accordPrealable.findAll({ assureId: ctx.assureSanteId })).items
           : ctx.prestataireId
-            ? await this.accordPrealable.findAll({ prestataireId: ctx.prestataireId })
+            ? (await this.accordPrealable.findAll({ prestataireId: ctx.prestataireId })).items
             : [];
         return dossiers.map((d) => ({ id: d.id, type: d.type, description: d.description, decision: d.decision, statutAnalyseMedicale: d.statutAnalyseMedicale, statutValidationFinanciere: d.statutValidationFinanciere, dateDemande: d.dateDemande }));
       }

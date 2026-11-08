@@ -581,7 +581,7 @@ export class PortailPrestataireController {
       societeIds.map(async (sid) => {
         const [societe, devis] = await Promise.all([
           this.prisma.societeAssurance.findUnique({ where: { id: sid }, select: { nom: true } }),
-          TenantContext.run(sid, () => this.accordPrealable.findAll({ prestataireId })),
+          TenantContext.run(sid, () => this.accordPrealable.findAll({ prestataireId }).then((r) => r.items)),
         ]);
         return devis.map((d) => ({ ...d, societeNom: societe?.nom ?? sid }));
       })

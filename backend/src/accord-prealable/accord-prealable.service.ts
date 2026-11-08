@@ -62,31 +62,45 @@ export class AccordPrealableService {
     du?: string; au?: string; reference?: string;
     page?: number; perPage?: number;
   }) {
-    const perPage = Math.min(filtres?.perPage ?? 500, 2000);
+    // shortcut: pour la vue portail/contrat (peu de dossiers) on garde la
+    // pagination stricte ; pour la vue admin sans filtre on charge tout
+    // (jusqu'à 15 000) car le frontend fait de la pagination côté client.
+    const perPage = Math.min(filtres?.perPage ?? 15000, 15000);
     const page = Math.max(filtres?.page ?? 1, 1);
-    const accords = await this.prisma.accordPrealable.findMany({
-      take: perPage,
-      skip: (page - 1) * perPage,
-      where: {
-        contratId: filtres?.contratId,
-        // assureIds (2026-09) — voir demande utilisateur : "même les prises
-        // en charge qui n'ont pas été demandées via l'application mobile ou
-        // le portail assuré doivent remonter... si ça concerne l'assuré et
-        // ses ayants droit". PortailMembreController.accordsPrealables ne
-        // filtrait jusqu'ici que sur l'id EXACT de l'utilisateur connecté —
-        // une entente préalable saisie par un gestionnaire pour un ayant
-        // droit (jamais lui-même) restait invisible côté portail assuré.
-        // Même principe que prisesEnCharge()/idsFamilleDe : assureIds
-        // (famille entière) prioritaire sur assureId (id unique) quand fourni.
-        assureId: filtres?.assureIds ? { in: filtres.assureIds } : filtres?.assureId,
-        prestataireId: filtres?.prestataireId,
-        type: filtres?.type,
-        decision: filtres?.decision,
-        origine: filtres?.origine,
-      },
-      include: { assure: true, prisesEnCharge: true, lignes: true },
-      orderBy: { dateDemande: "desc" },
-    });
+    const where = {
+      contratId: filtres?.contratId,
+      assureId: filtres?.assureIds ? { in: filtres.assureIds } : filtres?.assureId,
+      prestataireId: filtres?.prestataireId,
+      type: filtres?.type,
+      decision: filtres?.decision,
+      origine: filtres?.origine,
+    };
+    const [accords, total] = await Promise.all([
+      this.prisma.accordPrealable.findMany({
+        take: perPage,
+        skip: (page - 1) * perPage,
+        where,
+        // select lean : pas de include complet de prisesEnCharge (trop lourd
+        // sur 10k+ dossiers) — on garde juste montant pour le badge "Facturé".
+        select: {
+          id: true, contratId: true, assureId: true, type: true, description: true,
+          dateDemande: true, dateValidite: true, decision: true, decisionDate: true,
+          montantDevis: true, montantAutorise: true, origine: true,
+          prestataire: true, prestataireId: true, prescriptionRef: true,
+          ordonnanceFichier: true, devisFichier: true,
+          statutAnalyseMedicale: true, statutValidationFinanciere: true,
+          motifDecision: true, assigneAId: true, medicamentsLus: true,
+          codeAccesPharmacie: true, medecinTraitant: true,
+          texteCachetMedecin: true, signaturePresente: true,
+          casesCoches: true, documentNumerise: true,
+          assure: { select: { nom: true, prenom: true } },
+          lignes: { select: { id: true, acteMedicalId: true, lettreCleCode: true, coefficient: true, description: true, plafondReference: true, montantDevis: true, categorieGarantie: true } },
+          prisesEnCharge: { select: { montant: true } },
+        },
+        orderBy: { dateDemande: "desc" },
+      }),
+      this.prisma.accordPrealable.count({ where }),
+    ]);
     const du = parseDateFr(filtres?.du);
     const au = parseDateFr(filtres?.au);
     const referenceNorm = filtres?.reference?.trim().toLowerCase();
@@ -98,19 +112,22 @@ export class AccordPrealableService {
         if (au && d > au) return false;
       }
       if (referenceNorm) {
-        const nomAssure = `${a.assure.nom} ${a.assure.prenom ?? ""}`.toLowerCase();
+        const nomAssure = `${a.assure.nom} ${(a.assure as { prenom?: string }).prenom ?? ""}`.toLowerCase();
         const cible = `${a.id} ${nomAssure} ${a.prestataire} ${a.description}`.toLowerCase();
         if (!cible.includes(referenceNorm)) return false;
       }
       return true;
     });
-    return filtres_.map((a) => ({
-      ...a,
-      rubrique: normaliserRubrique(a.type ?? a.description ?? ""),
-      facture: a.prisesEnCharge.length > 0,
-      montantFacture: a.prisesEnCharge.reduce((s, p) => s + Number(p.montant), 0),
-      montantAutoriseSuggere: (Number(a.montantAutorise) || null) as number | null,
-    }));
+    return {
+      items: filtres_.map((a) => ({
+        ...a,
+        rubrique: normaliserRubrique(a.type ?? a.description ?? ""),
+        facture: a.prisesEnCharge.length > 0,
+        montantFacture: a.prisesEnCharge.reduce((s, p) => s + Number(p.montant), 0),
+        montantAutoriseSuggere: (Number(a.montantAutorise) || null) as number | null,
+      })),
+      total: (du || au || referenceNorm) ? filtres_.length : total,
+    };
   }
 
   async findOne(id: string) {

@@ -6273,7 +6273,7 @@ export class DocumentsService {
   // Export Accords Préalables (Prises en Charge) d'un contrat.
   async renderAccordPrealableExport(contratId: string, format: "pdf" | "xlsx" | "docx", res: Response) {
     const police = policePourNomFichier(await this.prisma.contrat.findUnique({ where: { id: contratId }, select: { numeroPolice: true } }));
-    const accords = await this.accordPrealable.findAll({ contratId });
+    const accords = (await this.accordPrealable.findAll({ contratId })).items;
     const rows = accords.map((a) => [a.assure.nom + " " + (a.assure.prenom ?? ""), a.type, a.dateDemande, a.decision, a.montantAutorise !== null ? Number(a.montantAutorise) : 0]);
     if (format === "xlsx") return this.envoyerTableauXlsx(res, `Accords-Prealables-${police}`, ["Assuré", "Type", "Date demande", "Décision", "Montant autorisé"], rows);
     if (format === "docx") return this.envoyerDocx(res, `Accords-Prealables-${police}`, "PRISES EN CHARGE", `${accords.length} dossier(s)`, [], { headers: ["Assuré", "Type", "Date demande", "Décision", "Montant"], rows: rows.map((r) => r.map(String)) });

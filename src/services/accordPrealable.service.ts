@@ -126,7 +126,7 @@ export interface AccordsPrealablesFiltres {
   du?: string; au?: string; reference?: string;
 }
 
-export async function getAccordsPrealables(filtres?: AccordsPrealablesFiltres): Promise<AccordPrealable[]> {
+export async function getAccordsPrealables(filtres?: AccordsPrealablesFiltres): Promise<{ items: AccordPrealable[]; total: number }> {
   const params = new URLSearchParams();
   if (filtres?.prestataireId) params.set("prestataireId", filtres.prestataireId);
   if (filtres?.type) params.set("type", filtres.type);
@@ -136,15 +136,15 @@ export async function getAccordsPrealables(filtres?: AccordsPrealablesFiltres): 
   if (filtres?.au) params.set("au", filtres.au);
   if (filtres?.reference) params.set("reference", filtres.reference);
   const qs = params.toString();
-  const data = await http.get<ApiAccordPrealable[]>(`/accord-prealable${qs ? `?${qs}` : ""}`);
-  return data.map(mapAccord);
+  const data = await http.get<{ items: ApiAccordPrealable[]; total: number }>(`/accord-prealable${qs ? `?${qs}` : ""}`);
+  return { items: data.items.map(mapAccord), total: data.total };
 }
 
 // Dossiers Prises en Charge (Entente Préalable) d'UN contrat — voir onglet
 // PrisesEnChargeTab de la fiche contrat.
 export async function getAccordsPrealablesContrat(contratId: string): Promise<AccordPrealable[]> {
-  const data = await http.get<ApiAccordPrealable[]>(`/accord-prealable?contratId=${contratId}`);
-  return data.map(mapAccord);
+  const data = await http.get<{ items: ApiAccordPrealable[]; total: number }>(`/accord-prealable?contratId=${contratId}`);
+  return data.items.map(mapAccord);
 }
 
 export interface AccordPrealableUpsertInput {

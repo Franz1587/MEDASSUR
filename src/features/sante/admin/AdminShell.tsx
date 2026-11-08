@@ -296,7 +296,7 @@ export function AdminShell({
   const moduleAllowed = (currentRole?.allowedModules as string[] | undefined) ?? [];
   useAlertesDossiers({
     actif: moduleAllowed.includes("accordPrealable"),
-    recuperer: async () => (await getAccordsPrealables()).map((a) => ({
+    recuperer: async () => (await getAccordsPrealables()).items.map((a) => ({
       id: a.id, titre: `${a.type} — ${a.prestataire}`, enAttente: !a.assigneAId && a.decision === "En attente",
     })),
     labelNouveau: (d) => `Nouvelle prise en charge — ${d.titre}`,

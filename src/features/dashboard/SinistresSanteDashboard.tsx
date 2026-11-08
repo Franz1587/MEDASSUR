@@ -33,7 +33,7 @@ export default function SinistresSanteDashboard() {
 
   useEffect(() => {
     if (!currentUser?.id) return;
-    getAccordsPrealables().then(setAccords);
+    getAccordsPrealables().then((r) => setAccords(r.items));
     // Filtré côté serveur (2026-09, était `getFactures()`/`getPriseEnCharges()`
     // sans filtre — tout le portefeuille de la société rapatrié pour ne
     // garder que les quelques lignes du gestionnaire courant) — voir
