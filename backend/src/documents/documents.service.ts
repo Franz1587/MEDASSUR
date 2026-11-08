@@ -2921,6 +2921,7 @@ export class DocumentsService {
       include: {
         assure: { include: { contrat: { include: { client: true, compagnie: true, garanties: true } }, famille: { select: { telephone: true } } } },
         prestataireRef: true, demandeur: true, lignes: { include: { acteMedical: true } },
+        prisesEnCharge: { where: { NOT: { statut: "Annulé" } }, include: { acteMedical: true } },
       },
     });
     if (!accord) throw new NotFoundException(`Prise en charge ${accordId} introuvable`);
@@ -3092,9 +3093,22 @@ export class DocumentsService {
     y += 22;
 
     doc.font("Helvetica").fontSize(8);
-    const lignesTable = accord.lignes.length > 0
-      ? accord.lignes.map((l) => ({ libelle: l.acteMedical?.libelle ?? l.description, remb: Number(l.plafondReference), frais: Number(l.montantDevis) }))
-      : [{ libelle: accord.description, remb: Number(accord.montantAutorise ?? 0), frais: Number(accord.montantDevis ?? accord.montantAutorise ?? 0) }];
+    // Priorité 1 : PrisesEnCharge réelles liées à cet accord (cas des accords importés
+    // où les lignes AccordPrealable n'existent pas mais les PEC portent les vrais actes
+    // et leurs montants réels — frais réels = montant La Ruche + reste à charge).
+    // Priorité 2 : lignes de l'accord (saisie lors de la demande).
+    // Priorité 3 : description brute de l'accord (fallback texte).
+    const pecActives = accord.prisesEnCharge.filter((p) => p.statut !== "Annulé");
+    const lignesTable: { libelle: string; frais: number; remb: number }[] =
+      pecActives.length > 0
+        ? pecActives.map((pec) => ({
+            libelle: pec.acteMedical?.libelle ?? pec.type,
+            remb: Number(pec.montant),
+            frais: Number(pec.montant) + Number(pec.resteACharge ?? 0),
+          }))
+        : accord.lignes.length > 0
+          ? accord.lignes.map((l) => ({ libelle: l.acteMedical?.libelle ?? l.description, remb: Number(l.plafondReference), frais: Number(l.montantDevis) }))
+          : [{ libelle: accord.description ?? "", remb: Number(accord.montantAutorise ?? 0), frais: Number(accord.montantDevis ?? accord.montantAutorise ?? 0) }];
     let totalRemb = 0, totalFrais = 0;
     for (const l of lignesTable) {
       totalRemb += l.remb; totalFrais += l.frais;
