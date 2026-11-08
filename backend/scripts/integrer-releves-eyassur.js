@@ -129,10 +129,10 @@ async function main() {
   for (let debut = 0; debut < releves.length; debut += TAILLE_LOT) {
     const lot = releves.slice(debut, debut + TAILLE_LOT);
 
-    // Relevés déjà intégrés (référence Eyassur conservée dans la période du bordereau).
+    // Relevés déjà intégrés — détection par le numéro (= référence Eyassur).
     const dejaCrees = new Map();
     for (const r of lot) {
-      const b = await prisma.bordereauReglement.findFirst({ where: { periode: { contains: r.ref } }, select: { id: true, numero: true, statut: true, datePaiement: true } });
+      const b = await prisma.bordereauReglement.findFirst({ where: { numero: r.ref }, select: { id: true, numero: true, statut: true, datePaiement: true } });
       if (b) dejaCrees.set(r.ref, b);
     }
 
@@ -291,7 +291,7 @@ async function main() {
             bordereau = await prisma.bordereauReglement.create({
               data: {
                 id: `BDX-${randomUUID().slice(0, 8).toUpperCase()}`, numero, prestataireId: prest.id,
-                periode: `${r.ref} (${dateRec})`, nbPrisesEnCharge: aRattacher.length, montantTotal: montantNetPrisesEnCharge(aRattacher),
+                periode: dateRec, nbPrisesEnCharge: aRattacher.length, montantTotal: montantNetPrisesEnCharge(aRattacher),
                 statut: "Reçu", dateReception: dateRec,
                 prisesEnCharge: { connect: aRattacher.map((p) => ({ id: p.id })) },
               },
@@ -359,7 +359,7 @@ async function main() {
       priseEnCharge: await prisma.$executeRawUnsafe(`UPDATE "PriseEnCharge" SET "societeId"=$1 WHERE "societeId" IS NULL AND "createdAt" >= $2::timestamp`, societe.id, depuis),
       factures: await prisma.$executeRawUnsafe(`UPDATE "Facture" SET "societeId"=$1 WHERE "societeId" IS NULL AND "createdAt" >= $2::timestamp`, societe.id, depuis),
       facturesEnAttente: await prisma.$executeRawUnsafe(`UPDATE "FactureEnAttente" SET "societeId"=$1 WHERE "societeId" IS NULL AND "createdAt" >= $2::timestamp`, societe.id, depuis),
-      reglements: await prisma.$executeRawUnsafe(`UPDATE "BordereauReglement" SET "societeId"=$1 WHERE "societeId" IS NULL AND periode LIKE 'RLV%'`, societe.id),
+      reglements: await prisma.$executeRawUnsafe(`UPDATE "BordereauReglement" SET "societeId"=$1 WHERE "societeId" IS NULL AND numero LIKE 'RLV%'`, societe.id),
       prestataires: await prisma.$executeRawUnsafe(`UPDATE "Prestataire" SET "societeId"=$1 WHERE "societeId" IS NULL AND id IN (SELECT DISTINCT "prestataireId" FROM "PriseEnCharge" WHERE "createdAt" >= $2::timestamp AND "prestataireId" IS NOT NULL)`, societe.id, depuis),
     };
     console.log("Rattachées à la société :", JSON.stringify(maj));
