@@ -271,6 +271,42 @@ async function main() {
       if (pec) { utilisees.add(pec.id); pecParLigne.set(l, pec); }
     }
 
+    // ── 2b. Cohérence souscripteur par relevé ──
+    // Un relevé Eyassur concerne UN seul souscripteur. Si un matricule ambigu
+    // (présent dans plusieurs polices de souscripteurs différents) a été
+    // résolu vers le mauvais contrat, sa PEC apparaîtrait sur un bordereau
+    // d'une autre société. On détecte le souscripteur dominant du relevé
+    // (vote majoritaire) et on exclut les PECs dont l'assuré n'y appartient pas.
+    {
+      const assureIdsTous = [...new Set([...pecParLigne.values()].map((p) => p.assureId))];
+      if (assureIdsTous.length > 0) {
+        const rows = await prisma.assureSante.findMany({
+          where: { id: { in: assureIdsTous } },
+          select: { id: true, contrat: { select: { clientId: true } } },
+        });
+        const clientDuPec = new Map(rows.map((a) => [a.id, a.contrat?.clientId ?? null]));
+        for (const r of lot) {
+          const lignesAvecPec = r.lignes.filter((l) => pecParLigne.has(l));
+          if (lignesAvecPec.length <= 1) continue;
+          const votes = new Map();
+          for (const l of lignesAvecPec) {
+            const cid = clientDuPec.get(pecParLigne.get(l).assureId);
+            if (cid) votes.set(cid, (votes.get(cid) ?? 0) + 1);
+          }
+          if (votes.size <= 1) continue; // tous du même souscripteur
+          const dominant = [...votes.entries()].sort((a, b) => b[1] - a[1])[0][0];
+          for (const l of lignesAvecPec) {
+            const pec = pecParLigne.get(l);
+            const cid = clientDuPec.get(pec.assureId);
+            if (cid && cid !== dominant) {
+              pecParLigne.delete(l);
+              utilisees.delete(pec.id);
+            }
+          }
+        }
+      }
+    }
+
     // ── 3. Un règlement maladie (bordereau "Reçu") par relevé ──
     for (const r of lot) {
       resume.releves++;
