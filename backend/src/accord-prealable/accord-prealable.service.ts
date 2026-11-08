@@ -13,6 +13,7 @@ import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
 import { sanitizeUpload } from "../storage/upload-security.util";
 import { MessagingService } from "../messaging/messaging.service";
+import { cleDateFr, trierParDate } from "../lib/tri-date-fr.util";
 import { PushNotificationsService } from "../notifications/push-notifications.service";
 
 const UPLOADS_DOCS_DIR = path.join(UPLOADS_ROOT, "accords-prealables");
@@ -75,36 +76,35 @@ export class AccordPrealableService {
       decision: filtres?.decision,
       origine: filtres?.origine,
     };
-    const [accords, total] = await Promise.all([
-      this.prisma.accordPrealable.findMany({
-        take: perPage,
-        skip: (page - 1) * perPage,
-        where,
-        // select lean : pas de include complet de prisesEnCharge (trop lourd
-        // sur 10k+ dossiers) — on garde juste montant pour le badge "Facturé".
-        select: {
-          id: true, contratId: true, assureId: true, type: true, description: true,
-          dateDemande: true, dateValidite: true, decision: true, decisionDate: true,
-          montantDevis: true, montantAutorise: true, origine: true,
-          prestataire: true, prestataireId: true, prescriptionRef: true,
-          ordonnanceFichier: true, devisFichier: true,
-          statutAnalyseMedicale: true, statutValidationFinanciere: true,
-          motifDecision: true, assigneAId: true, medicamentsLus: true,
-          codeAccesPharmacie: true, medecinTraitant: true,
-          texteCachetMedecin: true, signaturePresente: true,
-          casesCoches: true, documentNumerise: true,
-          assure: { select: { nom: true, prenom: true } },
-          lignes: { select: { id: true, acteMedicalId: true, lettreCleCode: true, coefficient: true, description: true, plafondReference: true, montantDevis: true, categorieGarantie: true } },
-          prisesEnCharge: { select: { montant: true } },
-        },
-        orderBy: { dateDemande: "desc" },
-      }),
-      this.prisma.accordPrealable.count({ where }),
-    ]);
+    const accords = await this.prisma.accordPrealable.findMany({
+      where,
+      // select lean : pas de include complet de prisesEnCharge (trop lourd
+      // sur 10k+ dossiers) — on garde juste montant pour le badge "Facturé".
+      select: {
+        id: true, contratId: true, assureId: true, type: true, description: true,
+        dateDemande: true, dateValidite: true, decision: true, decisionDate: true,
+        montantDevis: true, montantAutorise: true, origine: true,
+        prestataire: true, prestataireId: true, prescriptionRef: true,
+        ordonnanceFichier: true, devisFichier: true,
+        statutAnalyseMedicale: true, statutValidationFinanciere: true,
+        motifDecision: true, assigneAId: true, medicamentsLus: true,
+        codeAccesPharmacie: true, medecinTraitant: true,
+        texteCachetMedecin: true, signaturePresente: true,
+        casesCoches: true, documentNumerise: true,
+        assure: { select: { nom: true, prenom: true } },
+        lignes: { select: { id: true, acteMedicalId: true, lettreCleCode: true, coefficient: true, description: true, plafondReference: true, montantDevis: true, categorieGarantie: true } },
+        prisesEnCharge: { select: { montant: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    const total = accords.length;
+    // Rangés par date de soins (dateDemande = date de la prestation, texte
+    // JJ/MM/AAAA) : un orderBy en base trierait par jour du mois. Tri puis
+    // découpage en mémoire, pour que chaque page suive l'ordre chronologique.
     const du = parseDateFr(filtres?.du);
     const au = parseDateFr(filtres?.au);
     const referenceNorm = filtres?.reference?.trim().toLowerCase();
-    const filtres_ = accords.filter((a) => {
+    const filtres_ = trierParDate(accords.filter((a) => {
       if (du || au) {
         const d = parseDateFr(a.dateDemande);
         if (!d) return false;
@@ -117,10 +117,12 @@ export class AccordPrealableService {
         if (!cible.includes(referenceNorm)) return false;
       }
       return true;
-    });
+    }), (a) => cleDateFr(a.dateDemande));
     return {
-      items: filtres_.map((a) => ({
+      items: filtres_.slice((page - 1) * perPage, page * perPage).map((a) => ({
         ...a,
+        assure: a.assure,
+        lignes: a.lignes,
         rubrique: normaliserRubrique(a.type ?? a.description ?? ""),
         facture: a.prisesEnCharge.length > 0,
         montantFacture: a.prisesEnCharge.reduce((s, p) => s + Number(p.montant), 0),
