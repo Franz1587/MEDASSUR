@@ -82,7 +82,7 @@ export class AccordPrealableService {
       // sur 10k+ dossiers) — on garde juste montant pour le badge "Facturé".
       select: {
         id: true, contratId: true, assureId: true, type: true, description: true,
-        dateDemande: true, dateValidite: true, decision: true, decisionDate: true,
+        dateDemande: true, dateValidite: true, decision: true, dateDecision: true,
         montantDevis: true, montantAutorise: true, origine: true,
         prestataire: true, prestataireId: true, prescriptionRef: true,
         ordonnanceFichier: true, devisFichier: true,
@@ -95,7 +95,6 @@ export class AccordPrealableService {
         lignes: { select: { id: true, acteMedicalId: true, lettreCleCode: true, coefficient: true, description: true, plafondReference: true, montantDevis: true, categorieGarantie: true } },
         prisesEnCharge: { select: { montant: true } },
       },
-      orderBy: { createdAt: "desc" },
     });
     const total = accords.length;
     // Rangés par date de soins (dateDemande = date de la prestation, texte
