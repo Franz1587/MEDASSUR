@@ -286,8 +286,7 @@ async function main() {
         } else {
           const prest = prestataireParNom.get(nomPrest);
           if (prest) {
-            const [{ nextval }] = await prisma.$queryRaw`SELECT nextval('reglement_numero_seq') AS nextval`;
-            const numero = nextval.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+            const numero = r.ref;
             const dateRec = jour(r.dc);
             bordereau = await prisma.bordereauReglement.create({
               data: {
