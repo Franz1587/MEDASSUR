@@ -36,12 +36,16 @@ export interface AnalyseGedResultat {
   titrePrescripteurExtrait: string | null;
   codePraticienExtrait: string | null;
   codeEtablissementExtrait: string | null;
+  // Chèque bancaire extrait (2026-11)
+  numeroChequeExtrait: number | null;
+  nomBanqueExtrait: string | null;
 }
 
 const RESULTAT_ECHEC: AnalyseGedResultat = {
   statutOcr: "Échec", type: null, objet: null, resume: null,
   referenceExtraite: null, montantExtrait: null, dateCachet: null, nomEmetteurExtrait: null,
   nomPrescripteurExtrait: null, titrePrescripteurExtrait: null, codePraticienExtrait: null, codeEtablissementExtrait: null,
+  numeroChequeExtrait: null, nomBanqueExtrait: null,
 };
 
 @Injectable()
@@ -119,7 +123,9 @@ export class GedAnalyseService {
           "\"nomPrescripteur\": <si type = \"Prescription médicale\" : nom du médecin prescripteur SANS le titre Dr/Pr, tel qu'écrit sur le cachet ; null sinon>, " +
           "\"titrePrescripteur\": <si type = \"Prescription médicale\" : titre professionnel visible (\"Dr\", \"Pr\"…) ; null sinon>, " +
           "\"codePraticien\": <si type = \"Prescription médicale\" : numéro d'ordre / code praticien lisible sur le tampon ou la case \"Code praticien\" ; null sinon>, " +
-          "\"codeEtablissement\": <si type = \"Prescription médicale\" : code officiel de la structure lisible sur le tampon ou la case \"Code établissement\" ; null sinon>}\n" +
+          "\"codeEtablissement\": <si type = \"Prescription médicale\" : code officiel de la structure lisible sur le tampon ou la case \"Code établissement\" ; null sinon>, " +
+          "\"numeroCheque\": <si le document EST un chèque bancaire OU mentionne explicitement le N° d'un chèque qui accompagne ce règlement (ex : \"Chèque N° 5309183\", \"N° chèque : 5309183\", numéro imprimé sur un chèque scanné) : ce numéro EXACT en entier ; null sinon — NE PAS extraire un numéro de facture ou de bordereau>, " +
+          "\"nomBanque\": <si le document mentionne une banque émettrice du chèque de règlement (ex : \"Orabank Gabon\", \"BGFIBank\", \"UGB\"…) : son nom tel qu'écrit ; null sinon>}\n" +
           listePrestataires +
           "\nSi le document est flou, coupé ou réellement illisible, réponds quand même le JSON avec objet/resume " +
           "expliquant que le contenu n'est pas lisible, jamais d'invention de contenu absent.",
@@ -134,8 +140,10 @@ export class GedAnalyseService {
         dateCachet?: string | null; nomEmetteur?: string | null;
         nomPrescripteur?: string | null; titrePrescripteur?: string | null;
         codePraticien?: string | null; codeEtablissement?: string | null;
+        numeroCheque?: number | string | null; nomBanque?: string | null;
       };
       const montant = parsed.montant != null && parsed.montant !== "" ? Number(parsed.montant) : null;
+      const numeroChequeRaw = parsed.numeroCheque != null && parsed.numeroCheque !== "" ? Number(parsed.numeroCheque) : null;
       return {
         statutOcr: "Analysé",
         type: parsed.type && (TYPES_GED as readonly string[]).includes(parsed.type) ? parsed.type : "Autre",
@@ -149,6 +157,8 @@ export class GedAnalyseService {
         titrePrescripteurExtrait: parsed.titrePrescripteur?.trim() || null,
         codePraticienExtrait: parsed.codePraticien?.trim() || null,
         codeEtablissementExtrait: parsed.codeEtablissement?.trim() || null,
+        numeroChequeExtrait: numeroChequeRaw != null && !Number.isNaN(numeroChequeRaw) ? numeroChequeRaw : null,
+        nomBanqueExtrait: parsed.nomBanque?.trim() || null,
       };
     } catch (err) {
       this.logger.warn(`Lecture GED de "${nomFichier}" échouée : ${err instanceof Error ? err.message : err}`);

@@ -4027,6 +4027,12 @@ model GedDocument {
   // payées par le même chèque. Renseigné automatiquement par ARIANA cron.
   lettreChequeId    String?
   lettreCheque      LettreCheque? @relation(fields: [lettreChequeId], references: [id])
+  // Chèque bancaire extrait par ARIANA (2026-11) — numéro et banque lus
+  // directement sur le document scanné (chèque, bordereau, relevé).
+  // Si une LettreCheque avec ce numeroCheque existe déjà, ARIANA la lie ;
+  // sinon, elle la crée automatiquement et met à jour lettreChequeId.
+  numeroChequeExtrait   Int?
+  nomBanqueExtrait      String?
   // "Sans objet" (document qui n'est pas une facture prestataire — un
   // courrier, par exemple) | "Non traité" (facture importée, aucune saisie
   // correspondante trouvée) | "Traité partiellement" (saisie trouvée mais

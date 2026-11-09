@@ -99,6 +99,8 @@ export class GedService {
         montantExtrait: resultat.montantExtrait,
         dateCachet: params.dateCachetManuelle || resultat.dateCachet,
         nomEmetteurExtrait: resultat.nomEmetteurExtrait,
+        numeroChequeExtrait: resultat.numeroChequeExtrait,
+        nomBanqueExtrait: resultat.nomBanqueExtrait,
         demandeurId,
       },
       include: { prestataire: { select: { nom: true } }, facture: { select: { id: true, referenceFacture: true, statut: true } } },
@@ -191,6 +193,91 @@ export class GedService {
     });
   }
 
+  // Résolution ou création automatique d'une LettreCheque depuis les données
+  // extraites du document scanné (2026-11) — ARIANA lit le N° de chèque sur
+  // le document et appelle cette méthode lors du rapprochement.
+  // Stratégie :
+  //  1. Chercher une LettreCheque existante par numeroCheque + prestataire
+  //  2. Chercher la banque par nom (nomBanque extrait) si pas de match direct
+  //  3. Dans la banque trouvée, chercher un lot actif qui couvre ce numéro
+  //  4. Sinon créer un lot "ARIANA" unitaire pour cette banque
+  //  5. Créer la LettreCheque et lier le bordereau si fourni
+  private async creerOuTrouverLettreCheque(params: {
+    numeroCheque: number;
+    nomBanque: string | null;
+    prestataireId: string;
+    montant: number;
+    dateEmission: string;
+    bordereauId?: string;
+  }): Promise<string | null> {
+    const { numeroCheque, nomBanque, prestataireId, montant, dateEmission, bordereauId } = params;
+
+    // 1. LettreCheque déjà existante avec ce numéro pour ce prestataire
+    const existante = await this.prisma.lettreCheque.findFirst({
+      where: { numeroCheque, prestataireId },
+      select: { id: true },
+    });
+    if (existante) {
+      if (bordereauId) {
+        await this.prisma.bordereauReglement.update({
+          where: { id: bordereauId },
+          data: { lettreChequeId: existante.id, statut: "Payé", datePaiement: dateEmission, referenceVirement: `Chèque N° ${numeroCheque}` },
+        });
+      }
+      return existante.id;
+    }
+
+    // 2. Chercher la banque par nom (tolérant sur la casse)
+    if (!nomBanque) return null;
+    const banque = await this.prisma.banque.findFirst({
+      where: { nom: { contains: nomBanque.split(/\s+/)[0], mode: "insensitive" } },
+      select: { id: true },
+    });
+    if (!banque) return null;
+
+    return this.prisma.$transaction(async (tx) => {
+      // 3. Lot actif qui couvre ce numéro de chèque
+      let lot = await tx.lotCheques.findFirst({
+        where: { banqueId: banque.id, statut: "Actif", numeroDebut: { lte: numeroCheque }, numeroFin: { gte: numeroCheque } },
+        select: { id: true },
+      });
+
+      // 4. Lot "ARIANA" générique pour cette banque, ou création
+      if (!lot) {
+        const lotAriana = await tx.lotCheques.findFirst({
+          where: { banqueId: banque.id, numeroDebut: 0, numeroFin: 9999999 },
+          select: { id: true },
+        });
+        if (lotAriana) {
+          lot = lotAriana;
+        } else {
+          lot = await tx.lotCheques.create({
+            data: { id: randomUUID(), banqueId: banque.id, numeroDebut: 0, numeroFin: 9999999, numeroProchain: numeroCheque + 1 },
+            select: { id: true },
+          });
+        }
+      }
+
+      // 5. Numéro de lettre chèque via séquence Postgres
+      const [{ nextval }] = await tx.$queryRaw<{ nextval: bigint }[]>`SELECT nextval('lettre_cheque_numero_seq') AS nextval`;
+      const numero = `LC-${nextval.toString().padStart(6, "0")}`;
+
+      const lc = await tx.lettreCheque.create({
+        data: { id: randomUUID(), numero, banqueId: banque.id, lotChequesId: lot.id, numeroCheque, prestataireId, montantTotal: montant, statut: "Émise", dateEmission },
+        select: { id: true },
+      });
+
+      if (bordereauId) {
+        await tx.bordereauReglement.update({
+          where: { id: bordereauId },
+          data: { lettreChequeId: lc.id, statut: "Payé", datePaiement: dateEmission, referenceVirement: `Chèque N° ${numeroCheque}` },
+        });
+      }
+
+      return lc.id;
+    });
+  }
+
   // Rapprochement facture GED ↔ facture réellement saisie (2026-09) — voir
   // demande utilisateur d'origine : "suivi et comparaison des factures
   // enregistrées par la GED et celles traitées et saisies afin de dire
@@ -199,7 +286,10 @@ export class GedService {
   // facture peut être saisie APRÈS l'import GED, ou une correction de
   // référence côté document peut nécessiter un nouvel essai.
   async rapprocher(id: string) {
-    const doc = await this.prisma.gedDocument.findUnique({ where: { id } });
+    const doc = await this.prisma.gedDocument.findUnique({
+      where: { id },
+      include: { lettreCheque: { select: { id: true } } },
+    });
     if (!doc) throw new NotFoundException(`Document ${id} introuvable`);
 
     if (doc.type !== "Facture prestataire") {
@@ -320,7 +410,18 @@ export class GedService {
         });
         const premierFactureId = premiereLigne?.factureId ?? null;
         // Règlement comptable : chèque lié au bordereau (2026-11)
-        const lettreChequeId = bordereau.lettreCheque?.id ?? null;
+        // Si le doc a un N° de chèque extrait, créer/trouver la LettreCheque
+        let lettreChequeId = bordereau.lettreCheque?.id ?? null;
+        if (!lettreChequeId && doc.numeroChequeExtrait) {
+          lettreChequeId = await this.creerOuTrouverLettreCheque({
+            numeroCheque: doc.numeroChequeExtrait,
+            nomBanque: doc.nomBanqueExtrait,
+            prestataireId: prestataireIdEffectif,
+            montant: Number(doc.montantExtrait ?? bordereau.montantTotal),
+            dateEmission: doc.dateCachet ?? new Date().toLocaleDateString("fr-FR"),
+            bordereauId: bordereau.id,
+          });
+        }
         return this.prisma.gedDocument.update({
           where: { id },
           data: { statutTraitement, factureId: premierFactureId, lettreChequeId },
@@ -385,6 +486,28 @@ export class GedService {
         // toutes la même lettreCheque, on la remonte quand même.
         const lcIdsPartiel = [...new Set(avecBordereau.map((l) => l.bordereau?.lettreCheque?.id).filter(Boolean))];
         if (lcIdsPartiel.length === 1) lettreChequeIdRapproche = lcIdsPartiel[0] as string;
+      }
+
+      // Création automatique de la LettreCheque si le doc porte un N° de
+      // chèque extrait et qu'aucune n'a encore été résolue via la chaîne
+      // accords préalables → bordereaux.
+      if (!lettreChequeIdRapproche && doc.numeroChequeExtrait && prestataireIdEffectif) {
+        // Prendre le premier bordereau des accords préalables comme point de liaison
+        const premierBordereauId = avecBordereau[0]?.bordereau != null
+          ? await this.prisma.priseEnCharge.findFirst({
+              where: { factureId: facture.id, statut: { not: "Annulé" }, bordereauId: { not: null } },
+              select: { bordereauId: true },
+            }).then((l) => l?.bordereauId ?? undefined)
+          : undefined;
+
+        lettreChequeIdRapproche = await this.creerOuTrouverLettreCheque({
+          numeroCheque: doc.numeroChequeExtrait,
+          nomBanque: doc.nomBanqueExtrait,
+          prestataireId: prestataireIdEffectif,
+          montant: Number(doc.montantExtrait ?? total),
+          dateEmission: doc.dateCachet ?? new Date().toLocaleDateString("fr-FR"),
+          bordereauId: premierBordereauId,
+        });
       }
     }
 
