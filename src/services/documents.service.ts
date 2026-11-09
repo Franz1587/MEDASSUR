@@ -14,7 +14,7 @@ async function openBlobUrl(res: Response) {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-async function openDocument(path: string) {
+export async function openDocument(path: string) {
   const token = getAccessToken();
   const res = await fetch(`${API_URL}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
