@@ -2,9 +2,6 @@ import PDFDocument from "pdfkit";
 import { Injectable } from "@nestjs/common";
 import type { Response } from "express";
 import { PrismaService } from "../prisma/prisma.service";
-import { Prisma } from "@prisma/client";
-import { TenantContext } from "../tenant/tenant-context";
-import { resoudreRubriqueContrat, normaliserRubrique } from "../actes-medicaux/rubrique-contrat.util";
 import { ParametresEntrepriseService } from "../parametres-entreprise/parametres-entreprise.service";
 
 function fmt(n: number): string {
@@ -34,14 +31,6 @@ function moisDe(dateFr: string | null | undefined): number | null {
   const [, m] = dateFr.split("/").map(Number);
   return m ? m - 1 : null;
 }
-function estDateFuture(dateFr: string | null | undefined, maintenant = new Date()): boolean {
-  if (!dateFr) return false;
-  const [d, m, y] = dateFr.split("/").map(Number);
-  if (!d || !m || !y) return false;
-  const date = new Date(y, m - 1, d);
-  const aujourdHui = new Date(maintenant.getFullYear(), maintenant.getMonth(), maintenant.getDate());
-  return date > aujourdHui;
-}
 function joursRestants(dateFinFr: string): number {
   const [d, m, y] = dateFinFr.split("/").map(Number);
   if (!d || !m || !y) return Infinity;
@@ -53,60 +42,45 @@ export class DashboardService {
   constructor(private prisma: PrismaService, private parametresEntreprise: ParametresEntrepriseService) {}
 
   async pilotage(anneeParam?: string) {
-    // 7 requêtes en parallèle (2026-10) — les deux findMany Contrat séquentiels
-    // qui bloquaient le démarrage (contratsPourAnnees, contratsNonTest) sont
-    // fusionnés ici : contrats inclut déjà id et dateDebut. prisesEnCharge est
-    // lancé juste après, sequentiellement, car il a besoin des ids de contrats.
+    // Années réellement disponibles (2026-08) — dérivées des VRAIS contrats
+    // en base, jamais une liste figée ("2024", "2025"...) qui désynchronise
+    // dès que l'exploitation avance dans le temps.
+    const contratsPourAnnees = await this.prisma.contrat.findMany({ select: { dateDebut: true } });
+    const anneesDisponibles = [...new Set(contratsPourAnnees.map((c) => anneeDe(c.dateDebut)).filter((y): y is number => y !== null))].sort((a, b) => b - a);
+    const anneeCourante = new Date().getFullYear();
+    const annee = anneeParam ? Number(anneeParam) : (anneesDisponibles.includes(anneeCourante) ? anneeCourante : anneesDisponibles[0] ?? anneeCourante);
+    const anneePrecedente = annee - 1;
+
+    // Contrats de test exclus AVANT tout (2026-09) — voir demande
+    // utilisateur : "le cumul de la police n'est pas harmonisé" +
+    // ContratsService.findAll, qui exclut déjà `estTest` de toute liste
+    // interne ; cette requête globale ne joignait jusqu'ici jamais Contrat
+    // et pouvait donc laisser des données de test fuiter dans les cumuls
+    // (voir mémoire "project-famille-test-isolation" : "pas exhaustif sur
+    // tous les rapports").
+    const contratsNonTest = await this.prisma.contrat.findMany({ where: { estTest: false }, select: { id: true } });
+    const contratsNonTestIds = contratsNonTest.map((c) => c.id);
+
     const [
-      contrats, clients, sinistres, impayesEnCours, assuresSanteToutesAffiliations, prisesEnChargeEnAttente,
-      comptesBancaires,
+      contrats, clients, sinistres, impayesEnCours, assuresSanteParStatut, prisesEnChargeEnAttente,
+      comptesBancaires, prisesEnCharge,
     ] = await Promise.all([
       this.prisma.contrat.findMany({ where: { estTest: false }, select: { id: true, statut: true, dateDebut: true, dateFin: true, prime: true, montantCommission: true, clientId: true, client: { select: { ville: true } } } }),
       this.prisma.client.findMany({ select: { statut: true, type: true } }),
       this.prisma.sinistre.findMany({ select: { statut: true, montant: true, date: true } }),
       this.prisma.impaye.aggregate({ where: { statut: "En cours" }, _sum: { montantDu: true }, _count: true }),
-      this.prisma.assureSante.findMany({ select: { identiteId: true, matricule: true, statut: true, contrat: { select: { statut: true } } } }),
+      this.prisma.assureSante.groupBy({ by: ["statut"], _count: true }),
       this.prisma.accordPrealable.count({ where: { decision: "En attente" } }),
       this.prisma.compteBancaire.findMany({ select: { solde: true } }),
+      // Rejeté ET Annulé exclus (2026-09) — même métrique/mêmes exclusions
+      // que StatistiquesService.calculer (voir commentaire de
+      // consommationLignes plus bas, "même métrique") ; excluait jusqu'ici
+      // seulement Annulé, laissant passer Rejeté.
+      this.prisma.priseEnCharge.findMany({
+        where: { statut: { notIn: ["Rejeté", "Annulé"] }, contratId: { in: contratsNonTestIds }, factureId: { not: null } },
+        select: { type: true, date: true, statut: true, montant: true, baseRemboursement: true, bordereau: { select: { statut: true } } },
+      }),
     ]);
-    // Rejeté ET Annulé exclus — même métrique que StatistiquesService.calculer ;
-    // contrats est déjà filtré estTest:false, ses ids sont donc tous non-test.
-    // Agrégées par PostgreSQL (une ligne par date × type × réglé) au lieu de
-    // charger ~100 000 lignes : 3,7 s → quelques dizaines de ms, mêmes
-    // chiffres. Cloisonnement société garanti par les ids de contrats, déjà
-    // filtrés par le middleware, et par le même filtre societeId que lui sur
-    // PriseEnCharge (une requête brute ne passe pas par le middleware).
-    const societeId = TenantContext.getSocieteId();
-    const filtreSociete = societeId ? Prisma.sql`AND p."societeId" = ${societeId}` : Prisma.empty;
-    // Acte et type du prestataire joints (2026-11) : la rubrique se résout comme
-    // dans les Statistiques (resoudreRubriqueContrat), jamais sur le texte brut p.type.
-    const prisesEnChargeBrutes = await this.prisma.$queryRaw<{ date: string; type: string; paye: boolean; n: number; montant: number; famille: string | null; categorie: string | null; prestType: string | null }[]>`
-      SELECT p.date, p.type, COALESCE(b.statut = 'Payé', false) AS paye, COUNT(*)::int AS n,
-             COALESCE(SUM(COALESCE(p."baseRemboursement", p.montant)), 0)::float8 AS montant,
-             a.famille AS famille, a."categorieGarantie" AS categorie, pr.type AS "prestType"
-      FROM "PriseEnCharge" p LEFT JOIN "BordereauReglement" b ON b.id = p."bordereauId"
-        LEFT JOIN "ActeMedical" a ON a.id = p."acteMedicalId"
-        LEFT JOIN "Prestataire" pr ON pr.id = p."prestataireId"
-      WHERE p.statut NOT IN ('Rejeté', 'Annulé') AND p."contratId" = ANY(${contrats.map((c) => c.id)}::text[]) ${filtreSociete}
-      GROUP BY p.date, p.type, paye, a.famille, a."categorieGarantie", pr.type`;
-    // « Ambulatoire » ne dit rien : si l'acte du catalogue a une vraie famille
-    // (hors DIVERS), c'est elle qui donne la rubrique (Dentisterie, Optique, Imagerie…).
-    const rubriquesVagues = new Set(["Ambulatoire", "Autre", "Non précisé"]);
-    const prisesEnCharge = prisesEnChargeBrutes.map((p) => {
-      let rubrique = resoudreRubriqueContrat([], { type: p.type, prestataireType: p.prestType }, p.famille ? { famille: p.famille, categorieGarantie: p.categorie } : null);
-      if (rubriquesVagues.has(rubrique) && p.famille && p.famille.trim().toUpperCase() !== "DIVERS") {
-        const parFamille = normaliserRubrique(p.famille);
-        if (!rubriquesVagues.has(parFamille)) rubrique = parFamille;
-      }
-      return { ...p, rubrique };
-    });
-
-    // Années disponibles dérivées du résultat contrats (2026-08/2026-10) —
-    // jamais une liste figée, jamais une requête séquentielle séparée.
-    const anneesDisponibles = [...new Set(contrats.map((c) => anneeDe(c.dateDebut)).filter((y): y is number => y !== null))].sort((a, b) => b - a);
-    const anneeCourante = new Date().getFullYear();
-    const annee = anneeParam ? Number(anneeParam) : (anneesDisponibles.includes(anneeCourante) ? anneeCourante : anneesDisponibles[0] ?? anneeCourante);
-    const anneePrecedente = annee - 1;
 
     // Actifs/inactifs — assurés et contrats (2026-09) — voir demande
     // utilisateur : "de la même manière qu'on remonte le nombre total des
@@ -123,24 +97,11 @@ export class DashboardService {
     // vigueur (pas "terminé"), seuls "Expiré" et "Résilié" comptent comme
     // inactifs pour ne jamais présenter un contrat en cours de renouvellement
     // comme "terminé, retiré".
-    // Une personne est comptée une seule fois, même si elle possède des
-    // affiliations historiques sur plusieurs polices. Une affiliation
-    // active prime sur les anciennes affiliations inactives.
-    const identiteParPersonne = new Map<string, string>();
-    for (const affiliation of assuresSanteToutesAffiliations) {
-      const cle = affiliation.identiteId ?? `matricule:${affiliation.matricule}`;
-      const couvertureActive = affiliation.statut === "Actif" && ["Actif", "En renouvellement"].includes(affiliation.contrat.statut);
-      const statutCourant = couvertureActive ? "Actif" : affiliation.statut === "Radié" ? "Radié" : "Suspendu";
-      const statutActuel = identiteParPersonne.get(cle);
-      if (statutActuel === "Actif") continue;
-      identiteParPersonne.set(cle, statutCourant);
-    }
-    const compteParStatutAssure = new Map<string, number>();
-    for (const statut of identiteParPersonne.values()) compteParStatutAssure.set(statut, (compteParStatutAssure.get(statut) ?? 0) + 1);
+    const compteParStatutAssure = new Map(assuresSanteParStatut.map((g) => [g.statut, g._count]));
     const assuresSante = compteParStatutAssure.get("Actif") ?? 0;
     const assuresSanteSuspendus = compteParStatutAssure.get("Suspendu") ?? 0;
     const assuresSanteRadies = compteParStatutAssure.get("Radié") ?? 0;
-    const assuresSanteTotal = identiteParPersonne.size;
+    const assuresSanteTotal = assuresSanteParStatut.reduce((s, g) => s + g._count, 0);
     const assuresSanteInactifs = assuresSanteSuspendus + assuresSanteRadies;
 
     const contratsAnnee = contrats.filter((c) => anneeDe(c.dateDebut) === annee);
@@ -194,8 +155,8 @@ export class DashboardService {
     // TOUTE la société au lieu d'un seul contrat : c'est la différence avec
     // l'écran "Statistiques", qui reste volontairement par contrat pour une
     // analyse fine (arrêté de situation à imprimer).
-    const consommationLignes = prisesEnCharge.map((p) => ({ date: p.date, montant: p.montant }));
-    const consommationAnnee = consommationLignes.filter((l) => anneeDe(l.date) === annee && !(annee === new Date().getFullYear() && estDateFuture(l.date)));
+    const consommationLignes = prisesEnCharge.map((p) => ({ date: p.date, montant: Number(p.baseRemboursement ?? p.montant) }));
+    const consommationAnnee = consommationLignes.filter((l) => anneeDe(l.date) === annee);
     const consommationAnneePrecedenteLignes = consommationLignes.filter((l) => anneeDe(l.date) === anneePrecedente);
     const consommationMensuelle = MOIS.map((mois, i) => ({
       mois,
@@ -226,14 +187,14 @@ export class DashboardService {
     // encore rattachée...).
     const parType = new Map<string, { declares: number; regles: number }>();
     for (const p of prisesEnCharge) {
-      if (anneeDe(p.date) === annee && estDateFuture(p.date)) continue;
-      if (!parType.has(p.rubrique)) parType.set(p.rubrique, { declares: 0, regles: 0 });
-      const t = parType.get(p.rubrique)!;
-      t.declares += p.n;
-      if (p.paye) t.regles += p.n;
+      if (!parType.has(p.type)) parType.set(p.type, { declares: 0, regles: 0 });
+      const t = parType.get(p.type)!;
+      t.declares++;
+      if (p.bordereau?.statut === "Payé") t.regles++;
     }
     const sinistraliteParType = [...parType.entries()]
       .sort((a, b) => b[1].declares - a[1].declares)
+      .slice(0, 5)
       .map(([branche, v]) => ({ branche, "déclarés": v.declares, "réglés": v.regles, pendants: v.declares - v.regles }));
 
     const alertes: { message: string; type: "warning" | "danger"; view: string }[] = [];

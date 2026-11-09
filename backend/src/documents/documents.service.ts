@@ -5739,7 +5739,7 @@ export class DocumentsService {
   // "Facture égale détails" : jamais un total agrégé seul.
   async renderConsommationsExport(contratId: string, format: "pdf" | "xlsx" | "docx", res: Response) {
     const lignes = await this.prisma.priseEnCharge.findMany({
-      where: { contratId, statut: { not: "Annulé" } },
+      where: { contratId, statut: { not: "Annulé" }, factureId: { not: null } },
       include: { assure: true },
       orderBy: { date: "desc" },
     });

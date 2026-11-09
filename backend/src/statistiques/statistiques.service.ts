@@ -95,7 +95,7 @@ export class StatistiquesService {
     // différence des contrôles de plafond (SanteService.verifierPlafondPartage/
     // calculerPartPlafonnee), qui excluaient déjà Rejeté.
     const toutesLesLignes = await this.prisma.priseEnCharge.findMany({
-      where: { contratId, statut: { notIn: ["Rejeté", "Annulé"] } },
+      where: { contratId, statut: { notIn: ["Rejeté", "Annulé"] }, factureId: { not: null } },
       select: {
         date: true, montant: true, baseRemboursement: true, assureId: true, type: true, acteMedicalId: true, prestataire: true,
         assure: { select: { id: true, familleId: true, matricule: true, nom: true, prenom: true, typeAssure: true, sexe: true } },
