@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { genererAnalyseNarrative } from "./analyse-narrative.util";
-import { resoudreRubriqueContrat } from "../actes-medicaux/rubrique-contrat.util";
+import { resoudreRubriqueContrat, normaliserRubrique } from "../actes-medicaux/rubrique-contrat.util";
+import { FAMILLE_REPRISE } from "../actes-medicaux/resolution-designation.util";
 import type {
   ConsommationLigne, DetailFamille, DetailPrestataire, RepartitionBeneficiaireLigne, RepartitionLigne, RepartitionSousGroupe,
   SpBloc, StatistiquesPayload,
@@ -161,8 +162,12 @@ export class StatistiquesService {
     const familleActeParLibelle = new Map(actes.map((a) => [a.libelle.trim().toLowerCase(), a.famille]));
     const resoudreFamilleActe = (p: (typeof lignes)[number]): string => {
       if (p.acteMedicalId) {
-        const f = familleActeParActeId.get(p.acteMedicalId);
-        if (f && f.trim().toUpperCase() !== "DIVERS") return f;
+        const info = acteInfoParActeId.get(p.acteMedicalId);
+        const f = info?.famille;
+        // "DIVERS" et FAMILLE_REPRISE ne reflètent pas la vraie catégorie :
+        // se rabattre sur categorieGarantie (si renseignée) puis sur p.type.
+        if (f && f.trim().toUpperCase() !== "DIVERS" && f !== FAMILLE_REPRISE) return f;
+        if (info?.categorieGarantie) return normaliserRubrique(info.categorieGarantie);
       }
       const f = familleActeParLibelle.get(p.type.trim().toLowerCase());
       return f ?? p.type.trim() ?? "Non précisé";
