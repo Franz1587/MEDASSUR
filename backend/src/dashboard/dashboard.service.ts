@@ -69,7 +69,21 @@ export class DashboardService {
       this.prisma.client.findMany({ select: { statut: true, type: true } }),
       this.prisma.sinistre.findMany({ select: { statut: true, montant: true, date: true } }),
       this.prisma.impaye.aggregate({ where: { statut: "En cours" }, _sum: { montantDu: true }, _count: true }),
-      this.prisma.assureSante.groupBy({ by: ["statut"], _count: true }),
+      this.prisma.$queryRaw<{ statut: string; _count: bigint }[]>`
+        SELECT statut, COUNT(*) AS "_count"
+        FROM (
+          SELECT "identiteId",
+            CASE
+              WHEN bool_or(statut = 'Actif')    THEN 'Actif'
+              WHEN bool_or(statut = 'Suspendu') THEN 'Suspendu'
+              ELSE 'Radié'
+            END AS statut
+          FROM "AssureSante"
+          WHERE "identiteId" IS NOT NULL
+          GROUP BY "identiteId"
+        ) per_identite
+        GROUP BY statut
+      `,
       this.prisma.accordPrealable.count({ where: { decision: "En attente" } }),
       this.prisma.compteBancaire.findMany({ select: { solde: true } }),
       // Rejeté ET Annulé exclus (2026-09) — même métrique/mêmes exclusions
@@ -97,11 +111,12 @@ export class DashboardService {
     // vigueur (pas "terminé"), seuls "Expiré" et "Résilié" comptent comme
     // inactifs pour ne jamais présenter un contrat en cours de renouvellement
     // comme "terminé, retiré".
-    const compteParStatutAssure = new Map(assuresSanteParStatut.map((g) => [g.statut, g._count]));
+    // $queryRaw retourne bigint — conversion en number pour les calculs
+    const compteParStatutAssure = new Map(assuresSanteParStatut.map((g) => [g.statut, Number(g._count)]));
     const assuresSante = compteParStatutAssure.get("Actif") ?? 0;
     const assuresSanteSuspendus = compteParStatutAssure.get("Suspendu") ?? 0;
     const assuresSanteRadies = compteParStatutAssure.get("Radié") ?? 0;
-    const assuresSanteTotal = assuresSanteParStatut.reduce((s, g) => s + g._count, 0);
+    const assuresSanteTotal = assuresSanteParStatut.reduce((s, g) => s + Number(g._count), 0);
     const assuresSanteInactifs = assuresSanteSuspendus + assuresSanteRadies;
 
     const contratsAnnee = contrats.filter((c) => anneeDe(c.dateDebut) === annee);
