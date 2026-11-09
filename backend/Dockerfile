@@ -19,6 +19,11 @@ RUN npm run build
 # ---------- Backend (NestJS) ----------
 FROM node:22-bookworm AS backend
 WORKDIR /app
+# Dépendances de compilation pour canvas (chartjs-node-canvas, node-gyp)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential python3 \
+    libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev \
+    && rm -rf /var/lib/apt/lists/*
 COPY backend/package.json backend/package-lock.json ./
 RUN npm ci
 COPY backend/tsconfig.json backend/tsconfig.build.json backend/nest-cli.json ./
