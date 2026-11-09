@@ -381,6 +381,10 @@ export class GedService {
         if (lcIds.length === 1) lettreChequeIdRapproche = lcIds[0] as string;
       } else {
         statutTraitement = facture.statut === "Soumise" && montantOk ? "Traité totalement" : "Traité partiellement";
+        // Même en partiel : si les lignes déjà dans un bordereau partagent
+        // toutes la même lettreCheque, on la remonte quand même.
+        const lcIdsPartiel = [...new Set(avecBordereau.map((l) => l.bordereau?.lettreCheque?.id).filter(Boolean))];
+        if (lcIdsPartiel.length === 1) lettreChequeIdRapproche = lcIdsPartiel[0] as string;
       }
     }
 
@@ -401,6 +405,7 @@ export class GedService {
       where: { id },
       include: {
         prestataire: { select: { nom: true } },
+        lettreCheque: true,
         facture: {
           include: {
             lignes: {
@@ -437,6 +442,9 @@ export class GedService {
     for (const b of bordereaux) {
       if (b.lettreCheque) lettresChequeMap.set(b.lettreCheque.id, b.lettreCheque);
     }
+    // Inclure aussi la lettreCheque portée directement par le GedDocument
+    // (cas Fallback 3 : relevé de règlement → bordereau → chèque)
+    if (doc.lettreCheque) lettresChequeMap.set(doc.lettreCheque.id, doc.lettreCheque as LcBord);
 
     return {
       documentId: doc.id, nom: doc.nom, type: doc.type,
