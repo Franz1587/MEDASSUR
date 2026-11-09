@@ -1,8 +1,5 @@
 import * as fs from "fs";
-import { referenceLisible } from "../factures/reference-facture.util";
 import * as path from "path";
-import { createHash, randomUUID } from "crypto";
-import { PDFDocument as PdfLib } from "pdf-lib";
 import PDFDocument from "pdfkit";
 import sharp from "sharp";
 import * as QRCode from "qrcode";
@@ -12,14 +9,14 @@ import {
   Header, Footer, ImageRun, PageNumber, AlignmentType, ShadingType, BorderStyle, HeightRule, PageBreak, VerticalAlign,
 } from "docx";
 import type { Response } from "express";
-import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { ParametresEntrepriseService } from "../parametres-entreprise/parametres-entreprise.service";
 import { groupeDeFamille } from "../actes-medicaux/groupes-actes.util";
-import { resoudreRubriqueContrat, normaliserRubrique } from "../actes-medicaux/rubrique-contrat.util";
+import { resoudreRubriqueContrat } from "../actes-medicaux/rubrique-contrat.util";
 import { StatistiquesService } from "../statistiques/statistiques.service";
 import type { RubriqueId, StatistiquesPayload } from "../statistiques/statistiques.types";
-import { BordereauxService, type BordereauSinistresPayload, type BordereauProductionPayload, type FiltresBordereauSinistres } from "../bordereaux/bordereaux.service";
+import { BordereauxService, type BordereauSinistresPayload, type BordereauProductionPayload } from "../bordereaux/bordereaux.service";
 import { CotationService } from "../cotation/cotation.service";
 import { CourrierService } from "../courrier/courrier.service";
 import { CrmService } from "../crm/crm.service";
@@ -28,22 +25,14 @@ import { ReglementPrestataireService } from "../reglement-prestataire/reglement-
 import { RenouvellementsService } from "../renouvellements/renouvellements.service";
 import { AccordPrealableService } from "../accord-prealable/accord-prealable.service";
 import { PrestatairesService } from "../prestataires/prestataires.service";
-import { AppelOffresService } from "../appel-offres/appel-offres.service";
-import { EmailService } from "../communications/email.service";
 import { DocumentSignatureService } from "./document-signature.service";
 import { UPLOADS_ROOT, ASSETS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
 import { genererGraphiqueBarres, genererGraphiqueBarresEtiquetees, genererGraphiqueCamembert } from "./graphiques.util";
 import { montantEnLettresFcfa } from "../lib/montant-en-lettres.util";
 import { TAUX_TPS } from "../sante/sante.service";
-import { populationDuContrat } from "../mouvements/population-historique.util";
-import { ORDRE_PROVINCES, provinceDeVille, prioriteVilleDansProvince } from "../lib/gabonGeo";
-import { genererReseauSoins, type ProvinceAnnuaire } from "./reseau-soins.pdf";
-import { genererCorpsOffre, assemblerOffre, pdfVersBuffer, versPng, logoModeleCompagnie, genererPagesPortails, type CompagnieOffre } from "./offre-sante.pdf";
-import { contenuDepuisCotation, type ContenuOffre, type ParametresOffre } from "../cotation/contenu-offre";
-import type { Prisma, ParametresEntreprise, Cotation, Compagnie, CotationGarantieLigne } from "@prisma/client";
-import { numeroPolice, policePourNomFichier } from "../lib/police.util";
-import { EN_TETE_SIGNATURE } from "./signature-pdf.middleware";
+import { reconstituerPopulation } from "../mouvements/population-historique.util";
+import type { Prisma, ParametresEntreprise } from "@prisma/client";
 
 // Groupes d'actes considérés "Examen" (bon d'examen) — le reste (Consultation,
 // Pharmacie, Dentaire, Kinésithérapie, Hospitalisation, Actes de Spécialités)
@@ -67,8 +56,7 @@ type FormulairePec = {
       tauxHospitalisationPubliqueAyantDroit: string | null; tauxHospitalisationPriveeAyantDroit: string | null;
     };
   };
-  prestataireRef: { id: string; nom: string; secteur: string | null; codeEtablissement?: string | null } | null;
-  codeAffection?: string | null;
+  prestataireRef: { id: string; nom: string; secteur: string | null } | null;
   prescriptionOrigine: {
     medecin: { id: string; nom: string; prenom: string | null; titre: string | null; specialite: string | null; codePraticien: string | null };
     numeroBonExamen: string | null;
@@ -81,9 +69,6 @@ type FormulairePec = {
     // jamais une valeur inventée.
     medicaments: { libelle: string; quantite: number; posologie: string | null; montant: number | null; baseRemboursement: number | null }[];
   } | null;
-  // Indications cliniques libres lues par ARIANA sur la prescription
-  // numérisée (motifsConsultation de la Prescription) — null hors contexte.
-  indicationsLibres?: string | null;
 };
 type LigneFormulaire = {
   // `montant` null = ligne pas encore traitée par un prestataire (bon
@@ -113,7 +98,6 @@ const UPLOADS_LOGOS_COMPAGNIES_DIR = path.join(UPLOADS_ROOT, "logos");
 const UPLOADS_MODELES_CARTE_DIR = path.join(UPLOADS_ROOT, "modeles-carte");
 const UPLOADS_PAGES_GARDE_STATISTIQUES_DIR = path.join(UPLOADS_ROOT, "pages-garde-statistiques");
 const UPLOADS_SIGNATURES_DIR = path.join(UPLOADS_ROOT, "signatures");
-const UPLOADS_OFFRES_SANTE_DIR = path.join(UPLOADS_ROOT, "offres-sante");
 
 // Taille UNIQUE de toute image de signature dessinée sur un document
 // (2026-09) — voir demande utilisateur : "toutes les signatures dans
@@ -222,6 +206,23 @@ function heureVerbeuse(d: Date): string {
   return `${d.getHours()} H ${d.getMinutes()} Mn ${d.getSeconds()} S`;
 }
 
+// Référence de facture lisible (2026-09) — voir demande utilisateur :
+// "s'il est possible de déchiffrer ce code et le raccourcir, fais-le".
+// Les factures réellement télétransmises depuis le système externe d'un
+// prestataire portent une référence "MS-PRESTA-<uuid>-<horodatage
+// numérique>" (voir import.service.ts, REGEX_REFERENCE_TELETRANSMISE) —
+// illisible affichée telle quelle. L'UUID est un identifiant opaque, sans
+// rien à déchiffrer ; l'horodatage final, lui, encode une vraie date/heure
+// (AAAAMMJJHHmmssSSS) — c'est la seule partie réellement "déchiffrable",
+// affichée à la place du bloc complet. Le champ `referenceFacture` original
+// n'est jamais modifié en base, seul l'AFFICHAGE sur le document change.
+function referenceLisible(reference: string): string {
+  const m = reference.match(/^(MS-PRESTA)-[0-9a-f-]{36}-(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\d*$/i);
+  if (!m) return reference;
+  const [, prefixe, annee, mois, jour, heure, minute] = m;
+  return `${prefixe} · ${jour}/${mois}/${annee} ${heure}:${minute}`;
+}
+
 // Référence de quittance/police lisible, dérivée de façon stable de l'id
 // (même document régénéré → même numéro affiché).
 function refNumerique(id: string): string {
@@ -255,7 +256,7 @@ const AVENANT_META: Record<string, { code: string; suffixe: string; estRistourne
 };
 
 interface DocContrat {
-  id: string; numeroPolice?: string | null; branche: string; typeAffaire: string; dateDebut: string; dateFin: string; prime: Prisma.Decimal;
+  id: string; branche: string; typeAffaire: string; dateDebut: string; dateFin: string; prime: Prisma.Decimal;
   primeNette: Prisma.Decimal | null; primeTotaleHT: Prisma.Decimal | null;
   montantAccessoires: Prisma.Decimal | null; montantTaxe: Prisma.Decimal | null; tauxCommission: Prisma.Decimal | null;
   paysSouscription: string | null; extensionsTerritorialite: string[];
@@ -265,7 +266,7 @@ interface DocContrat {
   primeUnitaireEnfant: Prisma.Decimal | null; primeUnitaireCouple: Prisma.Decimal | null;
   numeroQuittance: number | null;
   client: { id: string; nom: string; pays: string | null; ville?: string | null; adresse?: string | null; boitePostale?: string | null; tel: string | null };
-  compagnie: { id: string; nom: string; pays: string; logo?: string | null };
+  compagnie: { id: string; nom: string; pays: string };
   garanties: { categorie: string; libelle: string; tauxAssure: Prisma.Decimal | null; plafond: string | null }[];
 }
 
@@ -389,8 +390,7 @@ export class DocumentsService {
     private reglementComptable: ReglementComptableService, private reglementPrestataire: ReglementPrestataireService,
     private renouvellements: RenouvellementsService, private accordPrealable: AccordPrealableService,
     private prestataires: PrestatairesService, private storage: StorageService,
-    private documentSignature: DocumentSignatureService, private appelOffres: AppelOffresService,
-    private email: EmailService,
+    private documentSignature: DocumentSignatureService,
   ) {}
 
   // Charge une image (logo/page de garde/modèle de carte/photo) depuis
@@ -400,46 +400,6 @@ export class DocumentsService {
   // directement utilisables par tous les appelants sans changement de
   // signature. `null` = fichier absent, jamais une exception (comportement
   // identique à l'ancien `fs.existsSync` avant chaque `doc.image()`).
-  // Fonds de carte importés parfois en très haute définition (8 500 px, soit
-  // 1,4 Mo dans chaque PDF de carte) : une copie à 2 000 px (300 dpi sur une
-  // carte de 85 mm) est créée une fois à côté de l'original et utilisée à sa
-  // place. shortcut: copie liée au nom du fichier, un fond remplacé sous le
-  // même nom garderait l'ancienne copie (les imports génèrent un nom unique).
-  private async fondCarte(nom: string | null | undefined): Promise<Buffer | string | null> {
-    const src = await this.chargerImage("modeles-carte", nom, UPLOADS_MODELES_CARTE_DIR);
-    if (!src || typeof src !== "string") return src;
-    const reduit = path.join(UPLOADS_MODELES_CARTE_DIR, "reduits", `${path.parse(src).name}.jpg`);
-    if (fs.existsSync(reduit)) return reduit;
-    try {
-      await fs.promises.mkdir(path.dirname(reduit), { recursive: true });
-      const tmp = `${reduit}.${randomUUID()}.tmp`;
-      await sharp(src).flatten({ background: "#ffffff" }).resize({ width: 2000, withoutEnlargement: true }).jpeg({ quality: 88 }).toFile(tmp);
-      await fs.promises.rename(tmp, reduit);
-      return reduit;
-    } catch {
-      return src;
-    }
-  }
-
-  // Annexe « Réseau de soins » : identique d'une offre à l'autre tant que le
-  // réseau et l'identité de la société ne changent pas, donc gardée en mémoire
-  // (clé = empreinte des données réellement imprimées, société comprise).
-  private reseauSoinsCache = new Map<string, Buffer>();
-  private async reseauSoinsPdf(p: ParametresEntreprise, logoSociete: Buffer | string | null): Promise<Buffer> {
-    const provinces = await this.construireAnnuaire();
-    const cle = createHash("sha1").update(JSON.stringify([p, typeof logoSociete === "string" ? logoSociete : logoSociete?.length ?? null, provinces])).digest("hex");
-    const enCache = this.reseauSoinsCache.get(cle);
-    if (enCache) return enCache;
-    const doc = new PDFDocument({ size: "A4", margin: 0, bufferPages: true });
-    const fin = pdfVersBuffer(doc);
-    genererReseauSoins(doc, p, logoSociete, provinces);
-    doc.end();
-    const pdf = await fin;
-    if (this.reseauSoinsCache.size >= 20) this.reseauSoinsCache.delete(this.reseauSoinsCache.keys().next().value as string);
-    this.reseauSoinsCache.set(cle, pdf);
-    return pdf;
-  }
-
   private async chargerImage(categorie: string, nomFichier: string | null | undefined, dossierLocal: string): Promise<Buffer | string | null> {
     if (!nomFichier) return null;
     if (this.storage.actif) return this.storage.download(categorie, nomFichier);
@@ -484,7 +444,7 @@ export class DocumentsService {
       where: { id },
       include: { client: true, compagnie: true, garanties: true },
     });
-    if (!contrat) throw new NotFoundException("Contrat introuvable");
+    if (!contrat) throw new NotFoundException(`Contrat ${id} introuvable`);
     return contrat;
   }
 
@@ -621,7 +581,7 @@ export class DocumentsService {
 
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="${meta.estRistourne ? "Ristourne" : "Quittance"}-${policePourNomFichier(contrat)}${avenant ? `-${avenant.id}` : ""}.pdf"`);
+    res.setHeader("Content-Disposition", `inline; filename="${meta.estRistourne ? "Ristourne" : "Quittance"}-${avenant?.id ?? contrat.id}.pdf"`);
     doc.pipe(res);
 
     const dessinerCorps = (exemplaire: string) => {
@@ -629,11 +589,9 @@ export class DocumentsService {
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
     // En-tête courtier (identité de l'entreprise exploitant l'application)
-    this.dessinerIdentiteEntete(doc, logoImage, left, 22, 230, 70, () => {
-      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
-      doc.fontSize(8).font("Helvetica-Bold").fillColor("#333").text(p.sousTitre, left, 56);
-      return 0;
-    });
+    this.dessinerLogoEntete(doc, logoImage, left, 8);
+    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+    doc.fontSize(8).font("Helvetica-Bold").fillColor("#333").text(p.sousTitre, left, 56);
     doc.fontSize(8).font("Helvetica").fillColor("#333");
     doc.text(`Tél.: ${p.telephone}`, right - 200, 40, { width: 200, align: "right" });
     doc.text(`${p.boitePostale} ${p.ville} - ${p.pays}`, right - 200, 51, { width: 200, align: "right" });
@@ -659,7 +617,7 @@ export class DocumentsService {
 
     const infoLignes: [string, string][] = [
       ["Branche :", contrat.branche],
-      ["Police :", `POLICE N° ${numeroPolice(contrat)}`],
+      ["Police :", `POLICE N° ${contrat.id}`],
       ["Emission :", `${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}`],
       ["Effet :", `${dateTirets(dateEffet)}  A 0 Heure`],
       ["Echéance :", `${dateTirets(dateFin)}  A Minuit`],
@@ -801,7 +759,6 @@ export class DocumentsService {
     const primeTotale = primeNette + montantAccessoires + montantTaxe;
     const now = new Date();
     const p = await this.parametresEntreprise.findOne();
-    const logoCompagnie = await this.chargerImage("logos", contrat.compagnie.logo, UPLOADS_LOGOS_COMPAGNIES_DIR);
 
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     res.setHeader("Content-Type", "application/pdf");
@@ -813,17 +770,10 @@ export class DocumentsService {
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
 
-    // Logo de la COMPAGNIE porteuse du risque, visible et imposant (2026-09)
-    // — voir demande utilisateur : "faire remonter les logos des compagnies
-    // de façon visible et imposant sur les avenants". Sans logo : nom écrit
-    // (comportement d'origine).
-    const logoCompagniePlace = this.dessinerIdentiteEntete(doc, logoCompagnie, left, 14, 230, 62, () => {
-      doc.fontSize(14).font("Helvetica-Bold").fillColor("#c0392b").text(contrat.compagnie.nom.toUpperCase(), left, 40);
-      return 0;
-    });
+    doc.fontSize(14).font("Helvetica-Bold").fillColor("#c0392b").text(contrat.compagnie.nom.toUpperCase(), left, 40);
     doc.fontSize(7).font("Helvetica").fillColor("#333");
-    doc.text("Entreprise régie par le Code des Assurances CIMA", left, logoCompagniePlace > 0 ? 80 : 58);
-    doc.text(`Siège social : Libreville (${contrat.compagnie.pays})`, left, logoCompagniePlace > 0 ? 89 : 68);
+    doc.text("Entreprise régie par le Code des Assurances CIMA", left, 58);
+    doc.text(`Siège social : Libreville (${contrat.compagnie.pays})`, left, 68);
     doc.fillColor(p.couleurPrimaire).fontSize(12).font("Helvetica-Bold").text(`AVENANT ${meta.suffixe} N° ${String(numero).padStart(3, "0")}`, left + 260, 45, { width: width - 260, align: "right" });
     doc.fillColor("#000");
 
@@ -840,7 +790,7 @@ export class DocumentsService {
     const leftCellW = midX - left - 8;
     const rightCellW = right - midX - 8;
     ry = tableTop;
-    champ(doc, left + 4, ry + 4, "POLICE :", numeroPolice(contrat), 44, leftCellW - 44, { boldLabel: true, fontSize: 8 });
+    champ(doc, left + 4, ry + 4, "POLICE :", contrat.id, 44, leftCellW - 44, { boldLabel: true, fontSize: 8 });
     champ(doc, midX + 4, ry + 4, "SOUSCRIPTEUR", `${refNumerique(contrat.client.id)}  ${contrat.client.nom}`, 74, rightCellW - 74, { boldLabel: true, fontSize: 8 });
     ry += rowH[0];
     champ(doc, left + 4, ry + 4, "EFFET :", avenant.dateEffet, 44, leftCellW - 44, { boldLabel: true, boldValeur: true, fontSize: 8 });
@@ -928,7 +878,7 @@ export class DocumentsService {
 
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="Tableau-Garanties-${policePourNomFichier(contrat)}.pdf"`);
+    res.setHeader("Content-Disposition", `inline; filename="Tableau-Garanties-${contrat.id}.pdf"`);
     doc.pipe(res);
 
     const dessinerCorps = (exemplaire: string) => {
@@ -947,7 +897,7 @@ export class DocumentsService {
       doc.fillColor(p.couleurPrimaire).fontSize(9).text(titreCentre, left + 260, 60, { width: width - 260, align: "center" });
       doc.fillColor("#000").fontSize(8).font("Helvetica");
       const infos = [
-        `POLICE N°   ${numeroPolice(contrat)}`,
+        `POLICE N°   ${contrat.id}`,
         `QUITTANCE N° ${numeroQuittance}`,
         `A EFFET DU : ${dateTirets(contrat.dateDebut)} A 0 HEURE`,
         `ECHEANCE AU  ${dateTirets(contrat.dateFin)} A MINUIT`,
@@ -972,7 +922,7 @@ export class DocumentsService {
 
     const dx = left + width * 0.45 + 6;
     const dw = width * 0.55 - 12;
-    doc.font("Helvetica-Bold").fontSize(8).text(`DECOMPTE (${numeroPolice(contrat)})`, dx, y + 6);
+    doc.font("Helvetica-Bold").fontSize(8).text(`DECOMPTE (${contrat.id})`, dx, y + 6);
     const decCols = [dw * 0.4, dw * 0.3, dw * 0.3];
     const decHeaderY = y + 20;
     doc.fontSize(7);
@@ -1238,7 +1188,7 @@ export class DocumentsService {
         basLigne2 = Math.max(basLigne2, y2 + 1 + 20);
       }
       doc.fillColor("#1a1a1a").fontSize(8.2).font("Helvetica-Bold")
-        .text("MEDASSUR+", decalageTexte, y2 + 7, { width: CARD_WIDTH - decalageTexte - 8, lineBreak: false });
+        .text("MedAssur", decalageTexte, y2 + 7, { width: CARD_WIDTH - decalageTexte - 8, lineBreak: false });
 
       // Lignes 3-4 (éditables) — téléphone d'assistance puis explication du
       // QR Code. ⚠️ Piège réel corrigé ici : faire dépendre le rectangle
@@ -1427,35 +1377,6 @@ export class DocumentsService {
     }
   }
 
-  // Identité de la société en tête de document (2026-09) — voir demande
-  // utilisateur (capture annotée d'une quittance) : "Retirer cela [nom et
-  // 'Courtier d'Assurances' écrits en texte] sur tous les documents et
-  // mettre le logo de façon visible à grande taille, même dimension que ce
-  // bloc à retirer", puis "même sur le décompte et règlement maladie,
-  // règlement comptable il faut rendre le logo de LA RUCHE (ou un autre
-  // courtier, compagnie ou mutuelle) plus visible". Le logo REMPLACE le
-  // texte, agrandi au maximum dans la boîte largeurMax × hauteurMax (ratio
-  // conservé) ; sans logo configuré ou lisible, `repli` dessine l'ancien
-  // texte — jamais de document sans identité. Renvoie la largeur occupée
-  // (le décompte et le règlement y calent leur titre).
-  private dessinerIdentiteEntete(
-    doc: PDFKit.PDFDocument, image: Buffer | string | null, x: number, y: number,
-    largeurMax: number, hauteurMax: number, repli: () => number,
-  ): number {
-    if (image) {
-      try {
-        const img = (doc as unknown as { openImage(src: Buffer | string): { width: number; height: number } }).openImage(image);
-        const echelle = Math.min(largeurMax / img.width, hauteurMax / img.height);
-        const largeur = img.width * echelle;
-        doc.image(img as unknown as Buffer, x, y, { width: largeur, height: img.height * echelle });
-        return largeur;
-      } catch {
-        // Fichier corrompu/format non supporté par pdfkit — repli texte.
-      }
-    }
-    return repli();
-  }
-
   // Signature électronique enregistrée par l'utilisateur (2026-09) — voir
   // demande utilisateur : "cette dernière pourra s'ajouter systématiquement
   // dans tous les document où sa signature sera nécessaire". `x` = bord
@@ -1591,8 +1512,8 @@ export class DocumentsService {
     // identité, taux) restent superposés aux mêmes positions qu'aujourd'hui.
     const modele = p.modeleCarteId ? await this.prisma.modeleCarte.findUnique({ where: { id: p.modeleCarteId } }) : null;
     const logoImage = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
-    const fondRecto = await this.fondCarte(modele?.imageRecto);
-    const fondVerso = await this.fondCarte(modele?.imageVerso);
+    const fondRecto = await this.chargerImage("modeles-carte", modele?.imageRecto, UPLOADS_MODELES_CARTE_DIR);
+    const fondVerso = await this.chargerImage("modeles-carte", modele?.imageVerso, UPLOADS_MODELES_CARTE_DIR);
     // Style "la-ruche" (2026-09) — voir ModeleCarte.styleCode : recto
     // reconstruit EN CODE pour copier fidèlement le modèle fourni par LA
     // RUCHE EXCELLENCE. Voir demande utilisateur : "il faut les redesign
@@ -1601,12 +1522,7 @@ export class DocumentsService {
     // voir demande utilisateur : "fais remonter le QR code... et mets-le
     // en noir").
     const styleLaRuche = !fondRecto && modele?.styleCode === "la-ruche";
-    // QR d'authentification (2026-11) — lien vers /verifier/{id} :
-    // scannable par n'importe quel téléphone, renvoie le statut en direct.
-    // Specimen (id absent) : QR basique sur le matricule, pas de signature DB.
-    const qrBuffer = assure.id
-      ? (await this.documentSignature.signer("Carte d'assure", assure.id, { nom: assure.nom, roleId: "systeme" })).qrBuffer
-      : await QRCode.toBuffer(assure.numeroAssure ?? assure.matricule, { margin: 0, width: 240 });
+    const qrBuffer = await QRCode.toBuffer(assure.numeroAssure ?? assure.matricule, { margin: 0, width: 240, color: { dark: styleLaRuche ? "#000000" : primaire, light: "#ffffff" } });
 
     // ── Recto ──────────────────────────────────────────────────────────
     doc.addPage({ size: [CARD_WIDTH, CARD_HEIGHT], margin: 0 });
@@ -1917,7 +1833,7 @@ export class DocumentsService {
       const limiteBasse = 134; // au-delà, on empiète sur la vague de bas de carte
       let vy = 20;
       doc.fillColor(primaire).fontSize(6).font("Helvetica-Bold");
-      const lignePolice = `POLICE N° ${numeroPolice(assure.contrat)}   ·   COMPAGNIE ${assure.contrat.compagnie.nom}`;
+      const lignePolice = `POLICE N° ${assure.contrat.id}   ·   COMPAGNIE ${assure.contrat.compagnie.nom}`;
       doc.text(lignePolice, 10, vy, { width: largeurTexte });
       vy += doc.heightOfString(lignePolice, { width: largeurTexte }) + 3;
       const ligneSouscripteur = `SOUSCRIPTEUR ${assure.contrat.client.nom}`;
@@ -1967,22 +1883,16 @@ export class DocumentsService {
   async renderCarteUnique(assureId: string, res: Response) {
     const assure = await this.prisma.assureSante.findUnique({
       where: { id: assureId },
-      include: {
-        contrat: { include: { client: true, compagnie: true } },
-        famille: { select: { telephone: true, nom: true, prenom: true } },
-        identite: { include: { matricules: { where: { statut: "Actuel" }, orderBy: { createdAt: "desc" }, take: 1, select: { matricule: true } } } },
-      },
+      include: { contrat: { include: { client: true, compagnie: true } }, famille: { select: { telephone: true, nom: true, prenom: true } } },
     });
     if (!assure) throw new NotFoundException(`Assuré ${assureId} introuvable`);
     const p = await this.parametresEntreprise.findOne();
 
-    // Afficher le matricule le plus récent (LRX-) si disponible dans l'historique
-    const matriculeCarte = assure.identite?.matricules?.[0]?.matricule ?? assure.matricule;
     const doc = new PDFDocument({ size: [CARD_WIDTH, CARD_HEIGHT], margin: 0, autoFirstPage: false });
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="Carte-${matriculeCarte}.pdf"`);
+    res.setHeader("Content-Disposition", `inline; filename="Carte-${assure.matricule}.pdf"`);
     doc.pipe(res);
-    await this.ajouterCarteRectoVerso(doc, { ...assure, matricule: matriculeCarte }, p);
+    await this.ajouterCarteRectoVerso(doc, assure, p);
     doc.end();
   }
 
@@ -2025,19 +1935,13 @@ export class DocumentsService {
       const lotIds = idsOrdonnes.slice(i, i + BATCH_SIZE);
       const lot = await this.prisma.assureSante.findMany({
         where: { id: { in: lotIds } },
-        include: {
-          contrat: { include: { client: true, compagnie: true } },
-          famille: { select: { telephone: true, nom: true, prenom: true } },
-          identite: { include: { matricules: { where: { statut: "Actuel" }, orderBy: { createdAt: "desc" }, take: 1, select: { matricule: true } } } },
-        },
+        include: { contrat: { include: { client: true, compagnie: true } }, famille: { select: { telephone: true, nom: true, prenom: true } } },
       });
       const parId = new Map(lot.map((a) => [a.id, a]));
       for (const id of lotIds) {
         const a = parId.get(id);
         if (!a) continue;
-        // Afficher le matricule le plus récent (LRX-) si disponible dans l'historique
-        const matriculeCarte = a.identite?.matricules?.[0]?.matricule ?? a.matricule;
-        await this.ajouterCarteRectoVerso(doc, { ...a, matricule: matriculeCarte }, p, dto.rectoUniquement);
+        await this.ajouterCarteRectoVerso(doc, a, p, dto.rectoUniquement);
         nombreCartes++;
       }
     }
@@ -2069,7 +1973,6 @@ export class DocumentsService {
     kind: "soins" | "examen", numero: string, pec: FormulairePec, lignes: LigneFormulaire[], res: Response,
     documentRef?: string, utilisateur?: { id: string | null; nom: string; roleId: string; masquerPrixPharmacie?: boolean },
     prestataireFiltre?: { id: string; nom: string; secteur?: string | null },
-    cachetNumerise?: Buffer,
   ) {
     const p = await this.parametresEntreprise.findOne();
     const logoImage = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
@@ -2090,17 +1993,12 @@ export class DocumentsService {
       ? prestataireFiltre.secteur
       : pec.prestataireRef?.secteur;
     const secteurPublic = secteurEffectif === "Public";
-    // Normalise un champ taux : "" (chaîne vide, laissée vide dans l'UI)
-    // traité comme null pour que ?? continue la cascade vers le fallback.
-    const t = (v: string | null | undefined): string | null => v?.trim() || null;
     const tauxAmbulatoire = (estAyantDroit
-      ? (t(secteurPublic ? contrat.tauxAmbulatoirePubliqueAyantDroit : contrat.tauxAmbulatoirePriveeAyantDroit)
-         ?? t(secteurPublic ? contrat.tauxAmbulatoirePublique : contrat.tauxAmbulatoirePrivee))
-      : t(secteurPublic ? contrat.tauxAmbulatoirePublique : contrat.tauxAmbulatoirePrivee)) ?? t(contrat.tauxCouvertureAmbulatoire);
+      ? (secteurPublic ? contrat.tauxAmbulatoirePubliqueAyantDroit : contrat.tauxAmbulatoirePriveeAyantDroit)
+      : (secteurPublic ? contrat.tauxAmbulatoirePublique : contrat.tauxAmbulatoirePrivee)) ?? contrat.tauxCouvertureAmbulatoire ?? null;
     const tauxHospitalisation = (estAyantDroit
-      ? (t(secteurPublic ? contrat.tauxHospitalisationPubliqueAyantDroit : contrat.tauxHospitalisationPriveeAyantDroit)
-         ?? t(secteurPublic ? contrat.tauxHospitalisationPublique : contrat.tauxHospitalisationPrivee))
-      : t(secteurPublic ? contrat.tauxHospitalisationPublique : contrat.tauxHospitalisationPrivee)) ?? t(contrat.tauxCouvertureHospitalisation) ?? tauxAmbulatoire;
+      ? (secteurPublic ? contrat.tauxHospitalisationPubliqueAyantDroit : contrat.tauxHospitalisationPriveeAyantDroit)
+      : (secteurPublic ? contrat.tauxHospitalisationPublique : contrat.tauxHospitalisationPrivee)) ?? contrat.tauxCouvertureHospitalisation ?? null;
     const lignePrincipale = lignes[0] as LigneFormulaire | undefined;
     // Ticket modérateur = 100 - taux applicable (2026-09) — recalculé
     // depuis tauxAmbulatoire/tauxHospitalisation ci-dessus (donc lui aussi
@@ -2119,15 +2017,14 @@ export class DocumentsService {
       ? String(Math.round(100 - tauxApplicable))
       : (lignePrincipale?.tauxRemboursement !== null && lignePrincipale?.tauxRemboursement !== undefined
         ? String(Math.round(100 - lignePrincipale.tauxRemboursement)) : null);
-    const codePraticien = medecin?.codePraticien || (medecin && medecin.id ? refNumerique(medecin.id) : null);
-    const codeEtablissement = (pec.prestataireRef as any)?.codeEtablissement || (pec.prestataireRef?.id ? refNumerique(pec.prestataireRef.id) : null);
-    const codeAffection = lignePrincipale?.codeAffection ?? pec.codeAffection ?? null;
+    const codePraticien = medecin?.codePraticien || (medecin ? refNumerique(medecin.id) : null);
+    const codeEtablissement = pec.prestataireRef ? refNumerique(pec.prestataireRef.id) : null;
+    const codeAffection = lignePrincipale?.codeAffection ?? null;
     const estSpecialiste = !!medecin?.specialite;
     const heure = lignePrincipale?.createdAt ?? pec.createdAt;
     const estTarifJour = heure.getHours() >= 6 && heure.getHours() < 20;
     const heureTexte = `${String(heure.getHours()).padStart(2, "0")}:${String(heure.getMinutes()).padStart(2, "0")}`;
-    const TITRE_RE = /^(Dr\.?|Pr\.?|Docteur|Professeur)\s+/i;
-    const nomMedecin = medecin ? `${medecin.titre ?? "Dr"} ${medecin.nom.replace(TITRE_RE, "")} ${medecin.prenom ?? ""}`.trim() : "—";
+    const nomMedecin = medecin ? `${medecin.titre ?? "Dr"} ${medecin.nom} ${medecin.prenom ?? ""}`.trim() : "—";
     // Zone "CONDITION DE PRISE EN CHARGE" / bas de page : toujours le
     // COURTIER (ou mutuelle) qui gère réellement le dossier, JAMAIS la
     // compagnie d'assurance porteuse du risque — voir demande utilisateur
@@ -2144,7 +2041,7 @@ export class DocumentsService {
     const nomAffiche = p.nom;
     // Les taux (Contrat.tauxXxxPublique/Privee) sont stockés avec le signe
     // "%" déjà inclus (ex. "90%") — jamais réafficher un second "%" à côté.
-    const sansPourcent = (s: string | null) => s?.replace(/\s*%\s*$/, "").trim() || "—";
+    const sansPourcent = (s: string | null) => s?.replace(/\s*%\s*$/, "") ?? "—";
     // "Code des actes" C/CS/CSP (2026-09) — voir demande utilisateur : "il
     // faut mettre C pour la consultation généraliste et CS pour les
     // consultations spécialisées et CSP pour la consultation professeur".
@@ -2192,7 +2089,6 @@ export class DocumentsService {
     // inchangé.
     const doc = new PDFDocument({ size: "A4", margins: { top: 28, left: 28, right: 28, bottom: 0 } });
     res.setHeader("Content-Type", "application/pdf");
-    if (utilisateur && documentRef) res.setHeader(EN_TETE_SIGNATURE, "integree"); // QR dessiné par le document lui-même
     res.setHeader("Content-Disposition", `inline; filename="${kind === "soins" ? "Feuille-Soins" : "Feuille-Examen"}-${numero.replace(/\//g, "-")}.pdf"`);
     doc.pipe(res);
 
@@ -2582,8 +2478,6 @@ export class DocumentsService {
       if (medecin) {
         const signatureMedecin = await this.chargerSignatureMedecin(medecin.id);
         if (signatureMedecin) { try { doc.image(signatureMedecin, 413.2, 338, { fit: TAILLE_SIGNATURE }); } catch { /* jamais bloquant */ } }
-      } else if (cachetNumerise) {
-        try { doc.image(cachetNumerise, 413.2, 333, { fit: [150, 36], align: "center", valign: "center" }); } catch { /* jamais bloquant */ }
       }
       texte("Code praticien", 50.0, 346.9);
       let finC = boiteValeur(102.8, 344.6, 46.9, 10.1, codePraticien ?? "—");
@@ -2670,11 +2564,6 @@ export class DocumentsService {
       for (const cx of colsC) ligneV(cx, 475.0, 719.6);
       boite(gx, 125.2, dx - gx, 719.6 - 125.2);
 
-      if (pec.indicationsLibres) {
-        texte("Indications cliniques :", gx, 723.0, { taille: 7, gras: true, w: 103 });
-        texte(pec.indicationsLibres, gx + 105, 723.0, { taille: 7, w: dx - gx - 107 });
-      }
-
       if (utilisateur && documentRef) await this.dessinerSignatureElectronique(doc, gx, 745, "Feuille d'Examen", documentRef, utilisateur);
 
       texte(`Visa du Médecin conseil ${nomAffiche}`, 40.0, 791.1, { taille: 7.5 });
@@ -2686,11 +2575,7 @@ export class DocumentsService {
         if (signatureAssure) { try { doc.image(signatureAssure, 261.1, 795, { fit: TAILLE_SIGNATURE }); } catch { /* jamais bloquant */ } }
       }
       texte("Cachet et signature du Praticien", 416.1, 788.0, { taille: 7.5, w: 150 });
-      if (cachetNumerise) {
-        // Zone agrandie : de y=748 à y=840 (~3,3 cm) pour afficher le tampon
-        // à taille lisible ; fond transparent (PNG) incruste l'encre sur le PDF.
-        try { doc.image(cachetNumerise, 416.1, 748, { fit: [150, 90], align: "center", valign: "center" }); } catch { /* jamais bloquant */ }
-      } else if (prestataireFiltre) await this.dessinerCachetPrestataire(doc, 416.1, 795, 150, utilisateur?.id ?? null, prestataireFiltre.nom);
+      if (prestataireFiltre) await this.dessinerCachetPrestataire(doc, 416.1, 795, 150, utilisateur?.id ?? null, prestataireFiltre.nom);
     }
 
     doc.end();
@@ -2732,21 +2617,13 @@ export class DocumentsService {
     });
     if (!pec) throw new NotFoundException(`Prise en charge ${priseEnChargeId} introuvable`);
 
-    // Lignes sœurs : même Facture si tiers payant saisi dans l'appli ;
-    // même prescriptionRef si PEC importée depuis l'ancien système (pas de factureId).
     const soeurs = pec.factureId
       ? await this.prisma.priseEnCharge.findMany({
           where: { factureId: pec.factureId, assureId: pec.assureId, statut: { not: "Annulé" } },
           include: { acteMedical: true },
           orderBy: { createdAt: "asc" },
         })
-      : pec.prescriptionRef
-        ? await this.prisma.priseEnCharge.findMany({
-            where: { prescriptionRef: pec.prescriptionRef, assureId: pec.assureId, statut: { not: "Annulé" } },
-            include: { acteMedical: true },
-            orderBy: { createdAt: "asc" },
-          })
-        : [pec];
+      : [pec];
 
     const estExamen = (famille: string | null | undefined) => GROUPES_EXAMEN.has(groupeDeFamille(famille) ?? "");
     const filtrees = soeurs.filter((l) => estExamen(l.acteMedical?.famille) === (kind === "examen"));
@@ -2755,8 +2632,7 @@ export class DocumentsService {
     const lignes: LigneFormulaire[] = retenues.map((l) => ({
       libelle: l.acteMedical?.libelle ?? l.type, quantite: l.quantite ?? 1,
       montant: Number(l.montant), baseRemboursement: l.baseRemboursement !== null ? Number(l.baseRemboursement) : null,
-      tauxRemboursement: l.tauxRemboursement !== null ? Number(l.tauxRemboursement)
-        : l.baseRemboursement !== null && Number(l.montant) > 0 ? Math.round((Number(l.baseRemboursement) / Number(l.montant)) * 100) : null,
+      tauxRemboursement: l.tauxRemboursement !== null ? Number(l.tauxRemboursement) : null,
       codeAffection: l.codeAffection, lettreCleCode: l.lettreCleCode, type: l.type, createdAt: l.createdAt,
       familleActe: l.acteMedical?.famille ?? null,
     }));
@@ -2807,33 +2683,12 @@ export class DocumentsService {
   // fourni uniquement quand CE prestataire imprime son propre bon d'examen
   // pendant son traitement, jamais pour le médecin/l'assuré (voir demande
   // utilisateur citée plus haut).
-  // Bon / ordonnance numérisé par l'assuré (2026-11) : pas de feuille issue
-  // d'une consultation, le document de référence est l'original photographié
-  // (PDF du carnet de santé).
-  async renderOriginalNumerise(prescriptionId: string, res: Response) {
-    const prescription = await this.prisma.prescription.findUnique({ where: { id: prescriptionId }, select: { carnetDocumentId: true, numeroOrdonnance: true, numeroBonExamen: true } });
-    const document = prescription?.carnetDocumentId ? await this.prisma.carnetSanteDocument.findUnique({ where: { id: prescription.carnetDocumentId } }) : null;
-    if (!document) throw new NotFoundException("Original du bon numérisé introuvable.");
-    const pdf = this.storage.actif
-      ? await this.storage.download("carnet-sante", document.fichier)
-      : await fs.promises.readFile(path.join(UPLOADS_ROOT, "carnet-sante", document.fichier)).catch(() => null);
-    if (!pdf) throw new NotFoundException("Fichier original introuvable sur le serveur.");
-    const numero = (prescription!.numeroOrdonnance ?? prescription!.numeroBonExamen ?? "bon").replace(/[^\w-]+/g, "-");
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="Original-${numero}.pdf"`);
-    res.end(pdf);
-  }
-
   async renderFeuilleExamenPrescription(prescriptionId: string, res: Response, utilisateur: { id: string | null; nom: string; roleId: string; masquerPrixPharmacie?: boolean }, prestataireFiltre?: { id: string; nom: string; secteur?: string | null }) {
     const prescription = await this.prisma.prescription.findUnique({
       where: { id: prescriptionId },
       include: {
         medecin: true,
         priseEnCharge: { include: { assure: { include: { contrat: { include: { client: true, compagnie: true } }, famille: true } }, prestataireRef: true } },
-        // Prescription numérisée (2026-11) : assure résolu directement sur la
-        // prescription (pas de priseEnCharge) — nécessaire pour générer la FE
-        // électronique au lieu de l'original photographié.
-        assure: { include: { contrat: { include: { client: true, compagnie: true } }, famille: true } },
         lignes: { where: { type: "Examen" }, include: { traitements: { include: { priseEnCharge: { include: { acteMedical: true } } } } } },
       },
     });
@@ -2856,43 +2711,13 @@ export class DocumentsService {
         familleActe: traite?.acteMedical?.famille ?? null,
       };
     });
-
-    if (!prescription.priseEnCharge) {
-      // Prescription numérisée — générer la vraie FE électronique depuis les
-      // données de la prescription (assure + lignes ARIANA), pas la photo.
-      if (!prescription.assure) return this.renderOriginalNumerise(prescriptionId, res);
-      const mecin = prescription.medecin ?? { id: "", nom: prescription.prescripteurNom ?? "—", prenom: null, titre: "", specialite: null, codePraticien: null };
-      const pec: FormulairePec = {
-        date: prescription.dateOrdonnance ?? new Date().toISOString().slice(0, 10),
-        type: "Examen", createdAt: prescription.createdAt,
-        assure: prescription.assure as unknown as FormulairePec["assure"],
-        prestataireRef: prescription.structureNom ? { id: "", nom: prescription.structureNom, secteur: null, codeEtablissement: (prescription as any).codeEtablissement ?? null } : null,
-        codeAffection: prescription.codeAffection ?? null,
-        prescriptionOrigine: { medecin: mecin, numeroBonExamen: prescription.numeroBonExamen, medicaments: [] },
-        indicationsLibres: prescription.motifsConsultation.length ? prescription.motifsConsultation.join(" ") : null,
-      };
-      // Cachet médecin extrait par ARIANA depuis la photo originale.
-      let cachetNumerise: Buffer | undefined;
-      if (prescription.carnetDocumentId) {
-        const carnetDoc = await this.prisma.carnetSanteDocument.findUnique({ where: { id: prescription.carnetDocumentId }, select: { fichier: true } });
-        if (carnetDoc) {
-          const cachetPath = path.join(UPLOADS_ROOT, "carnet-sante", carnetDoc.fichier.replace(/\.pdf$/, "-cachet.png"));
-          cachetNumerise = await fs.promises.readFile(cachetPath).catch(() => undefined);
-          Logger.log(`[cachet-render] carnetDocumentId=${prescription.carnetDocumentId} fichier=${carnetDoc.fichier} cachetPath=${cachetPath} trouvé=${!!cachetNumerise}`, "DocumentsService");
-        }
-      } else {
-        Logger.log(`[cachet-render] prescription ${prescriptionId} sans carnetDocumentId`, "DocumentsService");
-      }
-      return this.genererFormulaire("examen", prescription.numeroBonExamen, pec, lignes, res, prescriptionId, utilisateur, prestataireFiltre, cachetNumerise);
-    }
-
     const pec: FormulairePec = {
       date: prescription.priseEnCharge.date, type: prescription.priseEnCharge.type, createdAt: prescription.createdAt,
       assure: prescription.priseEnCharge.assure as unknown as FormulairePec["assure"],
       prestataireRef: prescription.priseEnCharge.prestataireRef,
       // Pas de section pharmacie sur la Feuille d'Examen — tableau vide,
       // jamais utilisé par genererFormulaire côté "examen".
-      prescriptionOrigine: { medecin: prescription.medecin!, numeroBonExamen: prescription.numeroBonExamen, medicaments: [] },
+      prescriptionOrigine: { medecin: prescription.medecin, numeroBonExamen: prescription.numeroBonExamen, medicaments: [] },
     };
     await this.genererFormulaire("examen", prescription.numeroBonExamen, pec, lignes, res, prescriptionId, utilisateur, prestataireFiltre);
   }
@@ -2921,7 +2746,6 @@ export class DocumentsService {
       include: {
         assure: { include: { contrat: { include: { client: true, compagnie: true, garanties: true } }, famille: { select: { telephone: true } } } },
         prestataireRef: true, demandeur: true, lignes: { include: { acteMedical: true } },
-        prisesEnCharge: { where: { NOT: { statut: "Annulé" } }, include: { acteMedical: true } },
       },
     });
     if (!accord) throw new NotFoundException(`Prise en charge ${accordId} introuvable`);
@@ -2938,8 +2762,7 @@ export class DocumentsService {
 
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     res.setHeader("Content-Type", "application/pdf");
-    const refDoc = accord.prescriptionRef ?? accord.id;
-    res.setHeader("Content-Disposition", `inline; filename="Certificat-Prise-En-Charge-${refDoc}.pdf"`);
+    res.setHeader("Content-Disposition", `inline; filename="Certificat-Prise-En-Charge-${accord.id}.pdf"`);
     doc.pipe(res);
 
     const left = doc.page.margins.left;
@@ -2994,16 +2817,12 @@ export class DocumentsService {
     encadre(left, y, colW, boxH1);
     encadre(left + colW, y, colW, boxH1);
     doc.font("Helvetica").fontSize(8);
-    champ(doc, left + 8, y + 8, "DOSSIER N°", refDoc, 90, colW - 98, { boldLabel: true });
+    champ(doc, left + 8, y + 8, "DOSSIER N°", accord.id, 90, colW - 98, { boldLabel: true });
     champ(doc, left + 8, y + 22, "Editer le :", fmtDate(dateBase), 90, colW - 98, { boldLabel: true });
     champ(doc, left + 8, y + 34, "Valable jusqu'au:", dateValidite, 90, colW - 98, { boldLabel: true });
     champ(doc, left + colW + 8, y + 8, "Demandeur:", accord.demandeur?.nom ?? "—", 75, colW - 83, { boldLabel: true, boldValeur: true });
     const estAyantDroit = accord.assure.familleId !== null;
-    // Repli si aucune ligne : construire une pseudo-ligne depuis le type/description de l'accord
-    const lignesFallbackTaux = accord.lignes.length > 0
-      ? accord.lignes
-      : [{ acteMedical: null, categorieGarantie: null, description: accord.type ?? accord.description ?? "" }];
-    const tauxCouverture = this.tauxCouvertureParRubrique(lignesFallbackTaux, accord.assure.contrat.garanties, estAyantDroit);
+    const tauxCouverture = this.tauxCouvertureParRubrique(accord.lignes, accord.assure.contrat.garanties, estAyantDroit);
     champ(doc, left + colW + 8, y + 24, "Taux de couverture:", tauxCouverture != null ? `${tauxCouverture} %` : "—", 105, colW - 113, { boldLabel: true });
     y += boxH1 + 10;
 
@@ -3051,33 +2870,10 @@ export class DocumentsService {
     // (voir resoudreRubriqueContrat), pour rester en harmonie avec le
     // tableau de garanties réel du contrat plutôt qu'un rapprochement
     // catalogue indépendant.
-    // Type du prestataire (ex. "Laboratoire") → override rubrique générique
-    // "Consultation/Divers" en "Analyses Médicale" (voir resoudreRubriqueContrat).
-    const prestataireType = accord.prestataireRef?.type ?? undefined;
-    const pecActives = accord.prisesEnCharge.filter((pec) => pec.statut !== "Annulé");
-    const rubriquesGarantie = Array.from(new Set([
-      ...accord.lignes.map((l) => {
-        const rBase = resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: l.categorieGarantie ?? l.description ?? "", prestataireType }, l.acteMedical);
-        if (l.description) {
-          // "CHAMBRE" → Hospitalisation même si categorieGarantie dit "Consultations"
-          const rDesc = normaliserRubrique(l.description);
-          if (rDesc !== l.description.trim() && rDesc !== rBase) return rDesc;
-        }
-        return rBase;
-      }),
-      // Quand aucune AccordPrealableLigne n'existe (accords importés), déduire
-      // la rubrique depuis les PrisesEnCharge, avec le type du prestataire
-      // pour lever l'ambiguïté des types génériques ("Consultation/Divers").
-      ...(accord.lignes.length === 0
-        ? pecActives.map((pec) =>
-            resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: pec.type ?? "", prestataireType }, pec.acteMedical)
-          )
-        : []),
-    ]));
-    // Repli si aucune ligne ni PEC : normaliser le type/description de l'accord lui-même
-    const objetPriseEnCharge = rubriquesGarantie.filter((r) => r && r !== "Non précisé").length > 0
-      ? rubriquesGarantie.filter((r) => r && r !== "Non précisé").join(", ")
-      : resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: accord.type ?? accord.description ?? "", prestataireType }, null);
+    const rubriquesGarantie = Array.from(new Set(
+      accord.lignes.map((l) => resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: l.categorieGarantie ?? l.description ?? "" }, l.acteMedical)),
+    ));
+    const objetPriseEnCharge = rubriquesGarantie.length > 0 ? rubriquesGarantie.join(", ") : (accord.lignes[0]?.description ?? accord.description);
     doc.font("Helvetica").fontSize(8).text(`Code: ${objetPriseEnCharge}`, left + 8, y + 20, { width: colW - 20 });
     // Coordonnées RÉELLES du prestataire, pas celles du courtier (2026-09)
     // — voir demande utilisateur : "faire remonter toutes les informations
@@ -3085,10 +2881,9 @@ export class DocumentsService {
     // bloc DESTINATAIRE ci-dessus (accord.prestataireRef), jamais p.nom/
     // p.ville/p.pays (les coordonnées de la société utilisatrice, sans
     // rapport avec qui délivre réellement la prestation).
-    // DELIVRE PAR = la société qui gère l'assurance (LA RUCHE EXCELLENCE), pas le prestataire
-    doc.text(`Nom: ${p.nom}`, left + colW + 8, y + 18, { width: colW - 20 });
-    doc.text(`Téléphone: ${p.telephone ?? "—"}`, left + colW + 8, y + 29, { width: colW - 20 });
-    doc.text(`Adresse: ${p.adresse ?? p.ville ?? "—"}`, left + colW + 8, y + 40, { width: colW - 20 });
+    doc.text(`Nom: ${accord.prestataireRef?.nom ?? accord.prestataire}`, left + colW + 8, y + 18, { width: colW - 20 });
+    doc.text(`Téléphone: ${accord.prestataireRef?.telephone ?? "—"}`, left + colW + 8, y + 29, { width: colW - 20 });
+    doc.text(`Adresse: ${accord.prestataireRef?.adresse ?? accord.prestataireRef?.ville ?? "—"}`, left + colW + 8, y + 40, { width: colW - 20 });
     y += boxH3 + 10;
 
     // ── Tableau des actes ─────────────────────────────────────────────
@@ -3105,33 +2900,9 @@ export class DocumentsService {
     y += 22;
 
     doc.font("Helvetica").fontSize(8);
-    // Priorité 1 : PrisesEnCharge réelles liées à cet accord (cas des accords importés
-    // où les lignes AccordPrealable n'existent pas mais les PEC portent les vrais actes
-    // et leurs montants réels — frais réels = montant La Ruche + reste à charge).
-    // Priorité 2 : lignes de l'accord (saisie lors de la demande).
-    // Priorité 3 : description brute de l'accord (fallback texte).
-    const lignesTable: { libelle: string; frais: number; remb: number }[] =
-      pecActives.length > 0
-        ? pecActives.map((pec) => {
-            // Si acteMedical est lié, son libellé fait foi.
-            // Sinon : pec.type est souvent une catégorie générique (ex. "Consultation/Divers")
-            // et non le nom de l'acte réel. Détecter cela : si normaliserRubrique(type) donne
-            // quelque chose de différent de type lui-même, c'est une catégorie → utiliser
-            // accord.description qui contient le vrai libellé de l'acte (ex. "PEPTIDES
-            // NATRIUMETIQUES, PRELEVEMENT SANGUIN" importé depuis la reprise).
-            const libelleType = pec.type ?? "";
-            const libelleNorm = normaliserRubrique(libelleType);
-            const libelleActe = pec.acteMedical?.libelle
-              ?? (libelleNorm !== libelleType.trim() ? accord.description ?? libelleType : libelleType);
-            return {
-              libelle: libelleActe,
-              remb: Number(pec.montant),
-              frais: Number(pec.montant) + Number(pec.resteACharge ?? 0),
-            };
-          })
-        : accord.lignes.length > 0
-          ? accord.lignes.map((l) => ({ libelle: l.acteMedical?.libelle ?? l.description, remb: Number(l.plafondReference), frais: Number(l.montantDevis) }))
-          : [{ libelle: accord.description ?? "", remb: Number(accord.montantAutorise ?? 0), frais: Number(accord.montantDevis ?? accord.montantAutorise ?? 0) }];
+    const lignesTable = accord.lignes.length > 0
+      ? accord.lignes.map((l) => ({ libelle: l.acteMedical?.libelle ?? l.description, remb: Number(l.plafondReference), frais: Number(l.montantDevis) }))
+      : [{ libelle: accord.description, remb: Number(accord.montantAutorise ?? 0), frais: Number(accord.montantDevis ?? accord.montantAutorise ?? 0) }];
     let totalRemb = 0, totalFrais = 0;
     for (const l of lignesTable) {
       totalRemb += l.remb; totalFrais += l.frais;
@@ -3200,17 +2971,14 @@ export class DocumentsService {
   // source que l'écran Contrats → Garanties), sur la rubrique de la
   // PREMIÈRE ligne ayant un acte du catalogue rattaché.
   private tauxCouvertureParRubrique(
-    lignes: { acteMedical: { categorieGarantie: string | null } | null; categorieGarantie: string | null; description: string }[],
+    lignes: { acteMedical: { categorieGarantie: string | null } | null; categorieGarantie: string | null }[],
     garanties: { categorie: string; tauxAssure: Prisma.Decimal | null; tauxAyantsDroit: Prisma.Decimal | null }[],
     estAyantDroit: boolean,
   ): number | null {
-    const rubriqueCandidate =
-      lignes.find((l) => l.acteMedical?.categorieGarantie)?.acteMedical?.categorieGarantie
-      ?? lignes.find((l) => l.categorieGarantie)?.categorieGarantie
-      ?? lignes.find((l) => l.description)?.description;
-    if (!rubriqueCandidate) return null;
-    const rubrique = normaliserRubrique(rubriqueCandidate);
-    const garantie = garanties.find((g) => normaliserRubrique(g.categorie) === rubrique);
+    const rubrique = lignes.find((l) => l.acteMedical?.categorieGarantie ?? l.categorieGarantie)?.acteMedical?.categorieGarantie
+      ?? lignes.find((l) => l.categorieGarantie)?.categorieGarantie;
+    if (!rubrique) return null;
+    const garantie = garanties.find((g) => g.categorie === rubrique);
     if (!garantie) return null;
     const taux = estAyantDroit ? (garantie.tauxAyantsDroit ?? garantie.tauxAssure) : garantie.tauxAssure;
     return taux != null ? Number(taux) : null;
@@ -3347,7 +3115,6 @@ export class DocumentsService {
     // longueur des données réelles.
     const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 21 });
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(EN_TETE_SIGNATURE, "integree"); // QR dessiné par le document lui-même
     res.setHeader("Content-Disposition", `inline; filename="Decompte-${facture.id}.pdf"`);
     doc.pipe(res);
 
@@ -3369,6 +3136,7 @@ export class DocumentsService {
       const right = doc.page.width - doc.page.margins.right;
       const width = right - left;
 
+      this.dessinerLogoEntete(doc, logoImage, left, 8);
       // Identité affichée en en-tête (2026-09) — voir demande utilisateur :
       // "faire remonter le logo et le vrai nom de la société qui assure et
       // gère les dossiers, et non la compagnie d'assurance si le client est
@@ -3376,15 +3144,12 @@ export class DocumentsService {
       // `p`), jamais un repli vers `contrat.compagnie.nom` (mélangerait
       // courtier et assureur porteur du risque — voir même correctif sur
       // genererFormulaire).
-      // Logo en grand à la place du nom écrit (voir dessinerIdentiteEntete).
       const nomAffiche = p.nom;
-      const nomW = this.dessinerIdentiteEntete(doc, logoImage, left, 10, 200, 48, () => {
-        doc.fillColor("#000").fontSize(13).font("Helvetica");
-        doc.text(nomAffiche, left, 31);
-        return doc.widthOfString(nomAffiche);
-      });
-      doc.fillColor("#000").font("Helvetica").fontSize(8).text("Service Maladie", left, 62);
-      doc.text(`Tél.: ${p.telephone}`, left, 73);
+      doc.fillColor("#000").fontSize(13).font("Helvetica");
+      const nomW = doc.widthOfString(nomAffiche);
+      doc.text(nomAffiche, left, 31);
+      doc.fontSize(8).text("Service Maladie", left, 50);
+      doc.text(`Tél.: ${p.telephone}`, left, 61);
 
       // Titre — même position relative que le modèle (43,6 % depuis la
       // marge gauche), avec un filet de sécurité si le nom de la société
@@ -3482,7 +3247,7 @@ export class DocumentsService {
       const b2c = champLigne(c3x, rowY + 1, "Nature maladie :", "Affection Courante", col3W - 12);
       rowY = Math.max(b2a, b2b, b2c) + 4;
 
-      const b3a = champEmpile(c1x, rowY, "N° Police", numeroPolice(contratAssure));
+      const b3a = champEmpile(c1x, rowY, "N° Police", contratAssure.numeroPolice ?? contratAssure.id);
       const b3b = champEmpileLarge(c2x, rowY, "Bénéficiaire des soins :", `${assure.nom} ${assure.prenom ?? ""}`.trim() + `  -  Matricule : ${assure.matricule}`, col2W - 12);
       const b3c = champLigne(c3x, rowY + 1, "Début des soins :", premiereLigne.date, col3W - 12);
       rowY = Math.max(b3a, b3b, b3c) + 6;
@@ -3522,9 +3287,7 @@ export class DocumentsService {
         const montant = Number(l.montant);
         const baseRemb = montant - Number(l.montantRejete ?? 0);
         const baseTps = l.baseRemboursement !== null ? Number(l.baseRemboursement) : 0;
-        // Ligne reprise sans taux enregistré : taux réellement appliqué = part
-        // de l'assurance / base remboursable (ex. 16 000 / 20 000 = 80 %).
-        const taux = l.tauxRemboursement !== null ? Number(l.tauxRemboursement) : baseRemb > 0 ? Math.round((baseTps / baseRemb) * 100) : null;
+        const taux = l.tauxRemboursement !== null ? Number(l.tauxRemboursement) : null;
         const ticket = baseRemb - baseTps;
         const tps = l.montantTps !== null ? Number(l.montantTps) : 0;
         const net = baseTps - tps;
@@ -3600,7 +3363,7 @@ export class DocumentsService {
     if (!releve) throw new NotFoundException(`Relevé ${releveId} introuvable`);
     const lignes = releve.factures.map((f) => {
       const net = f.lignes.reduce((s, l) => s + (l.baseRemboursement !== null ? Number(l.baseRemboursement) : 0) - (l.montantTps !== null ? Number(l.montantTps) : 0), 0);
-      return { reference: referenceLisible(f.referenceFacture), dateReception: f.dateReception, nbLignes: f.lignes.length, net };
+      return { reference: f.referenceFacture, dateReception: f.dateReception, nbLignes: f.lignes.length, net };
     });
     const total = lignes.reduce((s, l) => s + l.net, 0);
     return { releve, lignes, total };
@@ -3639,11 +3402,8 @@ export class DocumentsService {
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
 
-    this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 26, 220, 58, () => {
-      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
-      doc.fontSize(8).font("Helvetica").fillColor("#333").text(p.sousTitre, left, 56);
-      return 0;
-    });
+    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+    doc.fontSize(8).font("Helvetica").fillColor("#333").text(p.sousTitre, left, 56);
     doc.rect(right - 200, 40, 200, 30).fill(p.couleurPrimaire);
     doc.fillColor("#fff").fontSize(11).font("Helvetica-Bold").text("RELEVÉ PRESTATAIRE", right - 200, 47, { width: 200, align: "center" });
     doc.fontSize(8).text(`N° ${releve.numero}`, right - 200, 62, { width: 200, align: "center" });
@@ -3670,10 +3430,10 @@ export class DocumentsService {
 
     doc.font("Helvetica").fontSize(8);
     for (const l of lignes) {
-      const valeurs = [l.reference, l.dateReception, String(l.nbLignes), fmt(l.net)];
-      const rowH = Math.max(16, ...valeurs.map((v, i) => doc.heightOfString(v, { width: cols[i].w - 8 }) + 8));
+      const rowH = 16;
       if (y + rowH > doc.page.height - 100) { doc.addPage(); y = 40; }
       cx = left;
+      const valeurs = [l.reference, l.dateReception, String(l.nbLignes), fmt(l.net)];
       for (let i = 0; i < cols.length; i++) { doc.text(valeurs[i], cx + 4, y + 4, { width: cols[i].w - 8, align: i === 0 ? "left" : "right" }); cx += cols[i].w; }
       doc.moveTo(left, y + rowH).lineTo(right, y + rowH).strokeColor("#eee").stroke();
       y += rowH;
@@ -3715,7 +3475,7 @@ export class DocumentsService {
     const numeroQuittance = avenant ? await this.numeroQuittanceAvenant(avenant) : await this.numeroQuittanceContrat(contrat);
     const dateEffet = avenant ? avenant.dateEffet : contrat.dateDebut;
     const primeNette = Number(avenant ? avenant.primeApres : (contrat.primeNette ?? contrat.prime));
-    await this.envoyerDocx(res, `Quittance-${policePourNomFichier(contrat)}${avenant ? `-${avenant.id}` : ""}`, kind === "AffaireNouvelle" ? "QUITTANCE — AFFAIRE NOUVELLE" : `QUITTANCE — AVENANT ${AVENANT_META[kind].suffixe}`, `Police N° ${numeroPolice(contrat)}`, [
+    await this.envoyerDocx(res, `Quittance-${avenant?.id ?? contrat.id}`, kind === "AffaireNouvelle" ? "QUITTANCE — AFFAIRE NOUVELLE" : `QUITTANCE — AVENANT ${AVENANT_META[kind].suffixe}`, `Police N° ${contrat.id}`, [
       ["Souscripteur :", contrat.client.nom],
       ["Compagnie :", contrat.compagnie.nom],
       ["Quittance N° :", String(numeroQuittance)],
@@ -3736,7 +3496,7 @@ export class DocumentsService {
   }
 
   private async genererTableauGarantiesDocx(res: Response, contrat: DocContrat) {
-    await this.envoyerDocx(res, `Tableau-Garanties-${policePourNomFichier(contrat)}`, `TABLEAU DE GARANTIES — ${contrat.branche.toUpperCase()}`, `Police N° ${numeroPolice(contrat)}   ·   ${contrat.client.nom}`, [
+    await this.envoyerDocx(res, `Tableau-Garanties-${contrat.id}`, `TABLEAU DE GARANTIES — ${contrat.branche.toUpperCase()}`, `Police N° ${contrat.id}   ·   ${contrat.client.nom}`, [
       ["Compagnie :", contrat.compagnie.nom],
       ["Effet :", contrat.dateDebut],
       ["Échéance :", contrat.dateFin],
@@ -3886,15 +3646,8 @@ export class DocumentsService {
   // jusqu'ici (voir DocumentsController.population).
   async renderPopulationExport(contratId: string, format: "pdf" | "xlsx" | "docx", res: Response, filtres: { statut?: string; du?: string; au?: string }) {
     const contrat = await this.prisma.contrat.findUnique({ where: { id: contratId }, include: { client: true } });
-    if (!contrat) throw new NotFoundException("Contrat introuvable");
-    // Contrat Assistance lié à plusieurs contrats Maladie (2026-09) : la
-    // population de chacun, rangée par contrat Maladie puis par famille
-    // (voir demande utilisateur : "il faudra ranger les listes en fonction
-    // des contrats maladie"), avec une colonne "Police Maladie".
-    const population = await populationDuContrat(this.prisma, contratId, filtres.du, filtres.au);
-    const ordreSource = new Map<string, number>();
-    for (const a of population) if (a.contratSourceId && !ordreSource.has(a.contratSourceId)) ordreSource.set(a.contratSourceId, ordreSource.size);
-    const parContratMaladie = population.some((a) => a.contratSourceId && a.contratSourceId !== contratId);
+    if (!contrat) throw new NotFoundException(`Contrat ${contratId} introuvable`);
+    const population = await reconstituerPopulation(this.prisma, contratId, filtres.du, filtres.au);
     // Regroupement par famille, familles triées par ordre alphabétique de
     // l'assuré principal (2026-09) — voir demande utilisateur : "il faut
     // que l'application génère les liste en rangeant les famille et non
@@ -3916,8 +3669,6 @@ export class DocumentsService {
     const assures = population
       .filter((a) => !filtres.statut || a.statutPeriode === filtres.statut)
       .sort((a, b) => {
-        const source = (ordreSource.get(a.contratSourceId ?? "") ?? 0) - (ordreSource.get(b.contratSourceId ?? "") ?? 0);
-        if (source !== 0) return source;
         const racineA = parId.get(cleFamilleDe(a)) ?? a;
         const racineB = parId.get(cleFamilleDe(b)) ?? b;
         return nomTriDe(racineA).localeCompare(nomTriDe(racineB))
@@ -3930,17 +3681,13 @@ export class DocumentsService {
     // demande utilisateur répétée : "là où il y a N° Police, c'est le
     // numéro de police compagnie du contrat qui doit remonter" — cet export
     // affichait encore contrat.id brut, jamais numeroPolice.
-    const sousTitre = `${contrat.client.nom}   ·   Police N° ${numeroPolice(contrat)}   ·   ${assures.length} bénéficiaire(s)`;
-    const rows = assures.map((a) => [
-      ...(parContratMaladie ? [a.policeSource ?? "—"] : []),
-      a.matricule, `${a.nom} ${a.prenom ?? ""}`.trim(), TYPE_ASSURE_LABELS[a.typeAssure ?? ""] ?? a.typeAssure ?? "—", a.dateNaissance ?? "—", a.statutPeriode,
-    ]);
+    const sousTitre = `${contrat.client.nom}   ·   Police N° ${contrat.numeroPolice || contrat.id}   ·   ${assures.length} bénéficiaire(s)`;
+    const rows = assures.map((a) => [a.matricule, `${a.nom} ${a.prenom ?? ""}`.trim(), TYPE_ASSURE_LABELS[a.typeAssure ?? ""] ?? a.typeAssure ?? "—", a.dateNaissance ?? "—", a.statutPeriode]);
 
     if (format === "xlsx") {
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet("Assurés");
       ws.columns = [
-        ...(parContratMaladie ? [{ header: "Police Maladie", key: "police", width: 16 }] : []),
         { header: "Matricule", key: "matricule", width: 18 }, { header: "Nom et Prénom", key: "nom", width: 30 },
         { header: "Type", key: "type", width: 16 }, { header: "Date de naissance", key: "naissance", width: 18 }, { header: "Statut", key: "statut", width: 14 },
       ];
@@ -3948,36 +3695,31 @@ export class DocumentsService {
       for (const r of rows) ws.addRow(r);
       const buffer = await wb.xlsx.writeBuffer();
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename="Liste-Assures-${policePourNomFichier(contrat)}.xlsx"`);
+      res.setHeader("Content-Disposition", `attachment; filename="Liste-Assures-${contrat.id}.xlsx"`);
       res.send(Buffer.from(buffer));
       return;
     }
     if (format === "docx") {
-      return this.envoyerDocx(res, `Liste-Assures-${policePourNomFichier(contrat)}`, titre, sousTitre, [], { headers: [...(parContratMaladie ? ["Police Maladie"] : []), "Matricule", "Nom et Prénom", "Type", "Naissance", "Statut"], rows });
+      return this.envoyerDocx(res, `Liste-Assures-${contrat.id}`, titre, sousTitre, [], { headers: ["Matricule", "Nom et Prénom", "Type", "Naissance", "Statut"], rows });
     }
 
     const p = await this.parametresEntreprise.findOne();
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="Liste-Assures-${policePourNomFichier(contrat)}.pdf"`);
+    res.setHeader("Content-Disposition", `inline; filename="Liste-Assures-${contrat.id}.pdf"`);
     doc.pipe(res);
 
     const left = doc.page.margins.left;
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
 
-    this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 28, 200, 58, () => {
-      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
-      return 0;
-    });
+    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
     doc.fontSize(11).font("Helvetica-Bold").fillColor("#000").text(titre, left, 60, { width, align: "right" });
     doc.fontSize(8).font("Helvetica").fillColor("#555").text(sousTitre, left, 74, { width, align: "right" });
     doc.fillColor("#000");
 
     let y = 95;
-    const cols = parContratMaladie
-      ? [{ h: "Police Maladie", w: width * 0.15 }, { h: "Matricule", w: width * 0.15 }, { h: "Nom et Prénom", w: width * 0.32 }, { h: "Type", w: width * 0.12 }, { h: "Naissance", w: width * 0.13 }, { h: "Statut", w: width * 0.13 }]
-      : [{ h: "Matricule", w: width * 0.18 }, { h: "Nom et Prénom", w: width * 0.35 }, { h: "Type", w: width * 0.15 }, { h: "Naissance", w: width * 0.16 }, { h: "Statut", w: width * 0.16 }];
+    const cols = [{ h: "Matricule", w: width * 0.18 }, { h: "Nom et Prénom", w: width * 0.35 }, { h: "Type", w: width * 0.15 }, { h: "Naissance", w: width * 0.16 }, { h: "Statut", w: width * 0.16 }];
     const drawHeader = () => {
       doc.rect(left, y, width, 16).fill(p.couleurPrimaire);
       let cx = left;
@@ -3990,7 +3732,7 @@ export class DocumentsService {
 
     doc.font("Helvetica").fontSize(8);
     for (const r of rows) {
-      const rowH = Math.max(15, ...cols.map((c, i) => doc.heightOfString(String(r[i] ?? ""), { width: c.w - 8 }) + 7));
+      const rowH = 15;
       if (y + rowH > doc.page.height - 50) { doc.addPage(); y = 40; drawHeader(); doc.font("Helvetica").fontSize(8); }
       let cx = left;
       for (let i = 0; i < cols.length; i++) { doc.text(r[i], cx + 4, y + 4, { width: cols[i].w - 8 }); cx += cols[i].w; }
@@ -4026,7 +3768,7 @@ export class DocumentsService {
     // Police N° = le vrai numéro de police compagnie (2026-09) — voir
     // demande utilisateur : "là où il y a N° Police, c'est le numéro de
     // police compagnie du contrat qui doit remonter".
-    const sousTitre = `${avenant.contrat.client.nom}   ·   Police N° ${numeroPolice(avenant.contrat)}   ·   Avenant n°${numero}   ·   Date d'effet ${avenant.dateEffet}   ·   ${avenant.avenantAssures.length} personne(s)`;
+    const sousTitre = `${avenant.contrat.client.nom}   ·   Police N° ${avenant.contrat.numeroPolice || avenant.contrat.id}   ·   Avenant n°${numero}   ·   Date d'effet ${avenant.dateEffet}   ·   ${avenant.avenantAssures.length} personne(s)`;
     const rows = avenant.avenantAssures.map((a) => [a.matricule ?? "—", `${a.nom} ${a.prenom ?? ""}`.trim(), TYPE_ASSURE_LABELS[a.typeAssure ?? ""] ?? a.typeAssure ?? "—", a.action, a.dateEffet]);
 
     if (format === "xlsx") {
@@ -4058,10 +3800,7 @@ export class DocumentsService {
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
 
-    this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 28, 200, 58, () => {
-      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
-      return 0;
-    });
+    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
     doc.fontSize(11).font("Helvetica-Bold").fillColor("#000").text(titre, left, 60, { width, align: "right" });
     doc.fontSize(8).font("Helvetica").fillColor("#555").text(sousTitre, left, 74, { width, align: "right" });
     doc.fillColor("#000");
@@ -4083,7 +3822,7 @@ export class DocumentsService {
 
     doc.font("Helvetica").fontSize(8);
     for (const r of rows) {
-      const rowH = Math.max(15, ...cols.map((c, i) => doc.heightOfString(String(r[i] ?? "—"), { width: c.w - 8 }) + 7));
+      const rowH = 15;
       if (y + rowH > doc.page.height - 50) { doc.addPage(); y = 40; drawHeader(); doc.font("Helvetica").fontSize(8); }
       let cx = left;
       for (let i = 0; i < cols.length; i++) { doc.text(String(r[i] ?? "—"), cx + 4, y + 4, { width: cols[i].w - 8 }); cx += cols[i].w; }
@@ -4109,64 +3848,26 @@ export class DocumentsService {
   async renderStatistiques(
     contratId: string, du: string | undefined, au: string | undefined, format: "pdf" | "docx", res: Response,
     analyseOverride: import("../statistiques/statistiques.types").AnalyseNarrative | undefined, rubriques?: RubriqueId[],
+    primeForcee?: number,
   ) {
     const calcule = await this.statistiques.calculer(contratId, du, au);
-    const payload: StatistiquesPayload = analyseOverride ? { ...calcule, analyse: analyseOverride } : calcule;
+    let { spSansChargement, spAvecChargement } = calcule;
+    if (primeForcee && primeForcee > 0) {
+      const ratio = spSansChargement.primes > 0 ? spAvecChargement.primes / spSansChargement.primes : 1;
+      spSansChargement = { ...spSansChargement, primes: primeForcee, ratioPct: (spSansChargement.sinistres / primeForcee) * 100 };
+      spAvecChargement = { ...spAvecChargement, primes: primeForcee * ratio, ratioPct: (spAvecChargement.sinistres / (primeForcee * ratio)) * 100 };
+    }
+    const payload: StatistiquesPayload = { ...calcule, spSansChargement, spAvecChargement, ...(analyseOverride ? { analyse: analyseOverride } : {}) };
     const inclut = (id: RubriqueId) => !rubriques || rubriques.includes(id);
 
     if (format === "docx") return this.genererStatistiquesDocx(res, payload, inclut);
 
     const p = await this.parametresEntreprise.findOne();
-
-    // Pré-génération parallèle des graphiques + chargement des images (2026-10)
-    // — les 8 renderToBuffer chartjs-node-canvas étaient séquentiels, chacun
-    // prenant ~0,5-1 s (création Canvas + rendu PNG). Lancés tous en même temps,
-    // le total passe de ~5-8 s à ~1-2 s (durée du plus long).
-    // La page de garde (2.3 MB PNG) est compressée en JPEG 85 % avant embedding
-    // pour réduire la taille du PDF résultant et accélérer l'écriture.
-    const [logoImage, pageGardeRaw, grafEvolutionMensuelle, grafTop20, grafBenef, grafRubrique, grafFamilleActe, grafPrestataire, grafTop20Presta, grafSP] = await Promise.all([
-      this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR),
-      this.chargerImage("pages-garde-statistiques", p.statistiquesPageGarde, UPLOADS_PAGES_GARDE_STATISTIQUES_DIR),
-      inclut("evolutionMensuelle") && payload.evolutionMensuelle.length > 0
-        ? genererGraphiqueBarres(payload.evolutionMensuelle.map((l) => l.label), payload.evolutionMensuelle.map((l) => l.montant), "Évolution des consommations par mois", p.couleurPrimaire)
-        : Promise.resolve(null),
-      inclut("top20Consommateurs") && payload.top20Consommateurs.length > 0
-        ? genererGraphiqueBarres(payload.top20Consommateurs.map((l) => l.famille), payload.top20Consommateurs.map((l) => l.montant), "Top 20 des consommateurs", p.couleurPrimaire)
-        : Promise.resolve(null),
-      inclut("repartitionBeneficiaire") && payload.repartitionBeneficiaire.length > 0
-        ? genererGraphiqueCamembert(payload.repartitionBeneficiaire.map((l) => l.type), payload.repartitionBeneficiaire.map((l) => l.montant), "Répartition par type de bénéficiaire", false)
-        : Promise.resolve(null),
-      inclut("consommationParRubrique") && payload.consommationParRubrique.length > 0
-        ? genererGraphiqueCamembert(payload.consommationParRubrique.map((l) => l.libelle), payload.consommationParRubrique.map((l) => l.montant), "Consommation par Rubrique", false)
-        : Promise.resolve(null),
-      inclut("consommationParFamilleActe") && payload.consommationParFamilleActe.length > 0
-        ? genererGraphiqueCamembert(payload.consommationParFamilleActe.map((l) => l.libelle), payload.consommationParFamilleActe.map((l) => l.montant), "Consommation par Famille d'Actes", false)
-        : Promise.resolve(null),
-      inclut("consommationParPrestataire") && payload.consommationParPrestataire.length > 0
-        ? genererGraphiqueCamembert(payload.consommationParPrestataire.map((l) => l.libelle), payload.consommationParPrestataire.map((l) => l.montant), "Consommation par prestataire", true)
-        : Promise.resolve(null),
-      inclut("top20Prestataires") && payload.top20Prestataires.length > 0
-        ? genererGraphiqueBarres(payload.top20Prestataires.map((l) => l.libelle), payload.top20Prestataires.map((l) => l.montant), "Top 20 des prestataires", p.couleurPrimaire)
-        : Promise.resolve(null),
-      inclut("evolutionSP")
-        ? genererGraphiqueBarresEtiquetees(
-            ["S/P sans chargement", "S/P avec chargement"],
-            [payload.spSansChargement.ratioPct / 100, payload.spAvecChargement.ratioPct / 100],
-            "Evolution du S/P", [p.couleurPrimaire, p.couleurSecondaire],
-            (v) => v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-          )
-        : Promise.resolve(null),
-    ]);
-
-    // Compression JPEG de la page de garde si c'est un PNG lourd (> 500 KB)
-    let pageGardeImage: Buffer | string | null = pageGardeRaw;
-    if (Buffer.isBuffer(pageGardeRaw) && pageGardeRaw.length > 500_000) {
-      try { pageGardeImage = await sharp(pageGardeRaw).jpeg({ quality: 85 }).toBuffer(); } catch { /* conserver l'original si sharp échoue */ }
-    }
-
+    const logoImage = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
+    const pageGardeImage = await this.chargerImage("pages-garde-statistiques", p.statistiquesPageGarde, UPLOADS_PAGES_GARDE_STATISTIQUES_DIR);
     const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="Statistiques-${policePourNomFichier(payload.contrat)}.pdf"`);
+    res.setHeader("Content-Disposition", `inline; filename="Statistiques-${payload.contrat.id}.pdf"`);
     doc.pipe(res);
 
     const left = doc.page.margins.left;
@@ -4233,31 +3934,26 @@ export class DocumentsService {
         doc.font("Helvetica-Bold").fontSize(7.5);
         return Math.min(largeurMaxColonne, Math.max(LARGEUR_MIN_COLONNE, maxW + PADDING_CELLULE));
       });
-      // Jamais plus large que la page : colonnes réduites proportionnellement.
-      const brute = colW.reduce((a, b) => a + b, 0);
-      if (brute > width) colW.forEach((w, i) => { colW[i] = (w * width) / brute; });
       const largeurTableau = colW.reduce((a, b) => a + b, 0);
       const droiteTableau = left + largeurTableau;
-      const opts = (i: number) => ({ width: colW[i] - 6, align: (i === 0 ? "left" : "right") as "left" | "right" });
 
-      // Hauteurs selon le contenu : un libellé long passe à la ligne sans chevaucher la ligne suivante.
-      doc.fontSize(7.5).font("Helvetica-Bold");
-      const hEntete = Math.max(16, ...headers.map((h, i) => doc.heightOfString(h, opts(i)) + 8));
-      assurerPlace(hEntete + 2);
-      doc.rect(left, y, largeurTableau, hEntete).fillColor(p.couleurSecondaire).fill();
+      assurerPlace(18);
+      doc.rect(left, y, largeurTableau, 16).fillColor(p.couleurSecondaire).fill();
       let cx = left;
-      doc.fillColor("#fff");
-      for (let i = 0; i < headers.length; i++) { doc.text(headers[i], cx + 3, y + 4, opts(i)); cx += colW[i]; }
-      y += hEntete;
+      doc.fillColor("#fff").fontSize(7.5).font("Helvetica-Bold");
+      for (let i = 0; i < headers.length; i++) { doc.text(headers[i], cx + 3, y + 4, { width: colW[i] - 6, align: i === 0 ? "left" : "right" }); cx += colW[i]; }
+      y += 16;
       doc.font("Helvetica").fontSize(7.5).fillColor("#000");
       for (const row of rows) {
-        const textes = row.map((v) => (typeof v === "number" ? fmt(v) : String(v ?? "")));
-        const h = Math.max(14, ...textes.map((v, i) => doc.heightOfString(v, opts(i)) + 6));
-        assurerPlace(h);
+        assurerPlace(14);
         cx = left;
-        textes.forEach((v, i) => { doc.text(v, cx + 3, y + 3, opts(i)); cx += colW[i]; });
-        doc.moveTo(left, y + h).lineTo(droiteTableau, y + h).strokeColor("#eee").stroke();
-        y += h;
+        for (let i = 0; i < row.length; i++) {
+          const v = typeof row[i] === "number" ? fmt(row[i] as number) : String(row[i]);
+          doc.text(v, cx + 3, y + 3, { width: colW[i] - 6, align: i === 0 ? "left" : "right" });
+          cx += colW[i];
+        }
+        doc.moveTo(left, y + 14).lineTo(droiteTableau, y + 14).strokeColor("#eee").stroke();
+        y += 14;
       }
       y += 6;
     };
@@ -4378,7 +4074,8 @@ export class DocumentsService {
     if (inclut("evolutionMensuelle") && payload.evolutionMensuelle.length > 0) {
       titreSection("Évolution Mensuelle de la Consommation");
       tableau(["Mois", "Montant remboursé (FCFA)"], [...payload.evolutionMensuelle.map((l) => [l.label, l.montant]), ["Total", payload.evolutionMensuelle.reduce((s, l) => s + l.montant, 0)]]);
-      if (grafEvolutionMensuelle) await inserer(grafEvolutionMensuelle, 900 / 480, width);
+      const buf = await genererGraphiqueBarres(payload.evolutionMensuelle.map((l) => l.label), payload.evolutionMensuelle.map((l) => l.montant), "Évolution des consommations par mois", p.couleurPrimaire);
+      await inserer(buf, 900 / 480, width);
     }
 
     if (inclut("consommationParFamille") && payload.consommationParFamille.length > 0) {
@@ -4396,7 +4093,8 @@ export class DocumentsService {
     if (inclut("top20Consommateurs") && payload.top20Consommateurs.length > 0) {
       titreSection("Top 20 des Consommateurs");
       tableau(["N°", "Matricule", "Famille", "Montant consommé"], payload.top20Consommateurs.map((l, i) => [i + 1, l.matricule, l.famille, l.montant]));
-      if (grafTop20) await inserer(grafTop20, 900 / 480, width);
+      const buf = await genererGraphiqueBarres(payload.top20Consommateurs.map((l) => l.famille), payload.top20Consommateurs.map((l) => l.montant), "Top 20 des consommateurs", p.couleurPrimaire);
+      await inserer(buf, 900 / 480, width);
     }
 
     if (inclut("repartitionBeneficiaire") && payload.repartitionBeneficiaire.length > 0) {
@@ -4413,13 +4111,15 @@ export class DocumentsService {
       const totalMontant = payload.repartitionBeneficiaire.reduce((s, l) => s + l.montant, 0);
       rows.push(["Total", payload.totalPersonnesSoignees, totalMontant, "100%", "100%"]);
       tableau(["Type de Bénéficiaire", "Nombre", "Montant Remboursé", "% Dépenses", "% Population"], rows);
-      if (grafBenef) await inserer(grafBenef, 1, 300);
+      const buf = await genererGraphiqueCamembert(payload.repartitionBeneficiaire.map((l) => l.type), payload.repartitionBeneficiaire.map((l) => l.montant), "Répartition par type de bénéficiaire", false);
+      await inserer(buf, 1, 300);
     }
 
     if (inclut("consommationParRubrique") && payload.consommationParRubrique.length > 0) {
       titreSection(`Consommation par Rubrique · Total ${fmt(payload.totalConsomme)} FCFA`);
       tableau(["Rubrique", "Remboursé", "Nombre Actes", "% du total"], payload.consommationParRubrique.map((l) => [l.libelle, l.montant, l.nombre, `${l.pct.toFixed(2)}%`]));
-      if (grafRubrique) await inserer(grafRubrique, 1, 260);
+      const buf = await genererGraphiqueCamembert(payload.consommationParRubrique.map((l) => l.libelle), payload.consommationParRubrique.map((l) => l.montant), "Consommation par Rubrique", false);
+      await inserer(buf, 1, 260);
     }
 
     // Consommation par FAMILLE D'ACTES (2026-09) — voir demande
@@ -4431,13 +4131,15 @@ export class DocumentsService {
     if (inclut("consommationParFamilleActe") && payload.consommationParFamilleActe.length > 0) {
       titreSection(`Consommation par Famille d'Actes · Total ${fmt(payload.totalConsomme)} FCFA`);
       tableau(["Famille d'actes", "Remboursé", "Nombre Actes", "% du total"], payload.consommationParFamilleActe.map((l) => [l.libelle, l.montant, l.nombre, `${l.pct.toFixed(2)}%`]));
-      if (grafFamilleActe) await inserer(grafFamilleActe, 1, 260);
+      const buf = await genererGraphiqueCamembert(payload.consommationParFamilleActe.map((l) => l.libelle), payload.consommationParFamilleActe.map((l) => l.montant), "Consommation par Famille d'Actes", false);
+      await inserer(buf, 1, 260);
     }
 
     if (inclut("consommationParPrestataire") && payload.consommationParPrestataire.length > 0) {
       titreSection("Consommation par Prestataire");
       tableau(["Prestataire", "Remboursé", "% du total"], [...payload.consommationParPrestataire.map((l) => [l.libelle, l.montant, `${l.pct.toFixed(2)}%`]), ["Total", payload.consommationParPrestataire.reduce((s, l) => s + l.montant, 0), "100%"]]);
-      if (grafPrestataire) await inserer(grafPrestataire, 1, 320);
+      const buf = await genererGraphiqueCamembert(payload.consommationParPrestataire.map((l) => l.libelle), payload.consommationParPrestataire.map((l) => l.montant), "Consommation par prestataire", true);
+      await inserer(buf, 1, 320);
     }
 
     if (inclut("detailParPrestataire")) {
@@ -4450,7 +4152,8 @@ export class DocumentsService {
     if (inclut("top20Prestataires") && payload.top20Prestataires.length > 0) {
       titreSection("Top 20 des Prestataires");
       tableau(["N°", "Prestataire", "Remboursé", "% du total"], payload.top20Prestataires.map((l, i) => [i + 1, l.libelle, l.montant, `${l.pct.toFixed(2)}%`]));
-      if (grafTop20Presta) await inserer(grafTop20Presta, 900 / 480, width);
+      const buf = await genererGraphiqueBarres(payload.top20Prestataires.map((l) => l.libelle), payload.top20Prestataires.map((l) => l.montant), "Top 20 des prestataires", p.couleurPrimaire);
+      await inserer(buf, 900 / 480, width);
     }
 
     if (inclut("evolutionSP")) {
@@ -4522,7 +4225,13 @@ export class DocumentsService {
       blocSP(payload.spSansChargement, "sans Chargement");
       blocSP(payload.spAvecChargement, "avec Chargement");
 
-      if (grafSP) await inserer(grafSP, 900 / 480, width * 0.75);
+      const buf = await genererGraphiqueBarresEtiquetees(
+        ["S/P sans chargement", "S/P avec chargement"],
+        [payload.spSansChargement.ratioPct / 100, payload.spAvecChargement.ratioPct / 100],
+        "Evolution du S/P", [p.couleurPrimaire, p.couleurSecondaire],
+        (v) => v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      );
+      await inserer(buf, 900 / 480, width * 0.75);
     }
 
     if (inclut("analyse")) {
@@ -4928,7 +4637,7 @@ export class DocumentsService {
     });
     const buffer = await Packer.toBuffer(document);
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-    res.setHeader("Content-Disposition", `attachment; filename="Statistiques-${policePourNomFichier(payload.contrat)}.docx"`);
+    res.setHeader("Content-Disposition", `attachment; filename="Statistiques-${payload.contrat.id}.docx"`);
     res.send(buffer);
   }
 
@@ -4948,41 +4657,32 @@ export class DocumentsService {
     const width = right - left;
     let y = 40;
 
-    this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 22, 200, 58, () => {
-      doc.fontSize(12).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
-      return 0;
-    });
+    doc.fontSize(12).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, y);
     doc.fontSize(12).font("Helvetica-Bold").fillColor("#000").text(titre, left, y, { width, align: "right" });
     y += 16;
     doc.fontSize(8).font("Helvetica").fillColor("#555").text(sousTitre, left, y, { width, align: "right" });
     doc.fillColor("#000");
-    y = Math.max(y + 20, 82);
-
-    // Colonnes étirées sur toute la largeur ; chiffres à droite, texte à gauche (titre compris).
-    const echelle = width / cols.reduce((s, c) => s + c.w, 0);
-    const largeurs = cols.map((c) => c.w * echelle);
-    const aDroite = cols.map((_, i) => rows.length > 0 && rows.every((r) => r[i] === "" || r[i] === null || r[i] === undefined || typeof r[i] === "number"));
-    const cellule = (i: number) => ({ width: largeurs[i] - 6, align: (aDroite[i] ? "right" : "left") as "right" | "left" });
+    y += 20;
 
     const drawHeader = () => {
-      doc.fontSize(7).font("Helvetica-Bold");
-      const h = Math.max(16, ...cols.map((c, i) => doc.heightOfString(c.h, cellule(i)) + 8));
-      doc.rect(left, y, width, h).fill(p.couleurPrimaire);
+      doc.rect(left, y, width, 16).fill(p.couleurPrimaire);
       let cx = left;
-      doc.fillColor("#fff");
-      cols.forEach((c, i) => { doc.text(c.h, cx + 3, y + 4, cellule(i)); cx += largeurs[i]; });
+      doc.fillColor("#fff").fontSize(7).font("Helvetica-Bold");
+      for (const c of cols) { doc.text(c.h, cx + 3, y + 4, { width: c.w - 6 }); cx += c.w; }
       doc.fillColor("#000");
-      y += h;
+      y += 16;
     };
     drawHeader();
     doc.font("Helvetica").fontSize(7);
     for (const row of rows) {
-      const textes = cols.map((_, i) => (typeof row[i] === "number" ? fmt(row[i] as number) : String(row[i] ?? "")));
-      // Hauteur = cellule la plus haute : un texte long passe à la ligne sans chevaucher la suivante.
-      const rowH = Math.max(13, ...textes.map((v, i) => doc.heightOfString(v, cellule(i)) + 6));
+      const rowH = 13;
       if (y + rowH > doc.page.height - 60) { doc.addPage(); y = 40; drawHeader(); doc.font("Helvetica").fontSize(7); }
       let cx = left;
-      textes.forEach((v, i) => { doc.text(v, cx + 3, y + 3, cellule(i)); cx += largeurs[i]; });
+      for (let i = 0; i < cols.length; i++) {
+        const v = typeof row[i] === "number" ? fmt(row[i] as number) : String(row[i] ?? "");
+        doc.text(v, cx + 3, y + 3, { width: cols[i].w - 6, align: i === 0 ? "left" : "right" });
+        cx += cols[i].w;
+      }
       doc.moveTo(left, y + rowH).lineTo(right, y + rowH).strokeColor("#eee").stroke();
       y += rowH;
     }
@@ -5004,55 +4704,16 @@ export class DocumentsService {
     res.send(Buffer.from(buffer));
   }
 
-  async renderBordereauSinistres(
-    du: string | undefined, au: string | undefined, compagnieId: string | undefined, typeReglement: "maladie" | "comptable", format: "pdf" | "xlsx", res: Response,
-    filtres: FiltresBordereauSinistres = {},
-  ) {
-    // Les filtres (agence de saisie, ville du prestataire) ne font que
-    // sélectionner les lignes : le document reste EXACTEMENT le modèle
-    // d'origine — voir demande utilisateur : "le modèle de bordereau ne doit
-    // pas changer peu importe l'agence... le fichier doit rester inchangé
-    // sans ajouter d'autres champs."
-    const payload = await this.bordereaux.sinistres(du, au, compagnieId, typeReglement, filtres);
-    // "Date soins" et "Assuré" retirés (2026-10) — bordereau réduit pour la
-    // compagnie ; ces colonnes sont disponibles dans le "Détail du bordereau".
-    const rows = payload.groupes.flatMap((g) => g.lignes.map((l) => [l.dateReglement, l.numeroPolice, g.souscripteur, l.prestataire, l.numeroReglement, l.fraisReels, l.partGarant, l.tps, l.netAPayer]));
+  async renderBordereauSinistres(du: string | undefined, au: string | undefined, compagnieId: string | undefined, typeReglement: "maladie" | "comptable", format: "pdf" | "xlsx", res: Response) {
+    const payload = await this.bordereaux.sinistres(du, au, compagnieId, typeReglement);
+    const rows = payload.groupes.flatMap((g) => g.lignes.map((l) => [l.dateSoins, l.dateReglement, l.numeroPolice, g.souscripteur, l.assurePrincipal, l.prestataire, l.numeroReglement, l.fraisReels, l.partGarant, l.tps, l.netAPayer]));
     if (format === "xlsx") {
       return this.envoyerTableauXlsx(res, `Bordereau-Sinistres-${typeReglement}`,
-        ["Date règlement", "Police", "Souscripteur", "Prestataire", "N° règlement", "Frais réels", "Part garant", "TPS", "Net à payer"],
-        rows, ["", "", "", "", "TOTAL", payload.total.fraisReels, payload.total.partGarant, payload.total.tps, payload.total.netAPayer]);
+        ["Date soins", "Date règlement", "Police", "Souscripteur", "Assuré", "Prestataire", "N° règlement", "Frais réels", "Part garant", "TPS", "Net à payer"],
+        rows, ["", "", "", "", "", "", "TOTAL", payload.total.fraisReels, payload.total.partGarant, payload.total.tps, payload.total.netAPayer]);
     }
-    // Largeurs calées sur ~754 px (A4 paysage 842 - 2×40 marges = 762).
     return this.envoyerTableauPdf(res, `Bordereau-Sinistres-${typeReglement}`, "BORDEREAU SINISTRES", `${payload.compagnie ?? ""} · ${payload.typeReglement === "maladie" ? "Règlement Maladie" : "Règlement Comptable"} · ${du ?? "…"} au ${au ?? "…"}`,
-      [{ h: "Date règl.", w: 74 }, { h: "Police", w: 74 }, { h: "Souscripteur", w: 152 }, { h: "Prestataire", w: 152 }, { h: "N° règl.", w: 80 }, { h: "Frais réels", w: 70 }, { h: "Part garant", w: 70 }, { h: "TPS", w: 50 }, { h: "Net à payer", w: 70 }],
-      rows, "NET TOTAL À PAYER", `${fmt(payload.total.netAPayer)} FCFA`);
-  }
-
-  // Détail du bordereau (2026-10) — état complet par ligne de prestation avec
-  // assuré principal ET ayant droit. Formats : pdf | xlsx | csv.
-  async renderDetailBordereau(
-    du: string | undefined, au: string | undefined, compagnieId: string | undefined, format: "pdf" | "xlsx" | "csv", res: Response,
-    filtres: FiltresBordereauSinistres = {},
-  ) {
-    const payload = await this.bordereaux.detailSinistres(du, au, compagnieId, filtres);
-    const headers = ["Date soins", "Date règl.", "Police", "Souscripteur", "Assuré principal", "Ayant droit", "Type", "Prestataire", "Type prestation", "Frais réels", "Part garant", "TPS", "Net à payer"];
-    const rows = payload.lignes.map((l) => [l.dateSoins, l.dateReglement, l.numeroPolice, l.souscripteur, l.assurePrincipal, l.ayantDroit ?? l.assurePrincipal, l.typeAyantDroit ?? "AS", l.prestataire, l.typePrestation, l.fraisReels, l.partGarant, l.tps, l.netAPayer]);
-    const sousTitre = `${payload.compagnie ?? "Toutes compagnies"} · ${du ?? "…"} au ${au ?? "…"} · ${payload.lignes.length} ligne(s)`;
-
-    if (format === "csv") {
-      res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader("Content-Disposition", `attachment; filename="Detail-Bordereau.csv"`);
-      const lignesCsv = [headers, ...rows.map((r) => r), ["", "", "", "", "", "", "", "", "TOTAL", payload.total.fraisReels, payload.total.partGarant, payload.total.tps, payload.total.netAPayer]];
-      res.end("﻿" + lignesCsv.map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";")).join("\r\n"));
-      return;
-    }
-    if (format === "xlsx") {
-      return this.envoyerTableauXlsx(res, "Detail-Bordereau", headers, rows,
-        ["", "", "", "", "", "", "", "", "TOTAL", payload.total.fraisReels, payload.total.partGarant, payload.total.tps, payload.total.netAPayer]);
-    }
-    // PDF — 13 colonnes, orientation paysage.
-    return this.envoyerTableauPdf(res, "Detail-Bordereau", "DÉTAIL DU BORDEREAU", sousTitre,
-      [{ h: "Date soins", w: 58 }, { h: "Date règl.", w: 58 }, { h: "Police", w: 62 }, { h: "Souscripteur", w: 95 }, { h: "Assuré principal", w: 95 }, { h: "Ayant droit", w: 95 }, { h: "Type", w: 28 }, { h: "Prestataire", w: 95 }, { h: "Type prestation", w: 70 }, { h: "Frais réels", w: 55 }, { h: "Part garant", w: 55 }, { h: "TPS", w: 38 }, { h: "Net à payer", w: 58 }],
+      [{ h: "Date soins", w: 65 }, { h: "Date règl.", w: 65 }, { h: "Police", w: 70 }, { h: "Souscripteur", w: 110 }, { h: "Assuré", w: 100 }, { h: "Prestataire", w: 110 }, { h: "N° règl.", w: 70 }, { h: "Frais réels", w: 70 }, { h: "Part garant", w: 70 }, { h: "TPS", w: 55 }, { h: "Net à payer", w: 75 }],
       rows, "NET TOTAL À PAYER", `${fmt(payload.total.netAPayer)} FCFA`);
   }
 
@@ -5091,323 +4752,92 @@ export class DocumentsService {
   // en une seule proposition (voir schema.prisma Prospect.logo : "logo du
   // client pour le document de cotation"). Logo du prospect lié en
   // priorité, sinon celui de la première cotation.
-  async renderCotationOffre(cotationIds: string[], res: Response, userId?: string) {
+  async renderCotationOffre(cotationIds: string[], res: Response) {
     if (cotationIds.length === 0) throw new BadRequestException("Aucune cotation sélectionnée.");
-    const cotations = await this.prisma.cotation.findMany({
-      where: { id: { in: cotationIds } },
-      include: { compagnie: true, garanties: { orderBy: { ordre: "asc" } }, appelOffres: { include: { prospect: true, documents: { select: { id: true, createdAt: true } } } } },
-    });
-    if (!cotations.length) throw new NotFoundException("Cotations introuvables.");
-    // Toutes du même appel d'offres → ses paramètres et le logo du prospect ;
-    // sinon paramètres par défaut et logo saisi sur la cotation.
-    const aos = [...new Set(cotations.map((c) => c.appelOffresId))];
-    const ao = aos.length === 1 && aos[0] ? cotations[0].appelOffres : null;
-    const params = ao ? await this.appelOffres.parametresOffre(ao.id, userId) : await this.appelOffres.parametresPourClient(cotations[0].clientNom, userId);
-    const logoCotation = cotations.find((c) => c.logo)?.logo;
-    const clientNom = ao?.clientNom ?? cotations[0].clientNom;
-    const offre = await this.genererOffreSante(cotations, {
-      clientNom,
-      logoClient: ao?.prospect?.logo ? ["logos-prospects", ao.prospect.logo] : logoCotation ? ["logos-cotations", logoCotation] : null,
-      params: { ...params, cotationIdsExclues: [] },
-      dateDoc: ao ? new Map(ao.documents.map((d) => [d.id, d.createdAt.getTime()])) : undefined,
-    });
-    const archive = await this.archiverOffre(offre, {
-      appelOffresId: ao?.id ?? null, clientNom, origine: cotations.length > 1 ? "Document combiné" : "Cotation", cotationIds: cotations.map((c) => c.id), userId,
-    });
-    this.envoyerPdfOffre(res, offre.pdf, clientNom, archive.id);
+    const cotations = await Promise.all(cotationIds.map((id) => this.cotation.findOne(id)));
+    const p = await this.parametresEntreprise.findOne();
+    const doc = new PDFDocument({ size: "A4", margin: 40 });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="Offre-${cotations[0].id}.pdf"`);
+    doc.pipe(res);
+
+    const left = doc.page.margins.left;
+    const right = doc.page.width - doc.page.margins.right;
+    const width = right - left;
+
+    for (let i = 0; i < cotations.length; i++) {
+      if (i > 0) doc.addPage();
+      const c = cotations[i];
+      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+      doc.fontSize(12).font("Helvetica-Bold").fillColor("#000").text(`OFFRE DE COTATION — ${c.branche.toUpperCase()}`, left, 60, { width, align: "right" });
+      doc.fontSize(9).font("Helvetica").text(`Client : ${c.clientNom}`, left, 78, { width, align: "right" });
+
+      let y = 110;
+      let yy = champ(doc, left, y, "Population :", String(c.population), 100, 200, { boldLabel: true });
+      yy = champ(doc, left, yy, "Territorialité :", c.territorialite, 100, 300, { boldLabel: true });
+      if (c.tauxCouvertureAmbulatoire) yy = champ(doc, left, yy, "Taux Ambulatoire :", c.tauxCouvertureAmbulatoire, 130, width - 130, { boldLabel: true });
+      if (c.tauxCouvertureHospitalisation) yy = champ(doc, left, yy, "Taux Hospitalisation :", c.tauxCouvertureHospitalisation, 130, width - 130, { boldLabel: true });
+      if (c.exclusions) yy = champ(doc, left, yy, "Exclusions :", c.exclusions, 100, width - 100, { boldLabel: true });
+      if (c.clauseAjustement) yy = champ(doc, left, yy, "Ajustement :", c.clauseAjustement, 100, width - 100, { boldLabel: true });
+      y = yy + 20;
+
+      doc.rect(left, y, width, 80).stroke();
+      const recap: [string, string][] = [
+        ["Prime nette", `${fmt(Number(c.primeNette))} FCFA`], ["Cartes", `${fmt(Number(c.montantCartes))} FCFA`],
+        ["Accessoires", `${fmt(Number(c.montantAccessoires))} FCFA`], ["Taxe", `${fmt(Number(c.montantTaxe))} FCFA`],
+        ["PRIME TTC", `${fmt(Number(c.primeTTC))} FCFA`],
+      ];
+      let ry = y + 8;
+      for (const [label, valeur] of recap) { champ(doc, left + 10, ry, label, valeur, 200, width - 220, { boldLabel: label === "PRIME TTC", boldValeur: true, alignValeur: "right" }); ry += 14; }
+      y += 90;
+
+      doc.fontSize(8).font("Helvetica").fillColor("#555").text(`Cotation établie le ${c.dateCreation}${c.conditionsFermete ? ` — ${c.conditionsFermete}` : ""}`, left, y, { width });
+      doc.fillColor("#000");
+    }
+    doc.end();
   }
 
-  // Réseau de soins — annuaire des prestataires conventionnés, trié par province puis ville.
+  // Réseau de soins — annuaire des prestataires conventionnés (aucun
+  // argument : c'est un document global, pas scopé à un contrat).
   async renderReseauSoins(res: Response) {
+    const prestataires = await this.prestataires.findAllReseau({});
     const p = await this.parametresEntreprise.findOne();
-    const logoImage = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
-    const pdf = await this.reseauSoinsPdf(p, logoImage);
+    const doc = new PDFDocument({ size: "A4", margin: 40 });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", 'inline; filename="Reseau-de-Soins.pdf"');
-    res.end(pdf);
-  }
+    doc.pipe(res);
 
-  // Carte d'assurance SPECIMEN (recto/verso) de la société, au nom du
-  // prospect et aux taux de l'offre — illustre la page « LA CARTE SANTE »
-  // de l'offre. Données fictives : jamais la carte d'un vrai assuré.
-  private async carteSpecimen(p: ParametresEntreprise, client: string, compagnie: string, tauxAmb: string | null, tauxHosp: string | null): Promise<Buffer> {
-    const doc = new PDFDocument({ size: [CARD_WIDTH, CARD_HEIGHT], margin: 0, autoFirstPage: false });
-    const fin = pdfVersBuffer(doc);
-    await this.ajouterCarteRectoVerso(doc, {
-      nom: "SPECIMEN", prenom: "Assuré", matricule: `${p.prefixeMatricule ?? "MAT"}-000000`, typeAssure: "AS", dateNaissance: "01/01/1985",
-      telephone: p.telephone, photo: null,
-      contrat: { id: "SPECIMEN", dateDebut: "", dateFin: "", client: { nom: client }, compagnie: { nom: compagnie }, tauxCouvertureAmbulatoire: tauxAmb, tauxCouvertureHospitalisation: tauxHosp },
-    }, p);
+    const left = doc.page.margins.left;
+    const right = doc.page.width - doc.page.margins.right;
+    const width = right - left;
+    let y = 40;
+
+    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, y);
+    doc.fontSize(12).font("Helvetica-Bold").fillColor("#000").text("RÉSEAU DE SOINS CONVENTIONNÉ", left, y, { width, align: "right" });
+    doc.fillColor("#000");
+    y += 30;
+
+    const cols = [{ h: "Prestataire", w: width * 0.3 }, { h: "Type", w: width * 0.18 }, { h: "Ville", w: width * 0.15 }, { h: "Adresse", w: width * 0.22 }, { h: "Téléphone", w: width * 0.15 }];
+    const drawHeader = () => {
+      doc.rect(left, y, width, 16).fill(p.couleurPrimaire);
+      let cx = left;
+      doc.fillColor("#fff").fontSize(7.5).font("Helvetica-Bold");
+      for (const c of cols) { doc.text(c.h, cx + 3, y + 4, { width: c.w - 6 }); cx += c.w; }
+      doc.fillColor("#000");
+      y += 16;
+    };
+    drawHeader();
+    doc.font("Helvetica").fontSize(7.5);
+    for (const pr of prestataires) {
+      const rowH = 14;
+      if (y + rowH > doc.page.height - 50) { doc.addPage(); y = 40; drawHeader(); doc.font("Helvetica").fontSize(7.5); }
+      let cx = left;
+      const vals = [pr.nom, pr.type ?? "—", pr.ville ?? "—", pr.adresse ?? "—", pr.telephone ?? "—"];
+      for (let i = 0; i < cols.length; i++) { doc.text(vals[i], cx + 3, y + 3, { width: cols[i].w - 6 }); cx += cols[i].w; }
+      doc.moveTo(left, y + rowH).lineTo(right, y + rowH).strokeColor("#eee").stroke();
+      y += rowH;
+    }
     doc.end();
-    return fin;
-  }
-
-  // Annuaire du réseau (dédoublonné, groupé par province puis ville) —
-  // partagé par le PDF Réseau de Soins et l'annexe de l'offre santé.
-  private async construireAnnuaire(): Promise<ProvinceAnnuaire[]> {
-    const tous = await this.prestataires.findAllReseau({});
-
-    // ── Déduplication ──────────────────────────────────────────────────────
-    // Deux prestataires sont considérés identiques si :
-    //   1. Même numéro de téléphone (8 derniers chiffres) non vide
-    //   2. OU noms quasi-identiques (correspondance par préfixe de tous les tokens)
-    const normNom = (s: string) =>
-      s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
-    const normTel = (s: string | null) => (s || "").replace(/\D/g, "").slice(-8);
-    const tokensMatch = (a: string, b: string): boolean => {
-      const ta = normNom(a).split(" ").filter(t => t.length >= 3);
-      const tb = normNom(b).split(" ").filter(t => t.length >= 3);
-      if (ta.length === 0 || tb.length === 0) return false;
-      const shorter = ta.length <= tb.length ? ta : tb;
-      const longer  = [...(ta.length <= tb.length ? tb : ta)];
-      return shorter.every(tok => {
-        const idx = longer.findIndex(m => m.startsWith(tok) || tok.startsWith(m));
-        if (idx !== -1) { longer.splice(idx, 1); return true; }
-        return false;
-      });
-    };
-    const score = (pr: typeof tous[0]) =>
-      [pr.adresse, pr.telephone, pr.specialite, pr.secteur].filter(Boolean).length;
-
-    const dedupliques = (() => {
-      const gardes: typeof tous = [];
-      for (const pr of tous) {
-        if (!pr.nom || /^[0-9A-F]{8,}$/i.test(pr.nom)) continue;
-        if (pr.pays && !["Gabon","GABON",""].includes(pr.pays.trim())) continue; // exclure hors-Gabon
-        const tel = normTel(pr.telephone);
-        const dup = gardes.find(g => {
-          if (tel.length >= 6 && tel === normTel(g.telephone)) return true;
-          return tokensMatch(pr.nom, g.nom);
-        });
-        if (!dup) { gardes.push(pr); }
-        else if (score(pr) > score(dup)) {
-          const idx = gardes.indexOf(dup);
-          // Garder le nom le plus court/propre (moins de mots parasites)
-          gardes[idx] = { ...pr, nom: normNom(dup.nom).length <= normNom(pr.nom).length ? dup.nom : pr.nom };
-        }
-      }
-      return gardes;
-    })();
-
-    // ── Ville effective : adresse peut affiner la ville déclarée ──────────
-    // Ex. : ville="Libreville" mais adresse commence par "Owendo"
-    const VILLES_CONNUES: [string, string][] = [
-      ["akanda","Akanda"],["angondje","Akanda"],["angondjo","Akanda"],
-      ["owendo","Owendo"],["ntoum","Ntoum"],["kango","Kango"],
-      ["nkan","Nkan"],["cocobeach","Cocobeach"],
-      ["port gentil","Port-Gentil"],["portgentil","Port-Gentil"],
-      ["gamba","Gamba"],["omboue","Omboué"],
-      ["franceville","Franceville"],["moanda","Moanda"],["mounana","Mounana"],
-      ["okondja","Okondja"],["bakoumba","Bakoumba"],["akieni","Akiéni"],
-      ["mouila","Mouila"],["fougamou","Fougamou"],["ndende","Ndendé"],["mbigou","Mbigou"],
-      ["oyem","Oyem"],["afenan","Oyem"],
-      ["bitam","Bitam"],["mitzic","Mitzic"],["minvoul","Minvoul"],["medouneu","Médouneu"],
-      ["tchibanga","Tchibanga"],["mayumba","Mayumba"],["tsogni","Tsogni"],
-      ["koulamoutou","Koulamoutou"],["lastoursville","Lastoursville"],["lastourville","Lastoursville"],
-      ["lambarene","Lambaréné"],["ndjole","Ndjolé"],
-      ["makokou","Makokou"],["booue","Booué"],["mekambo","Mékambo"],
-      ["libreville","Libreville"],
-    ];
-    const villeEffective = (pr: typeof tous[0]): string => {
-      const norm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/-/g, " ").trim();
-      const adr = norm(pr.adresse || "");
-      for (const [k, display] of VILLES_CONNUES) {
-        if (adr.startsWith(k + ",") || adr.startsWith(k + " ") || adr === k) return display;
-      }
-      // Normaliser aussi le champ ville (ex. "Afenan II" → "Oyem")
-      const vil = norm(pr.ville || "");
-      for (const [k, display] of VILLES_CONNUES) {
-        if (vil.startsWith(k + " ") || vil === k) return display;
-      }
-      return pr.ville || "Libreville";
-    };
-
-    // Grouper par province → ville (en utilisant ville effective)
-    const groupes: Record<string, Record<string, typeof tous>> = {};
-    for (const pr of dedupliques) {
-      const villeReel = villeEffective(pr);
-      const prov = pr.province || provinceDeVille(villeReel) || provinceDeVille(pr.ville) || "Autres";
-      if (!groupes[prov]) groupes[prov] = {};
-      if (!groupes[prov][villeReel]) groupes[prov][villeReel] = [];
-      groupes[prov][villeReel].push(pr);
-    }
-    const provinces: ProvinceAnnuaire[] = [...ORDRE_PROVINCES, "Autres"]
-      .filter((prov) => groupes[prov])
-      .map((prov) => ({
-        nom: prov,
-        villes: Object.keys(groupes[prov])
-          .sort((a, b) => prioriteVilleDansProvince(a, prov) - prioriteVilleDansProvince(b, prov) || a.localeCompare(b, "fr"))
-          .map((v) => ({ nom: v, prestataires: groupes[prov][v] })),
-      }));
-
-    return provinces;
-  }
-
-  // Offre santé (2026-10) — document complet remis au client, copie du
-  // modèle Word LA RUCHE (voir offre-sante.pdf.ts) : couverture,
-  // récapitulatif, puis par compagnie intercalaire / proposition / tableau
-  // de garanties / décompte, comparatif, pages de présentation et annexe
-  // réseau de soins (données réelles du réseau, jamais une liste figée).
-  async renderOffreSante(appelOffresId: string, userId: string | undefined, res: Response) {
-    const { offre, ao, ids } = await this.offreDeAppelOffres(appelOffresId, userId);
-    const archive = await this.archiverOffre(offre, { appelOffresId, clientNom: ao.clientNom, origine: "Appel d'offres", cotationIds: ids, userId });
-    this.envoyerPdfOffre(res, offre.pdf, ao.clientNom, archive.id);
-  }
-
-  // Première offre montée par ARIANA (fin de la cotation par import) :
-  // générée et archivée sans être ouverte.
-  async archiverOffreAriana(appelOffresId: string, userId?: string) {
-    const { offre, ao, ids } = await this.offreDeAppelOffres(appelOffresId, userId);
-    return this.archiverOffre(offre, { appelOffresId, clientNom: ao.clientNom, origine: "ARIANA", cotationIds: ids, userId });
-  }
-
-  // Envoi de l'offre par email (2026-11) — génère le PDF, l'attache à l'email
-  // et l'envoie à l'adresse fournie via le même SMTP que CommunicationsService.
-  async envoyerOffreParEmail(appelOffresId: string, to: string, userId?: string): Promise<{ ok: boolean }> {
-    const { offre, ao } = await this.offreDeAppelOffres(appelOffresId, userId);
-    const nomFichier = `Offre-sante-${ao.clientNom.replace(/[^a-zA-Z0-9]/g, "-").replace(/-+/g, "-")}.pdf`;
-    const sujet = `Proposition santé MEDASSUR+ — ${ao.clientNom}`;
-    const corps = `Bonjour,\n\nVeuillez trouver ci-joint notre proposition d'assurance santé pour ${ao.clientNom}.\n\nPour toute question, n'hésitez pas à nous contacter.\n\nCordialement,\nL'équipe MEDASSUR+`;
-    const ok = await this.email.envoyer(to, sujet, corps, "MEDASSUR+", [{ filename: nomFichier, content: offre.pdf, contentType: "application/pdf" }]);
-    return { ok };
-  }
-
-  private async offreDeAppelOffres(appelOffresId: string, userId?: string) {
-    const ao = await this.prisma.appelOffres.findUnique({
-      where: { id: appelOffresId },
-      include: { prospect: true, documents: { select: { id: true, createdAt: true } }, cotations: { include: { compagnie: true, garanties: { orderBy: { ordre: "asc" } } } } },
-    });
-    if (!ao) throw new NotFoundException(`Appel d'offres ${appelOffresId} introuvable`);
-    const params = await this.appelOffres.parametresOffre(appelOffresId, userId);
-    const exclues = new Set(params.cotationIdsExclues ?? []);
-    const dateDoc = new Map(ao.documents.map((d) => [d.id, d.createdAt.getTime()]));
-    const retenues = ao.cotations.filter((c) => !exclues.has(c.id));
-    const offre = await this.genererOffreSante(retenues, {
-      clientNom: ao.clientNom, logoClient: ao.prospect?.logo ? ["logos-prospects", ao.prospect.logo] : null, params, dateDoc,
-    });
-    return { offre, ao, ids: retenues.map((c) => c.id) };
-  }
-
-  // Offre santé au format LA RUCHE — un seul générateur pour l'offre d'un
-  // appel d'offres, le document combiné et le document d'une cotation, que
-  // les cotations viennent d'ARIANA ou d'une saisie manuelle.
-  private async genererOffreSante(
-    cotations: (Cotation & { compagnie: Compagnie | null; garanties: CotationGarantieLigne[] })[],
-    ctx: { clientNom: string; logoClient: [string, string] | null; params: ParametresOffre; dateDoc?: Map<string, number> },
-  ): Promise<{ pdf: Buffer; pages: number }> {
-    const params = ctx.params;
-    const retenues = cotations;
-    if (!retenues.length) throw new BadRequestException("Aucune cotation à présenter dans l'offre.");
-    const sansCompagnie = retenues.filter((c) => !c.compagnie);
-    if (sansCompagnie.length) throw new BadRequestException(`Choisissez la compagnie des cotations ${sansCompagnie.map((c) => c.id).join(", ")} avant de générer l'offre.`);
-    const contenuDe = (c: typeof retenues[number]) => (c.contenuOffre as unknown as ContenuOffre | null) ?? contenuDepuisCotation(c);
-    // Durée de chaque étape, journalisée : on mesure avant d'optimiser.
-    const t0 = Date.now(), etapes: string[] = [];
-    let tPrec = t0;
-    const etape = (nom: string) => { const t = Date.now(); etapes.push(`${nom} ${t - tPrec} ms`); tPrec = t; };
-
-    const p = await this.parametresEntreprise.findOne();
-    const logoSociete = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
-    const [societeLogo, clientLogo] = await Promise.all([
-      versPng(logoSociete),
-      ctx.logoClient ? this.chargerImage(ctx.logoClient[0], ctx.logoClient[1], path.join(UPLOADS_ROOT, ctx.logoClient[0])).then(versPng) : null,
-    ]);
-
-    // Compagnies dans l'ordre choisi, sinon dans l'ordre d'import des documents.
-    const rang = (c: typeof retenues[number]) => [ctx.dateDoc?.get(c.documentSourceId ?? "") ?? 0, contenuDe(c).ordre ?? 0];
-    retenues.sort((a, b) => { const [da, oa] = rang(a), [db, ob] = rang(b); return da - db || oa - ob; });
-    const ordre = params.ordreCompagnies ?? [];
-    // Cotation sans compagnie : regroupée sous « COMPAGNIE NON RENSEIGNEE » plutôt qu'un échec.
-    const ids = [...new Set(retenues.map((c) => c.compagnieId))]
-      .sort((a, b) => (a && ordre.includes(a) ? ordre.indexOf(a) : 999) - (b && ordre.includes(b) ? ordre.indexOf(b) : 999));
-    const compagnies: CompagnieOffre[] = [];
-    for (const id of ids) {
-      const cots = retenues.filter((c) => c.compagnieId === id);
-      const comp = cots[0].compagnie ?? { nom: "COMPAGNIE NON RENSEIGNEE", logo: null };
-      const modele = logoModeleCompagnie(comp.nom);
-      const logoBase = modele ? null : await this.chargerImage("logos", comp.logo, UPLOADS_LOGOS_COMPAGNIES_DIR).then(versPng);
-      compagnies.push({
-        // Le modèle imprime « OGAR », « NSIA »… et non « OGAR ASSURANCES ».
-        nom: comp.nom.replace(/\s+ASSURANCES?$/i, ""),
-        logo: modele?.logo ?? logoBase, logoPetit: modele?.petit ?? logoBase, tailleLogo: modele?.taille ?? null,
-        cotations: cots.map((c) => ({
-          branche: c.branche, contenu: contenuDe(c),
-          primeNette: Number(c.primeNette), cartes: Number(c.montantCartes), accessoires: Number(c.montantAccessoires),
-          taxe: Number(c.montantTaxe), ttc: Number(c.primeTTC), tauxTaxe: 8,
-        })),
-      });
-    }
-
-    const donnees = { clientNom: ctx.clientNom, clientLogo, societeLogo, params, compagnies };
-    const corps = new PDFDocument({ size: [596.52, 842.52], margin: 0, bufferPages: true });
-    const pCorps = pdfVersBuffer(corps);
-    etape("logos");
-    const dernier = genererCorpsOffre(corps, donnees);
-    corps.end();
-    etape("corps");
-    // Annexe = le PDF officiel « Réseau de Soins » de MEDASSUR+ (même moteur
-    // et mêmes données en direct que le bouton Réseau de soins).
-    let annexe: Buffer | null = null;
-    if (params.annexeReseau) {
-      annexe = await this.reseauSoinsPdf(p, logoSociete);
-      etape("annexe réseau");
-    }
-    let presentation: { carte: Buffer | null; portails: Buffer } | null = null;
-    if (params.pagesPresentation) {
-      const maladie = retenues.find((c) => c.branche === "Maladie") ?? retenues[0];
-      const docPortails = new PDFDocument({ size: [596.52, 842.52], margin: 0, autoFirstPage: false });
-      const pPortails = pdfVersBuffer(docPortails);
-      genererPagesPortails(docPortails, p.nom.toUpperCase(), dernier + 3);
-      docPortails.end();
-      presentation = {
-        carte: await this.carteSpecimen(p, ctx.clientNom, maladie.compagnie?.nom ?? "", maladie.tauxCouvertureAmbulatoire, maladie.tauxCouvertureHospitalisation).catch(() => null),
-        portails: await pPortails,
-      };
-      etape("présentation");
-    }
-    const offre = await assemblerOffre(await pCorps, dernier, annexe, presentation, clientLogo);
-    etape("assemblage");
-    Logger.log(`Offre ${ctx.clientNom} : ${Date.now() - t0} ms (${etapes.join(", ")}), ${offre.pages} pages, ${Math.round(offre.pdf.length / 1024)} Ko`, "OffreSante");
-    return offre;
-  }
-
-  // Chaque offre générée est archivée telle quelle (OffreGeneree) avant
-  // d'être envoyée : on rouvre et retélécharge toujours le PDF remis.
-  private async archiverOffre({ pdf, pages }: { pdf: Buffer; pages: number }, meta: { appelOffresId: string | null; clientNom: string; origine: string; cotationIds: string[]; userId?: string }) {
-    const fichier = `${randomUUID()}.pdf`;
-    if (this.storage.actif) await this.storage.upload("offres-sante", fichier, pdf, "application/pdf");
-    else {
-      await fs.promises.mkdir(UPLOADS_OFFRES_SANTE_DIR, { recursive: true });
-      await fs.promises.writeFile(path.join(UPLOADS_OFFRES_SANTE_DIR, fichier), pdf);
-    }
-    const user = meta.userId ? await this.prisma.user.findUnique({ where: { id: meta.userId }, select: { nom: true } }) : null;
-    return this.prisma.offreGeneree.create({
-      data: {
-        appelOffresId: meta.appelOffresId, clientNom: meta.clientNom, origine: meta.origine, fichier, tailleOctets: pdf.length,
-        nbPages: pages, cotationIds: meta.cotationIds, creeParId: meta.userId ?? null, creeParNom: user?.nom ?? null,
-      },
-    });
-  }
-
-  private envoyerPdfOffre(res: Response, pdf: Buffer, clientNom: string, offreId?: string) {
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="OFFRE SANTE ${clientNom.replace(/[^\w .-]+/g, "")}.pdf"`);
-    if (offreId) res.setHeader("X-Offre-Generee-Id", offreId);
-    res.end(pdf);
-  }
-
-  listerOffresGenerees(appelOffresId?: string) {
-    return this.prisma.offreGeneree.findMany({ where: appelOffresId ? { appelOffresId } : undefined, orderBy: { createdAt: "desc" }, take: 300 });
-  }
-
-  async renderOffreGeneree(id: string, res: Response) {
-    const o = await this.prisma.offreGeneree.findUnique({ where: { id } });
-    if (!o) throw new NotFoundException("Offre introuvable dans l'historique.");
-    const pdf = this.storage.actif
-      ? await this.storage.download("offres-sante", o.fichier)
-      : await fs.promises.readFile(path.join(UPLOADS_OFFRES_SANTE_DIR, o.fichier)).catch(() => null);
-    if (!pdf) throw new NotFoundException("Le fichier de cette offre est introuvable sur le serveur.");
-    this.envoyerPdfOffre(res, pdf, `${o.clientNom} ${o.createdAt.toLocaleDateString("fr-FR").replace(/\//g, "-")}`);
   }
 
   // Fiche prestataire — synthèse imprimable d'un établissement du réseau.
@@ -5421,10 +4851,7 @@ export class DocumentsService {
     const left = doc.page.margins.left;
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
-    this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 28, 200, 62, () => {
-      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
-      return 0;
-    });
+    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
     doc.fontSize(13).font("Helvetica-Bold").fillColor("#000").text(pr.nom, left, 65, { width, align: "right" });
     let y = 100;
     const champs: [string, string][] = [
@@ -5450,11 +4877,9 @@ export class DocumentsService {
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
 
-    this.dessinerIdentiteEntete(doc, logoImage, left, 14, 200, 56, () => {
-      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 50);
-      return 0;
-    });
-    doc.fontSize(8).font("Helvetica").fillColor("#333").text(`${p.boitePostale} ${p.ville} - ${p.pays}   Tél.: ${p.telephone}`, left, 74);
+    this.dessinerLogoEntete(doc, logoImage, left, 15, 30);
+    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 50);
+    doc.fontSize(8).font("Helvetica").fillColor("#333").text(`${p.boitePostale} ${p.ville} - ${p.pays}   Tél.: ${p.telephone}`, left, 66);
     doc.fillColor("#000");
     doc.fontSize(9).text(`Réf. ${c.reference}`, right - 200, 50, { width: 200, align: "right" });
     doc.text(c.dateCreation, right - 200, 62, { width: 200, align: "right" });
@@ -5559,10 +4984,8 @@ export class DocumentsService {
     // destinataire en position FIXE (345, 118), indépendante de la hauteur
     // de l'en-tête ; corps de lettre démarrant à une position FIXE (y=230),
     // indépendante de la hauteur du bloc destinataire.
-    this.dessinerIdentiteEntete(doc, logoImage, left, 4, 200, 46, () => {
-      doc.fontSize(11).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 39);
-      return 0;
-    });
+    this.dessinerLogoEntete(doc, logoImage, left, 8);
+    doc.fontSize(11).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 39);
     doc.fillColor("#000").fontSize(11).font("Helvetica").text(`${p.ville}, le ${lettre.dateEmission}`, left, 39, { width, align: "right" });
     doc.fillColor("#333").fontSize(10).font("Helvetica");
     doc.text("Adresse :", left, 53);
@@ -5847,7 +5270,7 @@ export class DocumentsService {
       doc.rect(left, y, width, 22).fill("#1f2937");
       doc.font("Helvetica-Bold").fontSize(7.5).fillColor("#fff");
       let cx = left;
-      cols.forEach((c, i) => { doc.text(c.h, cx + 4, y + 4, { width: c.w - 8, align: i < 3 ? "left" : "right" }); cx += c.w; });
+      for (const c of cols) { doc.text(c.h, cx + 4, y + 4, { width: c.w - 8, align: cx === left ? "left" : "right" }); cx += c.w; }
       doc.fillColor("#000");
       y += 22;
     };
@@ -5856,23 +5279,20 @@ export class DocumentsService {
     let totalEngage = 0, totalBase = 0, totalAssure = 0, totalNet = 0;
     doc.font("Helvetica").fontSize(7.5);
     for (const l of lignes) {
+      if (y + 16 > doc.page.height - 50) { doc.addPage(); this.dessinerPiedDePage(doc, p); y = 40; dessinerEntete(); doc.font("Helvetica").fontSize(7.5); }
       const engage = Number(l.montant) - Number(l.montantRejete ?? 0);
       const base = l.baseRemboursement !== null ? Number(l.baseRemboursement) : 0;
       const partAssure = engage - base;
       const tps = l.montantTps !== null ? Number(l.montantTps) : 0;
       const net = base - tps;
       totalEngage += engage; totalBase += base; totalAssure += partAssure; totalNet += net;
-      const valeurs = [l.facture ? referenceLisible(l.facture.referenceFacture) : "—", `${l.assure.nom} ${l.assure.prenom ?? ""}`.trim(), l.date, fmt(engage), fmt(base), fmt(partAssure), fmt(net)];
-      // Hauteur selon la cellule la plus haute (référence ou nom renvoyés à la ligne).
-      const rowH = Math.max(16, ...valeurs.map((v, i) => doc.heightOfString(v, { width: cols[i].w - 8 }) + 7));
-      if (y + rowH > doc.page.height - 50) { doc.addPage(); this.dessinerPiedDePage(doc, p); y = 40; dessinerEntete(); doc.font("Helvetica").fontSize(7.5); }
+      const valeurs = [l.facture?.referenceFacture ?? "—", `${l.assure.nom} ${l.assure.prenom ?? ""}`.trim(), l.date, fmt(engage), fmt(base), fmt(partAssure), fmt(net)];
       let cx = left;
       for (let i = 0; i < valeurs.length; i++) {
         doc.text(valeurs[i], cx + 4, y + 4, { width: cols[i].w - 8, align: i < 3 ? "left" : "right" });
         cx += cols[i].w;
       }
-      y += rowH;
-      doc.moveTo(left, y).lineTo(right, y).strokeColor("#eee").lineWidth(0.5).stroke();
+      y += 16;
     }
     doc.moveTo(left, y).lineTo(right, y).strokeColor("#000").lineWidth(0.7).stroke();
     y += 4;
@@ -5970,7 +5390,6 @@ export class DocumentsService {
     // page portrait 595,32 × 841,92 pt — identique à ce document).
     const doc = new PDFDocument({ size: "A4", margin: 21 });
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(EN_TETE_SIGNATURE, "integree"); // QR dessiné par le document lui-même
     res.setHeader("Content-Disposition", `inline; filename="Reglement-${b.numero}.pdf"`);
     doc.pipe(res);
 
@@ -5979,15 +5398,12 @@ export class DocumentsService {
       const right = doc.page.width - doc.page.margins.right;
       const width = right - left;
 
-      // Logo en grand à la place du nom écrit (voir dessinerIdentiteEntete).
-      const nomW = this.dessinerIdentiteEntete(doc, logoImage, left, 6, 200, 48, () => {
-        doc.fillColor("#000").fontSize(13).font("Helvetica");
-        doc.text(p.nom, left, 24);
-        return doc.widthOfString(p.nom);
-      });
-      doc.fillColor("#000").font("Helvetica").fontSize(8).text("Service Maladie", left, 58);
-      doc.text(`Tél.: ${p.telephone}`, left, 69);
-      doc.fontSize(13);
+      this.dessinerLogoEntete(doc, logoImage, left, 8);
+      doc.fillColor("#000").fontSize(13).font("Helvetica");
+      const nomW = doc.widthOfString(p.nom);
+      doc.text(p.nom, left, 24);
+      doc.fontSize(8).text("Service Maladie", left, 49);
+      doc.text(`Tél.: ${p.telephone}`, left, 60);
       // Titre centré sur la pleine largeur (comme le modèle) avec un filet
       // de sécurité si le nom de la société est particulièrement long.
       // SANS accent sur le E ("REGLEMENT", pas "RÈGLEMENT") — reproduction
@@ -6087,18 +5503,14 @@ export class DocumentsService {
         // à 0/vide quand la TPS ne s'applique pas réellement.
         const pctTps = TAUX_TPS.toFixed(2).replace(".", ",");
         const premiere = grp[0];
-        const nomComplet = `${premiere.assure.nom} ${premiere.assure.prenom ?? ""}`.trim();
-        // Hauteur selon le nom le plus long (retour à la ligne sans chevaucher la ligne suivante).
-        const rowH = Math.max(18,
-          doc.heightOfString(nomComplet, { width: cols[0].w * 0.62 - 6 }) + 8,
-          doc.heightOfString(premiere.assure.nom.split(" ")[0], { width: cols[0].w * 0.36 - 6 }) + 8);
+        const rowH = 18;
         if (y + rowH > doc.page.height - 220) { doc.addPage(); y = 40; }
         cx = left;
         // "Famille" abrégée au premier mot du nom (comme sur le modèle de
         // référence, "KOKO B.") — même colonne que Bénéficiaire, positionné
         // au même décalage relatif (38 % de la largeur de colonne).
         doc.text(premiere.assure.nom.split(" ")[0], cx + 4, y + 4, { width: cols[0].w * 0.36 - 6 });
-        doc.text(nomComplet, cx + cols[0].w * 0.38, y + 4, { width: cols[0].w * 0.62 - 6 });
+        doc.text(`${premiere.assure.nom} ${premiere.assure.prenom ?? ""}`.trim(), cx + cols[0].w * 0.38, y + 4, { width: cols[0].w * 0.62 - 6 });
         cx += cols[0].w;
         // Référence COMPLÈTE du décompte affichée (2026-09) — voir demande
         // utilisateur : "il faut afficher l'intégralité et faire que ça
@@ -6217,7 +5629,7 @@ export class DocumentsService {
       const primeNette = Number(c.primeNette ?? c.prime);
       const accessoires = Number(c.montantAccessoires ?? 0);
       const taxe = Number(c.montantTaxe ?? Math.round((primeNette + accessoires) * TAUX_TAXE_GABON));
-      return { police: numeroPolice(c), nature: `${c.branche.toUpperCase()} ${c.typeAffaire?.toUpperCase() ?? ""}`.trim(), echeance: dateTirets(c.dateFin), primeTtc: primeNette + accessoires + taxe, compagnie: c.compagnie.nom };
+      return { police: c.id, nature: `${c.branche.toUpperCase()} ${c.typeAffaire?.toUpperCase() ?? ""}`.trim(), echeance: dateTirets(c.dateFin), primeTtc: primeNette + accessoires + taxe, compagnie: c.compagnie.nom };
     });
     const totalPrime = lignes.reduce((s, l) => s + l.primeTtc, 0);
     const dateEcheancePrincipale = contrats[0]?.dateFin ?? "—";
@@ -6237,11 +5649,8 @@ export class DocumentsService {
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
 
-    const logoAvis = this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 20, 200, 52, () => {
-      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
-      return 0;
-    });
-    doc.fontSize(8).font("Helvetica").fillColor("#333").text(`${p.boitePostale} ${p.ville} - ${p.pays}`, left, logoAvis > 0 ? 76 : 56);
+    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
+    doc.fontSize(8).font("Helvetica").fillColor("#333").text(`${p.boitePostale} ${p.ville} - ${p.pays}`, left, 56);
     doc.fillColor("#000").fontSize(9).font("Helvetica").text(`${p.ville}, le ${new Date().toLocaleDateString("fr-FR")}`, left, 40, { width, align: "right" });
     doc.text("Page 1 / 1", left, 54, { width, align: "right" });
 
@@ -6285,10 +5694,10 @@ export class DocumentsService {
 
     doc.font("Helvetica").fontSize(8);
     for (const l of lignes) {
-      const valeurs = [l.police, l.nature, l.echeance, fmt(l.primeTtc), l.compagnie];
-      const rowH = Math.max(18, ...valeurs.map((v, i) => doc.heightOfString(String(v), { width: cols[i].w - 6 }) + 8));
+      const rowH = 18;
       if (y + rowH > doc.page.height - 160) { doc.addPage(); y = 40; }
       cx = left;
+      const valeurs = [l.police, l.nature, l.echeance, fmt(l.primeTtc), l.compagnie];
       for (let i = 0; i < valeurs.length; i++) { doc.text(String(valeurs[i]), cx + 3, y + 4, { width: cols[i].w - 6, align: i === 3 ? "right" : "left" }); cx += cols[i].w; }
       y += rowH;
       doc.moveTo(left, y).lineTo(right, y).strokeColor("#ccc").lineWidth(0.5).stroke();
@@ -6317,12 +5726,11 @@ export class DocumentsService {
 
   // Export Accords Préalables (Prises en Charge) d'un contrat.
   async renderAccordPrealableExport(contratId: string, format: "pdf" | "xlsx" | "docx", res: Response) {
-    const police = policePourNomFichier(await this.prisma.contrat.findUnique({ where: { id: contratId }, select: { numeroPolice: true } }));
-    const accords = (await this.accordPrealable.findAll({ contratId })).items;
+    const accords = await this.accordPrealable.findAll({ contratId });
     const rows = accords.map((a) => [a.assure.nom + " " + (a.assure.prenom ?? ""), a.type, a.dateDemande, a.decision, a.montantAutorise !== null ? Number(a.montantAutorise) : 0]);
-    if (format === "xlsx") return this.envoyerTableauXlsx(res, `Accords-Prealables-${police}`, ["Assuré", "Type", "Date demande", "Décision", "Montant autorisé"], rows);
-    if (format === "docx") return this.envoyerDocx(res, `Accords-Prealables-${police}`, "PRISES EN CHARGE", `${accords.length} dossier(s)`, [], { headers: ["Assuré", "Type", "Date demande", "Décision", "Montant"], rows: rows.map((r) => r.map(String)) });
-    return this.envoyerTableauPdf(res, `Accords-Prealables-${police}`, "PRISES EN CHARGE", `${accords.length} dossier(s)`,
+    if (format === "xlsx") return this.envoyerTableauXlsx(res, `Accords-Prealables-${contratId}`, ["Assuré", "Type", "Date demande", "Décision", "Montant autorisé"], rows);
+    if (format === "docx") return this.envoyerDocx(res, `Accords-Prealables-${contratId}`, "PRISES EN CHARGE", `${accords.length} dossier(s)`, [], { headers: ["Assuré", "Type", "Date demande", "Décision", "Montant"], rows: rows.map((r) => r.map(String)) });
+    return this.envoyerTableauPdf(res, `Accords-Prealables-${contratId}`, "PRISES EN CHARGE", `${accords.length} dossier(s)`,
       [{ h: "Assuré", w: 150 }, { h: "Type", w: 100 }, { h: "Date demande", w: 100 }, { h: "Décision", w: 90 }, { h: "Montant autorisé", w: 100 }],
       rows, "TOTAL AUTORISÉ", `${fmt(rows.reduce((s, r) => s + (r[4] as number), 0))} FCFA`);
   }
@@ -6330,16 +5738,15 @@ export class DocumentsService {
   // Export Consommations (lignes PriseEnCharge) d'un contrat — voir mémoire
   // "Facture égale détails" : jamais un total agrégé seul.
   async renderConsommationsExport(contratId: string, format: "pdf" | "xlsx" | "docx", res: Response) {
-    const police = policePourNomFichier(await this.prisma.contrat.findUnique({ where: { id: contratId }, select: { numeroPolice: true } }));
     const lignes = await this.prisma.priseEnCharge.findMany({
       where: { contratId, statut: { not: "Annulé" } },
       include: { assure: true },
       orderBy: { date: "desc" },
     });
     const rows = lignes.map((l) => [`${l.assure.nom} ${l.assure.prenom ?? ""}`.trim(), l.date, l.type, Number(l.montant), l.baseRemboursement !== null ? Number(l.baseRemboursement) : 0]);
-    if (format === "xlsx") return this.envoyerTableauXlsx(res, `Consommations-${police}`, ["Assuré", "Date", "Type", "Frais réels", "Remboursé"], rows);
-    if (format === "docx") return this.envoyerDocx(res, `Consommations-${police}`, "CONSOMMATIONS", `${lignes.length} ligne(s)`, [], { headers: ["Assuré", "Date", "Type", "Frais réels", "Remboursé"], rows: rows.map((r) => r.map(String)) });
-    return this.envoyerTableauPdf(res, `Consommations-${police}`, "CONSOMMATIONS", `${lignes.length} ligne(s)`,
+    if (format === "xlsx") return this.envoyerTableauXlsx(res, `Consommations-${contratId}`, ["Assuré", "Date", "Type", "Frais réels", "Remboursé"], rows);
+    if (format === "docx") return this.envoyerDocx(res, `Consommations-${contratId}`, "CONSOMMATIONS", `${lignes.length} ligne(s)`, [], { headers: ["Assuré", "Date", "Type", "Frais réels", "Remboursé"], rows: rows.map((r) => r.map(String)) });
+    return this.envoyerTableauPdf(res, `Consommations-${contratId}`, "CONSOMMATIONS", `${lignes.length} ligne(s)`,
       [{ h: "Assuré", w: 150 }, { h: "Date", w: 90 }, { h: "Type", w: 110 }, { h: "Frais réels", w: 100 }, { h: "Remboursé", w: 100 }],
       rows, "TOTAL REMBOURSÉ", `${fmt(rows.reduce((s, r) => s + (r[4] as number), 0))} FCFA`);
   }
@@ -6362,14 +5769,11 @@ export class DocumentsService {
     const left = doc.page.margins.left;
     const right = doc.page.width - doc.page.margins.right;
     const width = right - left;
-    this.dessinerIdentiteEntete(doc, await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR), left, 24, 220, 60, () => {
-      doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
-      return 0;
-    });
+    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, 40);
     doc.fontSize(12).font("Helvetica-Bold").fillColor("#000").text(`QUITTANCE — TRANCHE N° ${tranche.numero}`, left, 60, { width, align: "right" });
     doc.fillColor("#000");
     let y = 90;
-    let yy = champ(doc, left, y, "Police :", numeroPolice(contrat), 100, 250, { boldLabel: true, boldValeur: true });
+    let yy = champ(doc, left, y, "Police :", contrat.id, 100, 250, { boldLabel: true, boldValeur: true });
     yy = champ(doc, left, yy, "Souscripteur :", contrat.client.nom, 100, 250, { boldLabel: true });
     yy = champ(doc, left, yy, "Compagnie :", contrat.compagnie.nom, 100, 250, { boldLabel: true });
     yy = champ(doc, left, yy, "Échéance :", tranche.dateEcheance, 100, 250, { boldLabel: true });
@@ -6406,265 +5810,6 @@ export class DocumentsService {
   async renderFeuilleExamenDeAssure(assureId: string, res: Response, utilisateur: { id: string | null; nom: string; roleId: string }) {
     const pecId = await this.peclaPlusRecente(assureId, "examen");
     return this.renderFeuilleExamenLigne(pecId, res, utilisateur);
-  }
-
-  // Réplique électronique d'un formulaire scanné (2026-10) — Ariana lit le
-  // scan, extrait toutes les données et appelle cette méthode pour générer
-  // un PDF structuré aux couleurs de la société, avec le texte exact du
-  // cachet copié ligne par ligne et l'état de la signature.
-  async genererFeuilleNumerisee(accordId: string, inp: {
-    typeDocument: string;
-    dateHeure?: string;
-    centreDesoins?: string;
-    nomPatient: string;
-    matriculeLaRuche?: string;
-    dateNaissance?: string;
-    qualitePatient?: string;
-    ticketModerateur?: number;
-    secteur?: string;
-    nomMedecin: string;
-    codePraticien?: string;
-    codeEtablissement?: string;
-    specialite?: string;
-    tarifJour?: boolean;
-    tarifNuit?: boolean;
-    texteCachetMedecin: string;
-    signaturePresente: boolean;
-    prestations?: Array<{ codeActe?: string; montant?: number; baseRemboursement?: number; ticketModerateur?: number; partLaRuche?: number }>;
-    examens?: Array<{ designation: string; codeActe?: string; montantPrestataire?: number; baseRemboursement?: number; ticketModerateur?: number; partLaRuche?: number }>;
-    prescriptions?: Array<{ medicament: string; posologie?: string; quantite?: string; prix?: number }>;
-    totalBaseRemboursement?: number;
-    totalTicket?: number;
-    totalPartLaRuche?: number;
-    situationPatient?: string;
-    nomEtablissementExamen?: string;
-    naturePrestation?: string;
-  }): Promise<string | null> {
-    try {
-      const p = await this.parametresEntreprise.findOne();
-      const logoImage = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
-      const couleur = p.couleurPrimaire ?? "#1a5276";
-
-      const doc = new PDFDocument({ size: "A4", margins: { top: 40, bottom: 40, left: 40, right: 40 }, autoFirstPage: true });
-      const chunks: Buffer[] = [];
-      doc.on("data", (c: Buffer) => chunks.push(c));
-      const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
-        doc.on("end", () => resolve(Buffer.concat(chunks)));
-        doc.on("error", reject);
-
-        const left = doc.page.margins.left;
-        const right = doc.page.width - doc.page.margins.right;
-        const width = right - left;
-        const estExamen = inp.typeDocument === "FeuilleExamens";
-        const titrePrincipal = estExamen ? "FEUILLE D'EXAMENS" : "FEUILLE DE SOINS";
-
-        // En-tête société
-        this.dessinerIdentiteEntete(doc, logoImage, left, 20, 180, 52, () => {
-          doc.fontSize(12).font("Helvetica-Bold").fillColor(couleur).text(p.nom, left, 38);
-          return 0;
-        });
-
-        // Titre + badge "Réplique électronique"
-        doc.fontSize(16).font("Helvetica-Bold").fillColor(couleur)
-          .text(titrePrincipal, left + 190, 26, { width: width - 190, align: "center" });
-        doc.fontSize(8).font("Helvetica").fillColor("#888")
-          .text("RÉPLIQUE ÉLECTRONIQUE — document numérisé par Ariana", left + 190, 46, { width: width - 190, align: "center" });
-        doc.fontSize(7.5).font("Helvetica").fillColor("#aaa")
-          .text(`Dossier : ${accordId}`, left + 190, 58, { width: width - 190, align: "center" });
-
-        doc.moveTo(left, 78).lineTo(right, 78).strokeColor(couleur).lineWidth(1.5).stroke();
-
-        let y = 90;
-        const col2 = left + width / 2;
-
-        const champ = (label: string, val: string | null | undefined, x: number, yPos: number, w = 220) => {
-          if (!val) return;
-          doc.fontSize(7.5).font("Helvetica-Bold").fillColor("#555").text(label, x, yPos, { width: w, continued: false });
-          doc.fontSize(8.5).font("Helvetica").fillColor("#000").text(val, x, yPos + 10, { width: w });
-        };
-
-        // Bloc assuré
-        doc.fontSize(9).font("Helvetica-Bold").fillColor(couleur).text("ASSURÉ / PATIENT", left, y);
-        y += 14;
-        champ("Nom du patient", inp.nomPatient, left, y);
-        champ("Matricule", inp.matriculeLaRuche, col2, y);
-        y += 24;
-        champ("Date de naissance", inp.dateNaissance, left, y);
-        champ("Qualité", inp.qualitePatient, col2, y);
-        y += 24;
-        champ("Secteur", inp.secteur, left, y);
-        champ("Ticket modérateur", inp.ticketModerateur != null ? `${inp.ticketModerateur}%` : undefined, col2, y);
-        y += 28;
-
-        doc.moveTo(left, y).lineTo(right, y).strokeColor("#ddd").lineWidth(0.5).stroke();
-        y += 8;
-
-        // Bloc médecin
-        doc.fontSize(9).font("Helvetica-Bold").fillColor(couleur).text("MÉDECIN / PRATICIEN", left, y);
-        y += 14;
-        champ("Nom du médecin", inp.nomMedecin, left, y);
-        champ("Spécialité", inp.specialite, col2, y);
-        y += 24;
-        champ("Code praticien", inp.codePraticien, left, y);
-        champ("Centre de soins", inp.centreDesoins, col2, y);
-        y += 24;
-        champ("Date / Heure", inp.dateHeure, left, y);
-        const tarifType = inp.tarifJour ? "Jour" : inp.tarifNuit ? "Nuit" : undefined;
-        champ("Tarif", tarifType, col2, y);
-        y += 28;
-
-        if (estExamen) {
-          doc.moveTo(left, y).lineTo(right, y).strokeColor("#ddd").lineWidth(0.5).stroke();
-          y += 8;
-          doc.fontSize(9).font("Helvetica-Bold").fillColor(couleur).text("EXAMENS", left, y);
-          y += 14;
-          if (inp.examens && inp.examens.length > 0) {
-            const cols = [left, left + 180, left + 290, left + 360, left + 430];
-            const hdrs = ["Désignation", "Montant", "Base remb.", "Ticket", "Part société"];
-            hdrs.forEach((h, i) => doc.fontSize(7).font("Helvetica-Bold").fillColor("#555").text(h, cols[i], y, { width: 110 }));
-            y += 12;
-            for (const ex of inp.examens) {
-              doc.fontSize(8).font("Helvetica").fillColor("#000")
-                .text(ex.designation, cols[0], y, { width: 170 })
-                .text(ex.montantPrestataire != null ? String(ex.montantPrestataire) : "—", cols[1], y, { width: 100 })
-                .text(ex.baseRemboursement != null ? String(ex.baseRemboursement) : "—", cols[2], y, { width: 60 })
-                .text(ex.ticketModerateur != null ? String(ex.ticketModerateur) : "—", cols[3], y, { width: 60 })
-                .text(ex.partLaRuche != null ? String(ex.partLaRuche) : "—", cols[4], y, { width: 80 });
-              y += 14;
-            }
-          } else {
-            doc.fontSize(8).font("Helvetica").fillColor("#999").text("(aucun examen lisible)", left, y); y += 14;
-          }
-        } else {
-          // Tableau prestations
-          doc.moveTo(left, y).lineTo(right, y).strokeColor("#ddd").lineWidth(0.5).stroke();
-          y += 8;
-          doc.fontSize(9).font("Helvetica-Bold").fillColor(couleur).text("PRESTATIONS", left, y);
-          y += 14;
-          if (inp.prestations && inp.prestations.length > 0) {
-            const cols = [left, left + 100, left + 210, left + 310, left + 400];
-            const hdrs = ["Code acte", "Montant", "Base remb.", "Ticket", "Part société"];
-            hdrs.forEach((h, i) => doc.fontSize(7).font("Helvetica-Bold").fillColor("#555").text(h, cols[i], y, { width: 100 }));
-            y += 12;
-            for (const pr of inp.prestations) {
-              doc.fontSize(8).font("Helvetica").fillColor("#000")
-                .text(pr.codeActe ?? "—", cols[0], y, { width: 100 })
-                .text(pr.montant != null ? String(pr.montant) : "—", cols[1], y, { width: 100 })
-                .text(pr.baseRemboursement != null ? String(pr.baseRemboursement) : "—", cols[2], y, { width: 90 })
-                .text(pr.ticketModerateur != null ? String(pr.ticketModerateur) : "—", cols[3], y, { width: 80 })
-                .text(pr.partLaRuche != null ? String(pr.partLaRuche) : "—", cols[4], y, { width: 80 });
-              y += 14;
-            }
-          } else {
-            doc.fontSize(8).font("Helvetica").fillColor("#999").text("(aucune prestation lisible)", left, y); y += 14;
-          }
-          // Prescriptions médicaments
-          if (inp.prescriptions && inp.prescriptions.length > 0) {
-            y += 6;
-            doc.moveTo(left, y).lineTo(right, y).strokeColor("#ddd").lineWidth(0.5).stroke();
-            y += 8;
-            doc.fontSize(9).font("Helvetica-Bold").fillColor(couleur).text("PRESCRIPTIONS MÉDICALES", left, y);
-            y += 14;
-            const colsP = [left, left + 220, left + 330, left + 430];
-            const hdrsP = ["Médicament", "Posologie", "Quantité", "Prix"];
-            hdrsP.forEach((h, i) => doc.fontSize(7).font("Helvetica-Bold").fillColor("#555").text(h, colsP[i], y, { width: 105 }));
-            y += 12;
-            for (const rx of inp.prescriptions) {
-              doc.fontSize(8).font("Helvetica").fillColor("#000")
-                .text(rx.medicament, colsP[0], y, { width: 215 })
-                .text(rx.posologie ?? "—", colsP[1], y, { width: 100 })
-                .text(rx.quantite ?? "—", colsP[2], y, { width: 95 })
-                .text(rx.prix != null ? `${rx.prix} FCFA` : "—", colsP[3], y, { width: 90 });
-              y += 14;
-            }
-          }
-        }
-
-        // Totaux si présents
-        if (inp.totalBaseRemboursement != null || inp.totalPartLaRuche != null) {
-          y += 4;
-          doc.moveTo(left, y).lineTo(right, y).strokeColor(couleur).lineWidth(0.8).stroke();
-          y += 6;
-          const totLine = [
-            inp.totalBaseRemboursement != null ? `Base remb. : ${inp.totalBaseRemboursement} FCFA` : null,
-            inp.totalTicket != null ? `Ticket : ${inp.totalTicket} FCFA` : null,
-            inp.totalPartLaRuche != null ? `Part société : ${inp.totalPartLaRuche} FCFA` : null,
-          ].filter(Boolean).join("     ");
-          doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#000").text(totLine, left, y, { align: "right" });
-          y += 18;
-        }
-
-        // Zone cachet + signature — élément central de la réplique
-        y += 6;
-        doc.moveTo(left, y).lineTo(right, y).strokeColor("#ddd").lineWidth(0.5).stroke();
-        y += 8;
-        const halfW = (width - 20) / 2;
-
-        // Cachet du praticien
-        doc.rect(left, y, halfW, 110).strokeColor(couleur).lineWidth(0.8).stroke();
-        doc.fontSize(7.5).font("Helvetica-Bold").fillColor(couleur)
-          .text("CACHET DU PRATICIEN (texte exact lu sur le document)", left + 6, y + 6, { width: halfW - 12 });
-        const lignesCachet = (inp.texteCachetMedecin ?? "").split("\n").filter(Boolean);
-        let yC = y + 20;
-        for (const ligne of lignesCachet) {
-          doc.fontSize(8.5).font("Helvetica").fillColor("#000").text(ligne, left + 8, yC, { width: halfW - 16 });
-          yC += 12;
-        }
-
-        // Signature
-        const sigX = left + halfW + 20;
-        doc.rect(sigX, y, halfW, 110).strokeColor(couleur).lineWidth(0.8).stroke();
-        doc.fontSize(7.5).font("Helvetica-Bold").fillColor(couleur)
-          .text("SIGNATURE DU PRATICIEN", sigX + 6, y + 6, { width: halfW - 12 });
-        const sigMention = inp.signaturePresente
-          ? "✓ Signature manuscrite présente sur le document original scanné"
-          : "✗ Aucune signature détectée sur le document original scanné";
-        doc.fontSize(9).font("Helvetica").fillColor(inp.signaturePresente ? "#27ae60" : "#c0392b")
-          .text(sigMention, sigX + 8, y + 30, { width: halfW - 16 });
-
-        // Pied de page
-        const pyBottom = doc.page.height - doc.page.margins.bottom - 20;
-        doc.fontSize(7).font("Helvetica").fillColor("#bbb")
-          .text(`Réplique électronique générée automatiquement par ${p.nom} · ${new Date().toLocaleDateString("fr-FR")} · ${accordId}`, left, pyBottom, { width, align: "center" });
-
-        doc.end();
-      });
-
-      const filename = `${accordId}-numerise.pdf`;
-      const destDir = path.join(UPLOADS_ROOT, "accords-prealables");
-      await fs.promises.mkdir(destDir, { recursive: true });
-      await fs.promises.writeFile(path.join(destDir, filename), pdfBuffer);
-
-      await this.prisma.accordPrealable.update({ where: { id: accordId }, data: { documentNumerise: filename } });
-      return filename;
-    } catch {
-      return null;
-    }
-  }
-
-  // Méthodes "buffer" pour ARIANA (email/WhatsApp) — reuses renderStatistiques
-  // via un PassThrough au lieu de res HTTP, sans dupliquer la logique de rendu.
-  async genererStatistiquesBuffer(contratId: string, du?: string, au?: string): Promise<{ buffer: Buffer; filename: string }> {
-    const { PassThrough } = await import("stream");
-    const pt = new PassThrough();
-    const buffers: Buffer[] = [];
-    let filename = "Statistiques.pdf";
-    pt.on("data", (b: Buffer) => buffers.push(b));
-    const done = new Promise<void>((resolve, reject) => { pt.on("end", resolve); pt.on("error", reject); });
-    const fakeRes = Object.assign(pt, {
-      setHeader(_name: string, val: unknown) {
-        if (typeof val === "string") { const m = val.match(/filename="([^"]+)"/); if (m) filename = m[1]; }
-      },
-    });
-    await this.renderStatistiques(contratId, du, au, "pdf", fakeRes as any, undefined);
-    await done;
-    return { buffer: Buffer.concat(buffers), filename };
-  }
-
-  async genererReseauSoinsBuffer(): Promise<Buffer> {
-    const p = await this.parametresEntreprise.findOne();
-    const logoImage = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
-    return this.reseauSoinsPdf(p, logoImage);
   }
 }
 
@@ -6712,7 +5857,6 @@ const CARD_WIDTH = 242.65; // 85,6 mm — format carte CR80 (Evolis Primacy)
 const CARD_HEIGHT = 153.01; // 53,98 mm
 
 interface CarteAssureData {
-  id?: string | null;
   nom: string;
   prenom?: string | null;
   matricule: string;
@@ -6734,7 +5878,6 @@ interface CarteAssureData {
     dateFin: string;
     client: { nom: string };
     compagnie: { nom: string };
-    numeroPolice?: string | null;
     nomCarteSante?: string | null;
     tauxCouvertureAmbulatoire?: string | null;
     tauxCouvertureHospitalisation?: string | null;

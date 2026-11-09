@@ -381,6 +381,7 @@ export default function StatistiquesView() {
   const [recherches, setRecherches] = useState<Record<string, string>>({});
   const rq = (id: string) => recherches[id] ?? "";
   const setRq = (id: string, v: string) => setRecherches((prev) => ({ ...prev, [id]: v }));
+  const [primeForceeStr, setPrimeForceeStr] = useState("");
 
   useEffect(() => { getContrats().then(setContrats); }, []);
 
@@ -420,7 +421,7 @@ export default function StatistiquesView() {
     if (!data) return;
     try {
       setTelechargeant(format);
-      await openStatistiques(data.contrat.id, du || undefined, au || undefined, format, analyseATelecharger(), rubriquesATelecharger());
+      await openStatistiques(data.contrat.id, du || undefined, au || undefined, format, analyseATelecharger(), rubriquesATelecharger(), primeForceeNum);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : `Génération du ${format === "pdf" ? "PDF" : "Word"} impossible.`);
     } finally {
@@ -444,6 +445,16 @@ export default function StatistiquesView() {
   const familleActeDominante = data?.consommationParFamilleActe[0];
   const prestataireDominant = data?.consommationParPrestataire[0];
   const partTop20Prestataires = data && data.totalConsomme > 0 ? (data.top20Prestataires.reduce((s, p) => s + p.montant, 0) / data.totalConsomme) * 100 : 0;
+
+  // Prime forcée pour le S/P — saisie manuelle facultative, recalcul côté client
+  const primeForceeNum = primeForceeStr ? parseFloat(primeForceeStr.replace(/\s/g, "").replace(",", ".")) || null : null;
+  const ratioChargeSurNet = data && data.spSansChargement.primes > 0 ? data.spAvecChargement.primes / data.spSansChargement.primes : 1;
+  const spSansForcee = primeForceeNum && data
+    ? { primes: primeForceeNum, ratioPct: (data.spSansChargement.sinistres / primeForceeNum) * 100 }
+    : null;
+  const spAvecForcee = primeForceeNum && data
+    ? { primes: primeForceeNum * ratioChargeSurNet, ratioPct: (data.spAvecChargement.sinistres / (primeForceeNum * ratioChargeSurNet)) * 100 }
+    : null;
 
   return (
     <div className="p-6 space-y-5">
@@ -648,22 +659,63 @@ export default function StatistiquesView() {
 
           <SectionCard title="Evolution du S/P">
             <div className="space-y-3">
+              {/* Forçage manuel de la prime */}
+              <div className="flex items-end gap-3 pb-3 border-b border-border/60">
+                <label className="block">
+                  <div className={labelCls}>Prime à forcer (optionnel)</div>
+                  <input
+                    type="text" inputMode="numeric"
+                    value={primeForceeStr} onChange={(e) => setPrimeForceeStr(e.target.value)}
+                    placeholder="Ex : 45000000"
+                    className={fieldCls + " w-44"}
+                  />
+                </label>
+                {primeForceeStr && (
+                  <button type="button" onClick={() => setPrimeForceeStr("")} className="text-[12px] text-muted-foreground hover:text-foreground flex items-center gap-1 pb-2">
+                    <X className="w-3.5 h-3.5" /> Effacer
+                  </button>
+                )}
+              </div>
+              {primeForceeNum && (
+                <div className="text-[11.5px] text-amber-600 dark:text-amber-400">
+                  S/P recalculé sur prime forcée de <strong>{fmtM(primeForceeNum)} FCFA</strong>. Prime calculée automatiquement : <strong>{fmtM(data.spSansChargement.primes)} FCFA</strong> (nette) / <strong>{fmtM(data.spAvecChargement.primes)} FCFA</strong> (avec chargement).
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <div className="text-[12px] font-semibold text-primary mb-1.5">Sans Chargement</div>
-                  <TableSimple headers={["Souscripteur", "Police", "Garanties", "Sinistres", "Primes", "S/P"]} rows={[[data.contrat.client, data.contrat.numeroPolice, data.contrat.garantiesPrivees, data.spSansChargement.sinistres, data.spSansChargement.primes, fmtRatio(data.spSansChargement.ratioPct)]]} />
+                  <TableSimple
+                    headers={spSansForcee ? ["Type", "Souscripteur", "Police", "Garanties", "Sinistres", "Primes", "S/P"] : ["Souscripteur", "Police", "Garanties", "Sinistres", "Primes", "S/P"]}
+                    rows={spSansForcee ? [
+                      ["Calculée", data.contrat.client, data.contrat.numeroPolice, data.contrat.garantiesPrivees, data.spSansChargement.sinistres, data.spSansChargement.primes, fmtRatio(data.spSansChargement.ratioPct)],
+                      ["Forcée", data.contrat.client, data.contrat.numeroPolice, data.contrat.garantiesPrivees, data.spSansChargement.sinistres, spSansForcee.primes, fmtRatio(spSansForcee.ratioPct)],
+                    ] : [[data.contrat.client, data.contrat.numeroPolice, data.contrat.garantiesPrivees, data.spSansChargement.sinistres, data.spSansChargement.primes, fmtRatio(data.spSansChargement.ratioPct)]]}
+                    lignesEnEvidence={spSansForcee ? [1] : []}
+                  />
                 </div>
                 <div>
                   <div className="text-[12px] font-semibold text-accent mb-1.5">Avec Chargement</div>
-                  <TableSimple headers={["Souscripteur", "Police", "Garanties", "Sinistres", "Primes", "S/P"]} rows={[[data.contrat.client, data.contrat.numeroPolice, data.contrat.garantiesPrivees, data.spAvecChargement.sinistres, data.spAvecChargement.primes, fmtRatio(data.spAvecChargement.ratioPct)]]} />
+                  <TableSimple
+                    headers={spAvecForcee ? ["Type", "Souscripteur", "Police", "Garanties", "Sinistres", "Primes", "S/P"] : ["Souscripteur", "Police", "Garanties", "Sinistres", "Primes", "S/P"]}
+                    rows={spAvecForcee ? [
+                      ["Calculée", data.contrat.client, data.contrat.numeroPolice, data.contrat.garantiesPrivees, data.spAvecChargement.sinistres, data.spAvecChargement.primes, fmtRatio(data.spAvecChargement.ratioPct)],
+                      ["Forcée", data.contrat.client, data.contrat.numeroPolice, data.contrat.garantiesPrivees, data.spAvecChargement.sinistres, spAvecForcee.primes, fmtRatio(spAvecForcee.ratioPct)],
+                    ] : [[data.contrat.client, data.contrat.numeroPolice, data.contrat.garantiesPrivees, data.spAvecChargement.sinistres, data.spAvecChargement.primes, fmtRatio(data.spAvecChargement.ratioPct)]]}
+                    lignesEnEvidence={spAvecForcee ? [1] : []}
+                  />
                 </div>
               </div>
               <BarSimple
-                data={[{ libelle: "S/P sans chargement", montant: data.spSansChargement.ratioPct }, { libelle: "S/P avec chargement", montant: data.spAvecChargement.ratioPct }]}
-                couleurs={["var(--primary)", "var(--accent)"]}
+                data={[
+                  { libelle: `S/P net${spSansForcee ? " (auto)" : ""}`, montant: data.spSansChargement.ratioPct },
+                  ...(spSansForcee ? [{ libelle: "S/P net (forcé)", montant: spSansForcee.ratioPct }] : []),
+                  { libelle: `S/P chargé${spAvecForcee ? " (auto)" : ""}`, montant: data.spAvecChargement.ratioPct },
+                  ...(spAvecForcee ? [{ libelle: "S/P chargé (forcé)", montant: spAvecForcee.ratioPct }] : []),
+                ]}
+                couleurs={["var(--primary)", "var(--chart-3)", "var(--accent)", "var(--chart-4)"]}
                 afficherValeurs
                 formatValeur={fmtRatio}
-                barSize={140}
+                barSize={spSansForcee ? 50 : 140}
                 labelsHorizontaux
               />
             </div>
