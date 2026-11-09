@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { Injectable, BadRequestException, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
+import { sanitizeUpload } from "../storage/upload-security.util";
 import { FacturesService } from "../factures/factures.service";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { GedAnalyseService } from "./ged-analyse.service";
@@ -54,10 +55,9 @@ export class GedService {
   async upload(file: Express.Multer.File, params: UploadGedDocumentParams, demandeurId: string) {
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
 
-    const ext = path.extname(file.originalname) || "";
-    const filename = `${randomUUID()}${ext.toLowerCase()}`;
+    const { storedName: filename, mime } = sanitizeUpload({ originalName: file.originalname, mimetype: file.mimetype, buffer: file.buffer, category: "document" });
     if (this.storage.actif) {
-      await this.storage.upload(CATEGORIE_STORAGE, filename, file.buffer, file.mimetype);
+      await this.storage.upload(CATEGORIE_STORAGE, filename, file.buffer, mime);
     } else {
       await fs.promises.mkdir(UPLOADS_GED_DIR, { recursive: true });
       await fs.promises.writeFile(path.join(UPLOADS_GED_DIR, filename), file.buffer);
@@ -209,14 +209,23 @@ export class GedService {
       });
     }
 
-    if (!doc.prestataireId || !doc.referenceExtraite) {
+    // Auto-résolution au rapprochement (cron ARIANA, 2026-11) — si aucun
+    // prestataire lié à l'upload, tenter via nomEmetteurExtrait avant d'abandonner.
+    let prestataireIdEffectif = doc.prestataireId;
+    if (!prestataireIdEffectif && doc.nomEmetteurExtrait) {
+      const trouve = await this.trouverPrestataireParNom(doc.nomEmetteurExtrait);
+      if (trouve) {
+        prestataireIdEffectif = trouve.id;
+        await this.prisma.gedDocument.update({ where: { id }, data: { prestataireId: prestataireIdEffectif } });
+      }
+    }
+
+    if (!prestataireIdEffectif || !doc.referenceExtraite) {
       return this.prisma.gedDocument.update({
         where: { id }, data: { statutTraitement: "Non traité", factureId: null },
         include: { prestataire: { select: { nom: true } }, facture: { select: { id: true, referenceFacture: true, statut: true } } },
       });
     }
-
-    let prestataireIdEffectif = doc.prestataireId;
     let factures = await this.factures.findAll({ prestataireId: prestataireIdEffectif, reference: doc.referenceExtraite });
 
     // Fallback 1 — ARIANA tente de résoudre le vrai prestataire depuis
