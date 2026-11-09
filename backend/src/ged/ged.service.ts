@@ -287,7 +287,7 @@ export class GedService {
       let bordereau = await this.prisma.bordereauReglement.findFirst({
         where: { numero: doc.referenceExtraite ?? "", prestataireId: prestataireIdEffectif },
         include: {
-          lettreCheque: { select: { numero: true, numeroCheque: true, montantTotal: true, dateEmission: true } },
+          lettreCheque: { select: { id: true, numero: true, numeroCheque: true, montantTotal: true, dateEmission: true } },
         },
       });
 
@@ -300,7 +300,7 @@ export class GedService {
         bordereau = await this.prisma.bordereauReglement.findFirst({
           where: { numero: { equals: doc.referenceExtraite, mode: "insensitive" } },
           include: {
-            lettreCheque: { select: { numero: true, numeroCheque: true, montantTotal: true, dateEmission: true } },
+            lettreCheque: { select: { id: true, numero: true, numeroCheque: true, montantTotal: true, dateEmission: true } },
           },
         });
         // Si le bordereau est sous un autre prestataire, mettre à jour le doc
@@ -319,9 +319,11 @@ export class GedService {
           select: { factureId: true },
         });
         const premierFactureId = premiereLigne?.factureId ?? null;
+        // Règlement comptable : chèque lié au bordereau (2026-11)
+        const lettreChequeId = bordereau.lettreCheque?.id ?? null;
         return this.prisma.gedDocument.update({
           where: { id },
-          data: { statutTraitement, factureId: premierFactureId },
+          data: { statutTraitement, factureId: premierFactureId, lettreChequeId },
           include: { prestataire: { select: { nom: true } }, facture: { select: { id: true, referenceFacture: true, statut: true } } },
         });
       }
@@ -342,6 +344,7 @@ export class GedService {
     // été payée comptablement, même si son statut est encore "Soumise"
     // (cas typique de la récupération de données).
     let statutTraitement: string;
+    let lettreChequeIdRapproche: string | null = null;
 
     if (facture.statut === "Payée") {
       // Déjà clôturée lors d'un traitement précédent
@@ -354,7 +357,7 @@ export class GedService {
             select: {
               statut: true,
               lettreCheque: {
-                select: { numero: true, numeroCheque: true, montantTotal: true, dateEmission: true },
+                select: { id: true, numero: true, numeroCheque: true, montantTotal: true, dateEmission: true },
               },
             },
           },
@@ -373,13 +376,17 @@ export class GedService {
           data: { statut: "Payée" },
         });
         statutTraitement = "Traité totalement";
+        // Règlement comptable : chèque commun à toutes les lignes (2026-11)
+        const lcIds = [...new Set(avecBordereau.map((l) => l.bordereau?.lettreCheque?.id).filter(Boolean))];
+        if (lcIds.length === 1) lettreChequeIdRapproche = lcIds[0] as string;
       } else {
         statutTraitement = facture.statut === "Soumise" && montantOk ? "Traité totalement" : "Traité partiellement";
       }
     }
 
     return this.prisma.gedDocument.update({
-      where: { id }, data: { statutTraitement, factureId: facture.id },
+      where: { id },
+      data: { statutTraitement, factureId: facture.id, ...(lettreChequeIdRapproche ? { lettreChequeId: lettreChequeIdRapproche } : {}) },
       include: { prestataire: { select: { nom: true } }, facture: { select: { id: true, referenceFacture: true, statut: true } } },
     });
   }

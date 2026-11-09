@@ -25,9 +25,6 @@ model User {
   email        String   @unique
   initiales    String
   passwordHash String
-  // Signatures de messagerie (2026-11) — HTML pour l'email, texte pour SMS/WhatsApp.
-  signatureEmail String?
-  signatureSms   String?
   // Changement de mot de passe imposé (2026-09) — voir demande utilisateur :
   // "la saisie du mot de passe pour la première fois ne demande pas de
   // réinitialiser le mot de passe à la première connexion... pour une
@@ -38,9 +35,6 @@ model User {
   // titulaire choisit lui-même son mot de passe (UsersService.
   // changerMotDePasse, seul endroit qui exige l'ancien mot de passe).
   doitChangerMotDePasse Boolean @default(false)
-  // consentementAccepteAt — champ non encore migré en prod (2026-10).
-  // Réintégrer dans le schéma après avoir appliqué la migration SQL :
-  // ALTER TABLE "User" ADD COLUMN "consentementAccepteAt" TIMESTAMP(3);
   createdAt    DateTime @default(now())
 
   // Coordonnées personnelles + photo de profil (2026-08) — voir demande
@@ -264,10 +258,7 @@ model SocieteAssurance {
   prixAbonnement    Decimal? @db.Decimal(18, 2)
   fraisInstallation Decimal? @db.Decimal(18, 2)
 
-  // prixAbonnementIndividuelXaf + abonnementsIndividuels — non encore migrés
-  // en prod (2026-10). Réintégrer après migration SQL.
-
-  facturesAbonnement      FactureAbonnement[]
+  facturesAbonnement FactureAbonnement[]
 
   // Nature juridique de la société utilisatrice (2026-09) — voir demande
   // utilisateur : "il faut pouvoir dire le type de société qui va utiliser
@@ -301,7 +292,6 @@ model SocieteAssurance {
   prospects Prospect[]
   appelsOffres AppelOffres[]
   cotations Cotation[]
-  offresGenerees OffreGeneree[]
   contrats Contrat[]
   quittanceLibres QuittanceLibre[]
   sinistres Sinistre[]
@@ -339,11 +329,6 @@ model SocieteAssurance {
   prestataireAlias PrestataireAlias[]
   lotsCheques LotCheques[]
   agences Agence[]
-  portailAccesPrestataires PortailSocieteAcces[]
-  transactions             Transaction[]
-  compteReglements         CompteReglement[]
-  niveauxRelance           NiveauRelance[]
-  relancesEnvoyees         RelanceEnvoyee[]
 
   @@index([planAbonnementId])
 }
@@ -536,16 +521,7 @@ model Communication {
   objet               String?
   contenu             String
   pieceJointe         String? // nom de fichier sous backend/uploads/communications/
-  // Messagerie type Outlook (2026-11) : corps riche, pièces jointes multiples, dossiers.
-  contenuHtml         String?
-  piecesJointes       String[] @default([]) // noms de fichiers sous uploads/communications/
-  cc                  String?
-  messageId           String? // Message-ID IMAP — déduplication des emails entrants
-  lu                  Boolean  @default(true)
-  archive             Boolean  @default(false)
-  supprime            Boolean  @default(false)
-  suivi               Boolean  @default(false)
-  statut              String   @default("Simulé") // "Simulé" | "Échec" | "Envoyé" | "Reçu" | "Brouillon"
+  statut              String   @default("Simulé") // "Simulé" | "Échec"
   // Déclencheur (2026-08) — "Manuel" (composé depuis l'écran) ou le nom
   // d'une automatisation (ex. "NouveauContrat" — voir CommunicationsService.
   // notifierPrestatairesNouveauContrat), pour distinguer l'activité
@@ -560,43 +536,6 @@ model Communication {
 
   @@index([destinataireType, destinataireId])
   @@index([canal])
-  @@index([societeId])
-  @@index([messageId])
-}
-
-// Niveaux de relance renouvellement (2026-11) — paramétrables par société :
-// J-90, J-60, J-30, J-15 avant l'échéance du contrat. Le cron quotidien
-// (RelancesService) envoie un email personnalisé par souscripteur.
-model NiveauRelance {
-  id                 String   @id @default(cuid())
-  societeId          String
-  societe            SocieteAssurance @relation(fields: [societeId], references: [id])
-  ordre              Int      // 1 = premier, 2 = second… (tri d'affichage)
-  joursAvantEcheance Int      // ex: 90, 60, 30, 15
-  objet              String   // Sujet de l'email : accepte {{nom}}, {{police}}, {{jours}}
-  corps              String   @db.Text // Corps : {{nom}}, {{police}}, {{echeance}}, {{jours}}
-  actif              Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  relancesEnvoyees   RelanceEnvoyee[]
-  @@unique([societeId, ordre])
-  @@index([societeId])
-}
-
-// Historique des relances envoyées (2026-11) — une entrée par contrat × niveau.
-// La contrainte unique empêche de renvoyer le même niveau au même contrat.
-model RelanceEnvoyee {
-  id              String           @id @default(cuid())
-  societeId       String
-  societe         SocieteAssurance @relation(fields: [societeId], references: [id])
-  contratId       String
-  contrat         Contrat          @relation(fields: [contratId], references: [id])
-  niveauRelanceId String
-  niveauRelance   NiveauRelance    @relation(fields: [niveauRelanceId], references: [id])
-  sentAt          DateTime         @default(now())
-  statut          String           // "Envoyé" | "Simulé" | "Erreur"
-  communicationId String?          // id de la Communication créée pour le journal
-  @@unique([contratId, niveauRelanceId])
   @@index([societeId])
 }
 
@@ -755,21 +694,6 @@ model Compagnie {
   clientId String? @unique
   client   Client? @relation(fields: [clientId], references: [id])
 
-  // Déclinaison d'agence (2026-09) — voir demande utilisateur : "lorsqu'un
-  // contrat est géré par l'agence de POG et est placé sur NSIA,
-  // l'application doit directement imputer le contrat à NSIA ASSURANCES
-  // POG." Une compagnie peut être la déclinaison d'une compagnie MÈRE pour
-  // UNE agence : déclarée à la main dans l'écran Compagnies (paramétrage
-  // propre), ou créée automatiquement par copie de la mère au premier
-  // contrat de cette agence (voir CompagniesService.declinaisonPourAgence
-  // et Agence.creerDeclinaisonsAuto).
-  compagnieMereId String?
-  compagnieMere   Compagnie?  @relation("DeclinaisonsAgence", fields: [compagnieMereId], references: [id])
-  declinaisons    Compagnie[] @relation("DeclinaisonsAgence")
-  agenceId        String?
-  agence          Agence?     @relation(fields: [agenceId], references: [id])
-  // (index : voir migration 20260926120000_compagnie_declinaison_agence)
-
   // Taux de commission par branche — repris automatiquement dans le
   // formulaire Contrat/Avenant selon la branche choisie (voir
   // CalculPrimeSection.tsx), reste librement modifiable ensuite.
@@ -858,8 +782,6 @@ model Compagnie {
   facturesProduction FactureProduction[]
 
   @@index([societeId])
-
-  @@index([compagnieMereId])
 }
 
 model CompagnieAccessoireTranche {
@@ -972,13 +894,6 @@ model Prospect {
   // tauxCommissionAssistance) s'appliquent dans la suggestion.
   typeContrat String? // "MaladieEtAssistance" | "MaladieSeule"
 
-  // Informations reprises telles quelles sur l'offre sante (2026-10) :
-  // jamais de valeur par defaut codee en dur.
-  adresse       String?
-  dateEffet     String? // JJ/MM/AAAA
-  dateEcheance  String? // JJ/MM/AAAA
-  dureeContrat  String?
-
   // Conversion en client (2026-08) — voir demande utilisateur : "lesquels
   // sont devenus des clients". Renseigné en liant un Client existant
   // (créé via le parcours Souscripteurs habituel) une fois l'affaire
@@ -1043,15 +958,11 @@ model AppelOffres {
   estimationFondsRoulement Decimal @db.Decimal(18, 2)
   statut                   String
   dateCreation             String
-  // Paramètres du document « Offre santé » (titre, date, chargée
-  // clientèle, période…), voir ParametresOffre dans contenu-offre.ts.
-  parametresOffre          Json?
 
   prospect     Prospect                 @relation(fields: [prospectId], references: [id])
   propositions PropositionCommerciale[]
   cotations    Cotation[]
   documents    AppelOffresDocument[]
-  offresGenerees OffreGeneree[]
 
   @@index([societeId])
 }
@@ -1148,13 +1059,6 @@ model Cotation {
   // Contrat.gestionnaireId — null pour les cotations déjà existantes.
   gestionnaireId String?
 
-  // Offre santé (2026-10) — contenu lu par ARIANA dans la proposition de
-  // la compagnie (titre, garanties, limites, tableau de garanties…), voir
-  // backend/src/cotation/contenu-offre.ts. documentSourceId = le document
-  // « Offre compagnie » de l'appel d'offres dont il a été extrait.
-  contenuOffre     Json?
-  documentSourceId String?
-
   appelOffres AppelOffres?            @relation(fields: [appelOffresId], references: [id])
   compagnie   Compagnie?              @relation(fields: [compagnieId], references: [id])
   proposition PropositionCommerciale? @relation(fields: [propositionId], references: [id])
@@ -1162,31 +1066,6 @@ model Cotation {
   garanties   CotationGarantieLigne[]
 
   @@index([societeId])
-}
-
-// Historique des offres santé générées (2026-10) — voir demande utilisateur :
-// « sauvegarder le fichier d'offres généré la première fois par Ariana…
-// retrouver l'historique des offres générées et les ouvrir à nouveau, les
-// consulter, les imprimer et les télécharger ». Le PDF est conservé tel
-// qu'il a été remis (fichier sous uploads/offres-sante/), jamais régénéré.
-model OffreGeneree {
-  id            String   @id @default(cuid())
-  societeId     String?
-  societe       SocieteAssurance? @relation(fields: [societeId], references: [id])
-  appelOffresId String?
-  appelOffres   AppelOffres? @relation(fields: [appelOffresId], references: [id], onDelete: SetNull)
-  clientNom     String
-  origine       String // "ARIANA" | "Appel d'offres" | "Document combiné" | "Cotation"
-  fichier       String
-  tailleOctets  Int
-  nbPages       Int
-  cotationIds   String[]
-  creeParId     String?
-  creeParNom    String?
-  createdAt     DateTime @default(now())
-
-  @@index([societeId])
-  @@index([appelOffresId])
 }
 
 // Ligne du tableau de garanties/plafonds tel que transmis par la compagnie
@@ -1258,11 +1137,6 @@ model Contrat {
   // bascule sur ce logiciel). Unique PAR compagnie, pas globalement — deux
   // compagnies différentes peuvent avoir des séries qui se recoupent.
   numeroPolice String?
-  // Nom imprimé sur la carte santé (2026-09) — voir demande utilisateur :
-  // libellé propre à CE contrat (ex. un collège ou une filiale) à la place
-  // du nom du souscripteur sur le champ "SOCIÉTÉ" des cartes (voir
-  // DocumentsService, rendu de la carte). Vide/null = nom du souscripteur.
-  nomCarteSante String?
 
   // Date de création réelle (2026-08) — absente jusqu'ici (seul Avenant
   // portait un createdAt), nécessaire pour dater l'ÉMISSION de l'affaire
@@ -1308,20 +1182,16 @@ model Contrat {
   paysSouscription         String?
   extensionsTerritorialite String[]
 
-  // Assistance liée (2026-08, rendu multiple 2026-09) — un contrat
-  // Assistance partage EXACTEMENT la population de ses contrats Maladie :
-  // jamais sa propre ligne AssureSante, sa population est l'union de
-  // celles des contrats Maladie liés (voir population-historique.util.ts
-  // populationDuContrat). Voir demande utilisateur : "plusieurs contrats
-  // maladie peuvent être liés au même contrat d'assistance... récupérer
-  // exactement chaque population de ces contrats maladie pour le calcul
-  // de prime." Le lien est donc porté par le contrat MALADIE (un contrat
-  // Maladie → au plus un contrat Assistance ; un contrat Assistance → N
-  // contrats Maladie). Remplace Contrat.contratMaladieLieId (Assistance →
-  // un seul Maladie).
-  contratAssistanceId String?
-  contratAssistance   Contrat?  @relation("ContratMaladieAssistance", fields: [contratAssistanceId], references: [id], onDelete: SetNull)
-  contratsMaladieLies Contrat[] @relation("ContratMaladieAssistance")
+  // Assistance liée (2026-08) — dès que la territorialité d'un contrat
+  // Maladie dépasse "Gabon Uniquement", un contrat Assistance devient
+  // obligatoire et partage EXACTEMENT la même population que son contrat
+  // Maladie (voir SanteService/ContratsService) : un contrat Assistance
+  // lié n'a jamais sa propre ligne AssureSante, sa population est lue par
+  // filtrage sur contratMaladieLieId — ce qui rend toute duplication
+  // structurellement impossible pour ce cas.
+  contratMaladieLieId String?
+  contratMaladieLie   Contrat?  @relation("ContratMaladieAssistance", fields: [contratMaladieLieId], references: [id])
+  contratsAssistanceLies Contrat[] @relation("ContratMaladieAssistance")
 
   // ── Garanties (2026-08) ──────────────────────────────────────────────
   // Résumé global affiché en tête du tableau de garanties (ex: "Taux
@@ -1441,12 +1311,10 @@ model Contrat {
   demandesClient    DemandeClient[]
   encaissements     EncaissementPrime[]
   quittancesLibres  QuittanceLibre[]
-  relancesEnvoyees  RelanceEnvoyee[]
 
   @@unique([compagnieId, numeroPolice])
 
   @@index([societeId])
-  @@index([contratAssistanceId])
 }
 
 // Encaissement de prime (2026-08) — voir demande utilisateur : "Bordereau
@@ -1924,9 +1792,6 @@ model FactureEnAttente {
   societeId String?
   societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
   matricule        String
-  // Numéro de police compagnie (2026-09, facultatif) — départage un
-  // matricule présent sur plusieurs polices (voir ImportService).
-  numeroPolice     String?
   prestataire      String
   referenceFacture String
   dateReception    String
@@ -2049,10 +1914,6 @@ model ParametresEntreprise {
   // Absent = page de garde générée par défaut (comportement historique).
   statistiquesPageGarde String?
 
-  // Adresses email mises en copie systématique sur chaque réponse ARIANA
-  // (2026-11) — paramétrables depuis l'onglet Paramétrage de l'entreprise.
-  arianaEmailCc String[] @default([])
-
   updatedAt         DateTime @updatedAt
 }
 
@@ -2119,49 +1980,6 @@ model Sinistre {
 }
 
 // ── Santé — Affiliation & Sinistres santé ────────────────────────────
-// Identité d'une personne assurée AU SEIN D'UNE SOCIÉTÉ (2026-09) — voir
-// demande utilisateur : "il peut arriver qu'une personne soit liée à plusieurs
-// contrats... il faut contextualiser ses consommations par rapport à chaque
-// contrat auquel il est lié... en affichant ses consommations par exercice
-// qu'il s'agisse du même contrat ou des contrats différents." Une identité
-// peut avoir plusieurs affiliations AssureSante, une par contrat/police ;
-// les prestations restent rattachées à l'affiliation et à son contrat pour
-// préserver l'historique (rapport S/P de chaque contrat intact).
-model IdentiteAssuree {
-  id           String             @id @default(cuid())
-  // Cloisonnée par société (2026-09-26) — voir demande utilisateur : "Chaque
-  // société gère ses données... en aucun moment l'application doit les
-  // considérer comme étant les mêmes données ou se rapportant à la même
-  // personne." Une même personne assurée par deux sociétés = deux identités.
-  societeId    String?
-  matricule    String
-  nom          String
-  prenom       String?
-  createdAt    DateTime           @default(now())
-  affiliations AssureSante[]
-  matricules   MatriculeAssuree[]
-
-  @@unique([societeId, matricule])
-  @@index([societeId])
-  @@index([nom])
-}
-
-// Matricules successifs d'une même personne (2026-09). Les anciens restent
-// recherchables sans recréer une personne ni perdre son historique.
-model MatriculeAssuree {
-  id         String          @id @default(cuid())
-  societeId  String?
-  matricule  String
-  identiteId String
-  statut     String          @default("Ancien") // Actuel | Ancien
-  createdAt  DateTime        @default(now())
-  identite   IdentiteAssuree @relation(fields: [identiteId], references: [id], onDelete: Cascade)
-
-  @@unique([societeId, matricule])
-  @@index([societeId])
-  @@index([identiteId])
-}
-
 model AssureSante {
   id                String  @id
 
@@ -2177,10 +1995,6 @@ model AssureSante {
   prenom            String?
   telephone         String?
   matricule         String
-  // Identité transverse (2026-09) — voir IdentiteAssuree : la même
-  // personne a une affiliation (cette fiche) par contrat/police.
-  identiteId        String?
-  identite          IdentiteAssuree?    @relation(fields: [identiteId], references: [id])
   contratId         String
   beneficiaires     Int
   cotisation        Decimal @db.Decimal(18, 2)
@@ -2251,10 +2065,6 @@ model AssureSante {
 
   contrat           Contrat             @relation(fields: [contratId], references: [id])
   prisesEnCharge    PriseEnCharge[]
-  rendezVous        RendezVous[]
-  accesDossiers     AccesDossierMedical[]
-  mesuresSante      MesureSante[]
-  prescriptionsNumerisees Prescription[] @relation("PrescriptionNumeriseeAssure")
   remboursementsBeneficiaire Remboursement[]
   accordsPrealables AccordPrealable[]
   // Compte du portail assuré (2026-08) — remplace l'ancien CompteAssureMobile
@@ -2269,15 +2079,11 @@ model AssureSante {
   // Ordonnance et rubrique Examens & Compte rendu" — documents filés par
   // l'assuré lui-même quand le prestataire ne les a pas saisis
   // systématiquement (photo → PDF, voir CarnetSanteDocument).
-  carnetSante            CarnetSanteDocument[]
+  carnetSante       CarnetSanteDocument[]
 
   @@unique([contratId, matricule])
 
   @@index([societeId])
-  @@index([identiteId])
-  @@index([contratId, statut])
-  @@index([nom])
-  @@index([prenom])
 }
 
 // Demande de mouvement de population initiée depuis le portail client
@@ -2405,17 +2211,11 @@ model Prestataire {
   // les migrations.
   specialite           String?
   pays                 String?
-  province             String?
   ville                String?
   telephone            String?
   adresse              String?
   statutConvention     String? // En négociation | Conventionné | Suspendu
   dateConventionnement String?
-  // Code officiel de la structure médicale lu sur les formulaires FS/FE
-  // (2026-11) — renseigné automatiquement par ARIANA lors de la conversion
-  // d'un bon numérisé ou de l'analyse GED ; permet un appariement exact
-  // sur les scans futurs sans dépendre de la qualité OCR du nom.
-  codeEtablissement    String?
   delaiPaiementMoyen   Int?
   scoreQualite         Decimal? @db.Decimal(5, 2)
   motifSuspension      String?
@@ -2445,7 +2245,6 @@ model Prestataire {
   // MedecinPrestataire ci-dessous (nouveau module "Professionnel de
   // santé", rubrique Système).
   medecins MedecinPrestataire[]
-  rendezVous RendezVous[]
   gedDocuments GedDocument[]
 
   // Visibilité du portail prestataire (2026-08) — voir demande utilisateur :
@@ -2500,10 +2299,6 @@ model Prestataire {
   // Alias de reprise d'antériorité (2026-08 — voir PrestataireAlias
   // ci-dessous).
   aliases PrestataireAlias[]
-  // Accès multi-clients portail (2026-10) — liste des sociétés utilisatrices
-  // de MEDASSUR+ que ce prestataire peut servir EN PLUS de sa propre société.
-  // Voir PortailSocieteAcces ci-dessous.
-  accesMultiClients PortailSocieteAcces[]
 
   @@index([societeId])
 }
@@ -2536,28 +2331,6 @@ model PrestataireAlias {
   // sociétés peuvent légitimement avoir chacune un prestataire dont le nom
   // d'origine (fichier importé) coïncide.
   @@unique([societeId, nomOrigine])
-  @@index([societeId])
-}
-
-// Accès multi-clients portail prestataire (2026-10) — voir demande
-// utilisateur : "permettre au prestataire de sélectionner pour le compte
-// de quel client il veut faire l'identification". Un prestataire physique
-// (hôpital, pharmacie, clinique) peut servir des patients couverts par
-// PLUSIEURS sociétés utilisant MEDASSUR+ (compagnies, courtiers, mutuelles).
-// Ce modèle liste les sociétés SUPPLÉMENTAIRES autorisées, au-delà de la
-// société d'origine du prestataire (celle qui a créé ses comptes portail).
-// Volontairement EXCLU de TENANT_MODELS : table de jonction inter-sociétés,
-// le filtrage automatique par societeId n'aurait pas de sens ici.
-model PortailSocieteAcces {
-  id            String           @id @default(cuid())
-  prestataireId String
-  societeId     String           // société cliente (compagnie, courtier, mutuelle)
-  createdAt     DateTime         @default(now())
-  prestataire   Prestataire      @relation(fields: [prestataireId], references: [id], onDelete: Cascade)
-  societe       SocieteAssurance @relation(fields: [societeId], references: [id], onDelete: Cascade)
-
-  @@unique([prestataireId, societeId])
-  @@index([prestataireId])
   @@index([societeId])
 }
 
@@ -2603,8 +2376,6 @@ model Medecin {
   // Prescriptions rédigées en tant que médecin prescripteur (2026-08) —
   // voir model Prescription ci-dessous.
   prescriptions Prescription[]
-  rendezVous    RendezVous[]
-  accesDossiers AccesDossierMedical[]
   // Consultations assignées par l'accueil (2026-09) — voir
   // PriseEnCharge.medecinId ci-dessus.
   prisesEnCharge PriseEnCharge[]
@@ -2651,21 +2422,10 @@ model Prescription {
   // Conversation ci-dessus pour le détail du mécanisme.
   societeId String?
   societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
-  priseEnChargeId   String?  @unique
-  priseEnCharge     PriseEnCharge? @relation("PrescriptionOrigine", fields: [priseEnChargeId], references: [id])
-  medecinId         String?
-  medecin           Medecin? @relation(fields: [medecinId], references: [id])
-  // Ordonnance / bon d'examen papier numérisé par l'assuré (2026-11) : pas
-  // de consultation ni de médecin du réseau, l'assuré et l'original sont
-  // portés directement ; délivrable comme une prescription électronique.
-  origine           String   @default("Consultation") // Consultation | Numérisée
-  assureId          String?
-  assure            AssureSante? @relation("PrescriptionNumeriseeAssure", fields: [assureId], references: [id])
-  numeroOrdonnance  String?  @unique
-  prescripteurNom   String?
-  structureNom      String?
-  dateOrdonnance    String?
-  carnetDocumentId  String?
+  priseEnChargeId   String   @unique
+  priseEnCharge     PriseEnCharge @relation("PrescriptionOrigine", fields: [priseEnChargeId], references: [id])
+  medecinId         String
+  medecin           Medecin  @relation(fields: [medecinId], references: [id])
   // Motifs de consultation (2026-08) — voir demande utilisateur :
   // "l'application doit pouvoir faire remonter une liste des motifs, avec
   // la possibilité d'en ajouter plusieurs" — plusieurs motifs par
@@ -2677,7 +2437,6 @@ model Prescription {
   // saisie libre.
   codeAffection     String?
   affection         CodeAffection? @relation(fields: [codeAffection], references: [code])
-  codeEtablissement String?
   // Numéro du bon d'examen (2026-08) — réutilise la numérotation des
   // Feuilles d'Examen déjà en place (DocumentsService.prochainNumeroFormulaire
   // "feuille-examen", FE-000001/2026). Absent si aucune ligne Examen.
@@ -2810,26 +2569,6 @@ model AccordPrealable {
   // origine est un portail externe (voir AccordPrealableService.decider).
   ordonnanceFichier String?
   devisFichier      String?
-
-  // Ordonnance électronique pharmacie (2026-10) — l'assuré filme/scanne
-  // son ordonnance, Ariana (vision Claude) extrait les médicaments et crée
-  // un AccordPrealable type "Pharmacie" accordé d'office ; la pharmacie
-  // entre le code pour servir l'assuré en tiers payant.
-  medicamentsLus     String?
-  codeAccesPharmacie String? @unique
-
-  // Numérisation intelligente (2026-10) — champs extraits par Ariana (vision
-  // Claude) depuis le scan d'une Feuille de Soins ou Feuille d'Examens LA
-  // RUCHE. texteCachetMedecin = texte EXACT de chaque ligne du cachet (CNOM,
-  // téléphone, adresse…) copié mot pour mot ; signaturePresente = signature
-  // du praticien visible sur le scan ; casesCoches = JSON des cases cochées
-  // (secteur, spécialité, tarif jour/nuit) ; documentNumerise = chemin du
-  // PDF de réplication généré reproduisant le format officiel LA RUCHE.
-  medecinTraitant    String?
-  texteCachetMedecin String?
-  signaturePresente  Boolean?
-  casesCoches        String?
-  documentNumerise   String?
 
   // Toute entente préalable se rapporte à un prestataire précis (clinique,
   // hôpital, cabinet médical, dentiste, ophtalmologue, laboratoire,
@@ -3098,10 +2837,6 @@ model PriseEnCharge {
   @@index([remboursementId])
   @@index([medecinId])
   @@index([codeAffection])
-  @@index([assureId])
-  @@index([date])
-  @@index([statut])
-  @@index([prestataireId])
 
   @@index([societeId])
 }
@@ -3129,19 +2864,12 @@ model Facture {
   contratId        String
   dateReception    String
   referenceFacture String
-  statut           String   @default("En saisie") // En saisie | Soumise | Payée | Annulée
+  statut           String   @default("En saisie") // En saisie | Soumise | Annulée
   // Une facture annulée n'est jamais supprimée (traçabilité) et reste dans
   // la liste du prestataire, mais ne peut plus être ni complétée ni liée à
   // un nouveau règlement (voir FacturesService.annuler).
   motifAnnulation  String?
   gestionnaireId   String?
-  // Agence de SAISIE (2026-09) — voir demande utilisateur : "faire remonter
-  // les sinistres... en fonction des prestataires d'une ville et surtout de
-  // l'agence dans laquelle les factures des prestataires médicaux ont été
-  // saisies." Figée à la création (agence de l'agent qui saisit), jamais
-  // recalculée si l'agent change d'agence ensuite.
-  agenceId         String?
-  agence           Agence?        @relation(fields: [agenceId], references: [id])
   createdAt        DateTime @default(now())
 
   // Relevé de facture prestataire (2026-08) — voir demande utilisateur :
@@ -3170,11 +2898,6 @@ model Facture {
 
   @@index([prestataireId])
   @@index([contratId])
-  @@index([statut])
-  @@index([dateReception])
-  @@index([gestionnaireId])
-  @@index([releveId])
-  @@index([createdAt])
 
   @@index([societeId])
 }
@@ -3227,13 +2950,6 @@ model Remboursement {
   statut            String   @default("En saisie") // En saisie | Soumise | Annulée
   motifAnnulation   String?
   gestionnaireId    String?
-  // Agence de SAISIE (2026-09) — voir demande utilisateur : "faire remonter
-  // les sinistres... en fonction des prestataires d'une ville et surtout de
-  // l'agence dans laquelle les factures des prestataires médicaux ont été
-  // saisies." Figée à la création (agence de l'agent qui saisit), jamais
-  // recalculée si l'agent change d'agence ensuite.
-  agenceId          String?
-  agence            Agence?      @relation(fields: [agenceId], references: [id])
   createdAt         DateTime @default(now())
 
   assurePrincipal AssureSante? @relation(fields: [assurePrincipalId], references: [id])
@@ -3243,9 +2959,6 @@ model Remboursement {
 
   @@index([contratId])
   @@index([assurePrincipalId])
-  @@index([statut])
-  @@index([gestionnaireId])
-  @@index([createdAt])
 
   @@index([societeId])
 }
@@ -3405,12 +3118,6 @@ model BordereauReglement {
   // la saisie libre de `payer()` par une vraie traçabilité bancaire.
   lettreChequeId String?
 
-  // Règlement par Mobile Money (2026-10) — Transaction E-Billing PAYOUT liée
-  // à ce bordereau. Miroir de lettreChequeId pour le mode chèque : quand le
-  // callback Digitech confirme le paiement, le bordereau passe "Payé" et
-  // referenceVirement reçoit la référence de la Transaction.
-  transactionEbillingId String?
-
   // Règlement à l'ordre d'un médecin (2026-08) — voir demande utilisateur :
   // "lorsqu'on fait un règlement pour une structure médicale, que le
   // règlement se fasse à l'ordre d'un médecin intervenant dans la
@@ -3427,18 +3134,14 @@ model BordereauReglement {
   // bordereaux créés avant ce champ.
   creeParId String?
 
-  prestataire         Prestataire     @relation(fields: [prestataireId], references: [id])
-  medecin             Medecin?        @relation(fields: [medecinId], references: [id])
-  creePar             User?           @relation(fields: [creeParId], references: [id])
-  prisesEnCharge      PriseEnCharge[]
-  lettreCheque        LettreCheque?   @relation(fields: [lettreChequeId], references: [id])
-  transactionEbilling Transaction?    @relation(fields: [transactionEbillingId], references: [id])
+  prestataire    Prestataire     @relation(fields: [prestataireId], references: [id])
+  medecin        Medecin?        @relation(fields: [medecinId], references: [id])
+  creePar        User?           @relation(fields: [creeParId], references: [id])
+  prisesEnCharge PriseEnCharge[]
+  lettreCheque   LettreCheque?   @relation(fields: [lettreChequeId], references: [id])
 
-  @@index([prestataireId])
-  @@index([statut])
   @@index([societeId])
   @@index([creeParId])
-  @@index([transactionEbillingId])
 }
 
 // ── Règlement comptable (lettre chèque) — 2026-08 ─────────────────────
@@ -3477,35 +3180,10 @@ model Banque {
   statut       String   @default("Actif") // Actif | Inactif
   createdAt    DateTime @default(now())
 
-  lots             LotCheques[]
-  lettresCheque    LettreCheque[]
-  encaissements    EncaissementPrime[]
-  compteReglements CompteReglement[]
-
-  @@index([societeId])
-}
-
-// Compte de règlement — sous-compte d'une banque pour les règlements
-// prestataires (2026-10, demande utilisateur : "Orabank Sanlam, Orabank NSIA").
-// Permet de paramétrer plusieurs comptes sur une même banque, chacun avec
-// sa propre plage de chèques. `compteReglementId` est optionnel sur
-// LotCheques et LettreCheque : les lots/lettres créés avant ce modèle
-// restent rattachés directement à la banque.
-model CompteReglement {
-  id           String   @id @default(cuid())
-  societeId    String?
-  societe      SocieteAssurance? @relation(fields: [societeId], references: [id])
-  banqueId     String
-  banque       Banque   @relation(fields: [banqueId], references: [id])
-  libelle      String
-  compteNumero String?
-  statut       String   @default("Actif")
-  createdAt    DateTime @default(now())
-
   lots          LotCheques[]
   lettresCheque LettreCheque[]
+  encaissements EncaissementPrime[]
 
-  @@index([banqueId])
   @@index([societeId])
 }
 
@@ -3530,33 +3208,10 @@ model Agence {
   // Code d'agence (2026-09) — optionnel, reprend au besoin la numérotation
   // historique du modèle papier ("212") ; purement déclaratif.
   code      String?
-  // Paramétrage complet de l'agence (2026-09) — voir demande utilisateur :
-  // "il faut rendre paramétrable la création des agences au lieu de
-  // laisser juste le code le décider." Tout est saisi depuis l'écran
-  // Agences, jamais déduit en dur.
-  ville       String?
-  adresse     String?
-  telephone   String?
-  email       String?
-  responsable String?
-  statut      String   @default("Actif") // Actif | Inactif
-  // Mentions reconnues à l'import (ex. "POG" pour Port-Gentil) : un
-  // fichier de contrats dont la compagnie/le souscripteur porte l'une de
-  // ces mentions ("OGAR ASSURANCES POG") est rattaché à CETTE agence —
-  // déclaré par l'utilisateur, plus aucune correspondance codée en dur.
-  mentionsImport String[] @default([])
-  // Création automatique des déclinaisons de compagnies (2026-09) — voir
-  // Compagnie.compagnieMereId. Désactivée : un contrat de l'agence placé
-  // sur une compagnie sans déclinaison déclarée reste sur la compagnie
-  // choisie (signalé à l'utilisateur), rien n'est créé.
-  creerDeclinaisonsAuto Boolean @default(true)
   createdAt DateTime @default(now())
 
   agents User[]
   contrats Contrat[]
-  compagnies Compagnie[]
-  factures Facture[]
-  remboursements Remboursement[]
 
   @@index([societeId])
 }
@@ -3576,20 +3231,17 @@ model LotCheques {
   // lecture. Voir Conversation ci-dessus pour le détail du mécanisme.
   societeId String?
   societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
-  banqueId            String
-  compteReglementId   String?
-  numeroDebut         Int
-  numeroFin           Int
-  numeroProchain      Int
-  statut              String   @default("Actif") // Actif | Épuisé
-  createdAt           DateTime @default(now())
+  banqueId       String
+  numeroDebut    Int
+  numeroFin      Int
+  numeroProchain Int
+  statut         String   @default("Actif") // Actif | Épuisé
+  createdAt      DateTime @default(now())
 
-  banque          Banque           @relation(fields: [banqueId], references: [id])
-  compteReglement CompteReglement? @relation(fields: [compteReglementId], references: [id])
-  lettresCheque   LettreCheque[]
+  banque        Banque         @relation(fields: [banqueId], references: [id])
+  lettresCheque LettreCheque[]
 
   @@index([banqueId])
-  @@index([compteReglementId])
   @@index([societeId])
 }
 
@@ -3609,27 +3261,25 @@ model LettreCheque {
   // a la main dans les services metier.
   societeId String?
   societe   SocieteAssurance? @relation(fields: [societeId], references: [id])
-  numero              String   @unique
-  banqueId            String
-  compteReglementId   String?
-  lotChequesId        String
-  numeroCheque        Int
-  compagnieId         String?
-  prestataireId       String
-  montantTotal        Decimal  @db.Decimal(18, 2)
-  statut              String   @default("Émise") // Émise | Annulée
-  dateEmission        String
-  createdAt           DateTime @default(now())
+  numero        String   @unique
+  banqueId      String
+  lotChequesId  String
+  numeroCheque  Int
+  compagnieId   String?
+  prestataireId String
+  montantTotal  Decimal  @db.Decimal(18, 2)
+  statut        String   @default("Émise") // Émise | Annulée
+  dateEmission  String
+  createdAt     DateTime @default(now())
 
-  banque          Banque               @relation(fields: [banqueId], references: [id])
-  compteReglement CompteReglement?     @relation(fields: [compteReglementId], references: [id])
-  lot             LotCheques           @relation(fields: [lotChequesId], references: [id])
-  compagnie       Compagnie?           @relation(fields: [compagnieId], references: [id])
-  prestataire     Prestataire          @relation(fields: [prestataireId], references: [id])
-  bordereaux      BordereauReglement[]
+  banque      Banque               @relation(fields: [banqueId], references: [id])
+  lot         LotCheques           @relation(fields: [lotChequesId], references: [id])
+  compagnie   Compagnie?           @relation(fields: [compagnieId], references: [id])
+  prestataire Prestataire          @relation(fields: [prestataireId], references: [id])
+  bordereaux   BordereauReglement[]
+  gedDocuments GedDocument[]
 
   @@index([banqueId])
-  @@index([compteReglementId])
   @@index([prestataireId])
   @@index([compagnieId])
 
@@ -4010,17 +3660,15 @@ model GedDocument {
   // renseigné qu'une fois un rapprochement (auto ou manuel) confirmé.
   prestataireId     String?
   prestataire       Prestataire? @relation(fields: [prestataireId], references: [id])
-  referenceExtraite   String?
-  montantExtrait      Decimal?  @db.Decimal(18, 2)
-  // Date lue sur le cachet/tampon "courrier arrivé" du document (2026-10) —
-  // extraite par l'IA lors de l'import ; null si aucun cachet visible.
-  dateCachet          String?
-  // Nom de l'émetteur lu sur le document (2026-10) — clinique, fournisseur,
-  // cabinet… ; null si non identifiable. Complète prestataireId/entiteLiee
-  // quand l'émetteur n'est pas encore enregistré comme Prestataire en base.
-  nomEmetteurExtrait  String?
+  referenceExtraite String?
+  montantExtrait    Decimal?     @db.Decimal(18, 2)
   factureId         String?
-  facture           Facture?     @relation(fields: [factureId], references: [id])
+  facture           Facture?      @relation(fields: [factureId], references: [id])
+  // Règlement comptable associé (2026-11) — LettreCheque liée au
+  // BordereauReglement rapproché (Fallback 3) ou aux PECs quand toutes
+  // payées par le même chèque. Renseigné automatiquement par ARIANA cron.
+  lettreChequeId    String?
+  lettreCheque      LettreCheque? @relation(fields: [lettreChequeId], references: [id])
   // "Sans objet" (document qui n'est pas une facture prestataire — un
   // courrier, par exemple) | "Non traité" (facture importée, aucune saisie
   // correspondante trouvée) | "Traité partiellement" (saisie trouvée mais
@@ -4035,6 +3683,7 @@ model GedDocument {
   @@index([societeId])
   @@index([prestataireId])
   @@index([factureId])
+  @@index([lettreChequeId])
   @@index([statutTraitement])
 }
 
@@ -4292,114 +3941,4 @@ model RequeteIdempotente {
   createdAt DateTime @default(now())
 
   @@index([createdAt])
-}
-
-// ── Abonnement individuel assuré radié/suspendu (2026-10) ─────────────────
-// Voir demande utilisateur : "si un assuré est suspendu/radié, une page
-// d'abonnement annuel doit s'afficher en lui disant clairement que son
-// compte n'est plus lié à un contrat d'assurance. Pour retrouver
-// l'historique de ses données et bénéficier de certains avantages de
-// l'application comme l'E-carnet Santé, il devra souscrire un abonnement
-// annuel." Cloisonné par societeId (même tenant que l'assure d'origine).
-// AbonnementIndividuel — migration non encore appliquée en prod (2026-10).
-// Réintégrer le modèle complet après avoir appliqué la migration SQL complète.
-
-// ── E-Billing / Paiement électronique ────────────────────────────────
-// Moteur de paiement Digitech Africa (2026-10) — PAYIN (collecte via
-// Airtel Money / Moov Money / Visa-Mastercard) et PAYOUT (décaissement
-// vers prestataires / assurés). Cloisonné par societeId.
-model Transaction {
-  id                     String    @id @default(cuid())
-  societeId              String
-  reference              String    @unique
-  type                   String    // "PAYIN" | "PAYOUT"
-  montant                Float
-  description            String
-  statut                 String    @default("created") // created|pending|paid|expired|failed
-  ebillingId             String?   // E-Billing bill_id (PAYIN)
-  payoutId               String?   // SHAP payout_id (PAYOUT)
-  operateur              String?   // airtelmoney | moovmoney4 | SIMU
-  transactionIdOperateur String?
-  fraisBilling           Float?    // Commission Digitech Africa (FCFA)
-  payeurMsisdn           String?
-  payeurNom              String?
-  payeurEmail            String?
-  contratId              String?
-  prestataireId          String?
-  gestionnaireId         String?
-  createdAt              DateTime  @default(now())
-  paidAt                 DateTime?
-
-  societe    SocieteAssurance    @relation(fields: [societeId], references: [id])
-  bordereaux BordereauReglement[]
-
-  @@index([societeId])
-  @@index([statut])
-}
-
-// Suivi de santé (2026-11) — rendez-vous en ligne entre un assuré (ou un
-// ayant droit) et un médecin et/ou une structure du réseau.
-model RendezVous {
-  id            String       @id @default(cuid())
-  societeId     String?
-  assureId      String
-  assure        AssureSante  @relation(fields: [assureId], references: [id])
-  medecinId     String?
-  medecin       Medecin?     @relation(fields: [medecinId], references: [id])
-  prestataireId String?
-  prestataire   Prestataire? @relation(fields: [prestataireId], references: [id])
-  type          String       // Consultation | Contrôle | Examen
-  // Spécialité demandée (2026-11) : choisie dans la structure ; sans
-  // médecin précis, l'établissement affecte un de ses médecins.
-  specialite    String?
-  motif         String?
-  dateHeure     DateTime
-  dureeMinutes  Int          @default(30)
-  statut        String       @default("Demandé") // Demandé | Confirmé | Refusé | Annulé | Honoré | Absent
-  reponse       String?      // message du professionnel (confirmation, refus, nouvel horaire…)
-  demandeParUserId String?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-
-  @@index([societeId])
-  @@index([assureId])
-  @@index([medecinId])
-  @@index([prestataireId])
-}
-
-// Accès d'un médecin au dossier médical d'un assuré, ouvert et fermé par
-// l'assuré lui-même depuis son portail (historique conservé).
-model AccesDossierMedical {
-  id        String      @id @default(cuid())
-  societeId String?
-  assureId  String
-  assure    AssureSante @relation(fields: [assureId], references: [id])
-  medecinId String
-  medecin   Medecin     @relation(fields: [medecinId], references: [id])
-  actif     Boolean     @default(true)
-  ouvertLe  DateTime    @default(now())
-  fermeLe   DateTime?
-
-  @@unique([assureId, medecinId])
-  @@index([societeId])
-  @@index([medecinId])
-}
-
-// Contrôles de santé : constantes relevées par l'assuré ou par un médecin
-// ayant accès au dossier (tension, glycémie, poids…).
-model MesureSante {
-  id         String      @id @default(cuid())
-  societeId  String?
-  assureId   String
-  assure     AssureSante @relation(fields: [assureId], references: [id])
-  type       String      // Tension | Glycémie | Poids | Température | Fréquence cardiaque | Saturation | Autre
-  valeur     String
-  unite      String?
-  dateMesure DateTime
-  note       String?
-  medecinId  String?     // renseigné quand la mesure est saisie par un médecin
-  createdAt  DateTime    @default(now())
-
-  @@index([societeId])
-  @@index([assureId])
 }
