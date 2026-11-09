@@ -13,22 +13,22 @@ export class DocumentsController {
 
   @Get("quittance/:contratId")
   quittance(@Param("contratId") contratId: string, @Res() res: Response) {
-    return this.documentsService.renderQuittance(contratId, res);
+    return this.documentsService.renderQuittance(contratId, "pdf", res);
   }
 
   @Get("quittance-avenant/:avenantId")
   quittanceAvenant(@Param("avenantId") avenantId: string, @Res() res: Response) {
-    return this.documentsService.renderQuittanceAvenant(avenantId, res);
+    return this.documentsService.renderQuittanceAvenant(avenantId, "pdf", res);
   }
 
   @Get("tableau-garanties/:contratId")
   tableauGaranties(@Param("contratId") contratId: string, @Res() res: Response) {
-    return this.documentsService.renderTableauGaranties(contratId, res);
+    return this.documentsService.renderTableauGaranties(contratId, "pdf", res);
   }
 
   @Get("avenant/:avenantId")
   avenant(@Param("avenantId") avenantId: string, @Res() res: Response) {
-    return this.documentsService.renderAvenant(avenantId, res);
+    return this.documentsService.renderAvenant(avenantId, "pdf", res);
   }
 
   @Get("carte/:assureId")

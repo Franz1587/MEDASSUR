@@ -2712,12 +2712,12 @@ export class DocumentsService {
       };
     });
     const pec: FormulairePec = {
-      date: prescription.priseEnCharge.date, type: prescription.priseEnCharge.type, createdAt: prescription.createdAt,
-      assure: prescription.priseEnCharge.assure as unknown as FormulairePec["assure"],
-      prestataireRef: prescription.priseEnCharge.prestataireRef,
+      date: prescription.priseEnCharge!.date, type: prescription.priseEnCharge!.type, createdAt: prescription.createdAt,
+      assure: prescription.priseEnCharge!.assure as unknown as FormulairePec["assure"],
+      prestataireRef: prescription.priseEnCharge!.prestataireRef,
       // Pas de section pharmacie sur la Feuille d'Examen — tableau vide,
       // jamais utilisé par genererFormulaire côté "examen".
-      prescriptionOrigine: { medecin: prescription.medecin, numeroBonExamen: prescription.numeroBonExamen, medicaments: [] },
+      prescriptionOrigine: { medecin: prescription.medecin as any, numeroBonExamen: prescription.numeroBonExamen, medicaments: [] },
     };
     await this.genererFormulaire("examen", prescription.numeroBonExamen, pec, lignes, res, prescriptionId, utilisateur, prestataireFiltre);
   }
@@ -5726,13 +5726,13 @@ export class DocumentsService {
 
   // Export Accords Préalables (Prises en Charge) d'un contrat.
   async renderAccordPrealableExport(contratId: string, format: "pdf" | "xlsx" | "docx", res: Response) {
-    const accords = await this.accordPrealable.findAll({ contratId });
-    const rows = accords.map((a) => [a.assure.nom + " " + (a.assure.prenom ?? ""), a.type, a.dateDemande, a.decision, a.montantAutorise !== null ? Number(a.montantAutorise) : 0]);
+    const accords = (await this.accordPrealable.findAll({ contratId })).items;
+    const rows = accords.map((a: any) => [a.assure.nom + " " + (a.assure.prenom ?? ""), a.type, a.dateDemande, a.decision, a.montantAutorise !== null ? Number(a.montantAutorise) : 0]);
     if (format === "xlsx") return this.envoyerTableauXlsx(res, `Accords-Prealables-${contratId}`, ["Assuré", "Type", "Date demande", "Décision", "Montant autorisé"], rows);
-    if (format === "docx") return this.envoyerDocx(res, `Accords-Prealables-${contratId}`, "PRISES EN CHARGE", `${accords.length} dossier(s)`, [], { headers: ["Assuré", "Type", "Date demande", "Décision", "Montant"], rows: rows.map((r) => r.map(String)) });
+    if (format === "docx") return this.envoyerDocx(res, `Accords-Prealables-${contratId}`, "PRISES EN CHARGE", `${accords.length} dossier(s)`, [], { headers: ["Assuré", "Type", "Date demande", "Décision", "Montant"], rows: rows.map((r: any[]) => r.map(String)) });
     return this.envoyerTableauPdf(res, `Accords-Prealables-${contratId}`, "PRISES EN CHARGE", `${accords.length} dossier(s)`,
       [{ h: "Assuré", w: 150 }, { h: "Type", w: 100 }, { h: "Date demande", w: 100 }, { h: "Décision", w: 90 }, { h: "Montant autorisé", w: 100 }],
-      rows, "TOTAL AUTORISÉ", `${fmt(rows.reduce((s, r) => s + (r[4] as number), 0))} FCFA`);
+      rows, "TOTAL AUTORISÉ", `${fmt(rows.reduce((s: number, r: any[]) => s + (r[4] as number), 0))} FCFA`);
   }
 
   // Export Consommations (lignes PriseEnCharge) d'un contrat — voir mémoire
@@ -5810,6 +5810,40 @@ export class DocumentsService {
   async renderFeuilleExamenDeAssure(assureId: string, res: Response, utilisateur: { id: string | null; nom: string; roleId: string }) {
     const pecId = await this.peclaPlusRecente(assureId, "examen");
     return this.renderFeuilleExamenLigne(pecId, res, utilisateur);
+  }
+
+  async renderOriginalNumerise(prescriptionId: string, res: Response): Promise<void> {
+    const prescription = await this.prisma.prescription.findUnique({
+      where: { id: prescriptionId },
+      select: { carnetDocumentId: true },
+    });
+    if (!prescription?.carnetDocumentId) {
+      res.status(404).json({ message: "Aucun original numérisé pour ce bon" });
+      return;
+    }
+    const doc = await this.prisma.carnetSanteDocument.findUnique({
+      where: { id: prescription.carnetDocumentId },
+      select: { fichier: true },
+    });
+    if (!doc?.fichier) {
+      res.status(404).json({ message: "Fichier original introuvable" });
+      return;
+    }
+    const buffer = this.storage.actif
+      ? await this.storage.download("carnet-sante", doc.fichier)
+      : await fs.promises.readFile(path.join(UPLOADS_ROOT, "carnet-sante", doc.fichier)).catch(() => null);
+    if (!buffer) {
+      res.status(404).json({ message: "Fichier original introuvable sur le serveur" });
+      return;
+    }
+    const ext = path.extname(doc.fichier).toLowerCase();
+    const contentType =
+      ext === ".pdf" ? "application/pdf" :
+      ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" :
+      ext === ".png" ? "image/png" : "application/octet-stream";
+    res.set("Content-Type", contentType);
+    res.set("Content-Disposition", `inline; filename="original${ext}"`);
+    res.send(buffer);
   }
 }
 
