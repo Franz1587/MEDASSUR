@@ -148,16 +148,21 @@ export class StatistiquesService {
     const resoudreFamille = (p: (typeof lignes)[number]): string => {
       const rubrique = resoudreRubriqueContrat(garantiesContrat, { type: p.type, prestataireType: p.prestataireRef?.type }, p.acteMedicalId ? acteInfoParActeId.get(p.acteMedicalId) : null);
       if (rubrique !== "Ambulatoire") return rubrique;
-      // "Ambulatoire" ne doit jamais remonter (voir demande utilisateur) :
-      // dernier recours via libellé exact de l'acte médical.
-      if (p.acteMedicalId) {
-        const lib = libelleParActeId.get(p.acteMedicalId);
-        if (lib) {
-          const viaLib = normaliserRubrique(lib);
-          if (viaLib !== "Ambulatoire") return viaLib;
-        }
+      // "Ambulatoire" ne doit jamais remonter (demande utilisateur). Cascade
+      // de 4 tentatives : libellé → catégorieGarantie (actes précis) →
+      // nom brut du prestataire (pharmacies/cabinets sans FK résolue) →
+      // catégorieGarantie des actes DIVERS (reprise d'antériorité).
+      const VALIDES = new Set(["Dentisterie", "Optique", "Kinésithérapie & Cure thermale", "Maternité", "Évacuation Sanitaire", "Transport", "Orthophonie", "Orthoptie", "Hospitalisation", "Pharmacie", "Analyses Médicale", "Imagerie", "Consultations", "Actes de Spécialités", "Petite Chirurgie/Soins"]);
+      const tenter = (v: string): string | null => { const r = normaliserRubrique(v); return VALIDES.has(r) ? r : null; };
+      const info = p.acteMedicalId ? acteInfoParActeId.get(p.acteMedicalId) : null;
+      const estDivers = !info || info.famille === FAMILLE_REPRISE || info.famille?.trim().toUpperCase() === "DIVERS";
+      if (!estDivers) {
+        const lib = p.acteMedicalId ? libelleParActeId.get(p.acteMedicalId) : null;
+        if (lib) { const r = tenter(lib); if (r) return r; }
+        if (info?.categorieGarantie) { const r = tenter(info.categorieGarantie); if (r) return r; }
       }
-      // Fallback absolu : soins ambulatoires = consultations externes.
+      if (p.prestataire) { const r = tenter(p.prestataire); if (r) return r; }
+      if (estDivers && info?.categorieGarantie) { const r = tenter(info.categorieGarantie); if (r) return r; }
       return "Consultations";
     };
     // Famille D'ACTES (2026-09/2026-10) — ActeMedical.famille brut (le
