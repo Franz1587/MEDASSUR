@@ -439,10 +439,24 @@ export class StatistiquesService {
       this.prisma.acteMedical.findMany({ select: { id: true, libelle: true, famille: true, categorieGarantie: true } }),
       this.prisma.contrat.findMany({ where: { id: { in: contratIds } }, select: { id: true, garanties: { select: { categorie: true } } } }),
     ]);
-    const acteInfoParActeId = new Map(actes.map((a) => [a.id, { famille: a.famille, categorieGarantie: a.categorieGarantie }]));
+    const acteInfoParActeId = new Map(actes.map((a) => [a.id, { libelle: a.libelle, famille: a.famille, categorieGarantie: a.categorieGarantie }]));
     const garantiesParContratId = new Map(contrats.map((c) => [c.id, c.garanties]));
-    const resoudreFamille = (contratId: string, l: { acteMedicalId: string | null; description: string }): string =>
-      resoudreRubriqueContrat(garantiesParContratId.get(contratId) ?? [], { type: l.description }, l.acteMedicalId ? acteInfoParActeId.get(l.acteMedicalId) : null);
+    const VALIDES_COMPTAGE = new Set(["Dentisterie", "Optique", "Kinésithérapie & Cure thermale", "Maternité", "Évacuation Sanitaire", "Transport", "Orthophonie", "Orthoptie", "Hospitalisation", "Pharmacie", "Analyses Médicale", "Imagerie", "Consultations", "Actes de Spécialités", "Petite Chirurgie/Soins"]);
+    const resoudreFamille = (contratId: string, l: { acteMedicalId: string | null; description: string }): string => {
+      const rubrique = resoudreRubriqueContrat(garantiesParContratId.get(contratId) ?? [], { type: l.description }, l.acteMedicalId ? acteInfoParActeId.get(l.acteMedicalId) : null);
+      if (rubrique !== "Ambulatoire") return rubrique;
+      const tenter = (v: string): string | null => { const r = normaliserRubrique(v); return VALIDES_COMPTAGE.has(r) ? r : null; };
+      const info = l.acteMedicalId ? acteInfoParActeId.get(l.acteMedicalId) : null;
+      const estDivers = !info || info.famille === FAMILLE_REPRISE || info.famille?.trim().toUpperCase() === "DIVERS";
+      if (!estDivers) {
+        if (info?.libelle) { const r = tenter(info.libelle); if (r) return r; }
+        if (info?.categorieGarantie) { const r = tenter(info.categorieGarantie); if (r) return r; }
+      }
+      const rDesc = tenter(l.description);
+      if (rDesc) return rDesc;
+      if (estDivers && info?.categorieGarantie) { const r = tenter(info.categorieGarantie); if (r) return r; }
+      return "Consultations";
+    };
     // Lignes = une par acte (voir AccordPrealableLigne) ; un dossier créé
     // avant l'introduction de ce modèle (aucune ligne) compte quand même
     // comme UN dossier, rattaché à son type de dossier (Hospitalisation |
