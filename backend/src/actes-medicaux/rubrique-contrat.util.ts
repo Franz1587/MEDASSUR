@@ -31,7 +31,10 @@ const RUBRIQUES_CANONIQUES: { rubrique: string; motsCles: string[] }[] = [
   { rubrique: "Optique", motsCles: ["OPTIQ", "LUNETTE", "VERRE", "MONTURE"] },
   { rubrique: "Kinésithérapie & Cure thermale", motsCles: ["KINE", "CURE THERMALE", "REEDUCATION"] },
   { rubrique: "Maternité", motsCles: ["MATERN", "ACCOUCH", "GROSSESSE", "PRENATAL"] },
-  { rubrique: "Transport", motsCles: ["TRANSPORT", "AMBULANCE", "EVASAN"] },
+  // Évacuation sanitaire AVANT Transport : "EVACUATION SANITAIRE" contient
+  // "SANIT" qui ne doit pas matcher Hospitalisation avant d'avoir matché ici.
+  { rubrique: "Évacuation Sanitaire", motsCles: ["EVASAN", "EVACUATION SANIT"] },
+  { rubrique: "Transport", motsCles: ["TRANSPORT", "AMBULANCE"] },
   { rubrique: "Orthophonie", motsCles: ["ORTHOPHON"] },
   { rubrique: "Orthoptie", motsCles: ["ORTHOPT"] },
   { rubrique: "Hospitalisation", motsCles: ["HOSPI", "HOPSI", "HOPITAL", "CHIRURGIE MAJEURE", "CHAMBRE", "SEJOUR", "NUITEE"] },
