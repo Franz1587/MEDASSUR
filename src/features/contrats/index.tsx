@@ -6,7 +6,6 @@ import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { Combobox } from "@/components/shared/Combobox";
 import { DateInput } from "@/components/shared/DateInput";
-import { echeanceApresEffet, normaliserEcheance } from "@/lib/echeance";
 import { DerniereModification } from "@/components/shared/DerniereModification";
 import { ImportEnMasseModal } from "@/components/shared/ImportEnMasseModal";
 import { Pagination } from "@/components/shared/Pagination";
@@ -23,7 +22,7 @@ import PrisesEnChargeTab from "@/features/contrats/PrisesEnChargeTab";
 import PopulationPanel from "@/features/contrats/PopulationPanel";
 import GenerationComptesMobileModal from "@/features/contrats/GenerationComptesMobileModal";
 import {
-  getContrats, createContrat, updateContrat, deleteContrat, replaceGaranties, getHistoriqueCompagnie, recalibrerExercice, getProchainNumeroPolice, toggleDerogationSaisie,
+  getContrats, createContrat, updateContrat, deleteContrat, replaceGaranties, getHistoriqueCompagnie, recalibrerExercice, supprimerExercice, getProchainNumeroPolice, toggleDerogationSaisie,
   telechargerModeleImportContrats, apercuImportContrats, confirmerImportContrats, joursRestants,
   type ContratUpsertInput, type GarantieInput, type ExerciceCompagnie, type ImportContratRow,
 } from "@/services/contrats.service";
@@ -34,18 +33,15 @@ import type { MonAbonnement } from "@/types/societes";
 import { getAssuresSante, createAssure, importPopulation, readPopulationFile, downloadPopulationTemplate, updateAssure, type ImportPopulationResult, type UpdateAssureInput } from "@/services/sante.service";
 import { getGarantieCatalogue } from "@/services/garantieCatalogue.service";
 import type { Contrat } from "@/types/contrats";
-import { getAgences } from "@/services/agences.service";
-import type { Agence } from "@/types/agences";
 import type { Client } from "@/types/clients";
 import type { Compagnie } from "@/types/compagnies";
 import type { AssureSante } from "@/types/sante";
 import type { GarantieCatalogueItem } from "@/types/garantieCatalogue";
 
 import {
-  CalculPrimeSection, calculerPrime, TAUX_TAXE_GABON, tallyByType,
+  CalculPrimeSection, calculerPrime, TAUX_TAXE_GABON, primeUnitairesAvecSurprime, tallyByType,
   type PersonneAvecAge,
 } from "@/features/contrats/CalculPrimeSection";
-import { numeroPolice } from "@/lib/police";
 
 // Portail d'accès rapide depuis un autre écran (2026-08) — voir onglet
 // "Contrats" de CompagnieParamsDrawer, même mécanisme que
@@ -163,7 +159,6 @@ function emptyForm(): ContratUpsertInput {
     clientId: "", compagnieId: "", branche: "Maladie", dateDebut: "", dateFin: "", prime: 0, statut: "Actif",
     numeroPolice: "",
     nomCarteSante: "",
-    agenceId: "",
     periodicite: "Annuel",
     produit: "MALADIE",
     paysSouscription: "Gabon", extensionsTerritorialite: [],
@@ -180,7 +175,7 @@ function emptyForm(): ContratUpsertInput {
   };
 }
 
-function contratToForm(c: Contrat, clients: Client[], compagnies: Compagnie[], contrats: Contrat[]): ContratUpsertInput {
+function contratToForm(c: Contrat, clients: Client[], compagnies: Compagnie[]): ContratUpsertInput {
   return {
     clientId: clients.find((cl) => cl.nom === c.client)?.id ?? "",
     compagnieId: compagnies.find((co) => co.nom === c.compagnie)?.id ?? "",
@@ -189,12 +184,11 @@ function contratToForm(c: Contrat, clients: Client[], compagnies: Compagnie[], c
     statut: c.statut as ContratUpsertInput["statut"],
     numeroPolice: c.numeroPolice ?? "",
     nomCarteSante: c.nomCarteSante ?? "",
-    agenceId: c.agenceId ?? "",
     periodicite: (c.periodicite as ContratUpsertInput["periodicite"]) ?? "Annuel",
     produit: c.produit ?? "",
     paysSouscription: c.paysSouscription || "Gabon",
     extensionsTerritorialite: c.extensionsTerritorialite ?? [],
-    contratsMaladieIds: c.branche === "Assistance" ? contrats.filter((m) => m.contratAssistanceId === c.id).map((m) => m.id) : undefined,
+    contratMaladieLieId: c.contratMaladieLieId ?? undefined,
     tauxCouvertureAmbulatoire: c.tauxCouvertureAmbulatoire ?? "",
     tauxCouvertureHospitalisation: c.tauxCouvertureHospitalisation ?? "",
     tauxAmbulatoirePublique: c.tauxAmbulatoirePublique ?? "",
@@ -411,11 +405,6 @@ export default function ContratsView() {
   // le sélecteur Compagnie du formulaire ci-dessous se masque à sa place.
   const [moi, setMoi] = useState<MonAbonnement | null>(null);
   useEffect(() => { getMonAbonnement().then(setMoi).catch(() => undefined); }, []);
-  // Bureau de rattachement (2026-09) — voir demande utilisateur : "LA RUCHE
-  // a un bureau à Port-Gentil qui gère ses contrats de façon autonome" —
-  // agences paramétrées dans l'écran Agences (jamais une liste codée en dur).
-  const [agences, setAgences] = useState<Agence[]>([]);
-  useEffect(() => { getAgences().then(setAgences).catch(() => undefined); }, []);
   const [historiqueCompagnie, setHistoriqueCompagnie] = useState<ExerciceCompagnie[]>([]);
   // Correction manuelle d'un exercice (2026-08) — voir demande utilisateur :
   // "il peut arriver que les données de l'import de date d'un exercice ne
@@ -466,9 +455,7 @@ export default function ContratsView() {
   const [importSearch, setImportSearch] = useState("");
   const [importRejected, setImportRejected] = useState<ImportPopulationResult["rejected"]>([]);
   const [manualPopulationEntry, setManualPopulationEntry] = useState(false);
-  // Surprime d'âge toujours appliquée (2026-09) — voir demande utilisateur :
-  // "Il faut appliquer les surprimes d'âge."
-  const appliquerSurprimeAge = true;
+  const [appliquerSurprimeAge, setAppliquerSurprimeAge] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Édition d'un assuré/ayant droit depuis la liste "population identique
@@ -481,7 +468,7 @@ export default function ContratsView() {
   // raison), mais MODIFIER la fiche d'une personne déjà affiliée ne crée
   // aucune duplication : c'est exactement la même ligne AssureSante que
   // celle du contrat Maladie (population partagée, jamais copiée — voir
-  // Contrat.contratAssistanceId), donc l'éditer ici la modifie aussi là-bas.
+  // Contrat.contratMaladieLieId), donc l'éditer ici la modifie aussi là-bas.
   const [editPersonneId, setEditPersonneId] = useState<string | null>(null);
   const [editPersonneForm, setEditPersonneForm] = useState<UpdateAssureInput>({});
   const [editPersonneSubmitting, setEditPersonneSubmitting] = useState(false);
@@ -512,7 +499,7 @@ export default function ContratsView() {
       await updateAssure(a.id, editPersonneForm);
       toast.success("Fiche mise à jour.");
       setEditPersonneId(null);
-      chargerPopulation(form.contratsMaladieIds ?? []);
+      getAssuresSante().then((all) => setExistingPopulation(all.filter((p) => p.police === form.contratMaladieLieId)));
     } catch (err) {
       setEditPersonneError(err instanceof Error ? err.message : "Erreur d'enregistrement.");
     } finally {
@@ -538,7 +525,7 @@ export default function ContratsView() {
     if (brancheFilter !== "Tous" && c.branche !== brancheFilter) return false;
     if (compagnieFilter && c.compagnie !== compagnieFilter.nom) return false;
     if (rechercheNorm) {
-      const cible = `${c.numeroPolice ?? ""} ${c.client} ${c.compagnie}`.toLowerCase();
+      const cible = `${c.id} ${c.client} ${c.compagnie} ${c.numeroPolice ?? ""}`.toLowerCase();
       if (!cible.includes(rechercheNorm)) return false;
     }
     if (echeanceDuDate || echeanceAuDate) {
@@ -610,6 +597,7 @@ export default function ContratsView() {
     setImportSearch("");
     setImportRejected([]);
     setManualPopulationEntry(false);
+    setAppliquerSurprimeAge(false);
     setTypeGestion("Classique");
     setHistoriqueCompagnie([]);
     setFormError(null);
@@ -627,19 +615,20 @@ export default function ContratsView() {
     setEditing(c);
     // Le nom peut correspondre à une vraie compagnie ou à un profil
     // Auto-Gestion (voir toggle "Type de gestion") — chercher dans les deux.
-    const f = contratToForm(c, clients, [...compagnies, ...compagniesAutoGestion], contrats);
+    const f = contratToForm(c, clients, [...compagnies, ...compagniesAutoGestion]);
     setForm(f);
     setTypeGestion(compagniesAutoGestion.some((ag) => ag.id === f.compagnieId) ? "AutoGestion" : "Classique");
     setNewPopulationRows([]);
     setGarantieRows(c.garanties.map((g) => ({ categorie: g.categorie, libelle: g.libelle, tauxAssure: g.tauxAssure ?? undefined, tauxAyantsDroit: g.tauxAyantsDroit ?? undefined, plafond: g.plafond ?? undefined })));
-    // Assistance liée : jamais sa propre population, toujours celle de ses
-    // contrats Maladie liés (voir basculerContratMaladieLie).
-    const liesMaladie = f.contratsMaladieIds ?? [];
-    chargerPopulation(c.branche === "Assistance" && liesMaladie.length > 0 ? liesMaladie : [c.id]);
+    // Assistance liée : jamais sa propre population, toujours celle de son
+    // contrat Maladie lié (voir handleContratMaladieLieChange).
+    const popSourceId = c.branche === "Assistance" && c.contratMaladieLieId ? c.contratMaladieLieId : c.id;
+    getAssuresSante().then((all) => setExistingPopulation(all.filter((a) => a.police === popSourceId)));
     setImportFile(null);
     setImportSearch("");
     setImportRejected([]);
     setManualPopulationEntry(false);
+    setAppliquerSurprimeAge(false);
     setFormError(null);
     setActiveTab("general");
     setShowCreate(true);
@@ -650,6 +639,19 @@ export default function ContratsView() {
   const ouvrirEditionExercice = (ex: ExerciceCompagnie) => {
     setExerciceEnEdition(ex.numero);
     setBrouillonExercice({ dateDebut: ex.dateDebut, dateFin: ex.dateFin });
+  };
+
+  const supprimerExerciceDoublon = async (ex: ExerciceCompagnie) => {
+    if (!editing) return;
+    if (!window.confirm(`Supprimer l'exercice N°${ex.numero} (${ex.dateDebut} → ${ex.dateFin}, ${fmt(toNumber(ex.prime))} FCFA) ?`)) return;
+    try {
+      const historique = await supprimerExercice(editing.id, ex.numero);
+      setHistoriqueCompagnie(historique);
+      toast.success("Exercice supprimé.");
+      refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Suppression impossible.");
+    }
   };
 
   const enregistrerRecalibrageExercice = async () => {
@@ -760,21 +762,13 @@ export default function ContratsView() {
   // Maladie n'a jamais sa propre population : elle est lue depuis le
   // contrat Maladie choisi ici (même mécanisme existingPopulation que
   // l'édition d'un contrat existant, voir openEdit), jamais ré-importée.
-  // Plusieurs contrats Maladie par contrat Assistance (2026-09) — voir
-  // demande utilisateur : "plusieurs contrats maladie peuvent être liés au
-  // même contrat d'assistance... récupérer exactement chaque population de
-  // ces contrats maladie pour le calcul de prime." Population = union de
-  // chacun (jamais dédoublonnée : une personne affiliée à deux contrats
-  // Maladie y compte deux fois, comme dans chacun d'eux).
-  function chargerPopulation(contratIds: string[]) {
-    if (contratIds.length === 0) { setExistingPopulation([]); return; }
-    getAssuresSante().then((all) => setExistingPopulation(all.filter((a) => contratIds.includes(a.contratId))));
-  }
-  const basculerContratMaladieLie = (contratId: string) => {
-    const actuels = contratsMaladieLiesValides;
-    const suivants = actuels.includes(contratId) ? actuels.filter((id) => id !== contratId) : [...actuels, contratId];
-    setForm((v) => ({ ...v, contratsMaladieIds: suivants }));
-    chargerPopulation(suivants);
+  const handleContratMaladieLieChange = (contratMaladieLieId: string) => {
+    setForm((v) => ({ ...v, contratMaladieLieId: contratMaladieLieId || undefined }));
+    if (contratMaladieLieId) {
+      getAssuresSante().then((all) => setExistingPopulation(all.filter((a) => a.police === contratMaladieLieId)));
+    } else {
+      setExistingPopulation([]);
+    }
   };
   // Contrats Maladie éligibles à un lien Assistance (2026-09, corrigé) —
   // voir demande utilisateur : "il faut faire remonter les contrats Maladie
@@ -789,27 +783,9 @@ export default function ContratsView() {
   // d'Assistance peut vouloir partager la population de N'IMPORTE QUEL
   // contrat Maladie du même souscripteur. Comparaison par clientId (pas
   // par nom, fragile si deux clients partagent le même nom).
-  // MÊME souscripteur uniquement — voir demande utilisateur : "la liaison
-  // ne peut se faire qu'avec les contrats maladie et le contrat
-  // d'assistance appartenant au même souscripteur" (règle aussi appliquée
-  // par le serveur, ContratsService.lierContratsMaladie).
-  const contratsMaladieDuClient = contrats
-    .filter((c) => c.branche === "Maladie" && c.clientId === form.clientId)
-    .sort((a, b) => numeroPolice(a).localeCompare(numeroPolice(b), "fr", { numeric: true }));
-  // Coches encore valables pour le souscripteur choisi : changer de
-  // souscripteur défait les liens vers les contrats de l'ancien.
-  const contratsMaladieLiesValides = (form.contratsMaladieIds ?? []).filter((id) => contratsMaladieDuClient.some((c) => c.id === id));
-  // Population d'un contrat Assistance rangée par contrat Maladie (voir
-  // demande utilisateur : "il faudra ranger les listes en fonction des
-  // contrats maladie"), dans l'ordre des n° de police.
-  const groupesPopulationAssistance = contratsMaladieDuClient
-    .filter((m) => contratsMaladieLiesValides.includes(m.id))
-    .map((m) => ({
-      contrat: m,
-      personnes: existingPopulation
-        .filter((a) => a.contratId === m.id)
-        .sort((a, b) => `${a.nom} ${a.prenom ?? ""}`.localeCompare(`${b.nom} ${b.prenom ?? ""}`, "fr")),
-    }));
+  const contratsMaladieDuClient = contrats.filter(
+    (c) => c.branche === "Maladie" && c.clientId === form.clientId,
+  );
 
   // Population individualisée (avec date de naissance) disponible pour le
   // calcul de la surprime d'âge — assurés déjà affiliés (édition), lignes
@@ -829,7 +805,6 @@ export default function ContratsView() {
     actif: appliquerSurprimeAge,
     grille: selectedCompagnie?.surprimesAge ?? [],
     population: populationAvecAge,
-    dateReference: form.dateDebut,
   };
 
   const toggleExtension = (ext: string) => {
@@ -934,7 +909,7 @@ export default function ContratsView() {
       setSubmitting(true);
       const payload: ContratUpsertInput = {
         ...form,
-        contratsMaladieIds: form.branche === "Assistance" ? contratsMaladieLiesValides : undefined,
+        ...(appliquerSurprimeAge ? primeUnitairesAvecSurprime(form, surprimeAgeOptions) : {}),
         prime: calc.primeTotaleTTC > 0 ? calc.primeTotaleTTC : form.prime,
       };
       const contrat = editing ? await updateContrat(editing.id, payload) : await createContrat(payload);
@@ -965,13 +940,6 @@ export default function ContratsView() {
         importSummary ? `${importSummary.imported} ligne(s) importée(s)${importSummary.updated ? `, ${importSummary.updated} mise(s) à jour` : ""}${importSummary.basculees ? `, ${importSummary.basculees} transférée(s) automatiquement depuis un autre contrat` : ""}${importSummary.rejected.length ? ` (${importSummary.rejected.length} rejetée(s) — voir le rapport)` : ""}` : null,
       ].filter(Boolean);
       toast.success(editing ? "Contrat mis à jour." : `Contrat créé avec succès${parts.length ? " — " + parts.join(", ") : ""}.`);
-      // Imputation compagnie ↔ agence (voir ContratsService.imputerSelonAgence).
-      if (contrat.imputationAgence?.imputation) {
-        const { de, vers, creee } = contrat.imputationAgence.imputation;
-        toast.info(`Contrat imputé à « ${vers} » (au lieu de « ${de} »), selon son agence${creee ? " — déclinaison créée à partir de la compagnie mère" : ""}.`);
-      } else if (contrat.imputationAgence?.avertissement) {
-        toast.warning(contrat.imputationAgence.avertissement);
-      }
       refresh();
       // Une ligne rejetée à l'import : on garde la fenêtre ouverte (sur la
       // fiche du contrat désormais enregistré) pour que le rapport reste
@@ -991,7 +959,7 @@ export default function ContratsView() {
   };
 
   const handleDelete = async (c: Contrat) => {
-    const ok = window.confirm(`Supprimer le contrat ${numeroPolice(c)} ?`);
+    const ok = window.confirm(`Supprimer le contrat ${c.id} ?`);
     if (!ok) return;
     try {
       await deleteContrat(c.id);
@@ -1127,9 +1095,9 @@ export default function ContratsView() {
             {pagination.pageItems.map((c) => (
               <tr key={c.id} onClick={() => openEdit(c)} className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer">
                 <td className="px-4 py-3 text-primary text-xs font-semibold whitespace-nowrap med-num med-col-ref med-sticky-col">
-                  {numeroPolice(c)}
+                  {c.numeroPolice || c.id}
                   <div className="md:hidden mt-1 space-y-0.5 text-[10px] leading-4 text-muted-foreground whitespace-normal">
-                    <p className="med-num text-foreground">{c.prime > 0 ? fmt(c.prime) : "—"}</p>
+                    <p className="med-num text-foreground">{fmt(c.prime)}</p>
                     <p>{c.statut}</p>
                   </div>
                 </td>
@@ -1137,22 +1105,16 @@ export default function ContratsView() {
                 <td className="hidden md:table-cell px-4 py-3 whitespace-nowrap">
                   <div className="inline-flex items-center gap-1.5">
                     <Badge variant={c.branche === "Assistance" ? "info" : "neutral"}>{c.branche}</Badge>
-                    {c.branche === "Maladie" && (c.extensionsTerritorialite?.length ?? 0) > 0 && !c.contratAssistanceId && (
+                    {c.branche === "Maladie" && (c.extensionsTerritorialite?.length ?? 0) > 0 && !contrats.some((a) => a.branche === "Assistance" && a.contratMaladieLieId === c.id) && (
                       <span title="Territorialité hors Gabon Uniquement — contrat d'Assistance lié manquant"><AlertTriangle className="w-3.5 h-3.5 text-amber-500" aria-label="Contrat d'Assistance lié manquant" /></span>
                     )}
                   </div>
-                  {c.branche === "Assistance" && (() => {
-                    const lies = contrats.filter((m) => m.contratAssistanceId === c.id);
-                    return lies.length > 0 ? (
-                      <p className="mt-0.5 text-[10.5px] text-muted-foreground med-num">Maladie : {lies.map((m) => numeroPolice(m)).join(", ")}</p>
-                    ) : null;
-                  })()}
                 </td>
                 <td className="hidden lg:table-cell px-4 py-3 text-muted-foreground whitespace-nowrap">{c.compagnie}</td>
                 <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap med-num med-col-period">
                   {c.dateDebut} → {c.dateFin}
                 </td>
-                <td className="px-4 py-3 text-right font-semibold text-foreground whitespace-nowrap med-num med-col-money" title={c.prime > 0 ? undefined : "Prime non renseignée — à paramétrer dans l'exercice du contrat"}>{c.prime > 0 ? fmt(c.prime) : "—"}</td>
+                <td className="px-4 py-3 text-right font-semibold text-foreground whitespace-nowrap med-num med-col-money">{fmt(c.prime)}</td>
                 <td className="px-4 py-3 text-center whitespace-nowrap med-col-days">
                   {(() => {
                     // Urgence de la colonne "Échéance" (2026-09) — calculée
@@ -1199,8 +1161,8 @@ export default function ContratsView() {
             <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
               <div>
                 <h3 className="text-[15px] font-semibold text-foreground">
-                  {editing ? `Modifier le contrat — Police ${numeroPolice(editing)}` : "Créer un contrat"}
-                  {editing && <span className="ml-2 text-[12px] font-normal text-muted-foreground">· {editing.client} · {editing.branche}</span>}
+                  {editing ? `Modifier le contrat ${editing.id}` : "Créer un contrat"}
+                  {editing?.numeroPolice && <span className="ml-2 text-[12px] font-normal text-muted-foreground">— N° police {editing.numeroPolice}</span>}
                 </h3>
                 {editing && <div className="mt-0.5"><DerniereModification entite="contrats" entiteId={editing.id} /></div>}
               </div>
@@ -1329,67 +1291,20 @@ export default function ContratsView() {
                       <input value={form.nomCarteSante ?? ""} onChange={(e) => setForm((v) => ({ ...v, nomCarteSante: e.target.value }))} className={fieldCls} placeholder="Par défaut : nom du souscripteur" />
                       <p className="text-[11px] text-muted-foreground mt-1">Ce libellé est propre à ce contrat et sera imprimé sur les cartes santé.</p>
                     </label>
-                    <div>
-                      <div className={labelCls}>Agence</div>
-                      <Combobox
-                        options={agences.filter((a) => a.statut === "Actif" || a.id === form.agenceId)}
-                        value={agences.find((a) => a.id === form.agenceId) ?? null}
-                        onChange={(a) => setForm((v) => ({ ...v, agenceId: a?.id ?? "" }))}
-                        getLabel={(a) => (a.ville ? `${a.nom} — ${a.ville}` : a.nom)} getId={(a) => a.id}
-                        allowClear clearLabel="Aucune"
-                        placeholder="Rechercher…"
-                      />
-                      <p className="text-[11px] text-muted-foreground mt-1">Bureau qui gère ce contrat (ex. Port-Gentil) — facultatif. À l'enregistrement, la compagnie est corrigée vers sa déclinaison pour cette agence (ex. NSIA ASSURANCES POG).</p>
-                    </div>
-                    <div className="md:col-span-2 rounded-lg border border-border px-3.5 py-3">
-                      <div className={labelCls}>Tranches d'âge pour bénéficier de l'assurance</div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
-                        <label className="block">
-                          <div className="text-[11.5px] text-muted-foreground mb-1">Enfant : de 0 à … ans</div>
-                          <input type="number" min={0} value={form.limiteAgeEnfant ?? 21} onChange={(e) => setForm((v) => ({ ...v, limiteAgeEnfant: Number(e.target.value) }))} className={fieldCls} />
-                        </label>
-                        <label className="block">
-                          <div className="text-[11.5px] text-muted-foreground mb-1" title="Ne s'applique qu'aux enfants marqués « scolarisé » sur leur fiche — sinon la limite enfant reste la règle.">Enfant scolarisé : jusqu'à … ans</div>
-                          <input type="number" min={0} value={form.limiteAgeEnfantScolarise ?? 28} onChange={(e) => setForm((v) => ({ ...v, limiteAgeEnfantScolarise: Number(e.target.value) }))} className={fieldCls} />
-                        </label>
-                        <label className="block">
-                          <div className="text-[11.5px] text-muted-foreground mb-1">Adulte (assuré, conjoint) : de 0 à … ans</div>
-                          <input type="number" min={0} value={form.limiteAgeAdulte ?? 65} onChange={(e) => setForm((v) => ({ ...v, limiteAgeAdulte: Number(e.target.value) }))} className={fieldCls} />
-                        </label>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground mt-1.5">Propres à ce contrat : au-delà, une personne ne peut pas être incorporée ni importée.</p>
-                    </div>
                     <label className="block">
                       <div className={labelCls}>Produit</div>
                       <input value={form.produit ?? ""} onChange={(e) => setForm((v) => ({ ...v, produit: e.target.value }))} className={fieldCls} placeholder="ex. PEC UPEGA COLLEGE 1" />
                       <p className="text-[11px] text-muted-foreground mt-1">Figure sur le Bordereau de Production — laissez vide pour un libellé générique.</p>
                     </label>
-                    <label className="block"><div className={labelCls}>Date d'effet</div><DateInput value={form.dateDebut} onChange={(v) => setForm((f) => ({ ...f, dateDebut: v, dateFin: echeanceApresEffet(f.dateDebut, v, f.dateFin) }))} className={fieldCls} /></label>
-                    <label className="block"><div className={labelCls}>Date d'échéance</div><DateInput value={form.dateFin} onChange={(v) => setForm((f) => ({ ...f, dateFin: normaliserEcheance(f.dateDebut, v) }))} className={fieldCls} />
-                      <p className="text-[11px] text-muted-foreground mt-1">Toujours la veille de la date anniversaire (effet 01/03/2026 → échéance 28/02/2027).</p></label>
+                    <label className="block"><div className={labelCls}>Date d'effet</div><DateInput value={form.dateDebut} onChange={(v) => setForm((f) => ({ ...f, dateDebut: v }))} className={fieldCls} /></label>
+                    <label className="block"><div className={labelCls}>Date d'échéance</div><DateInput value={form.dateFin} onChange={(v) => setForm((f) => ({ ...f, dateFin: v }))} className={fieldCls} /></label>
                     {form.branche === "Assistance" && (
                       <label className="block">
-                        <div className={labelCls}>Contrats Maladie liés</div>
-                        {contratsMaladieDuClient.length > 0 && (
-                          <div className="rounded-lg border border-border divide-y divide-border/50 max-h-56 overflow-y-auto" role="group" aria-label="Contrats Maladie liés">
-                            {contratsMaladieDuClient.map((c) => {
-                              const coche = contratsMaladieLiesValides.includes(c.id);
-                              const autreAssistance = c.contratAssistanceId && c.contratAssistanceId !== editing?.id ? contrats.find((a) => a.id === c.contratAssistanceId) : undefined;
-                              return (
-                                <label key={c.id} className="flex items-center gap-2.5 px-3 py-2 min-h-[40px] cursor-pointer hover:bg-secondary/30">
-                                  <input type="checkbox" checked={coche} onChange={() => basculerContratMaladieLie(c.id)} className="w-4 h-4 accent-primary flex-shrink-0" />
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block text-[12.5px] text-foreground med-num">Police {numeroPolice(c)}</span>
-                                    <span className="block text-[11px] text-muted-foreground truncate">{c.produit || c.client} · {c.statut}</span>
-                                  </span>
-                                  {autreAssistance && (
-                                    <span className="text-[10.5px] text-amber-600 flex-shrink-0">{coche ? "sera retiré de" : "déjà lié à"} l'Assistance {numeroPolice(autreAssistance)}</span>
-                                  )}
-                                </label>
-                              );
-                            })}
-                          </div>
-                        )}
+                        <div className={labelCls}>Contrat Maladie lié</div>
+                        <select value={form.contratMaladieLieId ?? ""} onChange={(e) => handleContratMaladieLieChange(e.target.value)} className={fieldCls}>
+                          <option value="">— Aucun (population saisie séparément) —</option>
+                          {contratsMaladieDuClient.map((c) => <option key={c.id} value={c.id}>{c.numeroPolice || c.id} · {c.client}</option>)}
+                        </select>
                         {/* Liste vide = pas un bug : voir le filtre de contratsMaladieDuClient
                             (branche Maladie + même client, tous éligibles depuis 2026-09). Message
                             explicite plutôt qu'un select silencieusement vide — voir demande
@@ -1399,7 +1314,7 @@ export default function ContratsView() {
                         {form.clientId && contratsMaladieDuClient.length === 0 ? (
                           <p className="text-[10.5px] text-amber-600 mt-1">Aucun contrat Maladie pour ce souscripteur — créez-le d'abord si ce contrat d'Assistance doit en partager la population.</p>
                         ) : (
-                          <p className="text-[10.5px] text-muted-foreground mt-1">Cochez un ou plusieurs contrats Maladie de ce souscripteur : la prime d'Assistance est calculée sur la population réunie de chacun d'eux. Aucun coché = population saisie séparément. Obligatoire pour un contrat Maladie avec une extension de territorialité hors Gabon.</p>
+                          <p className="text-[10.5px] text-muted-foreground mt-1">Facultatif : un contrat d'Assistance partage souvent la population d'un contrat Maladie du même souscripteur (population saisie une seule fois) — obligatoire si ce contrat Maladie a une extension de territorialité hors Gabon.</p>
                         )}
                       </label>
                     )}
@@ -1527,9 +1442,9 @@ export default function ContratsView() {
                           exerciceEnEdition === ex.numero ? (
                             <div key={ex.id} className="flex items-center gap-2 px-3 py-2 text-[12px] bg-primary/5">
                               <span className="flex-shrink-0 text-[11px] font-semibold text-muted-foreground med-num">N°{ex.numero}</span>
-                              <DateInput value={brouillonExercice.dateDebut} onChange={(v) => setBrouillonExercice((b) => ({ dateDebut: v, dateFin: echeanceApresEffet(b.dateDebut, v, b.dateFin) }))} className="border border-border rounded-md px-2 py-1 bg-background text-[12px] text-foreground flex-1 min-w-0" />
+                              <DateInput value={brouillonExercice.dateDebut} onChange={(v) => setBrouillonExercice((b) => ({ ...b, dateDebut: v }))} className="border border-border rounded-md px-2 py-1 bg-background text-[12px] text-foreground flex-1 min-w-0" />
                               <span className="text-muted-foreground flex-shrink-0">→</span>
-                              <DateInput value={brouillonExercice.dateFin} onChange={(v) => setBrouillonExercice((b) => ({ ...b, dateFin: normaliserEcheance(b.dateDebut, v) }))} className="border border-border rounded-md px-2 py-1 bg-background text-[12px] text-foreground flex-1 min-w-0" />
+                              <DateInput value={brouillonExercice.dateFin} onChange={(v) => setBrouillonExercice((b) => ({ ...b, dateFin: v }))} className="border border-border rounded-md px-2 py-1 bg-background text-[12px] text-foreground flex-1 min-w-0" />
                               <button type="button" onClick={enregistrerRecalibrageExercice} disabled={recalibrageEnCours} title="Enregistrer et recalibrer les exercices suivants" className="flex-shrink-0 p-1.5 rounded-md text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-50">
                                 <Check className="w-3.5 h-3.5" />
                               </button>
@@ -1563,6 +1478,15 @@ export default function ContratsView() {
                               >
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
+                              {editing?.exerciceNumero !== ex.numero && (
+                                <button
+                                  type="button" onClick={() => supprimerExerciceDoublon(ex)}
+                                  title="Supprimer cet exercice (doublon inutile)"
+                                  className="flex-shrink-0 p-1 rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-opacity"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
                           )
                         ))}
@@ -1575,25 +1499,15 @@ export default function ContratsView() {
                 </>
               )}
 
-              {activeTab === "population" && (form.branche === "Assistance" && contratsMaladieLiesValides.length > 0 ? (
+              {activeTab === "population" && (form.branche === "Assistance" && form.contratMaladieLieId ? (
                 <div className="space-y-3">
                   <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
-                    <p className="text-[13px] font-semibold text-foreground">
-                      Population de {groupesPopulationAssistance.length} contrat{groupesPopulationAssistance.length > 1 ? "s" : ""} Maladie : {groupesPopulationAssistance.reduce((n, g) => n + g.personnes.length, 0)} personne(s)
-                    </p>
-                    <p className="text-[11.5px] text-muted-foreground mt-1">Gérée exclusivement depuis chaque contrat Maladie (module Participants ou son propre onglet Population). Aucun import séparé n'est possible ici, pour éviter toute duplication.</p>
+                    <p className="text-[13px] font-semibold text-foreground">Population identique au contrat Maladie {form.contratMaladieLieId}</p>
+                    <p className="text-[11.5px] text-muted-foreground mt-1">{existingPopulation.length} personne(s) — gérée exclusivement depuis ce contrat Maladie (module Participants ou son propre onglet Population). Aucun import séparé n'est possible ici, pour éviter toute duplication.</p>
                   </div>
-                  {groupesPopulationAssistance.map((groupe) => (
-                    <section key={groupe.contrat.id} className="rounded-lg border border-border overflow-hidden" aria-label={`Contrat Maladie police ${numeroPolice(groupe.contrat)}`}>
-                      <div className="flex items-center justify-between gap-3 px-3 py-2 bg-secondary/40 border-b border-border">
-                        <p className="min-w-0 text-[12px] font-semibold text-foreground truncate">Police {numeroPolice(groupe.contrat)} <span className="font-normal text-muted-foreground">· {groupe.contrat.produit || groupe.contrat.client}</span></p>
-                        <span className="text-[11px] text-muted-foreground whitespace-nowrap flex-shrink-0">{groupe.personnes.length} personne(s)</span>
-                      </div>
-                      {groupe.personnes.length === 0 ? (
-                        <p className="px-3 py-2 text-[11.5px] text-muted-foreground">Aucune personne affiliée à ce contrat Maladie.</p>
-                      ) : (
-                    <div className="max-h-72 overflow-y-auto divide-y divide-border/50">
-                      {groupe.personnes.map((a) => {
+                  {existingPopulation.length > 0 && (
+                    <div className="rounded-lg border border-border overflow-hidden max-h-72 overflow-y-auto divide-y divide-border/50">
+                      {existingPopulation.map((a) => {
                         const ouverte = editPersonneId === a.id;
                         return (
                           <div key={a.id}>
@@ -1639,9 +1553,7 @@ export default function ContratsView() {
                         );
                       })}
                     </div>
-                      )}
-                    </section>
-                  ))}
+                  )}
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1827,6 +1739,7 @@ export default function ContratsView() {
                   accessoiresTranches={selectedCompagnie?.accessoires}
                   surprimeAge={{
                     actif: appliquerSurprimeAge,
+                    onToggle: () => setAppliquerSurprimeAge((v) => !v),
                     disabled: !selectedCompagnie || selectedCompagnie.surprimesAge.length === 0 || populationAvecAge.length === 0,
                     raison: !selectedCompagnie
                       ? "Sélectionnez une compagnie (onglet Informations générales) pour activer la surprime d'âge."
@@ -1844,6 +1757,12 @@ export default function ContratsView() {
                 >
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <label className="block"><div className={labelCls}>Taux territorialité (%)</div><input type="number" step="0.1" value={form.tauxTerritorialite ?? 0} onChange={(e) => setForm((v) => ({ ...v, tauxTerritorialite: Number(e.target.value) }))} className={fieldCls} /></label>
+                    <label className="block"><div className={labelCls}>Limite âge adulte</div><input type="number" value={form.limiteAgeAdulte ?? 0} onChange={(e) => setForm((v) => ({ ...v, limiteAgeAdulte: Number(e.target.value) }))} className={fieldCls} /></label>
+                    <label className="block"><div className={labelCls}>Limite âge enfant</div><input type="number" value={form.limiteAgeEnfant ?? 0} onChange={(e) => setForm((v) => ({ ...v, limiteAgeEnfant: Number(e.target.value) }))} className={fieldCls} /></label>
+                    <label className="block">
+                      <div className={labelCls} title="Ne s'applique qu'aux enfants marqués « scolarisé » sur leur fiche — sinon la limite âge enfant ci-dessus reste la règle.">Limite âge enfant scolarisé</div>
+                      <input type="number" value={form.limiteAgeEnfantScolarise ?? 0} onChange={(e) => setForm((v) => ({ ...v, limiteAgeEnfantScolarise: Number(e.target.value) }))} className={fieldCls} />
+                    </label>
                     <label className="block"><div className={labelCls}>Limite personnes/famille</div><input type="number" value={form.limitePersFamille ?? 0} onChange={(e) => setForm((v) => ({ ...v, limitePersFamille: Number(e.target.value) }))} className={fieldCls} /></label>
                     <label className="block"><div className={labelCls}>Plafond / Adhérent (FCFA)</div><input type="number" value={form.plafondAdherent ?? ""} onChange={(e) => setForm((v) => ({ ...v, plafondAdherent: e.target.value ? Number(e.target.value) : undefined }))} className={fieldCls} /></label>
                     <label className="block"><div className={labelCls}>Plafond / Famille (FCFA)</div><input type="number" value={form.plafondFamille ?? ""} onChange={(e) => setForm((v) => ({ ...v, plafondFamille: e.target.value ? Number(e.target.value) : undefined }))} className={fieldCls} /></label>
@@ -2071,7 +1990,7 @@ export default function ContratsView() {
           onClose={() => setBasculePopulationContrat(null)}
           onDone={() => {
             refresh();
-            if (editing) getAssuresSante(editing.id).then(setExistingPopulation);
+            if (editing) getAssuresSante().then((all) => setExistingPopulation(all.filter((a) => a.police === editing.id)));
           }}
         />
       )}
@@ -2083,14 +2002,6 @@ export default function ContratsView() {
       {exercicePrimeCible && editing && (
         <ExercicePrimeModal
           contratId={editing.id}
-          grilleSurprimeAge={selectedCompagnie?.surprimesAge ?? []}
-          contratEchu={(() => {
-            if (editing.statut !== "Actif" && editing.statut !== "En renouvellement") return true;
-            const [d, m, y] = editing.dateFin.split("/").map(Number);
-            const aujourdhui = new Date(); aujourdhui.setHours(0, 0, 0, 0);
-            return !!(d && m && y) && new Date(y, m - 1, d) < aujourdhui;
-          })()}
-          populationContratId={editing.id}
           exercice={exercicePrimeCible}
           onClose={() => setExercicePrimeCible(null)}
           onDone={(historique) => setHistoriqueCompagnie(historique)}

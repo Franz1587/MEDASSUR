@@ -91,7 +91,7 @@ export class DashboardService {
       // consommationLignes plus bas, "même métrique") ; excluait jusqu'ici
       // seulement Annulé, laissant passer Rejeté.
       this.prisma.priseEnCharge.findMany({
-        where: { statut: { notIn: ["Rejeté", "Annulé"] }, contratId: { in: contratsNonTestIds }, factureId: { not: null } },
+        where: { statut: { notIn: ["Rejeté", "Annulé"] }, contratId: { in: contratsNonTestIds }, factureId: { not: null }, facture: { statut: { not: "Annulée" } } },
         select: { type: true, date: true, statut: true, montant: true, baseRemboursement: true, bordereau: { select: { statut: true } } },
       }),
     ]);

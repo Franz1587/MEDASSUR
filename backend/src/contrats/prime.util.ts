@@ -1,3 +1,26 @@
+// ═══ CONVENTIONS DE CALCUL ACTUELLEMENT IMPLÉMENTÉES (documentation seule) ═══
+// Décisions métier EN ATTENTE — ne pas "corriger" sans validation du propriétaire :
+//  1. Prorata au jour : jours = date de fin − date de début (la date de fin
+//     n'est PAS comptée : 01/01 → 31/12 = 364 jours), divisé par 365 y
+//     compris en année bissextile (jamais 366). Si l'une des dates manque
+//     ou si jours <= 0, aucun prorata n'est appliqué (facteur = 1, prime
+//     annuelle pleine). Écart de jours calculé par arrondi de la différence
+//     en millisecondes / 86 400 000 (neutralise le changement d'heure).
+//  2. Prime nette = Σ(nombre × prime unitaire) des 4 catégories (assuré
+//     principal, conjoint, enfant, couple) × facteur de prorata
+//     × (1 + mino/majoration % / 100) × (1 − réduction commerciale % / 100).
+//  3. Prime totale H.T. = prime nette. Accessoires : montant forfaitaire,
+//     jamais proratisé.
+//  4. Taxe = 8 % FIXE de (prime H.T. + accessoires) ; prime TTC (`prime`) =
+//     H.T. + accessoires + taxe. La commission (% de la prime H.T.) est
+//     informative : elle n'est pas ajoutée à la prime TTC.
+//  5. Arrondi : chaque composante (prime nette, accessoires, taxe,
+//     commission) est arrondie séparément au franc le plus proche
+//     (Math.round, moitié vers le haut) ; la prime TTC est la somme des
+//     composantes déjà arrondies. Sans aucune population (tous les nombres
+//     à 0/absents), l'entrée est renvoyée telle quelle, sans recalcul.
+// ═══════════════════════════════════════════════════════════════════════════
+
 // Taux de taxe sur les primes d'assurance santé — fixe au Gabon.
 const TAUX_TAXE_GABON = 0.08;
 
@@ -89,8 +112,12 @@ export function withComputedPrime<T extends PrimeInput>(dto: T): T & PrimeCalcul
 // retombe sur la prime du DERNIER exercice (le plus grand numero) qui en
 // a une, qu'il soit Actif ou Clôturé — jamais 0 tant qu'un exercice
 // connaît une vraie valeur.
-export function primeAffichee(primeContrat: unknown, exercices: { numero: number; prime: unknown }[]): unknown {
-  if (Number(primeContrat) > 0) return primeContrat;
+export function primeAffichee(primeContrat: unknown, exercices: { numero: number; statut?: string; prime: unknown }[]): unknown {
+  // L'exercice Actif courant prime toujours — Contrat.prime peut être stale
+  // si un recalcul a mis à jour l'exercice sans toucher le contrat (ex. exercice
+  // non courant, ou contrat dont exerciceNumero ne correspond plus).
+  const actif = exercices.find((ex) => ex.statut === "Actif" && Number(ex.prime) > 0);
+  if (actif) return actif.prime;
   const dernierAvecPrime = [...exercices].sort((a, b) => b.numero - a.numero).find((ex) => Number(ex.prime) > 0);
   return dernierAvecPrime ? dernierAvecPrime.prime : primeContrat;
 }

@@ -120,7 +120,7 @@ export interface EvolutionAnnuelleLigne {
 export const RUBRIQUES_STATISTIQUES = [
   "basesContractuelles", "evolutionMensuelle", "consommationParFamille", "detailParFamille",
   "top20Consommateurs", "repartitionBeneficiaire", "consommationParRubrique", "consommationParFamilleActe",
-  "consommationParPrestataire", "detailParPrestataire", "top20Prestataires",
+  "consommationParActe", "consommationParPrestataire", "detailParPrestataire", "top20Prestataires",
   "evolutionSP", "analyse",
 ] as const;
 export type RubriqueId = (typeof RUBRIQUES_STATISTIQUES)[number];
@@ -152,6 +152,7 @@ export interface StatistiquesPayload {
   // (ActeMedical.categorieGarantie, 13 rubriques du tableau de garanties) :
   // ici c'est ActeMedical.famille, le regroupement plus fin du catalogue.
   consommationParFamilleActe: RepartitionLigne[];
+  consommationParActe: RepartitionLigne[];
   consommationParPrestataire: RepartitionLigne[];
   detailParPrestataire: DetailPrestataire[];
   top20Prestataires: RepartitionLigne[];

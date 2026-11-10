@@ -623,6 +623,20 @@ export default function StatistiquesView() {
           </SectionCard>
 
           <SectionCard
+            title="Consommation par Acte Précis"
+            resume={data.consommationParActe[0] ? [{ label: "Acte le plus fréquent", value: `${data.consommationParActe[0].libelle} (${pct(data.consommationParActe[0].pct)})` }] : undefined}
+          >
+            <div className="space-y-3">
+              <RechercheRubrique value={rq("consommationParActe")} onChange={(v) => setRq("consommationParActe", v)} placeholder="Rechercher un acte…" />
+              <TableSimple
+                headers={["Acte", "Remboursé", "Nombre", "% sur total"]}
+                rows={[...data.consommationParActe.filter((r) => correspond(rq("consommationParActe"), r.libelle)).map((r) => [r.libelle, r.montant, r.nombre, pct(r.pct)]), ["Total", data.totalConsomme, data.consommationParActe.reduce((s, r) => s + r.nombre, 0), "100%"]]}
+                lignesEnEvidence={[data.consommationParActe.filter((r) => correspond(rq("consommationParActe"), r.libelle)).length]}
+              />
+            </div>
+          </SectionCard>
+
+          <SectionCard
             title="Consommation par Prestataire"
             resume={[
               { label: "Nombre de prestataires", value: String(data.consommationParPrestataire.length) },

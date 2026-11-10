@@ -16,11 +16,9 @@ export interface ApiContrat {
   nomCarteSante?: string | null;
   client: { id: string; nom: string };
   compagnie: { nom: string };
-  agenceId?: string | null;
-  agence?: { nom: string } | null;
   paysSouscription?: string | null;
   extensionsTerritorialite?: string[];
-  contratAssistanceId?: string | null;
+  contratMaladieLieId?: string | null;
   tauxCouvertureAmbulatoire?: string | null;
   tauxCouvertureHospitalisation?: string | null;
   tauxAmbulatoirePublique?: string | null;
@@ -116,8 +114,7 @@ export function mapContrat(c: ApiContrat): Contrat {
     jours: Number.isNaN(jr) ? "—" : jr < 0 ? "Échu" : `${jr} jours`,
     paysSouscription: c.paysSouscription ?? "",
     extensionsTerritorialite: c.extensionsTerritorialite ?? [],
-    contratAssistanceId: c.contratAssistanceId ?? null,
-    agenceId: c.agenceId ?? null,
+    contratMaladieLieId: c.contratMaladieLieId ?? null,
     tauxCouvertureAmbulatoire: c.tauxCouvertureAmbulatoire ?? null,
     tauxCouvertureHospitalisation: c.tauxCouvertureHospitalisation ?? null,
     tauxAmbulatoirePublique: c.tauxAmbulatoirePublique ?? null,
@@ -180,13 +177,10 @@ export interface ContratUpsertInput {
   statut: "Actif" | "En renouvellement" | "Expiré" | "Résilié";
   numeroPolice?: string;
   nomCarteSante?: string;
-  agenceId?: string;
   periodicite?: "Mensuel" | "Trimestriel" | "Semestriel" | "Annuel";
   paysSouscription?: string;
   extensionsTerritorialite?: string[];
-  // Contrat Assistance : ses contrats Maladie liés (voir
-  // ContratsService.lierContratsMaladie côté serveur).
-  contratsMaladieIds?: string[];
+  contratMaladieLieId?: string;
   tauxCouvertureAmbulatoire?: string;
   tauxCouvertureHospitalisation?: string;
   tauxAmbulatoirePublique?: string;
@@ -220,24 +214,14 @@ export interface ContratUpsertInput {
   produit?: string;
 }
 
-// Imputation compagnie ↔ agence (2026-09) — renvoyée par le backend à la
-// création/modification (voir ContratsService.imputerSelonAgence) : le
-// contrat a pu être imputé à la déclinaison d'agence de sa compagnie
-// (ex. "NSIA ASSURANCES POG"), ou un avertissement signale qu'aucune
-// déclinaison n'était possible.
-export interface ImputationAgence {
-  imputation?: { de: string; vers: string; creee: boolean };
-  avertissement?: string;
+export async function createContrat(payload: ContratUpsertInput): Promise<Contrat> {
+  const c = await http.post<ApiContrat>("/contrats", payload);
+  return mapContrat(c);
 }
 
-export async function createContrat(payload: ContratUpsertInput): Promise<Contrat & { imputationAgence?: ImputationAgence }> {
-  const c = await http.post<ApiContrat & { imputationAgence?: ImputationAgence }>("/contrats", payload);
-  return { ...mapContrat(c), imputationAgence: c.imputationAgence };
-}
-
-export async function updateContrat(id: string, payload: Partial<ContratUpsertInput>): Promise<Contrat & { imputationAgence?: ImputationAgence }> {
-  const c = await http.patch<ApiContrat & { imputationAgence?: ImputationAgence }>(`/contrats/${id}`, payload);
-  return { ...mapContrat(c), imputationAgence: c.imputationAgence };
+export async function updateContrat(id: string, payload: Partial<ContratUpsertInput>): Promise<Contrat> {
+  const c = await http.patch<ApiContrat>(`/contrats/${id}`, payload);
+  return mapContrat(c);
 }
 
 export async function deleteContrat(id: string): Promise<{ id: string }> {
@@ -266,7 +250,7 @@ export async function getProchainNumeroPolice(compagnieId: string): Promise<stri
 // complète au cas par cas après import, via l'écran habituel.
 export interface ImportContratRow {
   souscripteur: string; compagnie: string;
-  branche?: string; dateDebut?: string; dateFin?: string; prime?: string; statut?: string; periodicite?: string; numeroPolice?: string; agence?: string;
+  branche?: string; dateDebut?: string; dateFin?: string; prime?: string; statut?: string; periodicite?: string; numeroPolice?: string;
 }
 
 export function telechargerModeleImportContrats(): Promise<void> {
@@ -412,6 +396,10 @@ export async function mettreAJourPrimeExercice(
   return http.patch<ExerciceCompagnie[]>(`/contrats/${contratId}/exercices/${numero}/prime`, dto);
 }
 
+export async function supprimerExercice(contratId: string, numero: number): Promise<ExerciceCompagnie[]> {
+  return http.delete<ExerciceCompagnie[]>(`/contrats/${contratId}/exercices/${numero}`);
+}
+
 interface ApiPersonnePeriode {
   id: string;
   nom: string;
@@ -443,7 +431,7 @@ export async function getPopulationHistorique(
   if (filtre.au) params.set("au", filtre.au);
   const data = await http.get<ApiPersonnePeriode[]>(`/contrats/${contratId}/population-historique?${params.toString()}`);
   return data.map((p) => ({
-    id: p.id, nom: p.nom, prenom: p.prenom ?? undefined, matricule: p.matricule, contratId,
+    id: p.id, nom: p.nom, prenom: p.prenom ?? undefined, matricule: p.matricule, police: contratId,
     benef: 0, cotisation: toNumber(p.cotisation), statut: p.statutPeriode,
     dateNaissance: p.dateNaissance ?? undefined, familleId: p.familleId ?? undefined,
     typeAssure: p.typeAssure ?? undefined, sexe: p.sexe ?? undefined, scolarise: p.scolarise,

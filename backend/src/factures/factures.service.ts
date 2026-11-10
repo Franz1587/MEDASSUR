@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { SanteService } from "../sante/sante.service";
 import { ReglementPrestataireService } from "../reglement-prestataire/reglement-prestataire.service";
@@ -12,6 +12,7 @@ import { UpdateFactureLigneDto } from "../sante/dto/update-facture-ligne.dto";
 import { agenceDeSaisie } from "../lib/agence-saisie.util";
 import { nomSocieteCourante, type TableauExport } from "../lib/export-tableau.util";
 import { referenceLisible } from "./reference-facture.util";
+import { cleDateFr, cleDateSoinsFacture, trierParDate } from "../lib/tri-date-fr.util";
 
 // select ciblé (2026-09, était include: {contrat:true, ...} en entier) —
 // voir demande utilisateur : "je veux la rapidité, la fluidité" ; mesuré en
@@ -105,6 +106,14 @@ const SELECT_EXPORT = {
 } satisfies Prisma.FactureSelect;
 
 const num = (v: Prisma.Decimal | number | null | undefined) => (v === null || v === undefined ? null : Number(v));
+
+// "12/03/2026" ou "12/03/2026 → 20/03/2026" : étendue des dates de soins des lignes d'une facture.
+function plageDatesSoins(lignes: readonly { date: string }[]): string {
+  const datees = trierParDate(lignes.filter((l) => cleDateFr(l.date) !== null), (l) => cleDateFr(l.date), "asc");
+  if (datees.length === 0) return "";
+  const premiere = datees[0].date, derniere = datees[datees.length - 1].date;
+  return cleDateFr(premiere) === cleDateFr(derniere) ? premiere : `${premiere} → ${derniere}`;
+}
 // Net à payer d'une ligne : base de remboursement − TPS ; montant déclaré si la base n'est pas encore calculée.
 const netLigne = (l: { statut: string; montant: Prisma.Decimal; baseRemboursement: Prisma.Decimal | null; montantTps: Prisma.Decimal | null }) =>
   l.statut === "Rejeté" || l.statut === "Annulé" ? 0 : (num(l.baseRemboursement) ?? Number(l.montant)) - (num(l.montantTps) ?? 0);
@@ -171,35 +180,43 @@ export class FacturesService {
       where: this.whereFactures(filtres), select: SELECT_FACTURE, orderBy: { createdAt: "desc" },
       ...(hasFiltreEtendu ? {} : { take: 200 }),
     });
-    return factures.filter((f) => this.dansPeriode(f.dateReception, filtres));
+    // Rangées par date de soins (la plus récente des prestations), pas par date de saisie.
+    return trierParDate(factures.filter((f) => this.dansPeriode(f.dateReception, filtres)), cleDateSoinsFacture);
   }
 
   // Pagination serveur (2026-11) — voir demande utilisateur : "l'onglet de
   // facture n'a pas de pagination… lorsqu'il y a assez de données on puisse
   // toutes les consulter". Toutes les factures restent accessibles page par
   // page ; la période (dateReception, texte JJ/MM/AAAA) est filtrée AVANT le
-  // découpage, sur une lecture légère (id + date), jamais après une coupe.
+  // découpage, sur une lecture légère (id + dates), jamais après une coupe.
+  // Tri par date de soins (2026-11 — voir demande utilisateur : "les données
+  // rangées par date de soins") : les dates étant du texte JJ/MM/AAAA, un
+  // orderBy en base trierait par jour du mois ; l'ordre est donc établi sur
+  // la lecture légère (date de soins la plus récente des lignes de chaque
+  // facture), puis seule la page demandée est chargée en entier.
   async findPage(filtres: FiltresFactures, page: number, taille: number) {
     const where = this.whereFactures(filtres);
-    const orderBy = { createdAt: "desc" as const };
-    if (!filtres.du && !filtres.au) {
-      const [total, items] = await Promise.all([
-        this.prisma.facture.count({ where }),
-        this.prisma.facture.findMany({ where, select: SELECT_FACTURE, orderBy, skip: (page - 1) * taille, take: taille }),
-      ]);
-      return { items, total, page, taille };
-    }
-    const legeres = await this.prisma.facture.findMany({ where, select: { id: true, dateReception: true }, orderBy });
-    const ids = legeres.filter((f) => this.dansPeriode(f.dateReception, filtres)).map((f) => f.id);
-    const items = await this.prisma.facture.findMany({ where: { id: { in: ids.slice((page - 1) * taille, page * taille) } }, select: SELECT_FACTURE, orderBy });
-    return { items, total: ids.length, page, taille };
+    const legeres = await this.prisma.facture.findMany({
+      where, select: { id: true, dateReception: true, lignes: { select: { date: true } } }, orderBy: { createdAt: "desc" },
+    });
+    const ordonnees = trierParDate(legeres.filter((f) => this.dansPeriode(f.dateReception, filtres)), cleDateSoinsFacture);
+    const idsPage = ordonnees.slice((page - 1) * taille, page * taille).map((f) => f.id);
+    const chargees = await this.prisma.facture.findMany({ where: { id: { in: idsPage } }, select: SELECT_FACTURE });
+    const parId = new Map(chargees.map((f) => [f.id, f]));
+    const items = idsPage.map((id) => parId.get(id)).filter((f): f is (typeof chargees)[number] => !!f);
+    return { items, total: ordonnees.length, page, taille };
   }
+
 
   // Export de l'écran Factures (mêmes filtres que la liste, toutes les pages) :
   // « factures » = une ligne par facture, « lignes » = détail de chaque prestation saisie.
   async exporter(filtres: FiltresFactures, niveau: "factures" | "lignes"): Promise<TableauExport> {
-    const factures = (await this.prisma.facture.findMany({ where: this.whereFactures(filtres), select: SELECT_EXPORT, orderBy: { createdAt: "desc" } }))
-      .filter((f) => this.dansPeriode(f.dateReception, filtres));
+    const factures = trierParDate(
+      (await this.prisma.facture.findMany({ where: this.whereFactures(filtres), select: SELECT_EXPORT, orderBy: { createdAt: "desc" } }))
+        .filter((f) => this.dansPeriode(f.dateReception, filtres))
+        .map((f) => ({ ...f, lignes: trierParDate(f.lignes, (l) => cleDateFr(l.date), "asc") })),
+      cleDateSoinsFacture,
+    );
     const prestataire = filtres.prestataireId ? factures[0]?.prestataire.nom ?? (await this.prisma.prestataire.findUnique({ where: { id: filtres.prestataireId }, select: { nom: true } }))?.nom : undefined;
     const criteres = [
       prestataire && `Prestataire : ${prestataire}`,
@@ -215,7 +232,7 @@ export class FacturesService {
         titre: "Liste des factures", societe, total: true, nomFichier: `Factures${suffixe}`,
         sousTitre: `${factures.length} facture(s)${criteres ? ` — ${criteres}` : ""}`,
         colonnes: [
-          { titre: "Référence", largeur: 1.8 }, { titre: "Réception" }, { titre: "Prestataire", largeur: 1.8 }, { titre: "Souscripteur", largeur: 1.8 },
+          { titre: "Référence", largeur: 1.8 }, { titre: "Réception" }, { titre: "Date de soins", largeur: 1.4 }, { titre: "Prestataire", largeur: 1.8 }, { titre: "Souscripteur", largeur: 1.8 },
           { titre: "Police" }, { titre: "Compagnie", largeur: 1.4 }, { titre: "Lignes", type: "nombre", largeur: 0.6 },
           { titre: "Frais réels", type: "montant" }, { titre: "Base remb.", type: "montant" }, { titre: "TPS", type: "montant" },
           { titre: "Rejeté", type: "montant" }, { titre: "Net à payer", type: "montant" }, { titre: "Statut" }, { titre: "Règlement(s)" },
@@ -224,7 +241,7 @@ export class FacturesService {
           const actives = f.lignes.filter((l) => l.statut !== "Annulé");
           const somme = (g: (l: (typeof actives)[number]) => number) => actives.reduce((s, l) => s + g(l), 0);
           return [
-            ref(f), f.dateReception, f.prestataire.nom, f.contrat.client.nom, f.contrat.numeroPolice ?? "", f.contrat.compagnie.nom, actives.length,
+            ref(f), f.dateReception, plageDatesSoins(f.lignes), f.prestataire.nom, f.contrat.client.nom, f.contrat.numeroPolice ?? "", f.contrat.compagnie.nom, actives.length,
             somme((l) => Number(l.montant)), somme((l) => num(l.baseRemboursement) ?? 0), somme((l) => num(l.montantTps) ?? 0),
             somme((l) => num(l.montantRejete) ?? (l.statut === "Rejeté" ? Number(l.montant) : 0)), somme(netLigne), f.statut,
             [...new Set(actives.map((l) => l.bordereau?.numero).filter(Boolean))].join(", "),
@@ -335,17 +352,26 @@ export class FacturesService {
   // Bloquée si une ligne appartient déjà à un bordereau "Payé" — au-delà, un
   // règlement effectué ne doit pas pouvoir être silencieusement rétracté.
   async annuler(id: string, motif: string) {
-    const facture = await this.prisma.facture.findUnique({ where: { id }, include: { lignes: { include: { bordereau: true } } } });
-    if (!facture) throw new NotFoundException(`Facture ${id} introuvable`);
-    if (facture.statut === "Annulée") throw new BadRequestException("Cette facture est déjà annulée.");
-    if (facture.statut === "Payée") throw new BadRequestException("Impossible d'annuler une facture déjà clôturée comme payée par ARIANA.");
-    const lignePayee = facture.lignes.find((l) => l.bordereau?.statut === "Payé");
-    if (lignePayee) throw new BadRequestException("Impossible d'annuler : cette facture a au moins une ligne déjà réglée (bordereau payé).");
+    // Toute la séquence (contrôles d'état + détachements + changement de
+    // statut) s'exécute dans une seule transaction, état relu à l'intérieur.
+    return this.prisma.$transaction(async (tx) => {
+      const facture = await tx.facture.findUnique({ where: { id }, include: { lignes: { include: { bordereau: true } } } });
+      if (!facture) throw new NotFoundException(`Facture ${id} introuvable`);
+      if (facture.statut === "Annulée") throw new BadRequestException("Cette facture est déjà annulée.");
+      if (facture.statut === "Payée") throw new BadRequestException("Impossible d'annuler une facture déjà clôturée comme payée par ARIANA.");
+      const lignePayee = facture.lignes.find((l) => l.bordereau?.statut === "Payé");
+      if (lignePayee) throw new BadRequestException("Impossible d'annuler : cette facture a au moins une ligne déjà réglée (bordereau payé).");
 
-    for (const ligne of facture.lignes) {
-      if (ligne.bordereauId) await this.reglement.detacherLigne(ligne.bordereauId, ligne.id);
-    }
-    return this.prisma.facture.update({ where: { id }, data: { statut: "Annulée", motifAnnulation: motif }, select: SELECT_FACTURE });
+      for (const ligne of facture.lignes) {
+        if (ligne.bordereauId) await this.reglement.detacherLigne(ligne.bordereauId, ligne.id, tx);
+      }
+      const r = await tx.facture.updateMany({ where: { id, statut: { notIn: ["Annulée", "Payée"] } }, data: { statut: "Annulée", motifAnnulation: motif } });
+      if (r.count === 0) throw new ConflictException("La facture a été modifiée entre-temps — rechargez puis recommencez.");
+      // Propager l'annulation aux PEC liées pour qu'elles soient exclues
+      // des statistiques (dashboard, rapport contrat, plafonds).
+      await tx.priseEnCharge.updateMany({ where: { factureId: id, statut: { notIn: ["Annulé", "Rejeté"] } }, data: { statut: "Annulé" } });
+      return tx.facture.findUniqueOrThrow({ where: { id }, select: SELECT_FACTURE });
+    });
   }
 
   async ajouterLigne(factureId: string, dto: CreateFactureLigneDto, opts?: { ignorerDoublonMemeJour?: boolean; exigerAffection?: boolean; baseRemboursementImpose?: number; ignorerRetrait?: boolean }) {
@@ -368,14 +394,14 @@ export class FacturesService {
   // jour systématiquement le règlement", donc le recalcul a lieu même si le
   // bordereau est déjà "Payé" (contrairement à l'annulation, plus stricte).
   async modifierLigne(factureId: string, ligneId: string, dto: UpdateFactureLigneDto) {
-    await this.verifierLigneAppartientFacture(factureId, ligneId);
+    await this.verifierLigneModifiable(factureId, ligneId);
     const ligne = await this.sante.modifierLigneFacture(ligneId, dto);
     if (ligne.bordereauId) await this.reglement.recalculerMontantTotal(ligne.bordereauId);
     return ligne;
   }
 
   async rejeterLigne(factureId: string, ligneId: string, motifRejet: string) {
-    await this.verifierLigneAppartientFacture(factureId, ligneId);
+    await this.verifierLigneModifiable(factureId, ligneId);
     return this.sante.rejeterLigneFacture(ligneId, motifRejet);
   }
 
@@ -383,12 +409,12 @@ export class FacturesService {
   // pouvoir annuler une prestation faite par erreur", distincte du rejet
   // (décision de l'assurance) — voir SanteService.annulerLigneFacture.
   async annulerLigne(factureId: string, ligneId: string, motif: string) {
-    await this.verifierLigneAppartientFacture(factureId, ligneId);
+    await this.verifierLigneModifiable(factureId, ligneId);
     return this.sante.annulerLigneFacture(ligneId, motif);
   }
 
   async supprimerLigne(factureId: string, ligneId: string) {
-    await this.verifierLigneAppartientFacture(factureId, ligneId);
+    await this.verifierLigneModifiable(factureId, ligneId);
     return this.sante.supprimerLigneFacture(ligneId);
   }
 
@@ -415,7 +441,12 @@ export class FacturesService {
     // (2026-09) — même garde que ajouterNumero ci-dessus, absente ici
     // jusqu'à présent : sans elle, connaître un couple (factureId,
     // numeroId) d'une AUTRE société suffisait à en supprimer une ligne.
-    await this.findOne(factureId);
+    const facture = await this.findOne(factureId);
+    // Une facture payée ou liée à un règlement garde ses numéros (trace
+    // comptable) : on annule la facture, on ne supprime pas ses références.
+    if (facture.statut === "Payée" || facture.lignes.some((l) => l.bordereau)) {
+      throw new ConflictException("Impossible de supprimer ce numéro : la facture est payée ou liée à un règlement. Utilisez l'annulation de la facture.");
+    }
     const numero = await this.prisma.numeroFacture.findUnique({ where: { id: numeroId } });
     if (!numero || numero.factureId !== factureId) throw new NotFoundException(`Numéro ${numeroId} introuvable sur cette facture.`);
     await this.prisma.numeroFacture.delete({ where: { id: numeroId } });
@@ -425,5 +456,12 @@ export class FacturesService {
   private async verifierLigneAppartientFacture(factureId: string, ligneId: string) {
     const ligne = await this.prisma.priseEnCharge.findUnique({ where: { id: ligneId } });
     if (!ligne || ligne.factureId !== factureId) throw new NotFoundException(`Ligne ${ligneId} introuvable sur cette facture.`);
+    return ligne;
+  }
+
+  // Une ligne rattachée à un règlement déjà payé reste immuable.
+  private async verifierLigneModifiable(factureId: string, ligneId: string) {
+    const ligne = await this.verifierLigneAppartientFacture(factureId, ligneId);
+    await this.reglement.garantirBordereauModifiable(ligne.bordereauId);
   }
 }

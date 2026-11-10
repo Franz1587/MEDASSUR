@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import ExcelJS from "exceljs";
+import { verifierTailleXlsx } from "../import/safe-xlsx.util";
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException, ConflictException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -754,6 +755,20 @@ export class ContratsService {
     return this.historiqueCompagnie(contratId);
   }
 
+  // Suppression d'un exercice doublon (2026-11 — voir demande utilisateur :
+  // "doublon de période inutile"). Interdit sur l'exercice courant du contrat
+  // (exerciceNumero) pour préserver la cohérence. Renvoie l'historique mis à jour.
+  async supprimerExercice(contratId: string, numero: number) {
+    const contrat = await this.findOne(contratId);
+    if (contrat.exerciceNumero === numero) {
+      throw new BadRequestException("Impossible de supprimer l'exercice courant du contrat.");
+    }
+    const cible = await this.prisma.exercice.findFirst({ where: { contratId, numero } });
+    if (!cible) throw new NotFoundException(`Exercice n°${numero} introuvable pour ce contrat.`);
+    await this.prisma.exercice.delete({ where: { id: cible.id } });
+    return this.historiqueCompagnie(contratId);
+  }
+
   // Population reconstituée sur une période passée (voir
   // population-historique.util.ts) + filtre statut — alimente à la fois
   // l'affichage de l'onglet Population (bouton "Rechercher") et les exports
@@ -906,6 +921,7 @@ export class ContratsService {
 
   async parseImportFile(buffer: Buffer): Promise<{ lignes: ImportContratRowDto[]; rejets: { ligne: number; motif: string }[] }> {
     const classeur = new ExcelJS.Workbook();
+    verifierTailleXlsx(buffer);
     await classeur.xlsx.load(buffer as unknown as ExcelJS.Buffer);
     const feuille = classeur.worksheets[0];
     if (!feuille) throw new BadRequestException("Fichier illisible ou vide.");

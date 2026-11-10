@@ -4135,6 +4135,11 @@ export class DocumentsService {
       await inserer(buf, 1, 260);
     }
 
+    if (inclut("consommationParActe") && payload.consommationParActe?.length > 0) {
+      titreSection(`Consommation par Acte Précis · Total ${fmt(payload.totalConsomme)} FCFA`);
+      tableau(["Acte", "Remboursé", "Nombre", "% du total"], payload.consommationParActe.map((l) => [l.libelle, l.montant, l.nombre, `${l.pct.toFixed(2)}%`]));
+    }
+
     if (inclut("consommationParPrestataire") && payload.consommationParPrestataire.length > 0) {
       titreSection("Consommation par Prestataire");
       tableau(["Prestataire", "Remboursé", "% du total"], [...payload.consommationParPrestataire.map((l) => [l.libelle, l.montant, `${l.pct.toFixed(2)}%`]), ["Total", payload.consommationParPrestataire.reduce((s, l) => s + l.montant, 0), "100%"]]);
@@ -4455,6 +4460,11 @@ export class DocumentsService {
       children.push(tableau(["Famille d'actes", "Remboursé", "Nombre Actes", "% du total"], payload.consommationParFamilleActe.map((l) => [l.libelle, l.montant, l.nombre, `${l.pct.toFixed(2)}%`])));
       const buf = await genererGraphiqueCamembert(payload.consommationParFamilleActe.map((l) => l.libelle), payload.consommationParFamilleActe.map((l) => l.montant), "Consommation par Famille d'Actes", false);
       children.push(image(buf, Math.round(LARGEUR_PAGE_EMU * 0.5), Math.round(LARGEUR_PAGE_EMU * 0.5)));
+    }
+
+    if (inclut("consommationParActe") && payload.consommationParActe?.length > 0) {
+      children.push(titreSection(`Consommation par Acte Précis · Total ${fmt(payload.totalConsomme)} FCFA`));
+      children.push(tableau(["Acte", "Remboursé", "Nombre", "% du total"], payload.consommationParActe.map((l) => [l.libelle, l.montant, l.nombre, `${l.pct.toFixed(2)}%`])));
     }
 
     if (inclut("consommationParPrestataire") && payload.consommationParPrestataire.length > 0) {

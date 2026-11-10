@@ -95,7 +95,7 @@ export class StatistiquesService {
     // différence des contrôles de plafond (SanteService.verifierPlafondPartage/
     // calculerPartPlafonnee), qui excluaient déjà Rejeté.
     const toutesLesLignes = await this.prisma.priseEnCharge.findMany({
-      where: { contratId, statut: { notIn: ["Rejeté", "Annulé"] }, factureId: { not: null } },
+      where: { contratId, statut: { notIn: ["Rejeté", "Annulé"] }, factureId: { not: null }, facture: { statut: { not: "Annulée" } } },
       select: {
         date: true, montant: true, baseRemboursement: true, assureId: true, type: true, acteMedicalId: true, prestataire: true,
         assure: { select: { id: true, familleId: true, matricule: true, nom: true, prenom: true, typeAssure: true, sexe: true } },
@@ -166,11 +166,13 @@ export class StatistiquesService {
         const f = info?.famille;
         // "DIVERS" et FAMILLE_REPRISE ne reflètent pas la vraie catégorie :
         // se rabattre sur categorieGarantie (si renseignée) puis sur p.type.
-        if (f && f.trim().toUpperCase() !== "DIVERS" && f !== FAMILLE_REPRISE) return f;
+        // normaliserRubrique ici pour éviter les doublons de casse
+        // ("CONSULTATIONS" vs "Consultations" → toujours "Consultations").
+        if (f && f.trim().toUpperCase() !== "DIVERS" && f !== FAMILLE_REPRISE) return normaliserRubrique(f);
         if (info?.categorieGarantie) return normaliserRubrique(info.categorieGarantie);
       }
       const f = familleActeParLibelle.get(p.type.trim().toLowerCase());
-      return f ?? p.type.trim() ?? "Non précisé";
+      return f ? normaliserRubrique(f) : (p.type ? normaliserRubrique(p.type.trim()) : "Non précisé");
     };
     const libelleActe = (p: (typeof lignes)[number]): string => (p.acteMedicalId && libelleParActeId.get(p.acteMedicalId)) || p.type || "Acte non précisé";
 
@@ -197,6 +199,7 @@ export class StatistiquesService {
     const detailParFamilleMap = new Map<string, DetailFamille>();
     const parPrestataire = new Map<string, { montant: number; nombre: number }>();
     const detailParPrestataireMap = new Map<string, DetailPrestataire>();
+    const parActePrecis = new Map<string, { montant: number; nombre: number }>();
 
     for (const p of lignes) {
       const montant = montantLigne(p);
@@ -236,6 +239,10 @@ export class StatistiquesService {
       parFamilleActe.set(familleActe, eFamilleActe);
 
       const acteLibelle = libelleActe(p);
+      const eActePrecis = parActePrecis.get(acteLibelle) ?? { montant: 0, nombre: 0 };
+      eActePrecis.montant += montant; eActePrecis.nombre += 1;
+      parActePrecis.set(acteLibelle, eActePrecis);
+
       const assureNom = `${p.assure.nom}${p.assure.prenom ? ` ${p.assure.prenom}` : ""}`;
 
       const eDetailFamille = detailParFamilleMap.get(racineId) ?? {
@@ -294,6 +301,9 @@ export class StatistiquesService {
       .map(([libelle, v]) => ({ libelle, montant: v.montant, nombre: v.nombre, pct: totalConsomme > 0 ? (v.montant / totalConsomme) * 100 : 0 }))
       .sort((a, b) => b.montant - a.montant);
     const consommationParFamilleActe: RepartitionLigne[] = [...parFamilleActe.entries()]
+      .map(([libelle, v]) => ({ libelle, montant: v.montant, nombre: v.nombre, pct: totalConsomme > 0 ? (v.montant / totalConsomme) * 100 : 0 }))
+      .sort((a, b) => b.montant - a.montant);
+    const consommationParActe: RepartitionLigne[] = [...parActePrecis.entries()]
       .map(([libelle, v]) => ({ libelle, montant: v.montant, nombre: v.nombre, pct: totalConsomme > 0 ? (v.montant / totalConsomme) * 100 : 0 }))
       .sort((a, b) => b.montant - a.montant);
 
@@ -394,7 +404,7 @@ export class StatistiquesService {
       periode: { du: duEff, au: auEff },
       basesContractuelles: { college: contrat.client.nom, assureur: contrat.compagnie.nom, policeNumero: numeroPolice(contrat), dateEffet: dateEffetExercice },
       evolutionMensuelle, evolutionAnnuelle, totalConsomme, consommationParFamille, detailParFamille, top20Consommateurs,
-      repartitionBeneficiaire, totalPersonnesSoignees, consommationParRubrique, consommationParFamilleActe,
+      repartitionBeneficiaire, totalPersonnesSoignees, consommationParRubrique, consommationParFamilleActe, consommationParActe,
       consommationParPrestataire, detailParPrestataire, top20Prestataires, spSansChargement, spAvecChargement,
     };
 

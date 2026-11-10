@@ -11,7 +11,9 @@ import { BasculerPopulationDto } from "./dto/basculer-population.dto";
 import { ImportContratsDto } from "./dto/import-contrats.dto";
 import { UpdateExerciceDto } from "./dto/update-exercice.dto";
 import { UpdateExercicePrimeDto } from "./dto/update-exercice-prime.dto";
+import { DerogationSaisieDto } from "./dto/derogation-saisie.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { ROLES_PRODUCTION } from "../auth/access-roles";
 import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../auth/roles.decorator";
 import { CommunicationsService } from "../communications/communications.service";
@@ -64,6 +66,7 @@ export class ContratsController {
     res.send(buffer);
   }
 
+  @Roles(...ROLES_PRODUCTION)
   @Post("import/apercu")
   @UseInterceptors(FileInterceptor("fichier", { storage: memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } }))
   apercuImport(@UploadedFile() file: Express.Multer.File) {
@@ -71,6 +74,7 @@ export class ContratsController {
     return this.contratsService.parseImportFile(file.buffer);
   }
 
+  @Roles(...ROLES_PRODUCTION)
   @Post("import")
   confirmerImport(@Body() dto: ImportContratsDto) {
     return this.contratsService.importer(dto.rows);
@@ -100,6 +104,7 @@ export class ContratsController {
     return this.contratsService.update(id, dto);
   }
 
+  @Roles(...ROLES_PRODUCTION)
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.contratsService.remove(id);
@@ -142,12 +147,18 @@ export class ContratsController {
     return this.contratsService.mettreAJourPrimeExercice(id, Number(numero), dto);
   }
 
+  // Suppression d'un exercice doublon (2026-11 — voir demande utilisateur).
+  @Delete(":id/exercices/:numero")
+  supprimerExercice(@Param("id") id: string, @Param("numero") numero: string) {
+    return this.contratsService.supprimerExercice(id, Number(numero));
+  }
+
   // Dérogation de saisie post-résiliation (2026-09) — voir demande
   // utilisateur : bouton "Permettre la saisie des prestations et des
   // prises en charge après la date de résiliation ou fermeture des
   // droits" — voir ContratsService.toggleDerogationSaisie.
   @Patch(":id/derogation-saisie")
-  toggleDerogationSaisie(@Param("id") id: string, @Body() dto: { autoriser: boolean }) {
+  toggleDerogationSaisie(@Param("id") id: string, @Body() dto: DerogationSaisieDto) {
     return this.contratsService.toggleDerogationSaisie(id, !!dto.autoriser);
   }
 
