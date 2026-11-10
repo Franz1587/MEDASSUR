@@ -48,21 +48,32 @@ export class StatistiquesService {
   constructor(private prisma: PrismaService) {}
 
   async calculer(contratId: string, du?: string, au?: string): Promise<StatistiquesPayload> {
-    const contrat = await this.prisma.contrat.findUnique({
-      where: { id: contratId },
-      include: { client: true, compagnie: { include: { clausesAjustement: { orderBy: { ordre: "asc" } } } }, garanties: { select: { categorie: true } } },
-    });
+    // 4 requêtes indépendantes en parallèle : toutes utilisent contratId
+    // fourni en paramètre, sans dépendance l'une envers l'autre.
+    const [contrat, exerciceCourant, toutesLesLignes, actes] = await Promise.all([
+      this.prisma.contrat.findUnique({
+        where: { id: contratId },
+        include: { client: true, compagnie: { include: { clausesAjustement: { orderBy: { ordre: "asc" } } } }, garanties: { select: { categorie: true } } },
+      }),
+      // "Date d'effet" des Bases Contractuelles = date d'effet de l'exercice
+      // EN COURS (voir demande utilisateur : "il s'agit de la date d'effet
+      // du contrat pour chaque exercice"). Repli sur contrat.dateDebut si
+      // aucun Exercice n'existe (contrats repris avant ce modèle).
+      this.prisma.exercice.findFirst({ where: { contratId }, orderBy: { numero: "desc" } }),
+      // `select` ciblé : seuls les champs réellement lus par montantLigne/
+      // resoudreFamille/libelleActe. L'hydratation Prisma des Decimal est le
+      // vrai goulot sur 15 000+ lignes, pas la requête SQL elle-même (~13ms).
+      this.prisma.priseEnCharge.findMany({
+        where: { contratId, statut: { notIn: ["Rejeté", "Annulé"] }, factureId: { not: null }, facture: { statut: { not: "Annulée" } } },
+        select: {
+          date: true, montant: true, baseRemboursement: true, assureId: true, type: true, acteMedicalId: true, prestataire: true,
+          assure: { select: { id: true, familleId: true, matricule: true, nom: true, prenom: true, typeAssure: true, sexe: true } },
+          prestataireRef: { select: { nom: true, type: true } },
+        },
+      }),
+      this.prisma.acteMedical.findMany({ select: { id: true, libelle: true, famille: true, categorieGarantie: true } }),
+    ]);
     if (!contrat) throw new NotFoundException("Contrat introuvable");
-
-    // "Date d'effet" des Bases Contractuelles = date d'effet de l'exercice
-    // EN COURS, pas la date de création du contrat (voir demande
-    // utilisateur : "il s'agit de la date d'effet du contrat pour chaque
-    // exercice et non la date de création du contrat") — un contrat
-    // renouvelé plusieurs fois a un Exercice par renouvellement
-    // (AvenantsService, branche "Renouvellement"), chacun avec sa propre
-    // dateDebut. Repli sur contrat.dateDebut si aucun Exercice n'existe
-    // (contrats créés avant l'introduction de ce modèle).
-    const exerciceCourant = await this.prisma.exercice.findFirst({ where: { contratId }, orderBy: { numero: "desc" } });
     const dateEffetExercice = exerciceCourant?.dateDebut ?? contrat.dateDebut;
 
     const duEff = du || contrat.dateDebut;
@@ -70,38 +81,6 @@ export class StatistiquesService {
     const duDate = parseDateFr(duEff);
     const auDate = parseDateFr(auEff);
 
-    // `select` ciblé plutôt que `include: { assure: true, prestataireRef:
-    // true }` (2026-09 — voir demande utilisateur : "l'application devient
-    // lente... peu importe le poids et le flux, [les données] doivent
-    // pouvoir remonter rapidement"). Mesuré en conditions réelles (contrat
-    // à 15 818 lignes, EXPLAIN ANALYZE) : la requête SQL elle-même
-    // s'exécute en ~13ms (index sur contratId déjà présent) — le temps
-    // observé côté Prisma (2 à 4s avec `include`) est presque entièrement
-    // de l'HYDRATATION côté Node de la trentaine de champs de
-    // PriseEnCharge (dont plusieurs Decimal, chacun enveloppé dans un
-    // objet decimal.js) × la fiche AssureSante COMPLÈTE × la fiche
-    // Prestataire COMPLÈTE pour CHAQUE ligne — alors que cette fonction ne
-    // lit qu'une poignée de champs (voir montantLigne/resoudreFamille/
-    // libelleActe ci-dessous et la boucle d'agrégation). Réduire aux seuls
-    // champs réellement utilisés a mesurablement réduit ce coût (~2-3x sur
-    // la requête isolée) — mais une hydratation Prisma pour 15 000+ lignes
-    // Decimal reste intrinsèquement plus lente qu'une requête SQL brute ;
-    // un passage à `$queryRaw` supprimerait le reste de cet écart mais est
-    // un changement plus risqué (mapping manuel, perte de la sécurité de
-    // type Prisma), volontairement laissé de côté ici.
-    // Rejeté ET Annulé exclus (2026-09) — voir demande utilisateur : "le
-    // cumul de la police n'est pas harmonisé avec le reste des données de
-    // la police" ; cette requête n'excluait jusqu'ici AUCUN statut, à la
-    // différence des contrôles de plafond (SanteService.verifierPlafondPartage/
-    // calculerPartPlafonnee), qui excluaient déjà Rejeté.
-    const toutesLesLignes = await this.prisma.priseEnCharge.findMany({
-      where: { contratId, statut: { notIn: ["Rejeté", "Annulé"] }, factureId: { not: null }, facture: { statut: { not: "Annulée" } } },
-      select: {
-        date: true, montant: true, baseRemboursement: true, assureId: true, type: true, acteMedicalId: true, prestataire: true,
-        assure: { select: { id: true, familleId: true, matricule: true, nom: true, prenom: true, typeAssure: true, sexe: true } },
-        prestataireRef: { select: { nom: true, type: true } },
-      },
-    });
     // Filtrage par période + collecte de racinesId en UN SEUL passage
     // (2026-09 — voir demande utilisateur : "l'application devient
     // lente... valable pour... la génération [de documents]"). La version
@@ -126,22 +105,7 @@ export class StatistiquesService {
     const racines = await this.prisma.assureSante.findMany({ where: { id: { in: [...racinesId] } }, select: { id: true, nom: true, matricule: true } });
     const racineParId = new Map(racines.map((r) => [r.id, r]));
 
-    // ── Consommation par Rubrique (2026-09 — voir demande utilisateur :
-    // "il faut trouver les correspondances de ces rubriques dans le
-    // tableau de garanties"). Priorité à ActeMedical.categorieGarantie —
-    // le champ créé précisément pour rattacher un acte à une catégorie du
-    // TABLEAU DE GARANTIES du contrat (voir Garantie.categorie/
-    // GarantieCatalogue.categorie, même valeurs : Consultation/Divers,
-    // Dentisterie, Hospitalisation, Maternité, Optique, Kinésithérapie &
-    // Cure thermale, Transport, Autre) — c'est cette rubrique-là qui
-    // correspond à un plafond/taux réel affiché sur le contrat, jamais
-    // ActeMedical.famille (regroupement catalogue plus fin, ex. "EXAMENS
-    // LABORATOIRE", sans équivalent direct dans le tableau de garanties).
-    // Repli sur famille puis sur le libellé brut UNIQUEMENT quand l'acte
-    // n'a encore aucune categorieGarantie renseignée (voir commentaire du
-    // schéma : "nullable, toute famille n'a pas forcément d'équivalent
-    // direct").
-    const actes = await this.prisma.acteMedical.findMany({ select: { id: true, libelle: true, famille: true, categorieGarantie: true } });
+    // actes + toutesLesLignes chargés en parallèle dans Promise.all ci-dessus.
     const acteInfoParActeId = new Map(actes.map((a) => [a.id, { famille: a.famille, categorieGarantie: a.categorieGarantie }]));
     const libelleParActeId = new Map(actes.map((a) => [a.id, a.libelle]));
     const garantiesContrat = contrat.garanties;

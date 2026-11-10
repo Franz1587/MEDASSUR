@@ -30,6 +30,7 @@ import { UPLOADS_ROOT, ASSETS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
 import { genererGraphiqueBarres, genererGraphiqueBarresEtiquetees, genererGraphiqueCamembert } from "./graphiques.util";
 import { montantEnLettresFcfa } from "../lib/montant-en-lettres.util";
+import { policePourNomFichier } from "../lib/police.util";
 import { TAUX_TPS } from "../sante/sante.service";
 import { reconstituerPopulation } from "../mouvements/population-historique.util";
 import type { Prisma, ParametresEntreprise } from "@prisma/client";
@@ -3867,7 +3868,8 @@ export class DocumentsService {
     const pageGardeImage = await this.chargerImage("pages-garde-statistiques", p.statistiquesPageGarde, UPLOADS_PAGES_GARDE_STATISTIQUES_DIR);
     const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="Statistiques-${payload.contrat.id}.pdf"`);
+    const nomFichierStats = `Statistiques-${payload.contrat.client.replace(/[\\/:*?"<>|\s]+/g, "-")}-${policePourNomFichier(payload.contrat)}`;
+    res.setHeader("Content-Disposition", `inline; filename="${nomFichierStats}.pdf"`);
     doc.pipe(res);
 
     const left = doc.page.margins.left;
@@ -4066,6 +4068,35 @@ export class DocumentsService {
     }
     nouvellePage();
 
+    // Pré-générer tous les graphiques en parallèle avant de commencer le
+    // rendu PDFKit (chaque appel canvas prend 200-500ms ; séquentiel = 2-3s).
+    const [gBufEvolution, gBufTop20Conso, gBufBenef, gBufRubrique, gBufFamille, gBufPrestataire, gBufTop20Prest, gBufSP] = await Promise.all([
+      inclut("evolutionMensuelle") && payload.evolutionMensuelle.length > 0
+        ? genererGraphiqueBarres(payload.evolutionMensuelle.map((l) => l.label), payload.evolutionMensuelle.map((l) => l.montant), "Évolution des consommations par mois", p.couleurPrimaire)
+        : Promise.resolve(null),
+      inclut("top20Consommateurs") && payload.top20Consommateurs.length > 0
+        ? genererGraphiqueBarres(payload.top20Consommateurs.map((l) => l.famille), payload.top20Consommateurs.map((l) => l.montant), "Top 20 des consommateurs", p.couleurPrimaire)
+        : Promise.resolve(null),
+      inclut("repartitionBeneficiaire") && payload.repartitionBeneficiaire.length > 0
+        ? genererGraphiqueCamembert(payload.repartitionBeneficiaire.map((l) => l.type), payload.repartitionBeneficiaire.map((l) => l.montant), "Répartition par type de bénéficiaire", false)
+        : Promise.resolve(null),
+      inclut("consommationParRubrique") && payload.consommationParRubrique.length > 0
+        ? genererGraphiqueCamembert(payload.consommationParRubrique.map((l) => l.libelle), payload.consommationParRubrique.map((l) => l.montant), "Consommation par Rubrique", false)
+        : Promise.resolve(null),
+      inclut("consommationParFamilleActe") && payload.consommationParFamilleActe.length > 0
+        ? genererGraphiqueCamembert(payload.consommationParFamilleActe.map((l) => l.libelle), payload.consommationParFamilleActe.map((l) => l.montant), "Consommation par Famille d'Actes", false)
+        : Promise.resolve(null),
+      inclut("consommationParPrestataire") && payload.consommationParPrestataire.length > 0
+        ? genererGraphiqueCamembert(payload.consommationParPrestataire.map((l) => l.libelle), payload.consommationParPrestataire.map((l) => l.montant), "Consommation par prestataire", true)
+        : Promise.resolve(null),
+      inclut("top20Prestataires") && payload.top20Prestataires.length > 0
+        ? genererGraphiqueBarres(payload.top20Prestataires.map((l) => l.libelle), payload.top20Prestataires.map((l) => l.montant), "Top 20 des prestataires", p.couleurPrimaire)
+        : Promise.resolve(null),
+      inclut("evolutionSP")
+        ? genererGraphiqueBarresEtiquetees(["S/P sans chargement", "S/P avec chargement"], [payload.spSansChargement.ratioPct / 100, payload.spAvecChargement.ratioPct / 100], "Evolution du S/P", [p.couleurPrimaire, p.couleurSecondaire], (v) => v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+        : Promise.resolve(null),
+    ]);
+
     if (inclut("basesContractuelles")) {
       titreSection("Bases Contractuelles");
       tableau(["Collège", "Assureur", "N° Police", "Date d'effet"], [[payload.basesContractuelles.college, payload.basesContractuelles.assureur, payload.basesContractuelles.policeNumero, payload.basesContractuelles.dateEffet]]);
@@ -4074,8 +4105,7 @@ export class DocumentsService {
     if (inclut("evolutionMensuelle") && payload.evolutionMensuelle.length > 0) {
       titreSection("Évolution Mensuelle de la Consommation");
       tableau(["Mois", "Montant remboursé (FCFA)"], [...payload.evolutionMensuelle.map((l) => [l.label, l.montant]), ["Total", payload.evolutionMensuelle.reduce((s, l) => s + l.montant, 0)]]);
-      const buf = await genererGraphiqueBarres(payload.evolutionMensuelle.map((l) => l.label), payload.evolutionMensuelle.map((l) => l.montant), "Évolution des consommations par mois", p.couleurPrimaire);
-      await inserer(buf, 900 / 480, width);
+      if (gBufEvolution) await inserer(gBufEvolution, 900 / 480, width);
     }
 
     if (inclut("consommationParFamille") && payload.consommationParFamille.length > 0) {
@@ -4093,8 +4123,7 @@ export class DocumentsService {
     if (inclut("top20Consommateurs") && payload.top20Consommateurs.length > 0) {
       titreSection("Top 20 des Consommateurs");
       tableau(["N°", "Matricule", "Famille", "Montant consommé"], payload.top20Consommateurs.map((l, i) => [i + 1, l.matricule, l.famille, l.montant]));
-      const buf = await genererGraphiqueBarres(payload.top20Consommateurs.map((l) => l.famille), payload.top20Consommateurs.map((l) => l.montant), "Top 20 des consommateurs", p.couleurPrimaire);
-      await inserer(buf, 900 / 480, width);
+      if (gBufTop20Conso) await inserer(gBufTop20Conso, 900 / 480, width);
     }
 
     if (inclut("repartitionBeneficiaire") && payload.repartitionBeneficiaire.length > 0) {
@@ -4111,15 +4140,13 @@ export class DocumentsService {
       const totalMontant = payload.repartitionBeneficiaire.reduce((s, l) => s + l.montant, 0);
       rows.push(["Total", payload.totalPersonnesSoignees, totalMontant, "100%", "100%"]);
       tableau(["Type de Bénéficiaire", "Nombre", "Montant Remboursé", "% Dépenses", "% Population"], rows);
-      const buf = await genererGraphiqueCamembert(payload.repartitionBeneficiaire.map((l) => l.type), payload.repartitionBeneficiaire.map((l) => l.montant), "Répartition par type de bénéficiaire", false);
-      await inserer(buf, 1, 300);
+      if (gBufBenef) await inserer(gBufBenef, 1, 300);
     }
 
     if (inclut("consommationParRubrique") && payload.consommationParRubrique.length > 0) {
       titreSection(`Consommation par Rubrique · Total ${fmt(payload.totalConsomme)} FCFA`);
       tableau(["Rubrique", "Remboursé", "Nombre Actes", "% du total"], payload.consommationParRubrique.map((l) => [l.libelle, l.montant, l.nombre, `${l.pct.toFixed(2)}%`]));
-      const buf = await genererGraphiqueCamembert(payload.consommationParRubrique.map((l) => l.libelle), payload.consommationParRubrique.map((l) => l.montant), "Consommation par Rubrique", false);
-      await inserer(buf, 1, 260);
+      if (gBufRubrique) await inserer(gBufRubrique, 1, 260);
     }
 
     // Consommation par FAMILLE D'ACTES (2026-09) — voir demande
@@ -4131,8 +4158,7 @@ export class DocumentsService {
     if (inclut("consommationParFamilleActe") && payload.consommationParFamilleActe.length > 0) {
       titreSection(`Consommation par Famille d'Actes · Total ${fmt(payload.totalConsomme)} FCFA`);
       tableau(["Famille d'actes", "Remboursé", "Nombre Actes", "% du total"], payload.consommationParFamilleActe.map((l) => [l.libelle, l.montant, l.nombre, `${l.pct.toFixed(2)}%`]));
-      const buf = await genererGraphiqueCamembert(payload.consommationParFamilleActe.map((l) => l.libelle), payload.consommationParFamilleActe.map((l) => l.montant), "Consommation par Famille d'Actes", false);
-      await inserer(buf, 1, 260);
+      if (gBufFamille) await inserer(gBufFamille, 1, 260);
     }
 
     if (inclut("consommationParActe") && payload.consommationParActe?.length > 0) {
@@ -4143,8 +4169,7 @@ export class DocumentsService {
     if (inclut("consommationParPrestataire") && payload.consommationParPrestataire.length > 0) {
       titreSection("Consommation par Prestataire");
       tableau(["Prestataire", "Remboursé", "% du total"], [...payload.consommationParPrestataire.map((l) => [l.libelle, l.montant, `${l.pct.toFixed(2)}%`]), ["Total", payload.consommationParPrestataire.reduce((s, l) => s + l.montant, 0), "100%"]]);
-      const buf = await genererGraphiqueCamembert(payload.consommationParPrestataire.map((l) => l.libelle), payload.consommationParPrestataire.map((l) => l.montant), "Consommation par prestataire", true);
-      await inserer(buf, 1, 320);
+      if (gBufPrestataire) await inserer(gBufPrestataire, 1, 320);
     }
 
     if (inclut("detailParPrestataire")) {
@@ -4157,8 +4182,7 @@ export class DocumentsService {
     if (inclut("top20Prestataires") && payload.top20Prestataires.length > 0) {
       titreSection("Top 20 des Prestataires");
       tableau(["N°", "Prestataire", "Remboursé", "% du total"], payload.top20Prestataires.map((l, i) => [i + 1, l.libelle, l.montant, `${l.pct.toFixed(2)}%`]));
-      const buf = await genererGraphiqueBarres(payload.top20Prestataires.map((l) => l.libelle), payload.top20Prestataires.map((l) => l.montant), "Top 20 des prestataires", p.couleurPrimaire);
-      await inserer(buf, 900 / 480, width);
+      if (gBufTop20Prest) await inserer(gBufTop20Prest, 900 / 480, width);
     }
 
     if (inclut("evolutionSP")) {
@@ -4230,13 +4254,7 @@ export class DocumentsService {
       blocSP(payload.spSansChargement, "sans Chargement");
       blocSP(payload.spAvecChargement, "avec Chargement");
 
-      const buf = await genererGraphiqueBarresEtiquetees(
-        ["S/P sans chargement", "S/P avec chargement"],
-        [payload.spSansChargement.ratioPct / 100, payload.spAvecChargement.ratioPct / 100],
-        "Evolution du S/P", [p.couleurPrimaire, p.couleurSecondaire],
-        (v) => v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-      );
-      await inserer(buf, 900 / 480, width * 0.75);
+      if (gBufSP) await inserer(gBufSP, 900 / 480, width * 0.75);
     }
 
     if (inclut("analyse")) {
@@ -4400,6 +4418,34 @@ export class DocumentsService {
       children: [new ImageRun({ data: buffer, transformation: { width: largeurEmu, height: hauteurEmu }, type: "png" })],
     });
 
+    // Pré-générer tous les graphiques en parallèle (mêmes buffers que le PDF).
+    const [dBufEvolution, dBufTop20Conso, dBufBenef, dBufRubrique, dBufFamille, dBufPrestataire, dBufTop20Prest, dBufSP] = await Promise.all([
+      inclut("evolutionMensuelle") && payload.evolutionMensuelle.length > 0
+        ? genererGraphiqueBarres(payload.evolutionMensuelle.map((l) => l.label), payload.evolutionMensuelle.map((l) => l.montant), "Évolution des consommations par mois", p.couleurPrimaire)
+        : Promise.resolve(null),
+      inclut("top20Consommateurs") && payload.top20Consommateurs.length > 0
+        ? genererGraphiqueBarres(payload.top20Consommateurs.map((l) => l.famille), payload.top20Consommateurs.map((l) => l.montant), "Top 20 des consommateurs", p.couleurPrimaire)
+        : Promise.resolve(null),
+      inclut("repartitionBeneficiaire") && payload.repartitionBeneficiaire.length > 0
+        ? genererGraphiqueCamembert(payload.repartitionBeneficiaire.map((l) => l.type), payload.repartitionBeneficiaire.map((l) => l.montant), "Répartition par type de bénéficiaire", false)
+        : Promise.resolve(null),
+      inclut("consommationParRubrique") && payload.consommationParRubrique.length > 0
+        ? genererGraphiqueCamembert(payload.consommationParRubrique.map((l) => l.libelle), payload.consommationParRubrique.map((l) => l.montant), "Consommation par Rubrique", false)
+        : Promise.resolve(null),
+      inclut("consommationParFamilleActe") && payload.consommationParFamilleActe.length > 0
+        ? genererGraphiqueCamembert(payload.consommationParFamilleActe.map((l) => l.libelle), payload.consommationParFamilleActe.map((l) => l.montant), "Consommation par Famille d'Actes", false)
+        : Promise.resolve(null),
+      inclut("consommationParPrestataire") && payload.consommationParPrestataire.length > 0
+        ? genererGraphiqueCamembert(payload.consommationParPrestataire.map((l) => l.libelle), payload.consommationParPrestataire.map((l) => l.montant), "Consommation par prestataire", true)
+        : Promise.resolve(null),
+      inclut("top20Prestataires") && payload.top20Prestataires.length > 0
+        ? genererGraphiqueBarres(payload.top20Prestataires.map((l) => l.libelle), payload.top20Prestataires.map((l) => l.montant), "Top 20 des prestataires", p.couleurPrimaire)
+        : Promise.resolve(null),
+      inclut("evolutionSP")
+        ? genererGraphiqueBarresEtiquetees(["S/P sans chargement", "S/P avec chargement"], [payload.spSansChargement.ratioPct / 100, payload.spAvecChargement.ratioPct / 100], "Evolution du S/P", [p.couleurPrimaire, p.couleurSecondaire], (v) => v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+        : Promise.resolve(null),
+    ]);
+
     const children: (Paragraph | Table)[] = [];
 
     if (inclut("basesContractuelles")) {
@@ -4410,8 +4456,7 @@ export class DocumentsService {
     if (inclut("evolutionMensuelle") && payload.evolutionMensuelle.length > 0) {
       children.push(titreSection("Évolution Mensuelle de la Consommation"));
       children.push(tableau(["Mois", "Montant remboursé (FCFA)"], [...payload.evolutionMensuelle.map((l) => [l.label, l.montant]), ["Total", payload.evolutionMensuelle.reduce((s, l) => s + l.montant, 0)]]));
-      const buf = await genererGraphiqueBarres(payload.evolutionMensuelle.map((l) => l.label), payload.evolutionMensuelle.map((l) => l.montant), "Évolution des consommations par mois", p.couleurPrimaire);
-      children.push(image(buf, LARGEUR_PAGE_EMU, Math.round(LARGEUR_PAGE_EMU * (480 / 900))));
+      if (dBufEvolution) children.push(image(dBufEvolution, LARGEUR_PAGE_EMU, Math.round(LARGEUR_PAGE_EMU * (480 / 900))));
     }
 
     if (inclut("consommationParFamille") && payload.consommationParFamille.length > 0) {
@@ -4429,8 +4474,7 @@ export class DocumentsService {
     if (inclut("top20Consommateurs") && payload.top20Consommateurs.length > 0) {
       children.push(titreSection("Top 20 des Consommateurs"));
       children.push(tableau(["N°", "Matricule", "Famille", "Montant consommé"], payload.top20Consommateurs.map((l, i) => [i + 1, l.matricule, l.famille, l.montant])));
-      const buf = await genererGraphiqueBarres(payload.top20Consommateurs.map((l) => l.famille), payload.top20Consommateurs.map((l) => l.montant), "Top 20 des consommateurs", p.couleurPrimaire);
-      children.push(image(buf, LARGEUR_PAGE_EMU, Math.round(LARGEUR_PAGE_EMU * (480 / 900))));
+      if (dBufTop20Conso) children.push(image(dBufTop20Conso, LARGEUR_PAGE_EMU, Math.round(LARGEUR_PAGE_EMU * (480 / 900))));
     }
 
     if (inclut("repartitionBeneficiaire") && payload.repartitionBeneficiaire.length > 0) {
@@ -4444,22 +4488,19 @@ export class DocumentsService {
       const totalMontant = payload.repartitionBeneficiaire.reduce((s, l) => s + l.montant, 0);
       rows.push(["Total", payload.totalPersonnesSoignees, totalMontant, "100%", "100%"]);
       children.push(tableau(["Type de Bénéficiaire", "Nombre", "Montant Remboursé", "% Dépenses", "% Population"], rows));
-      const buf = await genererGraphiqueCamembert(payload.repartitionBeneficiaire.map((l) => l.type), payload.repartitionBeneficiaire.map((l) => l.montant), "Répartition par type de bénéficiaire", false);
-      children.push(image(buf, Math.round(LARGEUR_PAGE_EMU * 0.55), Math.round(LARGEUR_PAGE_EMU * 0.55)));
+      if (dBufBenef) children.push(image(dBufBenef, Math.round(LARGEUR_PAGE_EMU * 0.55), Math.round(LARGEUR_PAGE_EMU * 0.55)));
     }
 
     if (inclut("consommationParRubrique") && payload.consommationParRubrique.length > 0) {
       children.push(titreSection(`Consommation par Rubrique · Total ${fmt(payload.totalConsomme)} FCFA`));
       children.push(tableau(["Rubrique", "Remboursé", "Nombre Actes", "% du total"], payload.consommationParRubrique.map((l) => [l.libelle, l.montant, l.nombre, `${l.pct.toFixed(2)}%`])));
-      const buf = await genererGraphiqueCamembert(payload.consommationParRubrique.map((l) => l.libelle), payload.consommationParRubrique.map((l) => l.montant), "Consommation par Rubrique", false);
-      children.push(image(buf, Math.round(LARGEUR_PAGE_EMU * 0.5), Math.round(LARGEUR_PAGE_EMU * 0.5)));
+      if (dBufRubrique) children.push(image(dBufRubrique, Math.round(LARGEUR_PAGE_EMU * 0.5), Math.round(LARGEUR_PAGE_EMU * 0.5)));
     }
 
     if (inclut("consommationParFamilleActe") && payload.consommationParFamilleActe.length > 0) {
       children.push(titreSection(`Consommation par Famille d'Actes · Total ${fmt(payload.totalConsomme)} FCFA`));
       children.push(tableau(["Famille d'actes", "Remboursé", "Nombre Actes", "% du total"], payload.consommationParFamilleActe.map((l) => [l.libelle, l.montant, l.nombre, `${l.pct.toFixed(2)}%`])));
-      const buf = await genererGraphiqueCamembert(payload.consommationParFamilleActe.map((l) => l.libelle), payload.consommationParFamilleActe.map((l) => l.montant), "Consommation par Famille d'Actes", false);
-      children.push(image(buf, Math.round(LARGEUR_PAGE_EMU * 0.5), Math.round(LARGEUR_PAGE_EMU * 0.5)));
+      if (dBufFamille) children.push(image(dBufFamille, Math.round(LARGEUR_PAGE_EMU * 0.5), Math.round(LARGEUR_PAGE_EMU * 0.5)));
     }
 
     if (inclut("consommationParActe") && payload.consommationParActe?.length > 0) {
@@ -4470,8 +4511,7 @@ export class DocumentsService {
     if (inclut("consommationParPrestataire") && payload.consommationParPrestataire.length > 0) {
       children.push(titreSection("Consommation par Prestataire"));
       children.push(tableau(["Prestataire", "Remboursé", "% du total"], [...payload.consommationParPrestataire.map((l) => [l.libelle, l.montant, `${l.pct.toFixed(2)}%`]), ["Total", payload.consommationParPrestataire.reduce((s, l) => s + l.montant, 0), "100%"]]));
-      const buf = await genererGraphiqueCamembert(payload.consommationParPrestataire.map((l) => l.libelle), payload.consommationParPrestataire.map((l) => l.montant), "Consommation par prestataire", true);
-      children.push(image(buf, Math.round(LARGEUR_PAGE_EMU * 0.6), Math.round(LARGEUR_PAGE_EMU * 0.6)));
+      if (dBufPrestataire) children.push(image(dBufPrestataire, Math.round(LARGEUR_PAGE_EMU * 0.6), Math.round(LARGEUR_PAGE_EMU * 0.6)));
     }
 
     if (inclut("detailParPrestataire")) {
@@ -4484,8 +4524,7 @@ export class DocumentsService {
     if (inclut("top20Prestataires") && payload.top20Prestataires.length > 0) {
       children.push(titreSection("Top 20 des Prestataires"));
       children.push(tableau(["N°", "Prestataire", "Remboursé", "% du total"], payload.top20Prestataires.map((l, i) => [i + 1, l.libelle, l.montant, `${l.pct.toFixed(2)}%`])));
-      const buf = await genererGraphiqueBarres(payload.top20Prestataires.map((l) => l.libelle), payload.top20Prestataires.map((l) => l.montant), "Top 20 des prestataires", p.couleurPrimaire);
-      children.push(image(buf, LARGEUR_PAGE_EMU, Math.round(LARGEUR_PAGE_EMU * (480 / 900))));
+      if (dBufTop20Prest) children.push(image(dBufTop20Prest, LARGEUR_PAGE_EMU, Math.round(LARGEUR_PAGE_EMU * (480 / 900))));
     }
 
     if (inclut("evolutionSP")) {
@@ -4547,13 +4586,7 @@ export class DocumentsService {
       children.push(new Paragraph({ text: "", spacing: { after: 150 } }));
       children.push(blocSPDocx(payload.spAvecChargement, "avec Chargement"));
 
-      const buf = await genererGraphiqueBarresEtiquetees(
-        ["S/P sans chargement", "S/P avec chargement"],
-        [payload.spSansChargement.ratioPct / 100, payload.spAvecChargement.ratioPct / 100],
-        "Evolution du S/P", [p.couleurPrimaire, p.couleurSecondaire],
-        (v) => v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-      );
-      children.push(image(buf, Math.round(LARGEUR_PAGE_EMU * 0.75), Math.round(LARGEUR_PAGE_EMU * 0.75 * (480 / 900))));
+      if (dBufSP) children.push(image(dBufSP, Math.round(LARGEUR_PAGE_EMU * 0.75), Math.round(LARGEUR_PAGE_EMU * 0.75 * (480 / 900))));
     }
 
     if (inclut("analyse")) {
@@ -4647,7 +4680,8 @@ export class DocumentsService {
     });
     const buffer = await Packer.toBuffer(document);
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-    res.setHeader("Content-Disposition", `attachment; filename="Statistiques-${payload.contrat.id}.docx"`);
+    const nomFichierDocx = `Statistiques-${payload.contrat.client.replace(/[\\/:*?"<>|\s]+/g, "-")}-${policePourNomFichier(payload.contrat)}`;
+    res.setHeader("Content-Disposition", `attachment; filename="${nomFichierDocx}.docx"`);
     res.send(buffer);
   }
 
