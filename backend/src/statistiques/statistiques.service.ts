@@ -174,7 +174,13 @@ export class StatistiquesService {
       const f = familleActeParLibelle.get(p.type.trim().toLowerCase());
       return f ? normaliserRubrique(f) : (p.type ? normaliserRubrique(p.type.trim()) : "Non précisé");
     };
-    const libelleActe = (p: (typeof lignes)[number]): string => (p.acteMedicalId && libelleParActeId.get(p.acteMedicalId)) || p.type || "Acte non précisé";
+    // Supprimer le suffixe numérique entre parenthèses ("VERRES ET MONTURES
+    // (500)" → "VERRES ET MONTURES") pour regrouper les variantes tarifées
+    // d'un même acte dans la consommation par acte précis.
+    const libelleActe = (p: (typeof lignes)[number]): string => {
+      const libelle = (p.acteMedicalId && libelleParActeId.get(p.acteMedicalId)) || p.type || "Acte non précisé";
+      return libelle.replace(/\s*\(\d+\)\s*$/, "").trim();
+    };
 
     // ── Agrégation combinée (2026-09) — un seul passage sur `lignes` pour
     // TOUTES les rubriques ci-dessous : évolution mensuelle/annuelle,
@@ -239,9 +245,14 @@ export class StatistiquesService {
       parFamilleActe.set(familleActe, eFamilleActe);
 
       const acteLibelle = libelleActe(p);
-      const eActePrecis = parActePrecis.get(acteLibelle) ?? { montant: 0, nombre: 0 };
-      eActePrecis.montant += montant; eActePrecis.nombre += 1;
-      parActePrecis.set(acteLibelle, eActePrecis);
+      // Exclure les lignes à montant nul : elles ont été validées mais rien
+      // n'a été remboursé (baseRemboursement = 0), elles ne doivent pas
+      // polluer le tableau "Consommation par Acte Précis".
+      if (montant > 0) {
+        const eActePrecis = parActePrecis.get(acteLibelle) ?? { montant: 0, nombre: 0 };
+        eActePrecis.montant += montant; eActePrecis.nombre += 1;
+        parActePrecis.set(acteLibelle, eActePrecis);
+      }
 
       const assureNom = `${p.assure.nom}${p.assure.prenom ? ` ${p.assure.prenom}` : ""}`;
 

@@ -33,13 +33,13 @@ const RUBRIQUES_CANONIQUES: { rubrique: string; motsCles: string[] }[] = [
   { rubrique: "Maternité", motsCles: ["MATERN", "ACCOUCH", "GROSSESSE", "PRENATAL"] },
   // Évacuation sanitaire AVANT Transport : "EVACUATION SANITAIRE" contient
   // "SANIT" qui ne doit pas matcher Hospitalisation avant d'avoir matché ici.
-  { rubrique: "Évacuation Sanitaire", motsCles: ["EVASAN", "EVACUATION SANIT"] },
+  { rubrique: "Évacuation Sanitaire", motsCles: ["EVASAN", "EVACUATION SANIT", "BILLET", "AVION", "AFRIJET"] },
   { rubrique: "Transport", motsCles: ["TRANSPORT", "AMBULANCE"] },
   { rubrique: "Orthophonie", motsCles: ["ORTHOPHON"] },
   { rubrique: "Orthoptie", motsCles: ["ORTHOPT"] },
   { rubrique: "Hospitalisation", motsCles: ["HOSPI", "HOPSI", "HOPITAL", "CHIRURGIE MAJEURE", "CHAMBRE", "SEJOUR", "NUITEE"] },
   { rubrique: "Pharmacie", motsCles: ["PHARMA", "MEDICAMENT"] },
-  { rubrique: "Analyses Médicale", motsCles: ["ANALYS", "LABO", "BIOLOG"] },
+  { rubrique: "Analyses Médicale", motsCles: ["ANALYS", "LABO", "BIOLOG", "BACTERIO", "PARASITO", "BIOCHIM", "HEMATO", "SEROLO", "VIROLO", "COAGUL", "TYPAGE", "EXAMEN", "PRELEV"] },
   { rubrique: "Imagerie", motsCles: ["IMAGERIE", "RADIO", "ECHOGRAPH", "SCANNER", "IRM"] },
   // Consultations avant Actes de Spécialités : "CS OPHTALMOLOGUE" ou
   // "CONSULTATION SPECIALISTE" sont des consultations, pas des actes. "CS"
@@ -114,6 +114,14 @@ export function resoudreRubriqueContrat(
   let rubrique = candidat ? normaliserRubrique(candidat) : "Non précisé";
   const rubriquePrestataire = ligne.prestataireType ? RUBRIQUE_PAR_TYPE_PRESTATAIRE[ligne.prestataireType] : undefined;
   if (rubriquePrestataire && RUBRIQUES_GENERIQUES.has(rubrique)) rubrique = rubriquePrestataire;
+  // "Ambulatoire" encore présent après substitution prestataire → essayer la
+  // famille d'acte (si disponible et non-DIVERS) pour trouver quelque chose
+  // de plus précis (voir demande utilisateur : "Ambulatoire ça ne veut rien
+  // dire quand il s'agit de retracer les rubriques des actes médicaux").
+  if (rubrique === "Ambulatoire" && acteInfo?.famille && acteInfo.famille.trim().toUpperCase() !== "DIVERS") {
+    const viaFamille = normaliserRubrique(acteInfo.famille);
+    if (viaFamille !== "Ambulatoire") rubrique = viaFamille;
+  }
   if (rubrique === "Non précisé") return rubrique;
 
   // Rubrique plafonnée (a besoin d'une ligne Garantie pour avoir un

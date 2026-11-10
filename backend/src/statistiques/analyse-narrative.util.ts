@@ -70,17 +70,17 @@ function analyseConsommationTotale(evolution: EvolutionMensuelleLigne[], total: 
 function analyseBeneficiaire(groupes: RepartitionBeneficiaireLigne[]): AnalyseSection {
   const lignes: string[] = [];
   for (const g of groupes) {
-    lignes.push(g.type, `• Montant : ${fmt(g.montant)} FCFA (${pct(g.pctDepenses)})`, `• Effectif : ${g.nombre} personnes (${pct(g.pctPopulation)})`, "");
+    lignes.push(g.type, `Montant : ${fmt(g.montant)} FCFA (${pct(g.pctDepenses)})`, `Effectif : ${g.nombre} personnes (${pct(g.pctPopulation)})`, "");
   }
   lignes.push("Analyse", "");
   const enfants = groupes.find((g) => g.type === "Enfants");
   const conjoints = groupes.find((g) => g.type === "Conjoints");
   const principaux = groupes.find((g) => g.type === "Assurés Principaux");
-  if (enfants) lignes.push(`• Les enfants représentent ${pct(enfants.pctPopulation)} de la population pour ${pct(enfants.pctDepenses)} de la dépense — ${enfants.pctDepenses <= enfants.pctPopulation + 5 ? "niveau cohérent avec leur poids démographique" : "consommation élevée au regard de leur poids démographique"}.`);
-  if (principaux) lignes.push(`• Les assurés principaux pèsent ${pct(principaux.pctDepenses)} de la dépense pour ${pct(principaux.pctPopulation)} de la population — ${Math.abs(principaux.pctDepenses - principaux.pctPopulation) <= 10 ? "répartition équilibrée" : "écart notable à surveiller"}.`);
+  if (enfants) lignes.push(`Les enfants représentent ${pct(enfants.pctPopulation)} de la population pour ${pct(enfants.pctDepenses)} de la dépense — ${enfants.pctDepenses <= enfants.pctPopulation + 5 ? "niveau cohérent avec leur poids démographique" : "consommation élevée au regard de leur poids démographique"}.`);
+  if (principaux) lignes.push(`Les assurés principaux pèsent ${pct(principaux.pctDepenses)} de la dépense pour ${pct(principaux.pctPopulation)} de la population — ${Math.abs(principaux.pctDepenses - principaux.pctPopulation) <= 10 ? "répartition équilibrée" : "écart notable à surveiller"}.`);
   if (conjoints) {
     const ratioCoutEffectif = conjoints.pctPopulation > 0 ? conjoints.pctDepenses / conjoints.pctPopulation : 0;
-    lignes.push(`• Les conjoints représentent ${pct(conjoints.pctDepenses)} de la dépense pour ${pct(conjoints.pctPopulation)} de la population — ${ratioCoutEffectif > 1.3 ? "ratio coût/effectif élevé, point de vigilance" : "ratio coût/effectif maîtrisé"}.`);
+    lignes.push(`Les conjoints représentent ${pct(conjoints.pctDepenses)} de la dépense pour ${pct(conjoints.pctPopulation)} de la population — ${ratioCoutEffectif > 1.3 ? "ratio coût/effectif élevé, point de vigilance" : "ratio coût/effectif maîtrisé"}.`);
   }
   const ecartMax = Math.max(...groupes.map((g) => Math.abs(g.pctDepenses - g.pctPopulation)));
   lignes.push("", ecartMax <= 15 ? "OK — Structure globalement équilibrée" : "ATTENTION — Structure déséquilibrée entre effectif et dépense selon les catégories");
@@ -101,14 +101,14 @@ const SEUILS_RUBRIQUE: Record<string, { eleve: number; label: string }> = {
 
 function analyseRubrique(rubriques: RepartitionLigne[]): AnalyseSection {
   const top = rubriques.slice(0, 6);
-  const lignes = ["Principaux postes", "", ...top.map((r) => `• ${r.libelle} : ${fmt(r.montant)} FCFA (${pct(r.pct)})`), "", "Analyse", ""];
+  const lignes = ["Principaux postes", "", ...top.map((r) => `${r.libelle} : ${fmt(r.montant)} FCFA (${pct(r.pct)})`), "", "Analyse", ""];
   for (const r of top) {
     const seuil = SEUILS_RUBRIQUE[r.libelle.toUpperCase()];
-    if (seuil && r.pct > seuil.eleve) lignes.push(`• ${r.libelle} (${pct(r.pct)}) = élevé, au-dessus des ${seuil.label} — poste à surveiller en priorité.`);
-    else if (seuil) lignes.push(`• ${r.libelle} (${pct(r.pct)}) = dans les ${seuil.label} — niveau cohérent.`);
+    if (seuil && r.pct > seuil.eleve) lignes.push(`${r.libelle} (${pct(r.pct)}) = élevé, au-dessus des ${seuil.label} — poste à surveiller en priorité.`);
+    else if (seuil) lignes.push(`${r.libelle} (${pct(r.pct)}) = dans les ${seuil.label} — niveau cohérent.`);
   }
   const soinsCourants = rubriques.filter((r) => ["CONSULTATIONS", "PHARMACIE", "EXAMENS LABORATOIRE"].includes(r.libelle.toUpperCase())).reduce((s, r) => s + r.pct, 0);
-  if (soinsCourants > 0) lignes.push(`• Soins courants (consultations + pharmacie + labo ~ ${pct(soinsCourants)}) — niveau ${soinsCourants > 50 ? "élevé" : "cohérent"}.`);
+  if (soinsCourants > 0) lignes.push(`Soins courants (consultations + pharmacie + labo ~ ${pct(soinsCourants)}) — niveau ${soinsCourants > 50 ? "élevé" : "cohérent"}.`);
   const posteDominant = rubriques[0];
   lignes.push("", posteDominant && SEUILS_RUBRIQUE[posteDominant.libelle.toUpperCase()]?.eleve && posteDominant.pct > SEUILS_RUBRIQUE[posteDominant.libelle.toUpperCase()].eleve
     ? `ATTENTION — Point critique : surconsommation en ${posteDominant.libelle.toLowerCase()}`
@@ -118,9 +118,9 @@ function analyseRubrique(rubriques: RepartitionLigne[]): AnalyseSection {
 
 function analysePrestataire(prestataires: RepartitionLigne[]): AnalyseSection {
   const top6 = prestataires.slice(0, 6);
-  const lignes = ["Top prestataires", "", ...top6.map((p) => `• ${p.libelle} : ${fmt(p.montant)} FCFA (${pct(p.pct)})`), "", "Analyse", ""];
+  const lignes = ["Top prestataires", "", ...top6.map((p) => `${p.libelle} : ${fmt(p.montant)} FCFA (${pct(p.pct)})`), "", "Analyse", ""];
   const concentrationTop5 = prestataires.slice(0, 5).reduce((s, p) => s + p.pct, 0);
-  lignes.push(`• Les 5 premiers prestataires concentrent ${pct(concentrationTop5)} de la consommation.`);
+  lignes.push(`Les 5 premiers prestataires concentrent ${pct(concentrationTop5)} de la consommation.`);
   lignes.push(concentrationTop5 > 40
     ? "  -> réseau dépendant de quelques acteurs clés."
     : "  -> réseau diversifié, consommation répartie sur un grand nombre de prestataires.");
@@ -131,9 +131,9 @@ function analysePrestataire(prestataires: RepartitionLigne[]): AnalyseSection {
 function analyseSp(sans: SpBloc, avec: SpBloc): AnalyseSection {
   const lignes = [
     "Sans chargement", "",
-    `• Sinistres : ${fmt(sans.sinistres)} FCFA`, `• Primes : ${fmt(sans.primes)} FCFA`, `• S/P : ${pct(sans.ratioPct)}`,
+    `Sinistres : ${fmt(sans.sinistres)} FCFA`, `Primes : ${fmt(sans.primes)} FCFA`, `S/P : ${pct(sans.ratioPct)}`,
     "", "Avec chargement", "",
-    `• Sinistres chargés : ${fmt(avec.sinistres)} FCFA`, `• Primes : ${fmt(avec.primes)} FCFA`, `• S/P : ${pct(avec.ratioPct)}`,
+    `Sinistres chargés : ${fmt(avec.sinistres)} FCFA`, `Primes : ${fmt(avec.primes)} FCFA`, `S/P : ${pct(avec.ratioPct)}`,
   ];
   return { titre: "5. Analyse du Rapport S/P (Sinistres / Primes)", lignes };
 }
@@ -150,8 +150,8 @@ function verdictSp(ratioPct: number): string {
 
 function conclusionSp(sans: SpBloc, avec: SpBloc): AnalyseSection {
   const lignes = [
-    "Sans chargement", `• ${pct(sans.ratioPct)} — ${verdictSp(sans.ratioPct)}`, `• Tranche : ${sans.tranche}`, `• Régularisation : ${pct(sans.regularisationPct)}`,
-    "", "Avec chargement", `• ${pct(avec.ratioPct)} — ${verdictSp(avec.ratioPct)}`, `• Tranche : ${avec.tranche}`, `• Régularisation : ${pct(avec.regularisationPct)}`,
+    "Sans chargement", `${pct(sans.ratioPct)} — ${verdictSp(sans.ratioPct)}`, `Tranche : ${sans.tranche}`, `Régularisation : ${pct(sans.regularisationPct)}`,
+    "", "Avec chargement", `${pct(avec.ratioPct)} — ${verdictSp(avec.ratioPct)}`, `Tranche : ${avec.tranche}`, `Régularisation : ${pct(avec.regularisationPct)}`,
   ];
   return { titre: "6. Conclusion S/P", lignes };
 }
