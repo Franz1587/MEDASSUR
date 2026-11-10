@@ -181,7 +181,7 @@ export class FacturesService {
       ...(hasFiltreEtendu ? {} : { take: 200 }),
     });
     // Rangées par date de soins (la plus récente des prestations), pas par date de saisie.
-    return trierParDate(factures.filter((f) => this.dansPeriode(f.dateReception, filtres)), cleDateSoinsFacture);
+    return trierParDate(factures.filter((f) => this.dansPeriode(f.dateReception, filtres)), (f) => cleDateSoinsFacture(f));
   }
 
   // Pagination serveur (2026-11) — voir demande utilisateur : "l'onglet de
@@ -199,7 +199,7 @@ export class FacturesService {
     const legeres = await this.prisma.facture.findMany({
       where, select: { id: true, dateReception: true, lignes: { select: { date: true } } }, orderBy: { createdAt: "desc" },
     });
-    const ordonnees = trierParDate(legeres.filter((f) => this.dansPeriode(f.dateReception, filtres)), cleDateSoinsFacture);
+    const ordonnees = trierParDate(legeres.filter((f) => this.dansPeriode(f.dateReception, filtres)), (f) => cleDateSoinsFacture(f));
     const idsPage = ordonnees.slice((page - 1) * taille, page * taille).map((f) => f.id);
     const chargees = await this.prisma.facture.findMany({ where: { id: { in: idsPage } }, select: SELECT_FACTURE });
     const parId = new Map(chargees.map((f) => [f.id, f]));
@@ -215,7 +215,7 @@ export class FacturesService {
       (await this.prisma.facture.findMany({ where: this.whereFactures(filtres), select: SELECT_EXPORT, orderBy: { createdAt: "desc" } }))
         .filter((f) => this.dansPeriode(f.dateReception, filtres))
         .map((f) => ({ ...f, lignes: trierParDate(f.lignes, (l) => cleDateFr(l.date), "asc") })),
-      cleDateSoinsFacture,
+      (f) => cleDateSoinsFacture(f),
     );
     const prestataire = filtres.prestataireId ? factures[0]?.prestataire.nom ?? (await this.prisma.prestataire.findUnique({ where: { id: filtres.prestataireId }, select: { nom: true } }))?.nom : undefined;
     const criteres = [
