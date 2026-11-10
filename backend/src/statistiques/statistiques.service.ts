@@ -145,8 +145,21 @@ export class StatistiquesService {
     const acteInfoParActeId = new Map(actes.map((a) => [a.id, { famille: a.famille, categorieGarantie: a.categorieGarantie }]));
     const libelleParActeId = new Map(actes.map((a) => [a.id, a.libelle]));
     const garantiesContrat = contrat.garanties;
-    const resoudreFamille = (p: (typeof lignes)[number]): string =>
-      resoudreRubriqueContrat(garantiesContrat, { type: p.type, prestataireType: p.prestataireRef?.type }, p.acteMedicalId ? acteInfoParActeId.get(p.acteMedicalId) : null);
+    const resoudreFamille = (p: (typeof lignes)[number]): string => {
+      const rubrique = resoudreRubriqueContrat(garantiesContrat, { type: p.type, prestataireType: p.prestataireRef?.type }, p.acteMedicalId ? acteInfoParActeId.get(p.acteMedicalId) : null);
+      if (rubrique !== "Ambulatoire") return rubrique;
+      // "Ambulatoire" ne doit jamais remonter (voir demande utilisateur) :
+      // dernier recours via libellé exact de l'acte médical.
+      if (p.acteMedicalId) {
+        const lib = libelleParActeId.get(p.acteMedicalId);
+        if (lib) {
+          const viaLib = normaliserRubrique(lib);
+          if (viaLib !== "Ambulatoire") return viaLib;
+        }
+      }
+      // Fallback absolu : soins ambulatoires = consultations externes.
+      return "Consultations";
+    };
     // Famille D'ACTES (2026-09/2026-10) — ActeMedical.famille brut (le
     // regroupement fin du catalogue), jamais categorieGarantie (déjà
     // utilisé par resoudreFamille pour la rubrique du tableau de garanties).
@@ -175,11 +188,20 @@ export class StatistiquesService {
       return f ? normaliserRubrique(f) : (p.type ? normaliserRubrique(p.type.trim()) : "Non précisé");
     };
     // Supprimer le suffixe numérique entre parenthèses ("VERRES ET MONTURES
-    // (500)" → "VERRES ET MONTURES") pour regrouper les variantes tarifées
-    // d'un même acte dans la consommation par acte précis.
+    // (500)" → "VERRES ET MONTURES") pour regrouper les variantes tarifées.
+    // Pour les actes DIVERS/FAMILLE_REPRISE (import d'antériorité), utiliser
+    // p.type directement afin de ne pas afficher "Prestation non détaillée
+    // (reprise d'antériorité)" — p.type porte la vraie catégorie saisie ou
+    // importée (Consultations, Pharmacie, Hospitalisation...).
     const libelleActe = (p: (typeof lignes)[number]): string => {
-      const libelle = (p.acteMedicalId && libelleParActeId.get(p.acteMedicalId)) || p.type || "Acte non précisé";
-      return libelle.replace(/\s*\(\d+\)\s*$/, "").trim();
+      if (p.acteMedicalId) {
+        const info = acteInfoParActeId.get(p.acteMedicalId);
+        if (info && info.famille !== FAMILLE_REPRISE && info.famille.trim().toUpperCase() !== "DIVERS") {
+          const lib = libelleParActeId.get(p.acteMedicalId);
+          if (lib) return lib.replace(/\s*\(\d+\)\s*$/, "").trim();
+        }
+      }
+      return (p.type || "Acte non précisé").replace(/\s*\(\d+\)\s*$/, "").trim();
     };
 
     // ── Agrégation combinée (2026-09) — un seul passage sur `lignes` pour
