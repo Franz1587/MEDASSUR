@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Settings, Plus, Edit, ShieldCheck, Trash2, X, RotateCcw, User as UserIcon, Camera, Lock } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Settings, Plus, Edit, ShieldCheck, Trash2, X, RotateCcw, User as UserIcon, Camera, Lock, Search, Copy, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
@@ -46,6 +46,15 @@ function UserDetailModal({ user, initialTab = "infos", modulesAutorises, onClose
   const [saving, setSaving] = useState(false);
   const [reinitialisant, setReinitialisant] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(null);
+  const [copied, setCopied] = useState<"email" | "mdp" | null>(null);
+
+  const copier = (text: string, field: "email" | "mdp") => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(field);
+      setTimeout(() => setCopied(null), 2000);
+    });
+  };
   // Agence de rattachement (2026-09) — voir demande utilisateur : "lier un
   // agent de saisie à une agence... afin que ce soit cette agence qui
   // remonte sur le décompte".
@@ -127,14 +136,18 @@ function UserDetailModal({ user, initialTab = "infos", modulesAutorises, onClose
         await updateUser(user.id, form);
         await updateUserModules(user.id, [...selection]);
         toast.success("Utilisateur mis à jour.");
+        onSaved();
+        onClose();
       } else {
         const cree = await createUser({ ...form, initiales: form.initiales.trim() || initiales(form.nom), modules: [...selection] });
-        toast.success(cree.motDePasseTemporaire
-          ? `Utilisateur créé — mot de passe temporaire (à communiquer, affiché une seule fois) : ${cree.motDePasseTemporaire}`
-          : "Utilisateur créé — un mot de passe temporaire a été généré.", { duration: 60000 });
+        onSaved();
+        if (cree.motDePasseTemporaire) {
+          setCredentials({ email: form.email, password: cree.motDePasseTemporaire });
+        } else {
+          toast.success("Utilisateur créé.");
+          onClose();
+        }
       }
-      onSaved();
-      onClose();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Enregistrement impossible.");
     } finally {
@@ -166,7 +179,39 @@ function UserDetailModal({ user, initialTab = "infos", modulesAutorises, onClose
         </div>
 
         <div className="p-5 overflow-y-auto flex-1">
-          {tab === "infos" && (
+          {credentials && (
+            <div className="space-y-5">
+              <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-xl">
+                <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-green-800 dark:text-green-300">Compte créé avec succès !</p>
+                  <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">Communiquez ces identifiants à l'utilisateur. Ils ne seront plus affichés.</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <div className={labelCls}>Identifiant (email)</div>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 px-3 py-2 bg-secondary/50 border border-border rounded-lg text-sm font-mono text-foreground break-all">{credentials.email}</code>
+                    <button type="button" onClick={() => copier(credentials.email, "email")} className="h-9 w-9 flex-shrink-0 rounded-lg border border-border hover:bg-secondary text-muted-foreground hover:text-foreground inline-flex items-center justify-center transition-colors">
+                      {copied === "email" ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <div className={labelCls}>Mot de passe temporaire</div>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 px-3 py-2 bg-secondary/50 border border-border rounded-lg text-sm font-mono text-foreground break-all">{credentials.password}</code>
+                    <button type="button" onClick={() => copier(credentials.password, "mdp")} className="h-9 w-9 flex-shrink-0 rounded-lg border border-border hover:bg-secondary text-muted-foreground hover:text-foreground inline-flex items-center justify-center transition-colors">
+                      {copied === "mdp" ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">L'utilisateur devra changer son mot de passe à sa première connexion.</p>
+            </div>
+          )}
+          {!credentials && tab === "infos" && (
             <div className="grid grid-cols-1 md:grid-cols-[140px_1fr] gap-5">
               <div>
                 <div className={labelCls}>Photo de profil</div>
@@ -220,7 +265,7 @@ function UserDetailModal({ user, initialTab = "infos", modulesAutorises, onClose
             </div>
           )}
 
-          {tab === "droits" && (
+          {!credentials && tab === "droits" && (
             <div className="space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <p className="text-[11px] text-muted-foreground">Fonctionnalités accessibles à cet utilisateur, indépendamment de son rôle ({roles[form.roleId]?.label}).</p>
@@ -256,8 +301,14 @@ function UserDetailModal({ user, initialTab = "infos", modulesAutorises, onClose
         </div>
 
         <div className="px-5 py-4 border-t border-border flex-shrink-0 flex justify-end gap-2">
-          <Btn variant="secondary" onClick={onClose}>Annuler</Btn>
-          <Btn variant="primary" disabled={saving} onClick={handleSave}>{user ? "Enregistrer" : "Créer"}</Btn>
+          {credentials ? (
+            <Btn variant="primary" onClick={onClose}>J'ai noté ces informations</Btn>
+          ) : (
+            <>
+              <Btn variant="secondary" onClick={onClose}>Annuler</Btn>
+              <Btn variant="primary" disabled={saving} onClick={handleSave}>{user ? "Enregistrer" : "Créer"}</Btn>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -344,7 +395,14 @@ function RoleTemplateModal({ template, modulesAutorises, onClose, onSaved }: { t
 export default function AdminView() {
   const { currentUser } = useAuth();
   const [users, setUsers] = useState<UserAccount[]>([]);
-  const pagination = usePagination(users);
+  const [searchQuery, setSearchQuery] = useState("");
+  const filteredUsers = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter((u) => u.nom.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
+  }, [users, searchQuery]);
+  const pagination = usePagination(filteredUsers);
+  useEffect(() => { pagination.setPage(1); }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
   const [chargement, setChargement] = useState(true);
   // Un seul modal pour identité + coordonnées + droits (voir
   // UserDetailModal) — detailTarget.user === null signifie "nouvel
@@ -392,8 +450,19 @@ export default function AdminView() {
       />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2 bg-card border border-border rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <h3 className="font-semibold text-foreground text-sm">Utilisateurs ({users.length})</h3>
+          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
+            <h3 className="font-semibold text-foreground text-sm flex-shrink-0">
+              Utilisateurs ({filteredUsers.length}{filteredUsers.length !== users.length ? ` / ${users.length}` : ""})
+            </h3>
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Rechercher par nom ou email…"
+                className="w-full pl-8 pr-3 h-8 border border-border rounded-lg bg-background text-[12px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+              />
+            </div>
           </div>
           <table className="w-full text-sm">
             <thead>
