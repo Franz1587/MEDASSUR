@@ -20,8 +20,12 @@ import type {
 function pct(n: number): string {
   return `${n.toLocaleString("fr-FR", { maximumFractionDigits: 2 })}%`;
 }
+// toLocaleString("fr-FR") produit un séparateur de milliers U+202F (espace
+// fine insécable) ou U+00A0 selon l'environnement Node.js — PDFKit/Helvetica
+// WinAnsi rend ces caractères hors-Latin1 en "/" dans le PDF. On formate
+// manuellement avec une espace ASCII ordinaire, sans dépendre de l'ICU.
 function fmt(n: number): string {
-  return Math.round(n).toLocaleString("fr-FR").replace(/ /g, " ");
+  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
 
 // Verdict S/P basé sur la clause RÉELLE de la compagnie (2026-11) —
