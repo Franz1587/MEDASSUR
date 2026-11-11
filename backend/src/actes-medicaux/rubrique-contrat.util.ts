@@ -158,9 +158,14 @@ export function resoudreRubriqueContrat(
   }
   // Nom du prestataire en dernier recours ("PHARMACIE DU CENTRE" sans
   // prestataireType renseigné) — avant le fallback "Consultations".
+  // Guard strict : on n'accepte QUE si le résultat est une rubrique
+  // canonique connue ; sinon normaliserRubrique retourne le nom brut du
+  // prestataire ("CLINIQUE EL RAPHA" → "CLINIQUE EL RAPHA") qui passerait
+  // !RUBRIQUES_GENERIQUES.has() et deviendrait la rubrique — créant autant
+  // de pseudo-rubriques que de prestataires inconnus.
   if (RUBRIQUES_GENERIQUES.has(rubrique) && ligne.prestataire) {
     const r = normaliserRubrique(ligne.prestataire);
-    if (!RUBRIQUES_GENERIQUES.has(r) && r !== "Non précisé") rubrique = r;
+    if (RUBRIQUES_CANONIQUES.some((rc) => rc.rubrique === r)) rubrique = r;
   }
   if (rubrique === "Ambulatoire") rubrique = "Consultations";
   if (rubrique === "Non précisé") return rubrique;

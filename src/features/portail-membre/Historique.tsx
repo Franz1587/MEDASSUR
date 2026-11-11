@@ -175,15 +175,26 @@ export default function MembreHistoriqueView() {
                               </div>
                               <Badge variant={statutVariant(l.statut)}>{l.statut}</Badge>
                             </div>
-                            <div className="flex items-center justify-between mt-2 text-[12px]">
-                              <span className="text-muted-foreground">{l.modePaiement ?? "—"}</span>
-                              {/* Remboursement : la part assurance (baseRemboursement) est
-                                  ce qui est réellement reversé — jamais les frais réels
-                                  présentés, voir demande utilisateur. */}
-                              {l.modePaiement === "Remboursement" && l.baseRemboursement != null ? (
-                                <span className="text-emerald-600 font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(l.baseRemboursement)} FCFA</span>
-                              ) : (
+                            <div className="mt-2 text-[12px]">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-muted-foreground">{l.modePaiement ?? "—"}</span>
                                 <span className="text-foreground font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(l.montant)} FCFA</span>
+                              </div>
+                              {(l.baseRemboursement != null || l.resteACharge != null) && (
+                                <div className="grid grid-cols-3 gap-1 bg-muted/40 rounded-lg p-2 text-[11px]">
+                                  <div>
+                                    <p className="text-muted-foreground">Frais réels</p>
+                                    <p className="font-semibold text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(l.montant)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Part La Ruche</p>
+                                    <p className="font-semibold text-emerald-600" style={{ fontFamily: "'DM Mono', monospace" }}>{l.baseRemboursement != null ? fmtM(l.baseRemboursement) : "—"}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Part assuré</p>
+                                    <p className="font-semibold text-amber-600" style={{ fontFamily: "'DM Mono', monospace" }}>{l.resteACharge != null ? fmtM(l.resteACharge) : "—"}</p>
+                                  </div>
+                                </div>
                               )}
                             </div>
                             <div className="flex items-center gap-3 mt-2">

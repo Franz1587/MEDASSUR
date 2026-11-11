@@ -139,7 +139,6 @@ export function HistoriqueScreen() {
                 <Text style={styles.rubriqueLabel}>{r.rubrique}</Text>
                 {r.lignes.map((l) => {
                   const groupe = (l.lignes?.length ?? 0) > 1;
-                  const montant = montantAffiche(l);
                   return (
                     <Pressable
                       key={l.id}
@@ -159,8 +158,24 @@ export function HistoriqueScreen() {
                       </View>
                       <View style={styles.ligneBas}>
                         <Text style={styles.ligneModePaiement}>{l.modePaiement ?? "—"}</Text>
-                        <Text style={[styles.ligneMontant, montant.remboursement ? { color: colors.success } : null]}>{montant.texte}</Text>
+                        <Text style={styles.ligneMontant}>{formatMontant(l.montant)}</Text>
                       </View>
+                      {(l.baseRemboursement != null || l.resteACharge != null) && (
+                        <View style={styles.quotePartRow}>
+                          <View style={styles.quotePart}>
+                            <Text style={styles.quotePartLabel}>Frais réels</Text>
+                            <Text style={styles.quotePartVal}>{formatMontant(l.montant)}</Text>
+                          </View>
+                          <View style={styles.quotePart}>
+                            <Text style={styles.quotePartLabel}>Part assureur</Text>
+                            <Text style={[styles.quotePartVal, { color: colors.success }]}>{l.baseRemboursement != null ? formatMontant(l.baseRemboursement) : "—"}</Text>
+                          </View>
+                          <View style={styles.quotePart}>
+                            <Text style={styles.quotePartLabel}>Part assuré</Text>
+                            <Text style={[styles.quotePartVal, { color: colors.warning ?? "#f59e0b" }]}>{l.resteACharge != null ? formatMontant(l.resteACharge) : "—"}</Text>
+                          </View>
+                        </View>
+                      )}
                     </Pressable>
                   );
                 })}
@@ -201,4 +216,8 @@ const styles = StyleSheet.create({
   ligneBas: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: spacing.sm },
   ligneModePaiement: { fontSize: 12, color: colors.textMuted },
   ligneMontant: { fontSize: 13, fontWeight: "700", color: colors.text, fontFamily: "monospace" },
+  quotePartRow: { flexDirection: "row", backgroundColor: "rgba(0,0,0,0.04)", borderRadius: 8, padding: spacing.sm, marginTop: spacing.sm, gap: 4 },
+  quotePart: { flex: 1 },
+  quotePartLabel: { fontSize: 10, color: colors.textMuted, marginBottom: 2 },
+  quotePartVal: { fontSize: 11, fontWeight: "700", color: colors.text, fontFamily: "monospace" },
 });
