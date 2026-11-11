@@ -517,4 +517,55 @@ export class PortailMembreController {
     await this.carnetSante.supprimer(id, idsFamille);
     return { ok: true };
   }
+
+  // Supprimer un bon papier numérisé (Prescription.origine = "Numérisée")
+  // non encore traité — seul l'assuré propriétaire peut le faire, et
+  // uniquement si aucune ligne n'est passée en "Traite".
+  @Delete("carnet-sante/bon/:prescriptionId")
+  async supprimerBonNumerise(@Param("prescriptionId") prescriptionId: string, @Req() req: PortailMembreRequest) {
+    const assureSanteId = this.assureSanteIdDe(req);
+    const idsFamille = await this.idsFamilleDe(assureSanteId);
+    const prescription = await this.prisma.prescription.findUnique({
+      where: { id: prescriptionId },
+      include: { lignes: { select: { statut: true } } },
+    });
+    if (!prescription) throw new NotFoundException("Bon introuvable");
+    const appartient = idsFamille.some((id) => id === prescription.assureId) ||
+      (prescription.priseEnChargeId
+        ? await this.prisma.priseEnCharge.findFirst({ where: { id: prescription.priseEnChargeId, assureId: { in: idsFamille } } }).then(Boolean)
+        : false);
+    if (!appartient) throw new ForbiddenException("Bon inaccessible");
+    if (prescription.origine !== "Numérisée") throw new BadRequestException("Ce bon ne peut pas être supprimé de cette façon.");
+    if (prescription.lignes.some((l) => l.statut === "Traite")) throw new BadRequestException("Ce bon a déjà été traité et ne peut plus être supprimé.");
+    await this.prisma.prescription.delete({ where: { id: prescriptionId } });
+    return { ok: true };
+  }
+
+  // Statut d'accès membre (2026-10) — voir demande utilisateur : "si un
+  // assuré est radié, une page d'abonnement annuel doit s'afficher".
+  // AbonnementIndividuel non encore migré en prod : retourne accesBloque
+  // basé sur le statut AssureSante et prixAnnuelXaf à null.
+  @Get("statut-acces")
+  async statutAcces(@Req() req: PortailMembreRequest) {
+    const assureSanteId = this.assureSanteIdDe(req);
+    const assure = await this.prisma.assureSante.findUnique({ where: { id: assureSanteId }, select: { statut: true } });
+    if (!assure) throw new NotFoundException("Assuré introuvable");
+    const accesBloque = ["Suspendu", "Radié", "Suspendu (radié)"].includes(assure.statut);
+    return { statut: assure.statut, accesBloque, abonnementActif: false, abonnement: null, prixAnnuelXaf: null };
+  }
+
+  // Demander un abonnement individuel (2026-10) — modèle AbonnementIndividuel
+  // non encore migré en prod : enregistre la demande en log et retourne un
+  // message de confirmation. L'admin active l'accès manuellement.
+  @Post("abonnement/demander")
+  async demanderAbonnement(@Req() req: PortailMembreRequest) {
+    const assureSanteId = this.assureSanteIdDe(req);
+    const assure = await this.prisma.assureSante.findUnique({ where: { id: assureSanteId }, select: { nom: true, prenom: true, matricule: true } });
+    if (!assure) throw new NotFoundException("Assuré introuvable");
+    // Journaliser la demande dans les audits (exploitation admin).
+    await this.prisma.auditLog.create({
+      data: { action: "DEMANDE_ABONNEMENT_INDIVIDUEL", entite: "AssureSante", entiteId: assureSanteId, utilisateur: req.user.nom || req.user.userId, details: JSON.stringify({ matricule: assure.matricule, nom: assure.nom }) },
+    }).catch(() => undefined);
+    return { ok: true, message: "Votre demande a bien été enregistrée. Votre société d'assurance vous contactera pour activer votre accès." };
+  }
 }

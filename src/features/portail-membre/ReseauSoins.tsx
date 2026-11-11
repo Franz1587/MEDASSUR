@@ -57,7 +57,7 @@ export default function MembreReseauSoinsView() {
     }).sort((a, b) => {
       const provCmp = (a.province ?? "").localeCompare(b.province ?? "", "fr");
       if (provCmp !== 0) return provCmp;
-      const villeCmp = a.ville.localeCompare(b.ville, "fr");
+      const villeCmp = (a.ville ?? "").localeCompare(b.ville ?? "", "fr");
       if (villeCmp !== 0) return villeCmp;
       return a.nom.localeCompare(b.nom, "fr");
     });

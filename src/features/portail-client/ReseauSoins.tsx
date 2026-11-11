@@ -77,9 +77,10 @@ export default function PortailReseauSoinsView() {
     for (const p of filtres) {
       const prov = p.province || "Autres";
       const gProv = map.get(prov) ?? new Map<string, PrestataireReseau[]>();
-      const gVille = gProv.get(p.ville) ?? [];
+      const villeKey = p.ville ?? "";
+      const gVille = gProv.get(villeKey) ?? [];
       gVille.push(p);
-      gProv.set(p.ville, gVille);
+      gProv.set(villeKey, gVille);
       map.set(prov, gProv);
     }
     return map;
