@@ -45,11 +45,11 @@ export default function PrestatairesView() {
   const [filtreProvince, setFiltreProvince] = useState<string | null>(null);
 
   const typesDisponibles = useMemo(
-    () => [...new Set(prestataires.map((p) => p.type))].sort((a, b) => a.localeCompare(b, "fr")),
+    () => [...new Set(prestataires.map((p) => p.type).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "fr")),
     [prestataires],
   );
   const villesDisponibles = useMemo(
-    () => [...new Set(prestataires.map((p) => p.ville))].sort((a, b) => a.localeCompare(b, "fr")),
+    () => [...new Set(prestataires.map((p) => p.ville).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "fr")),
     [prestataires],
   );
   const provincesDisponibles = useMemo(
