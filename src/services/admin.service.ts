@@ -13,6 +13,8 @@ export interface CreateUserInput {
   adresse?: string;
   // Agence de rattachement (2026-09) — voir services/agences.service.ts.
   agenceId?: string;
+  // Pseudo de connexion (2026-11).
+  username?: string;
 }
 
 export interface UpdateUserInput {
@@ -23,6 +25,8 @@ export interface UpdateUserInput {
   telephone?: string;
   adresse?: string;
   agenceId?: string;
+  // Pseudo de connexion (2026-11). Chaîne vide = supprime le pseudo.
+  username?: string;
 }
 
 // URL publique d'une photo de profil uploadée (voir POST /users/:id/photo,
@@ -80,6 +84,12 @@ export async function deleteUserSignature(id: string): Promise<UserAccount> {
 
 export async function genererQrSignatureUtilisateur(id: string): Promise<JetonSignatureQr> {
   return http.post<JetonSignatureQr>(`/users/${id}/signature/qr`, {});
+}
+
+// Réinitialisation du mot de passe par un administrateur (2026-11) —
+// retourne le nouveau mot de passe EN CLAIR une seule fois.
+export async function resetUserPassword(id: string, nouveauMotDePasse?: string): Promise<{ motDePasse: string }> {
+  return http.patch<{ motDePasse: string }>(`/users/${id}/reset-password`, { nouveauMotDePasse });
 }
 
 // Dérivé des comptes réels — plus de liste figée à part (voir demande

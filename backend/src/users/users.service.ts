@@ -26,7 +26,8 @@ const UPLOADS_PHOTOS_DIR = path.join(UPLOADS_ROOT, "photos-users");
 const UPLOADS_SIGNATURES_DIR = path.join(UPLOADS_ROOT, "signatures");
 
 const SELECT_SANS_HASH = {
-  id: true, roleId: true, nom: true, email: true, initiales: true, modules: true, createdAt: true,
+  id: true, roleId: true, nom: true, email: true, username: true, initiales: true, modules: true, createdAt: true,
+  doitChangerMotDePasse: true,
   telephone: true, adresse: true, photo: true, signature: true,
   // societeId/societe (2026-09) — voir demande utilisateur : "une gestion
   // des utilisateurs" côté Super Admin, qui n'a lui-même aucune société
@@ -76,7 +77,6 @@ export class UsersService {
   }
 
   async create(dto: CreateUserDto) {
-    const email = dto.email.trim().toLowerCase();
     const passwordHash = await bcrypt.hash(MOT_DE_PASSE_INITIAL, 10);
     // Modèle générique par rôle (voir RoleTemplatesService) — éditable
     // depuis Administration → "Rôles", donc lu en base plutôt que depuis la
@@ -87,10 +87,11 @@ export class UsersService {
       ?? ROLE_MODULES[dto.roleId as keyof typeof ROLE_MODULES] ?? [];
     const modules = await this.plafonnerModules(modulesDemandes);
     try {
-      return await this.prisma.user.create({
-        data: { nom: dto.nom, email, initiales: dto.initiales, roleId: dto.roleId, passwordHash, modules, telephone: dto.telephone, adresse: dto.adresse, agenceId: dto.agenceId || null, doitChangerMotDePasse: true },
+      const created = await this.prisma.user.create({
+        data: { nom: dto.nom, email: dto.email, username: dto.username?.trim() || undefined, initiales: dto.initiales, roleId: dto.roleId, passwordHash, modules, telephone: dto.telephone, adresse: dto.adresse, agenceId: dto.agenceId, doitChangerMotDePasse: true },
         select: SELECT_SANS_HASH,
       });
+      return { ...created, motDePasseTemporaire: MOT_DE_PASSE_INITIAL };
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
         throw new ConflictException(`L'email "${dto.email}" est déjà utilisé par un autre utilisateur.`);
@@ -105,7 +106,12 @@ export class UsersService {
     // Combobox allowClear côté frontend) — jamais transmise telle quelle à
     // Prisma (FK vers un id "" inexistant), convertie en null pour retirer
     // l'agence.
-    const data = { ...dto, agenceId: dto.agenceId === "" ? null : dto.agenceId };
+    // username vide = supprime le pseudo (null en base = pas de connexion par pseudo).
+    const data = {
+      ...dto,
+      agenceId: dto.agenceId === "" ? null : dto.agenceId,
+      username: dto.username === "" ? null : (dto.username?.trim() || undefined),
+    };
     try {
       return await this.prisma.user.update({ where: { id }, data, select: SELECT_SANS_HASH });
     } catch (err) {
@@ -150,6 +156,20 @@ export class UsersService {
     const passwordHash = await bcrypt.hash(dto.nouveauMotDePasse, 10);
     await this.prisma.user.update({ where: { id }, data: { passwordHash, doitChangerMotDePasse: false } });
     return { ok: true };
+  }
+
+  // Réinitialisation admin (2026-11) — voir demande utilisateur : "on peut
+  // changer le mot de passe tout le temps... un mot de passe temporaire qui
+  // se réinitialise à la première connexion." Ne demande pas l'ancien mot de
+  // passe (réservé à l'admin qui agit sur le compte d'autrui). Toujours
+  // marque doitChangerMotDePasse = true pour imposer un changement à la
+  // prochaine connexion.
+  async reinitialiserMotDePasse(id: string, dto: { nouveauMotDePasse?: string }) {
+    await this.findOne(id);
+    const mdp = dto.nouveauMotDePasse?.trim() || MOT_DE_PASSE_INITIAL;
+    const passwordHash = await bcrypt.hash(mdp, 10);
+    await this.prisma.user.update({ where: { id }, data: { passwordHash, doitChangerMotDePasse: true } });
+    return { motDePasse: mdp };
   }
 
   async remove(id: string) {

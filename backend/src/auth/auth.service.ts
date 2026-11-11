@@ -31,6 +31,15 @@ export class AuthService {
       where: { email: { equals: emailNormalisee, mode: "insensitive" } },
     });
 
+    // Connexion par pseudo (2026-11) — voir demande utilisateur : "rendre
+    // possible la connexion par un pseudo pour aller plus vite". Testé
+    // APRÈS email car la majorité des comptes admin se connecte par email.
+    if (!user) {
+      user = await this.prisma.user.findFirst({
+        where: { username: { equals: identifiantNettoye, mode: "insensitive" } },
+      });
+    }
+
     if (!user) {
       // Connexion par téléphone (2026-09) — voir demande utilisateur : "je
       // remarque que le numéro de téléphone ne passe pas." Le numéro tapé
@@ -108,7 +117,6 @@ export class AuthService {
         id: user.id, nom: user.nom, email: user.email, roleId: user.roleId, initiales: user.initiales,
         modules: user.modules, clientId: user.clientId, assureSanteId: user.assureSanteId, prestataireId: user.prestataireId,
         medecinId: user.medecinId, societeId: user.societeId, doitChangerMotDePasse: user.doitChangerMotDePasse,
-        consentementAccepteAt: null, // colonne non encore migrée en prod — réactiver après migration
       },
     };
   }
@@ -128,14 +136,6 @@ export class AuthService {
       id: user.id, nom: user.nom, email: user.email, roleId: user.roleId, initiales: user.initiales,
       modules: user.modules, clientId: user.clientId, assureSanteId: user.assureSanteId, prestataireId: user.prestataireId,
       medecinId: user.medecinId, societeId: user.societeId, doitChangerMotDePasse: user.doitChangerMotDePasse,
-      consentementAccepteAt: null, // colonne non encore migrée en prod — réactiver après migration
     };
-  }
-
-  // Consentement RGPD (2026-10) — stocké en localStorage côté client tant que
-  // la colonne User.consentementAccepteAt n'est pas migrée en prod.
-  // Réactiver la vraie persistance DB après migration.
-  async accepterConsentement(_userId: string) {
-    return { ok: true };
   }
 }

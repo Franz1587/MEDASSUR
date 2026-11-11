@@ -12,7 +12,7 @@ import { roles, roleList, type RoleId } from "@/auth/roles";
 import { useAuth } from "@/auth/AuthContext";
 import {
   getUsers, createUser, updateUser, updateUserModules, deleteUser, computeRoleSummaries,
-  uploadUserPhoto, deleteUserPhoto, userPhotoUrl,
+  uploadUserPhoto, deleteUserPhoto, userPhotoUrl, resetUserPassword,
   type CreateUserInput,
 } from "@/services/admin.service";
 import { getRoleTemplates, updateRoleTemplate, type RoleTemplate } from "@/services/role-templates.service";
@@ -37,23 +37,41 @@ function initiales(nom: string): string {
 // onglets ; le bouton "Enregistrer" sauvegarde toujours identité ET droits
 // ensemble, quel que soit l'onglet actif.
 function UserDetailModal({ user, initialTab = "infos", modulesAutorises, onClose, onSaved }: { user: UserAccount | null; initialTab?: "infos" | "droits"; modulesAutorises: string[] | null; onClose: () => void; onSaved: () => void }) {
-  const [tab, setTab] = useState<"infos" | "droits">(initialTab);
+  const [tab, setTab] = useState<"infos" | "droits" | "securite">(initialTab);
   const [form, setForm] = useState<CreateUserInput>(user
-    ? { nom: user.nom, email: user.email, initiales: user.initiales, roleId: user.roleId, telephone: user.telephone ?? "", adresse: user.adresse ?? "", agenceId: user.agenceId ?? "" }
-    : { nom: "", email: "", initiales: "", roleId: "commercial", telephone: "", adresse: "", agenceId: "" });
+    ? { nom: user.nom, email: user.email, username: user.username ?? "", initiales: user.initiales, roleId: user.roleId, telephone: user.telephone ?? "", adresse: user.adresse ?? "", agenceId: user.agenceId ?? "" }
+    : { nom: "", email: "", username: "", initiales: "", roleId: "commercial", telephone: "", adresse: "", agenceId: "" });
   const [selection, setSelection] = useState<Set<string>>(new Set(user?.modules ?? []));
   const [photo, setPhoto] = useState<string | null | undefined>(user?.photo);
   const [saving, setSaving] = useState(false);
   const [reinitialisant, setReinitialisant] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(null);
-  const [copied, setCopied] = useState<"email" | "mdp" | null>(null);
+  const [copied, setCopied] = useState<"email" | "mdp" | "resetMdp" | null>(null);
+  const [resetMdp, setResetMdp] = useState("");
+  const [resettingMdp, setResettingMdp] = useState(false);
+  const [resetResult, setResetResult] = useState<{ motDePasse: string } | null>(null);
 
-  const copier = (text: string, field: "email" | "mdp") => {
+  const copier = (text: string, field: "email" | "mdp" | "resetMdp") => {
     navigator.clipboard.writeText(text).then(() => {
       setCopied(field);
       setTimeout(() => setCopied(null), 2000);
     });
+  };
+
+  const handleResetMdp = async () => {
+    if (!user) return;
+    setResettingMdp(true);
+    try {
+      const result = await resetUserPassword(user.id, resetMdp.trim() || undefined);
+      setResetResult(result);
+      setResetMdp("");
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Réinitialisation impossible.");
+    } finally {
+      setResettingMdp(false);
+    }
   };
   // Agence de rattachement (2026-09) — voir demande utilisateur : "lier un
   // agent de saisie à une agence... afin que ce soit cette agence qui
@@ -166,14 +184,14 @@ function UserDetailModal({ user, initialTab = "infos", modulesAutorises, onClose
         </div>
 
         <div className="px-5 pt-3 flex-shrink-0 flex items-center gap-2 border-b border-border/70">
-          {(["infos", "droits"] as const).map((t) => (
+          {(["infos", "droits", ...(user ? ["securite"] : [])] as const).map((t) => (
             <button
               key={t}
               type="button"
-              onClick={() => setTab(t)}
+              onClick={() => setTab(t as "infos" | "droits" | "securite")}
               className={`px-3 py-2 text-[12.5px] font-semibold border-b-2 -mb-px transition-colors ${tab === t ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
             >
-              {t === "infos" ? "Informations" : "Droits"}
+              {t === "infos" ? "Informations" : t === "droits" ? "Droits" : "Sécurité"}
             </button>
           ))}
         </div>
@@ -242,6 +260,7 @@ function UserDetailModal({ user, initialTab = "infos", modulesAutorises, onClose
                   <label className="block"><div className={labelCls}>Nom complet</div><input value={form.nom} onChange={(e) => setForm((v) => ({ ...v, nom: e.target.value }))} className={fieldCls} /></label>
                   <label className="block"><div className={labelCls}>Initiales</div><input value={form.initiales} onChange={(e) => setForm((v) => ({ ...v, initiales: e.target.value.toUpperCase() }))} placeholder="ex. AB" maxLength={3} className={fieldCls} /></label>
                   <label className="block"><div className={labelCls}>Email</div><input type="email" value={form.email} onChange={(e) => setForm((v) => ({ ...v, email: e.target.value }))} className={fieldCls} /></label>
+                  <label className="block"><div className={labelCls}>Pseudo (connexion rapide)</div><input value={form.username ?? ""} onChange={(e) => setForm((v) => ({ ...v, username: e.target.value }))} placeholder="ex. oscar.lekogo" className={fieldCls} /></label>
                   <label className="block"><div className={labelCls}>Téléphone</div><input value={form.telephone ?? ""} onChange={(e) => setForm((v) => ({ ...v, telephone: e.target.value }))} placeholder="ex. +241 00 00 00 00" className={fieldCls} /></label>
                 </div>
                 <label className="block"><div className={labelCls}>Adresse</div><input value={form.adresse ?? ""} onChange={(e) => setForm((v) => ({ ...v, adresse: e.target.value }))} className={fieldCls} /></label>
@@ -262,6 +281,60 @@ function UserDetailModal({ user, initialTab = "infos", modulesAutorises, onClose
                   <p className="text-[11px] text-muted-foreground mt-1">Pré-remplit l'onglet "Droits" depuis ce rôle — ajustable ensuite librement dans cet écran.</p>
                 </label>
               </div>
+            </div>
+          )}
+
+          {!credentials && tab === "securite" && user && (
+            <div className="space-y-5">
+              {resetResult ? (
+                <div className="space-y-5">
+                  <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-xl">
+                    <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-green-800 dark:text-green-300">Mot de passe réinitialisé !</p>
+                      <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">Communiquez ce mot de passe temporaire à l'utilisateur. Il ne sera plus affiché.</p>
+                    </div>
+                  </div>
+                  <div>
+                    <div className={labelCls}>Nouveau mot de passe temporaire</div>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 px-3 py-2 bg-secondary/50 border border-border rounded-lg text-sm font-mono text-foreground break-all">{resetResult.motDePasse}</code>
+                      <button type="button" onClick={() => copier(resetResult.motDePasse, "resetMdp")} className="h-9 w-9 flex-shrink-0 rounded-lg border border-border hover:bg-secondary text-muted-foreground hover:text-foreground inline-flex items-center justify-center transition-colors">
+                        {copied === "resetMdp" ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">L'utilisateur devra changer son mot de passe à sa prochaine connexion.</p>
+                  <Btn variant="secondary" onClick={() => setResetResult(null)}>Réinitialiser à nouveau</Btn>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-[13px] font-semibold text-foreground mb-1">Réinitialiser le mot de passe</p>
+                    <p className="text-[11.5px] text-muted-foreground mb-3">
+                      Définit un nouveau mot de passe pour cet utilisateur. L'utilisateur devra le changer à sa prochaine connexion.
+                      Laissez le champ vide pour générer automatiquement un mot de passe temporaire.
+                    </p>
+                    {user.doitChangerMotDePasse && (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg mb-3">
+                        <span className="text-[11.5px] text-amber-800 dark:text-amber-300">Un changement de mot de passe est déjà en attente pour cet utilisateur.</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={resetMdp}
+                        onChange={(e) => setResetMdp(e.target.value)}
+                        placeholder="Nouveau mot de passe (ou vide = auto)"
+                        className={`${fieldCls} flex-1`}
+                      />
+                      <Btn variant="primary" disabled={resettingMdp} onClick={handleResetMdp}>
+                        {resettingMdp ? "…" : "Réinitialiser"}
+                      </Btn>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -303,6 +376,8 @@ function UserDetailModal({ user, initialTab = "infos", modulesAutorises, onClose
         <div className="px-5 py-4 border-t border-border flex-shrink-0 flex justify-end gap-2">
           {credentials ? (
             <Btn variant="primary" onClick={onClose}>J'ai noté ces informations</Btn>
+          ) : tab === "securite" ? (
+            <Btn variant="secondary" onClick={onClose}>Fermer</Btn>
           ) : (
             <>
               <Btn variant="secondary" onClick={onClose}>Annuler</Btn>

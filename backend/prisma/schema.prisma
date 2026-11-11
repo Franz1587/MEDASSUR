@@ -38,6 +38,11 @@ model User {
   // titulaire choisit lui-même son mot de passe (UsersService.
   // changerMotDePasse, seul endroit qui exige l'ancien mot de passe).
   doitChangerMotDePasse Boolean @default(false)
+  // Pseudo de connexion (2026-11) — voir demande utilisateur : "rendre
+  // possible la connexion par un pseudo pour aller plus vite". Facultatif :
+  // la connexion par email reste toujours possible ; seuls les comptes qui
+  // ont un username peuvent aussi se connecter par ce raccourci.
+  username String? @unique
   // consentementAccepteAt — champ non encore migré en prod (2026-10).
   // Réintégrer dans le schéma après avoir appliqué la migration SQL :
   // ALTER TABLE "User" ADD COLUMN "consentementAccepteAt" TIMESTAMP(3);

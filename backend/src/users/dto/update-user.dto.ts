@@ -16,4 +16,7 @@ export class UpdateUserDto {
   // Agence de rattachement (2026-09) — voir schema.prisma Agence. Chaîne
   // vide = retire l'agence (retombe sur "—" côté documents).
   @IsOptional() @IsString() agenceId?: string;
+
+  // Pseudo de connexion (2026-11) — voir schema.prisma User.username.
+  @IsOptional() @IsString() username?: string;
 }

@@ -27,4 +27,7 @@ export class CreateUserDto {
 
   // Agence de rattachement (2026-09) — voir schema.prisma Agence.
   @IsOptional() @IsString() agenceId?: string;
+
+  // Pseudo de connexion (2026-11) — voir schema.prisma User.username.
+  @IsOptional() @IsString() username?: string;
 }

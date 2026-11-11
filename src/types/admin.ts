@@ -13,6 +13,10 @@ export interface UserAccount {
   roleId: RoleId;
   modules: string[];
   createdAt: string;
+  // Pseudo de connexion (2026-11) — voir schema.prisma User.username.
+  username?: string | null;
+  // Mot de passe à changer (2026-11) — true si un mdp temporaire a été fixé par l'admin.
+  doitChangerMotDePasse?: boolean;
   // Coordonnées personnelles + photo de profil (2026-08, voir demande
   // utilisateur : "ajouter les coordonnées personnels, y compris la photo
   // de profil").
