@@ -141,10 +141,11 @@ export const RUBRIQUES_STATISTIQUES: { id: string; label: string }[] = [
   { id: "analyse", label: "Analyse des données statistiques" },
 ];
 
-export async function getStatistiques(contratId: string, du?: string, au?: string): Promise<StatistiquesPayload> {
+export async function getStatistiques(contratId: string, du?: string, au?: string, primeForcee?: number | null): Promise<StatistiquesPayload> {
   const params = new URLSearchParams();
   if (du) params.set("du", du);
   if (au) params.set("au", au);
+  if (primeForcee) params.set("primeForcee", String(primeForcee));
   const qs = params.toString();
   return http.get<StatistiquesPayload>(`/statistiques/${contratId}${qs ? `?${qs}` : ""}`);
 }

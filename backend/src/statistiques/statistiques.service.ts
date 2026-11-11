@@ -47,7 +47,7 @@ function trouverTranche(ratio: number, clauses: { spMin: unknown; spMax: unknown
 export class StatistiquesService {
   constructor(private prisma: PrismaService) {}
 
-  async calculer(contratId: string, du?: string, au?: string): Promise<StatistiquesPayload> {
+  async calculer(contratId: string, du?: string, au?: string, primeForcee?: number): Promise<StatistiquesPayload> {
     // 4 requêtes indépendantes en parallèle : toutes utilisent contratId
     // fourni en paramètre, sans dépendance l'une envers l'autre.
     const [contrat, exerciceCourant, toutesLesLignes, actes] = await Promise.all([
@@ -365,12 +365,17 @@ export class StatistiquesService {
     const sinistresSansChargement = totalConsomme;
     const sinistresAvecChargement = totalConsomme * (1 + tauxChargement / 100);
     const clauses = contrat.compagnie.clausesAjustement;
-    const ratioSans = primes > 0 ? sinistresSansChargement / primes : 0;
-    const ratioAvec = primes > 0 ? sinistresAvecChargement / primes : 0;
+    // Prime forcée (2026-11) — si l'utilisateur a saisi une prime manuelle,
+    // elle remplace la prime calculée pour les ratios S/P ET l'analyse narrative
+    // (voir demande : "la prime forcée et le nouveau s/p doivent remonter à la
+    // place de ce qui est généré par l'application").
+    const primesEffectives = primeForcee && primeForcee > 0 ? primeForcee : primes;
+    const ratioSans = primesEffectives > 0 ? sinistresSansChargement / primesEffectives : 0;
+    const ratioAvec = primesEffectives > 0 ? sinistresAvecChargement / primesEffectives : 0;
     const trancheSans = trouverTranche(ratioSans, clauses);
     const trancheAvec = trouverTranche(ratioAvec, clauses);
-    const spSansChargement: SpBloc = { sinistres: sinistresSansChargement, primes, ratioPct: ratioSans * 100, ...trancheSans };
-    const spAvecChargement: SpBloc = { sinistres: sinistresAvecChargement, primes, ratioPct: ratioAvec * 100, ...trancheAvec };
+    const spSansChargement: SpBloc = { sinistres: sinistresSansChargement, primes: primesEffectives, ratioPct: ratioSans * 100, ...trancheSans };
+    const spAvecChargement: SpBloc = { sinistres: sinistresAvecChargement, primes: primesEffectives, ratioPct: ratioAvec * 100, ...trancheAvec };
 
     // "Garanties" du tableau S/P = taux de couverture clinique PRIVÉE
     // (voir demande utilisateur : "il s'agit des garanties qui sont sur la

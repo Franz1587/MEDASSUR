@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { PieChart as PieChartIcon, Search, FileDown, FileText, ChevronRight, ChevronDown, ListChecks, X } from "lucide-react";
+import { PieChart as PieChartIcon, Search, FileDown, FileText, ChevronRight, ChevronDown, ListChecks, X, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList,
@@ -93,10 +93,13 @@ function StatBadges({ items }: { items: { label: string; value: string }[] }) {
   );
 }
 
-function SectionCard({ title, subtitle, resume, children }: { title: string; subtitle?: string; resume?: { label: string; value: string }[]; children: React.ReactNode }) {
+function SectionCard({ title, subtitle, resume, action, children }: { title: string; subtitle?: string; resume?: { label: string; value: string }[]; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="bg-card border border-border rounded-xl p-4">
-      <h3 className="font-semibold text-primary text-sm border-b border-primary/25 pb-2 mb-3">{title}</h3>
+      <div className="flex items-center justify-between gap-2 border-b border-primary/25 pb-2 mb-3">
+        <h3 className="font-semibold text-primary text-sm">{title}</h3>
+        {action}
+      </div>
       {subtitle && <p className="text-[12px] text-muted-foreground -mt-2 mb-3">{subtitle}</p>}
       {resume && <StatBadges items={resume} />}
       {children}
@@ -382,6 +385,7 @@ export default function StatistiquesView() {
   const rq = (id: string) => recherches[id] ?? "";
   const setRq = (id: string, v: string) => setRecherches((prev) => ({ ...prev, [id]: v }));
   const [primeForceeStr, setPrimeForceeStr] = useState("");
+  const [regenerantAnalyse, setRegenerantAnalyse] = useState(false);
 
   useEffect(() => { getContrats().then(setContrats); }, []);
 
@@ -426,6 +430,25 @@ export default function StatistiquesView() {
       toast.error(err instanceof Error ? err.message : `Génération du ${format === "pdf" ? "PDF" : "Word"} impossible.`);
     } finally {
       setTelechargeant(null);
+    }
+  };
+
+  // Régénération de l'analyse avec prime forcée (2026-11) — voir demande
+  // utilisateur : "si on force la prime on doit avoir un bouton pour régénérer
+  // l'analyse en fonction du nouveau s/p". Appelle getStatistiques avec la
+  // prime forcée (backend recalcule S/P et analyse narrative), met à jour
+  // uniquement analyseEdite sans toucher aux tableaux de données déjà affichés.
+  const handleRegenerAnalyse = async () => {
+    if (!data || !primeForceeNum) return;
+    setRegenerantAnalyse(true);
+    try {
+      const resultat = await getStatistiques(data.contrat.id, du || undefined, au || undefined, primeForceeNum);
+      setAnalyseEdite(versEditable(resultat.analyse));
+      toast.success("Analyse régénérée avec le S/P forcé.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Régénération impossible.");
+    } finally {
+      setRegenerantAnalyse(false);
     }
   };
 
@@ -699,43 +722,53 @@ export default function StatistiquesView() {
                 <div>
                   <div className="text-[12px] font-semibold text-primary mb-1.5">Sans Chargement</div>
                   <TableSimple
-                    headers={spSansForcee ? ["Type", "Souscripteur", "Police", "Garanties", "Sinistres", "Primes", "S/P"] : ["Souscripteur", "Police", "Garanties", "Sinistres", "Primes", "S/P"]}
-                    rows={spSansForcee ? [
-                      ["Calculée", data.contrat.client, data.contrat.numeroPolice, data.contrat.garantiesPrivees, data.spSansChargement.sinistres, data.spSansChargement.primes, fmtRatio(data.spSansChargement.ratioPct)],
-                      ["Forcée", data.contrat.client, data.contrat.numeroPolice, data.contrat.garantiesPrivees, data.spSansChargement.sinistres, spSansForcee.primes, fmtRatio(spSansForcee.ratioPct)],
-                    ] : [[data.contrat.client, data.contrat.numeroPolice, data.contrat.garantiesPrivees, data.spSansChargement.sinistres, data.spSansChargement.primes, fmtRatio(data.spSansChargement.ratioPct)]]}
-                    lignesEnEvidence={spSansForcee ? [1] : []}
+                    headers={["Souscripteur", "Police", "Garanties", "Sinistres", "Primes", "S/P"]}
+                    rows={[[
+                      data.contrat.client, data.contrat.numeroPolice, data.contrat.garantiesPrivees,
+                      data.spSansChargement.sinistres,
+                      spSansForcee ? spSansForcee.primes : data.spSansChargement.primes,
+                      fmtRatio(spSansForcee ? spSansForcee.ratioPct : data.spSansChargement.ratioPct),
+                    ]]}
                   />
                 </div>
                 <div>
                   <div className="text-[12px] font-semibold text-accent mb-1.5">Avec Chargement</div>
                   <TableSimple
-                    headers={spAvecForcee ? ["Type", "Souscripteur", "Police", "Garanties", "Sinistres", "Primes", "S/P"] : ["Souscripteur", "Police", "Garanties", "Sinistres", "Primes", "S/P"]}
-                    rows={spAvecForcee ? [
-                      ["Calculée", data.contrat.client, data.contrat.numeroPolice, data.contrat.garantiesPrivees, data.spAvecChargement.sinistres, data.spAvecChargement.primes, fmtRatio(data.spAvecChargement.ratioPct)],
-                      ["Forcée", data.contrat.client, data.contrat.numeroPolice, data.contrat.garantiesPrivees, data.spAvecChargement.sinistres, spAvecForcee.primes, fmtRatio(spAvecForcee.ratioPct)],
-                    ] : [[data.contrat.client, data.contrat.numeroPolice, data.contrat.garantiesPrivees, data.spAvecChargement.sinistres, data.spAvecChargement.primes, fmtRatio(data.spAvecChargement.ratioPct)]]}
-                    lignesEnEvidence={spAvecForcee ? [1] : []}
+                    headers={["Souscripteur", "Police", "Garanties", "Sinistres", "Primes", "S/P"]}
+                    rows={[[
+                      data.contrat.client, data.contrat.numeroPolice, data.contrat.garantiesPrivees,
+                      data.spAvecChargement.sinistres,
+                      spAvecForcee ? spAvecForcee.primes : data.spAvecChargement.primes,
+                      fmtRatio(spAvecForcee ? spAvecForcee.ratioPct : data.spAvecChargement.ratioPct),
+                    ]]}
                   />
                 </div>
               </div>
               <BarSimple
                 data={[
-                  { libelle: `S/P net${spSansForcee ? " (auto)" : ""}`, montant: data.spSansChargement.ratioPct },
-                  ...(spSansForcee ? [{ libelle: "S/P net (forcé)", montant: spSansForcee.ratioPct }] : []),
-                  { libelle: `S/P chargé${spAvecForcee ? " (auto)" : ""}`, montant: data.spAvecChargement.ratioPct },
-                  ...(spAvecForcee ? [{ libelle: "S/P chargé (forcé)", montant: spAvecForcee.ratioPct }] : []),
+                  { libelle: "S/P net", montant: (spSansForcee ?? data.spSansChargement).ratioPct },
+                  { libelle: "S/P chargé", montant: (spAvecForcee ?? data.spAvecChargement).ratioPct },
                 ]}
-                couleurs={["var(--primary)", "var(--chart-3)", "var(--accent)", "var(--chart-4)"]}
+                couleurs={["var(--primary)", "var(--accent)"]}
                 afficherValeurs
                 formatValeur={fmtRatio}
-                barSize={spSansForcee ? 50 : 140}
+                barSize={140}
                 labelsHorizontaux
               />
             </div>
           </SectionCard>
 
-          <SectionCard title="Analyse des données statistiques" subtitle="Généré automatiquement à partir des chiffres ci-dessus (moteur de règles) — le texte ci-dessous est librement modifiable avant impression/téléchargement.">
+          <SectionCard
+            title="Analyse des données statistiques"
+            subtitle="Généré automatiquement à partir des chiffres ci-dessus (moteur de règles) — le texte ci-dessous est librement modifiable avant impression/téléchargement."
+            action={primeForceeNum ? (
+              <button type="button" onClick={handleRegenerAnalyse} disabled={regenerantAnalyse}
+                className="inline-flex items-center gap-1.5 text-[12px] text-primary hover:underline disabled:opacity-50">
+                <RefreshCw className={`w-3.5 h-3.5 ${regenerantAnalyse ? "animate-spin" : ""}`} />
+                {regenerantAnalyse ? "Régénération…" : "Régénérer l'analyse avec S/P forcé"}
+              </button>
+            ) : undefined}
+          >
             <div className="space-y-5">
               {analyseEdite.sections.map((s, i) => (
                 <BlocAnalyseEditable
