@@ -6,7 +6,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { PrismaService } from "../prisma/prisma.service";
 import { MouvementsService } from "../mouvements/mouvements.service";
 import { NotificationsService } from "../notifications/notifications.service";
-import { verifierAge } from "../mouvements/age-limite.util";
+import { verifierAge, calculerAgeAns } from "../mouvements/age-limite.util";
 import { CreateAssureDto } from "./dto/create-assure.dto";
 import { UpdateAssureDto } from "./dto/update-assure.dto";
 import { CreatePriseEnChargeDto } from "./dto/create-prise-en-charge.dto";
@@ -15,10 +15,14 @@ import { ImportedPersonRowDto, ImportPopulationDto } from "./dto/import-populati
 import { creerGenerateurMatricule } from "./matricule.util";
 import { CreateFactureLigneDto, RUBRIQUES_PLAFONNEES } from "./dto/create-facture-ligne.dto";
 import { resoudreRubriqueContrat } from "../actes-medicaux/rubrique-contrat.util";
+import { resoudreIdentite } from "./identite-assuree.util";
+import { recalculerPrimeSelonPopulation } from "../contrats/prime-exercice.util";
+import { numeroPolice } from "../lib/police.util";
 import { UpdateFactureLigneDto } from "./dto/update-facture-ligne.dto";
 import { CreateRemboursementLigneDto } from "../remboursements/dto/create-remboursement-ligne.dto";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
+import { sanitizeUpload } from "../storage/upload-security.util";
 
 const UPLOADS_PHOTOS_DIR = path.join(UPLOADS_ROOT, "photos");
 const UPLOADS_REMBOURSEMENTS_DIR = path.join(UPLOADS_ROOT, "remboursements");
@@ -28,6 +32,17 @@ const UPLOADS_REMBOURSEMENTS_DIR = path.join(UPLOADS_ROOT, "remboursements");
 // que des champs scalaires de AssureSante lui-même (police = contratId brut,
 // jamais l'objet contrat) : sur un vrai volume de production, l'hydratation
 // Prisma des Decimal de `contrat` pour chaque ligne rendait cet endpoint
+// Le FCFA ne comporte pas de sous-unité en pratique. Toute prestation est
+// donc arrondie au franc le plus proche avant calcul et stockage : moins de
+// 0,5 par défaut, 0,5 ou plus par excès.
+function arrondirMontantFcfa(montant: number): number {
+  return Math.round(montant);
+}
+
+function normaliserTypePrestation(type: string): string {
+  return type.trim().toLowerCase() === "consultation" ? "Consultations" : type;
+}
+
 // injouable (187s mesurés en prod sans filtre). Même diagnostic déjà posé
 // sur StatistiquesService — voir mémoire project-performance-optimisations.
 const SELECT_ASSURE_LISTE = {
@@ -37,6 +52,8 @@ const SELECT_ASSURE_LISTE = {
   motifRadiation: true, photo: true, familleId: true, typeAssure: true, scolarise: true,
   nationalite: true, sexe: true, adresse: true, nomJeuneFille: true, lieuNaissance: true,
   email: true, telephoneFixe: true, autreNumero: true, fax: true,
+  // Matricule le plus récent (LRX-) si disponible dans l'historique (2026-10)
+  identite: { select: { matricules: { where: { statut: "Actuel" }, orderBy: { createdAt: "desc" }, take: 1, select: { matricule: true } } } },
 } satisfies Prisma.AssureSanteSelect;
 
 // TPS — 9,5% de la base de remboursement assurance, prélevée uniquement
@@ -52,6 +69,14 @@ function parseDateFr(s?: string | null): Date | null {
   if (!s) return null;
   const [d, m, y] = s.split("/").map(Number);
   return d && m && y ? new Date(y, m - 1, d) : null;
+}
+
+function verifierDatePrestationNonFuture(datePrestation: string): void {
+  const date = parseDateFr(datePrestation);
+  if (!date) return;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (date > today) throw new BadRequestException(`La date de soins ${datePrestation} est future. Une prestation ne peut être saisie qu'à la date du jour ou dans le passé.`);
 }
 
 function aujourdhuiFr(): string {
@@ -136,34 +161,63 @@ async function verifierContratDeAssureALaDate(prisma: PrismaService, contratId: 
   });
   if (evenements.length === 0) return;
 
-  type Segment = { contratId: string; debut: Date; fin: Date | null };
+  const idsContrats = [...new Set([...evenements.map((e) => e.contratId), contratId])];
+  const contrats = await prisma.contrat.findMany({
+    where: { id: { in: idsContrats } },
+    select: { id: true, compagnieId: true, numeroPolice: true },
+  });
+  const contratParId = new Map(contrats.map((contrat) => [contrat.id, contrat]));
+  const cleMetier = (id: string) => {
+    const contrat = contratParId.get(id);
+    return contrat ? `${contrat.compagnieId}|${contrat.numeroPolice?.trim().toLowerCase() || `id:${contrat.id}`}` : `id:${id}`;
+  };
+  const libelleContrat = (id: string) => {
+    const contrat = contratParId.get(id);
+    return numeroPolice(contrat);
+  };
+  const cleContratCible = cleMetier(contratId);
+  type Segment = { contratId: string; cle: string; debut: Date; fin: Date | null };
   const segments: Segment[] = [];
   let ouvert: { contratId: string; debut: Date } | null = null;
   for (const e of evenements) {
     const d = parseDateFr(e.dateEffet);
     if (!d) continue;
     if (e.action === "Incorporation") {
-      if (ouvert) segments.push({ contratId: ouvert.contratId, debut: ouvert.debut, fin: null });
+      if (ouvert) segments.push({ contratId: ouvert.contratId, cle: cleMetier(ouvert.contratId), debut: ouvert.debut, fin: null });
       ouvert = { contratId: e.contratId, debut: d };
     } else if (e.action === "Retrait" && ouvert && ouvert.contratId === e.contratId) {
-      segments.push({ contratId: ouvert.contratId, debut: ouvert.debut, fin: d });
+      segments.push({ contratId: ouvert.contratId, cle: cleMetier(ouvert.contratId), debut: ouvert.debut, fin: d });
       ouvert = null;
     }
   }
-  if (ouvert) segments.push({ contratId: ouvert.contratId, debut: ouvert.debut, fin: null });
+  if (ouvert) segments.push({ contratId: ouvert.contratId, cle: cleMetier(ouvert.contratId), debut: ouvert.debut, fin: null });
 
   const dPrestation = parseDateFr(datePrestation);
   if (!dPrestation) return;
   const segmentTrouve = segments.find((s) => dPrestation >= s.debut && (s.fin === null || dPrestation < s.fin));
 
   if (!segmentTrouve) {
+    // Une reprise d'antériorité peut précéder le premier mouvement importé
+    // (mouvements commencés seulement lors de la migration) sans pour autant
+    // changer de police. Dans ce cas, la même compagnie + police confirme
+    // le rattachement historique sans créer artificiellement un avenant.
+    const premiereIncorporation = evenements.find((e) => e.action === "Incorporation");
+    const datePremiereIncorporation = premiereIncorporation ? parseDateFr(premiereIncorporation.dateEffet) : null;
+    // Un retrait isolé atteste une fin de couverture, pas son début. Les
+    // soins antérieurs restent recevables (verifierAssureNonRetire bloque
+    // déjà toute date à partir du retrait).
+    if (!premiereIncorporation) return;
+    if (
+      premiereIncorporation && datePremiereIncorporation && dPrestation < datePremiereIncorporation
+      && cleMetier(premiereIncorporation.contratId) === cleContratCible
+    ) return;
     throw new BadRequestException(
       `Aucun contrat connu pour cet assuré à la date du ${datePrestation} d'après son historique de rattachement — vérifiez la date de la prestation ou le contrat.`,
     );
   }
-  if (segmentTrouve.contratId !== contratId) {
+  if (segmentTrouve.cle !== cleContratCible) {
     throw new BadRequestException(
-      `Cette personne était rattachée au contrat ${segmentTrouve.contratId} à la date du ${datePrestation} (pas ${contratId}) — vérifiez le contrat de cette prestation.`,
+      `Cette personne était rattachée à la police ${libelleContrat(segmentTrouve.contratId)} à la date du ${datePrestation} (pas ${libelleContrat(contratId)}) — vérifiez la police compagnie de cette prestation.`,
     );
   }
 }
@@ -194,7 +248,7 @@ function nomComplet(nom: string, prenom?: string | null): string {
 function normaliserStatutImport(valeur?: string): "Actif" | "Suspendu" | undefined {
   const v = (valeur ?? "").trim().toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   if (v === "ACTIF" || v === "ACTIVE" || v === "ACTIVE(VE)") return "Actif";
-  if (v === "INACTIF" || v === "INACTIVE" || v === "SUSPENDU" || v === "SUSPENDUE") return "Suspendu";
+  if (v === "INACTIF" || v === "INACTIVE" || v === "SUSPENDU" || v === "SUSPENDUE" || v === "TERMINE" || v === "TERMINEE" || v === "RESILIE" || v === "RESILIEE" || v === "EXPIRE" || v === "EXPIREE") return "Suspendu";
   return undefined;
 }
 
@@ -235,16 +289,26 @@ export class SanteService {
     if (!criteresAvances) {
       return this.prisma.assureSante.findMany({ where: filtres?.contratId ? { contratId: filtres.contratId } : undefined, select: SELECT_ASSURE_LISTE });
     }
-    const where: Prisma.AssureSanteWhereInput = {
-      ...(filtres?.contratId ? { contratId: filtres.contratId } : {}),
-      ...(filtres?.typeAssure ? { typeAssure: filtres.typeAssure } : {}),
-      ...(filtres?.statut ? { statut: filtres.statut } : {}),
-      ...(filtres?.sexe ? { sexe: filtres.sexe } : {}),
-      ...(filtres?.matricule ? { matricule: { contains: filtres.matricule, mode: "insensitive" } } : {}),
-      ...(filtres?.nom
-        ? { OR: [{ nom: { contains: filtres.nom, mode: "insensitive" } }, { prenom: { contains: filtres.nom, mode: "insensitive" } }] }
-        : {}),
-    };
+    const conds: Prisma.AssureSanteWhereInput[] = [];
+    if (filtres?.contratId) conds.push({ contratId: filtres.contratId });
+    if (filtres?.typeAssure) conds.push({ typeAssure: filtres.typeAssure });
+    if (filtres?.statut) conds.push({ statut: filtres.statut });
+    if (filtres?.sexe) conds.push({ sexe: filtres.sexe });
+    if (filtres?.matricule) {
+      // Recherche sur le matricule courant ET l'historique (2026-10) —
+      // permet de retrouver un assuré par son ancien OU nouveau matricule.
+      conds.push({ OR: [
+        { matricule: { contains: filtres.matricule, mode: "insensitive" } },
+        { identite: { matricules: { some: { matricule: { contains: filtres.matricule, mode: "insensitive" } } } } },
+      ]});
+    }
+    if (filtres?.nom) {
+      conds.push({ OR: [
+        { nom: { contains: filtres.nom, mode: "insensitive" } },
+        { prenom: { contains: filtres.nom, mode: "insensitive" } },
+      ]});
+    }
+    const where: Prisma.AssureSanteWhereInput = conds.length > 0 ? { AND: conds } : {};
     const correspondances = await this.prisma.assureSante.findMany({ where, select: { id: true, familleId: true } });
     if (correspondances.length === 0) return [];
     const racinesIds = [...new Set(correspondances.map((m) => m.familleId ?? m.id))];
@@ -262,7 +326,7 @@ export class SanteService {
   async findAssuresForClient(clientId: string, contratId?: string) {
     if (contratId) {
       const contrat = await this.prisma.contrat.findUnique({ where: { id: contratId }, select: { clientId: true } });
-      if (!contrat || contrat.clientId !== clientId) throw new ForbiddenException(`Contrat ${contratId} inaccessible`);
+      if (!contrat || contrat.clientId !== clientId) throw new ForbiddenException("Contrat inaccessible");
     }
     return this.prisma.assureSante.findMany({
       where: { contrat: { clientId }, ...(contratId ? { contratId } : {}) },
@@ -281,11 +345,11 @@ export class SanteService {
   // racine (AS) → deux familles ne peuvent pas partager un numéro, refusé
   // sans confirmation possible. "confirm" = la personne est un CJ/EF → le
   // rattachement à la famille trouvée doit être confirmé explicitement.
-  private async resolveTelephone(telephone: string | undefined, estAssurePrincipal: boolean, excludeId?: string): Promise<ResolutionTelephone> {
+  private async resolveTelephone(telephone: string | undefined, contratId: string, estAssurePrincipal: boolean, excludeId?: string): Promise<ResolutionTelephone> {
     const tel = telephone?.trim();
     if (!tel) return { ok: true };
     const existant = await this.prisma.assureSante.findFirst({
-      where: { telephone: tel, familleId: null, ...(excludeId ? { id: { not: excludeId } } : {}) },
+      where: { contratId, telephone: tel, familleId: null, ...(excludeId ? { id: { not: excludeId } } : {}) },
       select: { id: true, nom: true, prenom: true },
     });
     if (!existant) return { ok: true };
@@ -296,27 +360,22 @@ export class SanteService {
     return `Le numéro ${tel} est déjà utilisé par la famille de ${nomComplet(famille.nom, famille.prenom)} (assuré principal) — un numéro de téléphone ne peut être associé qu'à une seule famille.`;
   }
 
-  // Verrou anti-doublon de population (2026-08) — un même matricule sur
-  // deux contrats différents est toujours une duplication (jamais une
-  // famille légitime à confirmer, contrairement au téléphone) : blocage
-  // net. La bascule (SanteService.basculerAssureVersContrat) est la seule
-  // façon légitime de faire passer une personne d'un contrat à un autre.
   private async resolveMatricule(matricule: string | undefined, contratId: string, excludeId?: string) {
     const mat = matricule?.trim();
     if (!mat) return null;
     return this.prisma.assureSante.findFirst({
-      where: { matricule: mat, contratId: { not: contratId }, ...(excludeId ? { id: { not: excludeId } } : {}) },
+      where: { matricule: mat, contratId, ...(excludeId ? { id: { not: excludeId } } : {}) },
       select: { id: true, contratId: true, nom: true, prenom: true },
     });
   }
 
   private messageConflitMatricule(mat: string, autre: { contratId: string; nom: string; prenom: string | null }): string {
-    return `Le matricule ${mat} est déjà utilisé sur le contrat ${autre.contratId} par ${nomComplet(autre.nom, autre.prenom)} — une même personne ne peut pas être rattachée à deux contrats. Utilisez le transfert (fiche du participant) pour la faire passer d'un contrat à l'autre.`;
+    return `Le matricule ${mat} est déjà utilisé sur ce contrat par ${nomComplet(autre.nom, autre.prenom)}.`;
   }
 
   async createAssure(dto: CreateAssureDto) {
     const estAssurePrincipal = !dto.familleId && (dto.typeAssure ?? "AS").toUpperCase() === "AS";
-    const resolution = await this.resolveTelephone(dto.telephone, estAssurePrincipal);
+    const resolution = await this.resolveTelephone(dto.telephone, dto.contratId, estAssurePrincipal);
     if ("conflict" in resolution) {
       const tel = dto.telephone!.trim();
       if (resolution.conflict === "block") {
@@ -367,7 +426,7 @@ export class SanteService {
       }
       const tel = dto.telephone.trim();
       if (tel) {
-        const resolution = await this.resolveTelephone(tel, true, id);
+          const resolution = await this.resolveTelephone(tel, existant.contratId, true, id);
         if ("conflict" in resolution) {
           throw new BadRequestException(this.messageConflitTelephone(tel, resolution.famille));
         }
@@ -383,6 +442,17 @@ export class SanteService {
       if (erreurAge) throw new BadRequestException(erreurAge);
     }
 
+    if (dto.typeAssure !== undefined) {
+      // On ne permet le changement que dans la même catégorie d'appartenance
+      // (ayant droit → ayant droit ou AS → AS) ; changer de AS à EF/CJ
+      // nécessiterait d'affecter un familleId (hors périmètre de ce patch).
+      if (dto.typeAssure === "AS" && existant.familleId) {
+        throw new BadRequestException("Impossible de changer en Assuré Principal un ayant droit rattaché à une famille — retirez-le d'abord du contrat.");
+      }
+      if (dto.typeAssure !== "AS" && !existant.familleId) {
+        throw new BadRequestException("Impossible de changer le type d'un assuré principal en CJ/EF sans le rattacher à une famille.");
+      }
+    }
     const miseAJour = await this.prisma.assureSante.update({
       where: { id },
       data: {
@@ -400,6 +470,7 @@ export class SanteService {
         telephoneFixe: dto.telephoneFixe,
         autreNumero: dto.autreNumero,
         fax: dto.fax,
+        typeAssure: dto.typeAssure,
       },
       include: { contrat: true, membres: true },
     });
@@ -424,21 +495,25 @@ export class SanteService {
   }
 
   async uploadPhoto(id: string, file: Express.Multer.File) {
-    await this.findAssureOne(id);
+    const existant = await this.findAssureOne(id);
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
-    const ext = path.extname(file.originalname) || ".jpg";
-    const filename = `${id}${ext.toLowerCase()}`;
+    const { storedName: filename, mime } = sanitizeUpload({ originalName: file.originalname, mimetype: file.mimetype, buffer: file.buffer, category: "image" });
     if (this.storage.actif) {
-      await this.storage.upload("photos", filename, file.buffer, file.mimetype);
+      await this.storage.upload("photos", filename, file.buffer, mime);
     } else {
       await fs.promises.mkdir(UPLOADS_PHOTOS_DIR, { recursive: true });
       await fs.promises.writeFile(path.join(UPLOADS_PHOTOS_DIR, filename), file.buffer);
     }
-    return this.prisma.assureSante.update({
+    const maj = await this.prisma.assureSante.update({
       where: { id },
       data: { photo: filename },
       include: { contrat: true, membres: true },
     });
+    // Nom aléatoire à chaque envoi : l'ancienne photo n'est plus écrasée, on la supprime.
+    if (existant.photo && existant.photo !== filename) {
+      await fs.promises.unlink(path.join(UPLOADS_PHOTOS_DIR, path.basename(existant.photo))).catch(() => undefined);
+    }
+    return maj;
   }
 
   async deletePhoto(id: string) {
@@ -535,11 +610,11 @@ export class SanteService {
   // leur motif — le reste du fichier est importé normalement.
   async importPopulation(dto: ImportPopulationDto) {
     const contrat = await this.prisma.contrat.findUnique({ where: { id: dto.contratId } });
-    if (!contrat) throw new NotFoundException(`Contrat ${dto.contratId} introuvable`);
+    if (!contrat) throw new NotFoundException("Contrat introuvable");
 
     const existants = await this.prisma.assureSante.findMany({
       where: { contratId: dto.contratId },
-      select: { id: true, matricule: true, familleId: true, telephone: true, prenom: true, dateNaissance: true, statut: true },
+      select: { id: true, nom: true, matricule: true, familleId: true, telephone: true, prenom: true, dateNaissance: true, statut: true, identiteId: true },
     });
     const existantParMatricule = new Map(existants.map((e) => [e.matricule, e]));
 
@@ -547,7 +622,6 @@ export class SanteService {
     const rejets: Rejet[] = [];
     type LigneAcceptee = { row: ImportedPersonRowDto; nom: string; prenom?: string; type: string; id: string; matricule: string; familleId: string | null; isNew: boolean };
     const accepted: LigneAcceptee[] = [];
-    const matriculesVusEnLigne = new Map<string, number>();
     // Fusion des doublons de matricule dans le fichier (2026-09) — voir la
     // boucle plus bas : associe chaque matricule déjà traité à SON entrée
     // acceptée, pour qu'une ligne suivante partageant le même matricule
@@ -564,14 +638,24 @@ export class SanteService {
     // regroupement familial dépend de l'ORDRE des lignes, voir
     // `currentFamilyId`, donc ne peut pas être parallélisé).
     const matriculesDuLot = [...new Set(dto.rows.map((l) => l.matricule?.trim()).filter((m): m is string => !!m))];
+    // Un ancien matricule doit retrouver l'affiliation actuelle de la même
+    // personne, sans créer une seconde fiche dans le contrat cible.
+    if (matriculesDuLot.length > 0) {
+      const aliases = await this.prisma.matriculeAssuree.findMany({ where: { matricule: { in: matriculesDuLot } }, select: { matricule: true, identiteId: true } });
+      const identiteIds = aliases.map((a) => a.identiteId);
+      if (identiteIds.length > 0) {
+        const affiliations = await this.prisma.assureSante.findMany({ where: { contratId: dto.contratId, identiteId: { in: identiteIds } }, select: { id: true, nom: true, matricule: true, familleId: true, telephone: true, prenom: true, dateNaissance: true, statut: true, identiteId: true } });
+        const affiliationParIdentite = new Map(affiliations.map((a) => [a.identiteId, a]));
+        for (const alias of aliases) {
+          const affiliation = affiliationParIdentite.get(alias.identiteId);
+          if (affiliation) existantParMatricule.set(alias.matricule, affiliation);
+        }
+      }
+    }
     const telephonesDuLot = [...new Set(dto.rows.map((l) => l.telephone?.trim()).filter((t): t is string => !!t))];
-    const conflitsMatricule = matriculesDuLot.length > 0
-      ? await this.prisma.assureSante.findMany({ where: { matricule: { in: matriculesDuLot }, contratId: { not: dto.contratId } }, select: { id: true, matricule: true, contratId: true, nom: true, prenom: true } })
-      : [];
     const conflitsTelephone = telephonesDuLot.length > 0
-      ? await this.prisma.assureSante.findMany({ where: { telephone: { in: telephonesDuLot }, familleId: null }, select: { id: true, telephone: true, nom: true, prenom: true } })
+      ? await this.prisma.assureSante.findMany({ where: { contratId: dto.contratId, telephone: { in: telephonesDuLot }, familleId: null }, select: { id: true, telephone: true, nom: true, prenom: true } })
       : [];
-    const conflitMatriculeParValeur = new Map(conflitsMatricule.map((c) => [c.matricule, c]));
     const conflitTelephoneParValeur = new Map(conflitsTelephone.filter((c) => c.telephone).map((c) => [c.telephone as string, c]));
 
     let currentFamilyId: string | null = null;
@@ -615,76 +699,19 @@ export class SanteService {
         continue;
       }
 
-      const existant = matricule ? existantParMatricule.get(matricule) : undefined;
+      let existant = matricule ? existantParMatricule.get(matricule) : undefined;
+      // Comparaison secondaire nom + prénom + date de naissance: utile pour
+      // les anciens exports qui ont perdu le matricule, mais uniquement dans
+      // le contrat importé pour éviter un rapprochement ambigu entre polices.
+      if (!existant && nom && line.dateNaissance?.trim()) {
+        existant = existants.find((a) => a.nom.toUpperCase() === nom && (a.prenom ?? "").toLowerCase() === (prenom ?? "").toLowerCase() && a.dateNaissance === line.dateNaissance?.trim());
+      }
       if (existant) {
         if (estAS) currentFamilyId = existant.familleId ?? existant.id;
         const item: LigneAcceptee = { row: line, nom, prenom, type: type || (estAS ? "AS" : "EF"), id: existant.id, matricule: existant.matricule, familleId: existant.familleId, isNew: false };
         accepted.push(item);
         if (matricule) accepteeParMatricule.set(matricule, item);
         continue;
-      }
-
-      if (matricule) {
-        // Ré-entrée sur un matricule déjà traité par la branche
-        // "bascule/file d'attente" ci-dessous (rare : une bascule vient
-        // de faire disparaître le conflit inter-contrat pour ce
-        // matricule) — jamais retenter la bascule une 2ᵉ fois, la ligne
-        // suivante est simplement ignorée (déjà prise en compte).
-        if (matriculesVusEnLigne.has(matricule)) continue;
-
-        const doublonMatricule = conflitMatriculeParValeur.get(matricule);
-        if (doublonMatricule) {
-          matriculesVusEnLigne.set(matricule, ligneNo);
-          // Bascule automatique à l'import (2026-09) — voir demande
-          // utilisateur : reprise en masse de populations sur plusieurs
-          // imports étalés dans le temps ; "c'est le statut au moment de
-          // l'import qui indique qu'une personne est inactive sur un
-          // contrat et active sur un autre". Un matricule déjà présent sur
-          // UN AUTRE contrat n'est plus un rejet sec dès que CETTE ligne
-          // affirme "Actif" pour le contrat en cours d'import — c'est le
-          // signal fiable d'un vrai basculement (jamais une saisie
-          // erronée), exécuté via le même mécanisme que "Transférer" sur
-          // la fiche du participant (MouvementsService.basculerVersContrat
-          // — même ligne AssureSante, contratId réaffecté, aucune
-          // duplication possible, historique de consommation intact sous
-          // l'ancien contrat).
-          if (normaliserStatutImport(line.statut) === "Actif") {
-            try {
-              await this.mouvements.basculerVersContrat(doublonMatricule.id, dto.contratId, true, aujourdhuiFr());
-              await this.prisma.personneEnAttenteTransfert.deleteMany({ where: { matricule } });
-              basculees++;
-              resultatsBascule.push({ matricule, id: doublonMatricule.id });
-            } catch (err) {
-              rejets.push({ ligne: ligneNo, matricule, nom, motif: err instanceof Error ? err.message : this.messageConflitMatricule(matricule, doublonMatricule) });
-            }
-            continue;
-          }
-
-          // Statut non affirmé "Actif" sur ce contrat — pas assez
-          // d'information pour basculer avec confiance maintenant (le bon
-          // contrat de destination sera peut-être importé plus tard, voir
-          // demande utilisateur : "il faut même un système de sauvegarde
-          // comme un cache... plus on importe les données plus
-          // l'application voit plus claire"). Jamais un rejet sec qui
-          // perdrait l'information : mise en file d'attente, résolue
-          // d'elle-même au prochain import qui affirmera son statut Actif
-          // pour ce même matricule (même chemin ci-dessus, rejoué).
-          await this.prisma.personneEnAttenteTransfert.deleteMany({ where: { matricule } });
-          await this.prisma.personneEnAttenteTransfert.create({
-            data: {
-              matricule, nom, prenom: prenom ?? null,
-              contratSourceId: doublonMatricule.contratId, contratCibleId: dto.contratId,
-              statutImport: line.statut ?? null,
-              motif: this.messageConflitMatricule(matricule, doublonMatricule),
-              donneesLigne: line as unknown as Prisma.InputJsonValue,
-            },
-          });
-          rejets.push({
-            ligne: ligneNo, matricule, nom,
-            motif: `En attente de transfert — ${this.messageConflitMatricule(matricule, doublonMatricule)} Résolu automatiquement dès qu'un import affirmera son statut Actif sur le bon contrat.`,
-          });
-          continue;
-        }
       }
 
       const tel = line.telephone?.trim();
@@ -753,10 +780,21 @@ export class SanteService {
     const aMettreAJour = accepted.filter((item) => !item.isNew);
 
     if (nouveaux.length > 0) {
+      // Identité de chaque nouvelle fiche, DANS LA SOCIÉTÉ DU CONTRAT :
+      // matricule (actuel ou ancien), sinon même nom + prénom + date de
+      // naissance, sinon nouvelle personne — voir identite-assuree.util.ts.
+      const identiteParMatricule = new Map<string, { id: string }>();
+      for (const item of nouveaux) {
+        if (identiteParMatricule.has(item.matricule)) continue;
+        identiteParMatricule.set(item.matricule, await resoudreIdentite(this.prisma, contrat.societeId ?? null, {
+          matricule: item.matricule, nom: item.nom, prenom: item.prenom, dateNaissance: item.row.dateNaissance,
+        }));
+      }
       await this.prisma.assureSante.createMany({
         data: nouveaux.map((item) => ({
           id: item.id,
           contratId: dto.contratId,
+          identiteId: identiteParMatricule.get(item.matricule)!.id,
           beneficiaires: 0,
           cotisation: 0,
           statut: normaliserStatutImport(item.row.statut) ?? "Actif",
@@ -854,6 +892,10 @@ export class SanteService {
       updated += compteurs.reduce((s, c) => s + c, 0);
     }
 
+    // Prime de l'exercice courant réalignée sur la population importée
+    // (voir contrats/prime-exercice.util.ts). Jamais bloquant.
+    await recalculerPrimeSelonPopulation(this.prisma, [dto.contratId]);
+
     return { imported, updated, basculees, rejected: rejets, resultats };
   }
 
@@ -880,6 +922,105 @@ export class SanteService {
     return { id };
   }
 
+  async ignorerToutesPersonnesEnAttenteTransfert() {
+    const { count } = await this.prisma.personneEnAttenteTransfert.deleteMany({});
+    return { ignorees: count };
+  }
+
+  // Valide manuellement le transfert d'une personne en attente.
+  // Résilient : cherche l'assuré sur source → cible → n'importe quel contrat.
+  // Corrige typeAssure=EF adulte avant bascule. Nettoie l'entrée dans tous les cas.
+  async validerTransfertPersonne(id: string) {
+    const entree = await this.prisma.personneEnAttenteTransfert.findUnique({ where: { id } });
+    if (!entree) throw new NotFoundException(`Entrée ${id} introuvable`);
+
+    // Cas 1 : déjà sur le contrat cible — transfert déjà effectué.
+    const surCible = await this.prisma.assureSante.findFirst({
+      where: { matricule: entree.matricule, contratId: entree.contratCibleId },
+      select: { id: true },
+    });
+    if (surCible) {
+      await this.prisma.personneEnAttenteTransfert.deleteMany({ where: { id } });
+      return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId, typeAssureCorrige: null, dejaEffectue: true };
+    }
+
+    // Cas 2 : sur le contrat source (cas normal) OU sur un contrat tiers.
+    const assure = await this.prisma.assureSante.findFirst({
+      where: { matricule: entree.matricule },
+      select: { id: true, typeAssure: true, dateNaissance: true, contratId: true },
+    });
+    if (!assure) {
+      // Introuvable nulle part → entrée fantôme, nettoyer silencieusement.
+      await this.prisma.personneEnAttenteTransfert.deleteMany({ where: { id } });
+      return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId, typeAssureCorrige: null, dejaEffectue: true };
+    }
+
+    // contratSource = contratCible → entrée incohérente, nettoyer.
+    if (entree.contratSourceId === entree.contratCibleId) {
+      await this.prisma.personneEnAttenteTransfert.deleteMany({ where: { id } });
+      throw new BadRequestException(`Entrée incohérente : contrat source = contrat cible (${entree.contratSourceId})`);
+    }
+
+    // Auto-correction : typeAssure = "EF" mais âge adulte → "AS".
+    let typeAssureCorrige: string | null = null;
+    if (assure.typeAssure === "EF") {
+      const age = calculerAgeAns(assure.dateNaissance, new Date());
+      if (age !== null && age >= 18) {
+        typeAssureCorrige = "AS";
+        await this.prisma.assureSante.update({ where: { id: assure.id }, data: { typeAssure: "AS" } });
+      }
+    }
+
+    const donneesLigne = entree.donneesLigne as { dateEffet?: string } | null;
+    const dateEffet = donneesLigne?.dateEffet ?? new Date().toLocaleDateString("fr-FR");
+    try {
+      // ignorerAge: true — action admin délibérée ; l'âge hors-limite indique
+      // souvent un AS/CJ enregistré comme EF (corrigé ci-dessus) ou un retraité
+      // maintenu par avenant. Le gestionnaire voit le cas avant de valider.
+      await this.mouvements.basculerVersContrat(assure.id, entree.contratCibleId, true, dateEffet, { ignorerAge: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Unique constraint (contratId, matricule) → l'assuré existe déjà sur
+      // le contrat cible (doublon non détecté par le filtre tenant) : nettoyer.
+      if (msg.includes("Unique constraint") && msg.includes("contratId") && msg.includes("matricule")) {
+        await this.prisma.personneEnAttenteTransfert.deleteMany({ where: { id } });
+        return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId, typeAssureCorrige: null, dejaEffectue: true };
+      }
+      if (err instanceof BadRequestException || err instanceof NotFoundException) throw err;
+      throw new BadRequestException(`Bascule échouée pour ${entree.matricule} : ${msg}`);
+    }
+    await this.prisma.personneEnAttenteTransfert.deleteMany({ where: { id } });
+    return { id, matricule: entree.matricule, contratCibleId: entree.contratCibleId, typeAssureCorrige, dejaEffectue: false };
+  }
+
+  // Détecte et corrige tous les assurés enregistrés avec typeAssure = "EF"
+  // (enfant) mais dont l'âge révèle une erreur de saisie (adulte ≥ 18 ans).
+  // Corrige en "AS". Optionnel : contratId pour restreindre à un contrat.
+  async corrigerTypeAssureErreurs(contratId?: string) {
+    const candidats = await this.prisma.assureSante.findMany({
+      where: { typeAssure: "EF", ...(contratId ? { contratId } : {}) },
+      select: { id: true, nom: true, prenom: true, matricule: true, dateNaissance: true, contratId: true },
+    });
+    const aujourd = new Date();
+    const aCorriger = candidats.filter((p) => {
+      const age = calculerAgeAns(p.dateNaissance, aujourd);
+      return age !== null && age >= 18;
+    });
+    if (aCorriger.length === 0) return { corriges: 0, details: [] };
+    await this.prisma.assureSante.updateMany({
+      where: { id: { in: aCorriger.map((p) => p.id) } },
+      data: { typeAssure: "AS" },
+    });
+    return {
+      corriges: aCorriger.length,
+      details: aCorriger.map((p) => ({
+        matricule: p.matricule, nom: p.nom, prenom: p.prenom,
+        age: calculerAgeAns(p.dateNaissance, aujourd),
+        contratId: p.contratId,
+      })),
+    };
+  }
+
   // `assureIds` (optionnel) permet au profil Participants de récupérer en un
   // seul appel les PEC de toute une famille (assuré principal + ayants
   // droit) plutôt que de tout charger puis filtrer côté client. `contratId`
@@ -888,21 +1029,42 @@ export class SanteService {
   // contratId dénormalisé (voir PriseEnCharge.contratId, posé une fois à la
   // création — reste rattaché au contrat en vigueur au moment des faits même
   // si l'assuré bascule ensuite vers un autre contrat).
-  async findPrisesEnCharge(assureIds?: string[], contratId?: string, gestionnaireId?: string) {
+  async findPrisesEnCharge(assureIds?: string[], contratId?: string, gestionnaireId?: string, portailMode = false) {
     const where: Prisma.PriseEnChargeWhereInput = {
       ...(contratId ? { contratId } : assureIds && assureIds.length > 0 ? { assureId: { in: assureIds } } : {}),
       ...(gestionnaireId ? { gestionnaireId } : {}),
+      // Portail : exclure les TiersPayant non encore facturés (non passés en
+      // facturation) — la PEC n'est une consommation réelle que quand le
+      // prestataire a facturé et que factureId est renseigné.
+      ...(portailMode ? { NOT: { modePaiement: "TiersPayant", factureId: null } } : {}),
     };
+    // Identité transverse (voir schema.prisma IdentiteAssuree) : demandées
+    // par assuré (portail membre, agent IA...), les prestations de la
+    // famille incluent aussi celles de ses AUTRES affiliations — la même
+    // personne sur un ancien contrat ou une autre police. Chaque ligne garde
+    // son propre contratId, donc reste affichée par contrat et par exercice.
+    if (!contratId && assureIds && assureIds.length > 0) {
+      const selection = await this.prisma.assureSante.findMany({ where: { id: { in: assureIds } }, select: { id: true, familleId: true } });
+      const racineIds = [...new Set(selection.map((a) => a.familleId ?? a.id))];
+      const familleSelectionnee = await this.prisma.assureSante.findMany({
+        where: { OR: [{ id: { in: racineIds } }, { familleId: { in: racineIds } }] },
+        select: { identiteId: true },
+      });
+      const identiteIds = familleSelectionnee.map((a) => a.identiteId).filter((id): id is string => !!id);
+      if (identiteIds.length > 0) {
+        const historiques = await this.prisma.assureSante.findMany({ where: { identiteId: { in: identiteIds } }, select: { id: true } });
+        where.assureId = { in: [...new Set([...assureIds, ...historiques.map((a) => a.id)])] };
+      }
+    }
     const lignes = await this.prisma.priseEnCharge.findMany({
       where,
-      // select ciblé (2026-09, était include: {assure, prestataireRef,
-      // accordPrealable, acteMedical} en entier) — voir demande utilisateur :
-      // "je veux la rapidité, la fluidité" ; mesuré en production sans
-      // filtre : 93 Mo de JSON, 14,8s. `prestataireRef`/`accordPrealable`
-      // n'étaient même pas lus par ApiPriseEnCharge côté frontend (voir
-      // src/services/sante.service.ts) — uniquement `assure.nom` et
-      // `acteMedical.categorieGarantie`. Même diagnostic que
-      // SanteService.findAssures (voir mémoire project-performance-optimisations).
+      // shortcut: 500 lignes les plus récentes, suffit pour tout affichage UI.
+      // Sans cette limite, un contrat de 47 k lignes déclenche 13,7 s
+      // d'hydratation Prisma des Decimal (mesuré en prod 2026-11-02) malgré
+      // un select ciblé, car le goulot est la transformation JS, pas le SQL.
+      // Les statistiques/agrégations passent par leurs propres endpoints.
+      orderBy: { date: "desc" },
+      take: 500,
       select: {
         id: true, assureId: true, contratId: true, prestataire: true, type: true, montant: true, statut: true, date: true,
         modePaiement: true, statutControleMedical: true, motifRejet: true, prescriptionRef: true, factureRef: true,
@@ -911,12 +1073,19 @@ export class SanteService {
         factureId: true,
         assure: { select: { nom: true, prenom: true } },
         acteMedical: { select: { categorieGarantie: true, libelle: true, famille: true } },
-        // prestataireRef.type (2026-11) — nécessaire pour RUBRIQUE_PAR_TYPE_PRESTATAIRE
-        // (Opticien → Optique, Cabinet Dentaire → Dentisterie) ; select ciblé
-        // pour ne pas réintroduire les 93 Mo du include complet.
         prestataireRef: { select: { type: true } },
       },
     });
+    // Dedup : un import PEC puis un import factures pour le même événement
+    // crée deux lignes (factureId null vs non null). On garde la plus complète
+    // (factureId > null). Clé = assureId + date + montant + prestataire.
+    const seenPec = new Map<string, (typeof lignes)[0]>();
+    for (const l of lignes) {
+      const key = `${l.assureId}|${String(l.date).slice(0, 10)}|${l.montant}|${l.prestataire}`;
+      const prev = seenPec.get(key);
+      if (!prev || (l.factureId && !prev.factureId)) seenPec.set(key, l);
+    }
+    const lignesUniques = [...seenPec.values()];
     // rubrique (2026-09) — voir demande utilisateur : "les statistiques
     // doivent être en harmonie parfaite avec le tableau de garantie du
     // contrat" — pré-résolue ici (même resolver canonique que
@@ -925,19 +1094,12 @@ export class SanteService {
     // rubrique sans dupliquer la logique côté navigateur. Chaque ligne
     // garde son PROPRE contratId (peut différer d'un membre à l'autre
     // d'une même famille) — garanties chargées par lot, une seule requête.
-    const contratIds = [...new Set(lignes.map((l) => l.contratId))];
+    const contratIds = [...new Set(lignesUniques.map((l) => l.contratId))];
     const contrats = contratIds.length > 0
       ? await this.prisma.contrat.findMany({ where: { id: { in: contratIds } }, select: { id: true, garanties: { select: { categorie: true } } } })
       : [];
     const garantiesParContratId = new Map(contrats.map((c) => [c.id, c.garanties]));
-    return lignes.map((l) => ({
-      ...l,
-      rubrique: resoudreRubriqueContrat(
-        garantiesParContratId.get(l.contratId) ?? [],
-        { ...l, prestataireType: l.prestataireRef?.type ?? undefined },
-        l.acteMedical,
-      ),
-    }));
+    return lignesUniques.map((l) => ({ ...l, rubrique: resoudreRubriqueContrat(garantiesParContratId.get(l.contratId) ?? [], { type: l.type, prestataireType: l.prestataireRef?.type }, l.acteMedical) }));
   }
 
   // Vérifie l'enveloppe partagée d'une rubrique de garantie (ex: Dentisterie
@@ -1079,10 +1241,11 @@ export class SanteService {
   // correspondance approximative/devinée).
   private async resoudreContratParTauxObserve(
     contratActuelId: string, clientId: string, estHospitalisation: boolean, secteur: string | null | undefined, estAyantDroit: boolean, tauxEffectif: number,
+    datePrestation?: string,
   ): Promise<string | null> {
     if (!secteur) return null;
     const SELECT_TAUX = {
-      id: true,
+      id: true, dateDebut: true, dateFin: true,
       tauxAmbulatoirePublique: true, tauxAmbulatoirePrivee: true, tauxHospitalisationPublique: true, tauxHospitalisationPrivee: true,
       tauxAmbulatoirePubliqueAyantDroit: true, tauxAmbulatoirePriveeAyantDroit: true, tauxHospitalisationPubliqueAyantDroit: true, tauxHospitalisationPriveeAyantDroit: true,
     } satisfies Prisma.ContratSelect;
@@ -1093,9 +1256,19 @@ export class SanteService {
     if (tauxActuel !== null && Math.abs(tauxActuel - tauxEffectif) <= SanteService.TOLERANCE_TAUX) return null;
 
     const freres = await this.prisma.contrat.findMany({ where: { clientId, id: { not: contratActuelId } }, select: SELECT_TAUX });
+    const dateP = datePrestation ? parseDateFr(datePrestation) : null;
     const frereCorrespondant = freres.find((f) => {
       const t = this.tauxParSecteur(estHospitalisation, secteur, estAyantDroit, f);
-      return t !== null && Math.abs(t - tauxEffectif) <= SanteService.TOLERANCE_TAUX;
+      if (t === null || Math.abs(t - tauxEffectif) > SanteService.TOLERANCE_TAUX) return false;
+      // Filtre temporel : la prestation doit tomber dans la période du contrat frère
+      // pour éviter les faux positifs entre contrats aux taux proches (ex. 260143 vs 260144).
+      if (dateP) {
+        const debut = parseDateFr(f.dateDebut);
+        const fin = parseDateFr(f.dateFin);
+        if (debut && dateP < debut) return false;
+        if (fin && dateP > fin) return false;
+      }
+      return true;
     });
     return frereCorrespondant?.id ?? null;
   }
@@ -1132,7 +1305,7 @@ export class SanteService {
       const tauxEffectif = (Number(ligne.baseRemboursement) / Number(ligne.montant)) * 100;
       const secteur = ligne.prestataireId ? secteurParPrestataire.get(ligne.prestataireId) : undefined;
       const contratTrouve = await this.resoudreContratParTauxObserve(
-        contratActuelId, clientId, ligne.type === "Hospitalisation", secteur, estAyantDroit, tauxEffectif,
+        contratActuelId, clientId, ligne.type === "Hospitalisation", secteur, estAyantDroit, tauxEffectif, ligne.date,
       );
       if (contratTrouve) return { contratTrouve, dateEffet: ligne.date };
     }
@@ -1161,7 +1334,7 @@ export class SanteService {
   async analyserEcartsTauxContrat(contratId?: string) {
     const contrats = await this.prisma.contrat.findMany({
       where: contratId ? { id: contratId } : {},
-      select: { id: true, clientId: true },
+      select: { id: true, clientId: true, numeroPolice: true },
     });
     let detectes = 0;
     for (const c of contrats) {
@@ -1178,7 +1351,7 @@ export class SanteService {
             matricule: p.matricule, nom: p.nom, prenom: p.prenom ?? null,
             contratSourceId: c.id, contratCibleId: trouve.contratTrouve,
             statutImport: null,
-            motif: `Taux observé sur les prestations correspondant au contrat ${trouve.contratTrouve} depuis le ${trouve.dateEffet} (contrat actuel : ${c.id}).`,
+            motif: `Taux observé sur les prestations correspondant à la police ${numeroPolice(await this.prisma.contrat.findUnique({ where: { id: trouve.contratTrouve }, select: { numeroPolice: true } }))} depuis le ${trouve.dateEffet} (police actuelle : ${numeroPolice(c)}).`,
             donneesLigne: { source: "analyse-a-posteriori", dateEffet: trouve.dateEffet } as unknown as Prisma.InputJsonValue,
           },
         });
@@ -1390,7 +1563,7 @@ export class SanteService {
   // uniquement par PrescriptionsService.traiter, qui hérite déjà le code
   // affection de la Prescription d'origine sans jamais le faire ressaisir
   // par le prestataire traitant.
-  async creerLigneFacture(factureId: string, dto: CreateFactureLigneDto, opts?: { ignorerDoublonMemeJour?: boolean; exigerAffection?: boolean; baseRemboursementImpose?: number }) {
+  async creerLigneFacture(factureId: string, dto: CreateFactureLigneDto, opts?: { ignorerDoublonMemeJour?: boolean; exigerAffection?: boolean; baseRemboursementImpose?: number; ignorerRetrait?: boolean }) {
     const facture = await this.prisma.facture.findUnique({ where: { id: factureId }, include: { prestataire: true } });
     if (!facture) throw new NotFoundException(`Facture ${factureId} introuvable`);
     const ligne = await this.creerLigneCommune(
@@ -1461,8 +1634,12 @@ export class SanteService {
   private async creerLigneCommune(
     ctx: { contratId: string; prestataireId: string | null; prestataireNom: string; factureId?: string; remboursementId?: string; modePaiement: "TiersPayant" | "Remboursement"; appliquerTps: boolean },
     dto: CreateFactureLigneDto,
-    opts?: { ignorerDoublonMemeJour?: boolean; exigerAffection?: boolean; baseRemboursementImpose?: number },
+    opts?: { ignorerDoublonMemeJour?: boolean; exigerAffection?: boolean; baseRemboursementImpose?: number; ignorerRetrait?: boolean },
   ) {
+    dto.montant = arrondirMontantFcfa(dto.montant);
+    if (dto.montantRejete !== undefined) dto.montantRejete = arrondirMontantFcfa(dto.montantRejete);
+    dto.typePrestation = normaliserTypePrestation(dto.typePrestation);
+    verifierDatePrestationNonFuture(dto.datePrestation);
     // Blocage de saisie post-résiliation (2026-09) — voir
     // verifierSaisieAutorisee ci-dessus. Couvre à la fois les lignes de
     // Facture (saisie interne + portail prestataire) et de Remboursement
@@ -1472,7 +1649,7 @@ export class SanteService {
       select: { statut: true, dateFin: true, saisieApresResiliationAutorisee: true },
     });
     verifierSaisieAutorisee(contratRef, dto.datePrestation);
-    await verifierAssureNonRetire(this.prisma, ctx.contratId, dto.assureId, dto.datePrestation);
+    if (!opts?.ignorerRetrait) await verifierAssureNonRetire(this.prisma, ctx.contratId, dto.assureId, dto.datePrestation);
     await verifierContratDeAssureALaDate(this.prisma, ctx.contratId, dto.assureId, dto.datePrestation);
     // Rubrique forcée par le TYPE de prestataire (2026-09) — voir demande
     // utilisateur : "chaque prestation des prestataires de type opticien
@@ -1556,7 +1733,11 @@ export class SanteService {
     // demande utilisateur), pas des colonnes du modèle PriseEnCharge — à ne
     // jamais transmettre à Prisma.
     delete part.plafondRestant; delete part.messagePlafond;
-    if (opts?.baseRemboursementImpose !== undefined) part.resteACharge = montantPourCalcul - baseRemboursement;
+    if (opts?.baseRemboursementImpose !== undefined) {
+      part.resteACharge = montantPourCalcul - baseRemboursement;
+      // Taux réellement appliqué par l'ancien système, pour les décomptes.
+      if (montantPourCalcul > 0 && baseRemboursement >= 0 && baseRemboursement <= montantPourCalcul) part.tauxRemboursement = Math.round((baseRemboursement / montantPourCalcul) * 10000) / 100;
+    }
     const montantTps = ctx.appliquerTps ? await this.calculerTps(ctx.prestataireId, dto.acteMedicalId, baseRemboursement, dto.datePrestation) : 0;
     return this.prisma.priseEnCharge.create({
       data: {
@@ -1589,6 +1770,9 @@ export class SanteService {
   async modifierLigneFacture(ligneId: string, dto: UpdateFactureLigneDto & { prestataireId?: string | null; prestataireNom?: string }) {
     const ligne = await this.prisma.priseEnCharge.findUnique({ where: { id: ligneId } });
     if (!ligne) throw new NotFoundException(`Ligne ${ligneId} introuvable`);
+    if (dto.montant !== undefined) dto.montant = arrondirMontantFcfa(dto.montant);
+    if (dto.montantRejete !== undefined) dto.montantRejete = arrondirMontantFcfa(dto.montantRejete);
+    if (dto.typePrestation !== undefined) dto.typePrestation = normaliserTypePrestation(dto.typePrestation);
     if (dto.codeAffection !== undefined) {
       const codeAffection = await this.prisma.codeAffection.findUnique({ where: { code: dto.codeAffection } });
       if (!codeAffection) throw new BadRequestException(`Code affection "${dto.codeAffection}" inconnu.`);
@@ -1716,6 +1900,8 @@ export class SanteService {
   // soumise en libre-service depuis le portail assuré n'a pas de
   // gestionnaire interne à l'origine (voir PortailMembreController).
   async createPriseEnCharge(dto: CreatePriseEnChargeDto, gestionnaireId?: string) {
+    dto.montant = arrondirMontantFcfa(dto.montant);
+    dto.type = normaliserTypePrestation(dto.type);
     await this.verifierPlafondPartage(dto.assureId, dto.type, dto.montant);
     const assure = await this.findAssureOne(dto.assureId);
     verifierSaisieAutorisee(assure.contrat, dto.date);
@@ -1740,10 +1926,9 @@ export class SanteService {
     const pec = await this.prisma.priseEnCharge.findUnique({ where: { id } });
     if (!pec) throw new NotFoundException(`Prise en charge ${id} introuvable`);
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
-    const ext = path.extname(file.originalname) || "";
-    const filename = `${id}-${type}-${randomUUID().slice(0, 6)}${ext.toLowerCase()}`;
+    const { storedName: filename, mime } = sanitizeUpload({ originalName: file.originalname, mimetype: file.mimetype, buffer: file.buffer, category: "document" });
     if (this.storage.actif) {
-      await this.storage.upload("remboursements", filename, file.buffer, file.mimetype);
+      await this.storage.upload("remboursements", filename, file.buffer, mime);
     } else {
       await fs.promises.mkdir(UPLOADS_REMBOURSEMENTS_DIR, { recursive: true });
       await fs.promises.writeFile(path.join(UPLOADS_REMBOURSEMENTS_DIR, filename), file.buffer);
@@ -1760,6 +1945,8 @@ export class SanteService {
   async updatePriseEnCharge(id: string, dto: UpdatePriseEnChargeDto) {
     const existante = await this.prisma.priseEnCharge.findUnique({ where: { id } });
     if (!existante) throw new NotFoundException(`Prise en charge ${id} introuvable`);
+    if (dto.montant !== undefined) dto.montant = arrondirMontantFcfa(dto.montant);
+    if (dto.type !== undefined) dto.type = normaliserTypePrestation(dto.type);
 
     const influenceRemboursement = dto.prestataireId !== undefined || dto.type !== undefined || dto.montant !== undefined;
     let remboursement = {};
@@ -1791,5 +1978,33 @@ export class SanteService {
       await this.notifierAssure(existante.assureId, `Votre ${existante.modePaiement === "Remboursement" ? "demande de remboursement" : "prise en charge"} (${id}) est passée au statut "${dto.statut}".`);
     }
     return mise;
+  }
+
+  // Historique des matricules d'un assuré (tous les formats successifs liés
+  // à la même identité). Utilisé par le profil assuré pour afficher et gérer
+  // les anciens matricules, et par ARIANA pour résoudre les PEC d'un assuré
+  // créé sous un matricule différent dans l'ancien système.
+  async getMatricules(assureId: string): Promise<{ id: string; matricule: string; statut: string; createdAt: Date }[]> {
+    const assure = await this.prisma.assureSante.findUnique({ where: { id: assureId }, select: { identiteId: true } });
+    if (!assure?.identiteId) return [];
+    return this.prisma.matriculeAssuree.findMany({
+      where: { identiteId: assure.identiteId },
+      select: { id: true, matricule: true, statut: true, createdAt: true },
+      orderBy: [{ statut: "asc" }, { createdAt: "desc" }],
+    });
+  }
+
+  async ajouterAncienMatricule(assureId: string, matricule: string): Promise<void> {
+    const mat = matricule.trim();
+    if (!mat) throw new BadRequestException("Matricule vide.");
+    const assure = await this.prisma.assureSante.findUnique({ where: { id: assureId }, select: { identiteId: true, contratId: true } });
+    if (!assure?.identiteId) throw new NotFoundException("Assuré introuvable.");
+    const contrat = await this.prisma.contrat.findUnique({ where: { id: assure.contratId }, select: { societeId: true } });
+    const societeId = contrat?.societeId ?? null;
+    const existant = await this.prisma.matriculeAssuree.findFirst({ where: { societeId, matricule: mat } });
+    if (existant && existant.identiteId !== assure.identiteId)
+      throw new BadRequestException(`Le matricule ${mat} est déjà associé à un autre assuré.`);
+    if (!existant)
+      await this.prisma.matriculeAssuree.create({ data: { societeId, matricule: mat, identiteId: assure.identiteId, statut: "Ancien" } });
   }
 }
