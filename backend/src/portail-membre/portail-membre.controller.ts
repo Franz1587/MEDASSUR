@@ -18,8 +18,7 @@ import { UpdateInformationsMedicalesDto } from "./dto/update-informations-medica
 import { CreateRemboursementMembreDto } from "./dto/create-remboursement-membre.dto";
 import { GrantDelegationDto } from "./dto/grant-delegation.dto";
 import { UpdateDelegationModulesDto } from "./dto/update-delegation-modules.dto";
-import { resoudreCategorieConsommation, resoudreExercice } from "./portail-membre.util";
-import { normaliserRubrique } from "../actes-medicaux/rubrique-contrat.util";
+import { resoudreExercice } from "./portail-membre.util";
 import { RUBRIQUES_PLAFONNEES } from "../sante/dto/create-facture-ligne.dto";
 import { CarnetSanteService } from "./carnet-sante.service";
 import { PushNotificationsService } from "../notifications/push-notifications.service";
@@ -170,7 +169,7 @@ export class PortailMembreController {
     const [pecEnAttente, dernierRemboursement, lignes] = await Promise.all([
       this.prisma.accordPrealable.count({ where: { assureId: { in: idsFamille }, decision: "En attente" } }),
       this.prisma.priseEnCharge.findFirst({ where: { assureId: { in: idsFamille }, modePaiement: "Remboursement" }, orderBy: { date: "desc" } }),
-      this.sante.findPrisesEnCharge(idsFamille),
+      this.sante.findPrisesEnCharge(idsFamille, undefined, undefined, true),
     ]);
 
     let totalConsommation = 0;
@@ -187,7 +186,7 @@ export class PortailMembreController {
       entree.total += montant;
       parBeneficiaireMap.set(l.assureId, entree);
 
-      const rubrique = resoudreCategorieConsommation(assure.contrat.garanties, l.type, l.acteMedical, l.prestataire);
+      const rubrique = l.rubrique;
       parRubriqueMap.set(rubrique, (parRubriqueMap.get(rubrique) ?? 0) + montant);
     }
 
@@ -250,26 +249,12 @@ export class PortailMembreController {
       this.idsFamilleDe(assureSanteId),
     ]);
     if (!assure) throw new NotFoundException("Assuré introuvable");
-    const lignes = await this.sante.findPrisesEnCharge(idsFamille);
+    const lignes = await this.sante.findPrisesEnCharge(idsFamille, undefined, undefined, true);
     const filtrees = modePaiement ? lignes.filter((l) => l.modePaiement === modePaiement) : lignes;
     const enrichies = filtrees.map((l) => ({
       ...l,
-      rubrique: resoudreCategorieConsommation(assure.contrat.garanties, l.type, l.acteMedical, l.prestataire),
       exercice: resoudreExercice(assure.contrat.exercices, l.date),
       acteLibelle: l.acteMedical?.libelle ?? null,
-      // typeAffiche (2026-11) — libellé d'affichage pour l'historique : vrai
-      // acte catalogue quand disponible (ex. "Consultation dentaire"), sinon
-      // normaliserRubrique(type) pour éviter les types bruts en MAJUSCULES
-      // ("ACTES AMBULATOIRES" → "Consultations") — voir demande utilisateur :
-      // "l'assuré doit avoir le détail et les vrais actes réalisés".
-      typeAffiche: (l.acteMedical && l.acteMedical.famille?.toUpperCase() !== "DIVERS" && l.acteMedical.famille !== "ACTES REPRIS (ANCIEN SYSTÈME)")
-        ? (l.acteMedical.libelle ?? normaliserRubrique(l.type))
-        : normaliserRubrique(l.type),
-      // acteFamille (2026-08) — voir demande utilisateur : "chaque fiche de
-      // consultation génère aussi une feuille de soins et chaque saisie
-      // d'un examen... génère une feuille d'examen" : le frontend en a
-      // besoin pour savoir laquelle des deux proposer par ligne (voir
-      // GROUPES_ACTES, Historique.tsx).
       acteFamille: l.acteMedical?.famille ?? null,
     }));
 
