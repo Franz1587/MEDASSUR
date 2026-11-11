@@ -153,6 +153,7 @@ export interface MembrePriseEnCharge {
   franchise?: number | null;
   plafondApplique?: number | null;
   acteLibelle?: string | null;
+  typeAffiche?: string | null;
   acteFamille?: string | null;
   lignes?: MembrePriseEnCharge[];
 }

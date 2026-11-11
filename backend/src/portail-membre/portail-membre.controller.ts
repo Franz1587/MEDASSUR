@@ -19,6 +19,7 @@ import { CreateRemboursementMembreDto } from "./dto/create-remboursement-membre.
 import { GrantDelegationDto } from "./dto/grant-delegation.dto";
 import { UpdateDelegationModulesDto } from "./dto/update-delegation-modules.dto";
 import { resoudreCategorieConsommation, resoudreExercice } from "./portail-membre.util";
+import { normaliserRubrique } from "../actes-medicaux/rubrique-contrat.util";
 import { RUBRIQUES_PLAFONNEES } from "../sante/dto/create-facture-ligne.dto";
 import { CarnetSanteService } from "./carnet-sante.service";
 import { PushNotificationsService } from "../notifications/push-notifications.service";
@@ -256,6 +257,14 @@ export class PortailMembreController {
       rubrique: resoudreCategorieConsommation(assure.contrat.garanties, l.type, l.acteMedical, l.prestataire),
       exercice: resoudreExercice(assure.contrat.exercices, l.date),
       acteLibelle: l.acteMedical?.libelle ?? null,
+      // typeAffiche (2026-11) — libellé d'affichage pour l'historique : vrai
+      // acte catalogue quand disponible (ex. "Consultation dentaire"), sinon
+      // normaliserRubrique(type) pour éviter les types bruts en MAJUSCULES
+      // ("ACTES AMBULATOIRES" → "Consultations") — voir demande utilisateur :
+      // "l'assuré doit avoir le détail et les vrais actes réalisés".
+      typeAffiche: (l.acteMedical && l.acteMedical.famille?.toUpperCase() !== "DIVERS" && l.acteMedical.famille !== "ACTES REPRIS (ANCIEN SYSTÈME)")
+        ? (l.acteMedical.libelle ?? normaliserRubrique(l.type))
+        : normaliserRubrique(l.type),
       // acteFamille (2026-08) — voir demande utilisateur : "chaque fiche de
       // consultation génère aussi une feuille de soins et chaque saisie
       // d'un examen... génère une feuille d'examen" : le frontend en a

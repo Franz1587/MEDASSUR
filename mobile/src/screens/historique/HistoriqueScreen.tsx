@@ -149,7 +149,7 @@ export function HistoriqueScreen() {
                       <View style={styles.ligneTop}>
                         <View style={{ flex: 1, minWidth: 0 }}>
                           <View style={styles.ligneTitreRow}>
-                            <Text style={styles.ligneTitre} numberOfLines={1}>{l.type}</Text>
+                            <Text style={styles.ligneTitre} numberOfLines={1}>{l.typeAffiche ?? l.type}</Text>
                             {l.assureId !== currentUser?.assureSanteId ? <Badge label={l.assureNom} variant="info" /> : null}
                             {groupe ? <Badge label={`${l.lignes!.length} actes`} variant="neutral" /> : null}
                           </View>

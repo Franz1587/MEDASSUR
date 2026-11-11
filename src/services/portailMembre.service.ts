@@ -182,6 +182,11 @@ export interface MembrePriseEnCharge {
   // Acte (2026-08) — voir demande utilisateur : "dans le détails, il faut
   // de l'acte" (écran Historique de soins).
   acteLibelle?: string | null;
+  // typeAffiche (2026-11) — libellé d'affichage principal : libellé du
+  // catalogue quand disponible, sinon type normalisé (voir portail-membre
+  // controller). L'assuré voit "Consultation dentaire" et non "ACTES
+  // AMBULATOIRES".
+  typeAffiche?: string | null;
   // Famille brute de l'acte (2026-08) — voir demande utilisateur :
   // "chaque fiche de consultation génère aussi une feuille de soins et
   // chaque saisie d'un examen... génère une feuille d'examen" : décide,
