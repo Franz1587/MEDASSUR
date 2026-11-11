@@ -3896,13 +3896,17 @@ export class DocumentsService {
     // exacte demandée) : un simple titre coloré + filet, jamais un bandeau
     // plein comme l'ancienne version. couleurPrimaire (bleu chez LA RUCHE)
     // pour rester cohérent avec la couleur des filets de la référence.
+    // Chaque rubrique commence sur une page propre (2026-11) — voir demande
+    // utilisateur : "chaque grand titre commence toujours sur une nouvelle
+    // page". nouvellePage() inconditionnel sauf pour la toute première
+    // rubrique (page fraîche après la page de garde → pas de page blanche
+    // parasite). Les demarrerPageDediee() explicites avant S/P et Analyse
+    // ont été retirés pour la même raison : titreSection() gère seul les
+    // sauts de page, sans doublon.
+    let premiereRubrique = true;
     const titreSection = (titre: string) => {
-      // Chaque grande rubrique commence toujours sur une nouvelle page (2026-11)
-      // — voir demande utilisateur : "chaque grand titre... commence toujours
-      // sur une nouvelle page et non que ça se chevauche". demarrerPageDediee()
-      // saute seulement si la page courante contient déjà quelque chose, évitant
-      // les pages blanches parasites (même principe que la section S/P et Analyse).
-      demarrerPageDediee();
+      if (premiereRubrique) { demarrerPageDediee(); premiereRubrique = false; }
+      else nouvellePage();
       y += 8;
       doc.fillColor(p.couleurPrimaire).fontSize(13).font("Helvetica-Bold").text(titre, left, y);
       y += 17;
@@ -4192,11 +4196,6 @@ export class DocumentsService {
     }
 
     if (inclut("evolutionSP")) {
-      // Page dédiée (2026-09) — voir demande utilisateur : "la page du S/P
-      // est à cheval entre pages. Non, il ne doit pas en être ainsi, le
-      // S/P doit avoir sa page dédiée." Jamais enchaîné à la suite d'une
-      // section précédente encore en cours de page.
-      demarrerPageDediee();
       titreSection("Evolution du S/P");
 
       // Bloc reproduit EXACTEMENT la structure du modèle de référence
@@ -4264,10 +4263,6 @@ export class DocumentsService {
     }
 
     if (inclut("analyse")) {
-      // Page dédiée (2026-09) — voir demande utilisateur : "l'analyse des
-      // statistiques... doit commencer sur une nouvelle page et non sur
-      // celle du S/P."
-      demarrerPageDediee();
       titreSection("Analyse & Recommandations");
       doc.font("Helvetica").fontSize(8);
       for (const section of payload.analyse.sections) {
