@@ -271,7 +271,12 @@ export class PortailMembreController {
       // des lignes de PLUSIEURS bénéficiaires de la famille ; ne jamais
       // fusionner celles de deux personnes différentes même si même
       // facture + même rubrique.
-      const cle = l.factureId ? `${l.factureId}|${l.assureId}|${l.rubrique}` : `seule|${l.id}`;
+      // Clé sans rubrique (2026-11) : tous les actes d'une même facture
+      // pour le même assuré sont regroupés en une seule carte, quelle que
+      // soit leur rubrique. Sans ça une hospitalisation avec Pharmacie
+      // séparée → 2 cartes. L'assureId reste dans la clé : une facture
+      // peut couvrir plusieurs bénéficiaires d'une même famille.
+      const cle = l.factureId ? `${l.factureId}|${l.assureId}` : `seule|${l.id}`;
       if (!groupes.has(cle)) { groupes.set(cle, []); ordre.push(cle); }
       groupes.get(cle)!.push(l);
     }

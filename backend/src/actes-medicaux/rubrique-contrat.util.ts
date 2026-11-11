@@ -45,14 +45,21 @@ const RUBRIQUES_CANONIQUES: { rubrique: string; motsCles: string[] }[] = [
   { rubrique: "Orthoptie", motsCles: ["ORTHOPT"] },
   { rubrique: "Hospitalisation", motsCles: ["HOSPI", "HOPSI", "HOPITAL", "CHIRURGIE MAJEURE", "CHAMBRE", "SEJOUR", "NUITEE"] },
   { rubrique: "Pharmacie", motsCles: ["PHARMA", "MEDICAMENT"] },
-  { rubrique: "Analyses Médicale", motsCles: ["ANALYS", "LABO", "BIOLOG", "BACTERIO", "PARASITO", "BIOCHIM", "HEMATO", "SEROLO", "VIROLO", "COAGUL", "TYPAGE", "EXAMEN", "PRELEV"] },
+  // "EXAMEN" retiré : trop générique — capturait "EXAMEN OPHTALMOLOGIQUE"
+  // → "Analyses Médicale". Les examens de labo sont couverts par BIOLOG,
+  // BACTERIO, HEMATO, etc. sans risque de collision.
+  { rubrique: "Analyses Médicale", motsCles: ["ANALYS", "LABO", "BIOLOG", "BACTERIO", "PARASITO", "BIOCHIM", "HEMATO", "SEROLO", "VIROLO", "COAGUL", "TYPAGE", "PRELEV"] },
   { rubrique: "Imagerie", motsCles: ["IMAGERIE", "RADIO", "ECHOGRAPH", "SCANNER", "IRM"] },
   // Consultations avant Actes de Spécialités : "CS OPHTALMOLOGUE" ou
   // "CONSULTATION SPECIALISTE" sont des consultations, pas des actes. "CS"
   // est l'abréviation gabonaise standard pour "consultation spécialiste".
   { rubrique: "Consultations", motsCles: ["CONSULT", "VISITE", " CS "] },
   // "SPECIALIT" sans "CONSULT" devant → acte (plateau technique, interventions).
-  { rubrique: "Actes de Spécialités", motsCles: ["SPECIALIT"] },
+  // "OPHTALM" / "OEI" / "VISUEL" : actes ophtalmologiques (fond d'œil,
+  // champ visuel, examen ophtalmologique) — ne contiennent ni "CONSULT"
+  // ni "SPECIALIT" et finissaient en "Analyses Médicale" (via "EXAMEN")
+  // ou en brut.
+  { rubrique: "Actes de Spécialités", motsCles: ["SPECIALIT", "OPHTALM", "OEI", "VISUEL"] },
   { rubrique: "Petite Chirurgie/Soins", motsCles: ["PETITE CHIRURGIE", "SOINS INFIRMIER", "SOINS"] },
   { rubrique: "Ambulatoire", motsCles: ["AMBU", "FRAIS MEDICAUX"] },
   { rubrique: "Autre", motsCles: ["AUTRE", "PRESTATION", "DIVERS"] },
