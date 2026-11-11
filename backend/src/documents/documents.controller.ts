@@ -51,4 +51,14 @@ export class DocumentsController {
       contratId, body.du, body.au, body.format ?? "pdf", res, body.analyse, body.rubriques, body.primeForcee,
     );
   }
+
+  @Get("reseau-soins")
+  reseauSoins(@Res() res: Response) {
+    return this.documentsService.renderReseauSoins(res);
+  }
+
+  @Get("fiche-prestataire/:id")
+  fichePrestataire(@Param("id") id: string, @Res() res: Response) {
+    return this.documentsService.renderFichePrestataire(id, res);
+  }
 }
