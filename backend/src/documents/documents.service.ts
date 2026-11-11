@@ -3897,7 +3897,12 @@ export class DocumentsService {
     // plein comme l'ancienne version. couleurPrimaire (bleu chez LA RUCHE)
     // pour rester cohérent avec la couleur des filets de la référence.
     const titreSection = (titre: string) => {
-      assurerPlace(30);
+      // Chaque grande rubrique commence toujours sur une nouvelle page (2026-11)
+      // — voir demande utilisateur : "chaque grand titre... commence toujours
+      // sur une nouvelle page et non que ça se chevauche". demarrerPageDediee()
+      // saute seulement si la page courante contient déjà quelque chose, évitant
+      // les pages blanches parasites (même principe que la section S/P et Analyse).
+      demarrerPageDediee();
       y += 8;
       doc.fillColor(p.couleurPrimaire).fontSize(13).font("Helvetica-Bold").text(titre, left, y);
       y += 17;
