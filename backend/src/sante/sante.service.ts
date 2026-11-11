@@ -1099,7 +1099,16 @@ export class SanteService {
       ? await this.prisma.contrat.findMany({ where: { id: { in: contratIds } }, select: { id: true, garanties: { select: { categorie: true } } } })
       : [];
     const garantiesParContratId = new Map(contrats.map((c) => [c.id, c.garanties]));
-    return lignesUniques.map((l) => ({ ...l, rubrique: resoudreRubriqueContrat(garantiesParContratId.get(l.contratId) ?? [], { type: l.type, prestataireType: l.prestataireRef?.type }, l.acteMedical) }));
+    return lignesUniques.map((l) => {
+      const rubrique = resoudreRubriqueContrat(garantiesParContratId.get(l.contratId) ?? [], { type: l.type, prestataireType: l.prestataireRef?.type }, l.acteMedical);
+      // typeAffiche : libellé catalogué si l'acte est connu et non-DIVERS ;
+      // sinon rubrique canonique — évite "Consultation/Divers", "CS Gynécologue"
+      // et autres valeurs brutes d'import comme titre de carte.
+      const famille = l.acteMedical?.famille?.trim().toUpperCase() ?? "";
+      const estDivers = famille === "DIVERS" || famille === "ACTES REPRIS (ANCIEN SYSTÈME)";
+      const typeAffiche = !estDivers && l.acteMedical?.libelle ? l.acteMedical.libelle : rubrique;
+      return { ...l, rubrique, typeAffiche };
+    });
   }
 
   // Vérifie l'enveloppe partagée d'une rubrique de garantie (ex: Dentisterie
