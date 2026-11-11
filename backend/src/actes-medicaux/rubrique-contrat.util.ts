@@ -141,6 +141,11 @@ export function resoudreRubriqueContrat(
     };
     const estDivers = acteInfo.famille === FAMILLE_REPRISE_UTIL
       || acteInfo.famille.trim().toUpperCase() === "DIVERS";
+    // Pour les actes DIVERS / reprise d'antériorité, categorieGarantie est
+    // souvent "Consultation/Divers" (fourre-tout) — l'utiliser écraserait
+    // "ACTES DE SPECIALITES" → "Consultations" à tort et briserait le
+    // groupement par facture (doublons). Seuls les actes catalogue réels
+    // (non-DIVERS) bénéficient de la cascade libelle→catégorie→famille.
     if (!estDivers) {
       if (acteInfo.libelle) { const r = tenter(acteInfo.libelle); if (r) rubrique = r; }
       if (RUBRIQUES_GENERIQUES.has(rubrique) && acteInfo.categorieGarantie) {
@@ -149,9 +154,6 @@ export function resoudreRubriqueContrat(
       if (RUBRIQUES_GENERIQUES.has(rubrique)) {
         const r = tenter(acteInfo.famille); if (r) rubrique = r;
       }
-    }
-    if (RUBRIQUES_GENERIQUES.has(rubrique) && acteInfo.categorieGarantie) {
-      const r = tenter(acteInfo.categorieGarantie); if (r) rubrique = r;
     }
   }
   // Nom du prestataire en dernier recours ("PHARMACIE DU CENTRE" sans
