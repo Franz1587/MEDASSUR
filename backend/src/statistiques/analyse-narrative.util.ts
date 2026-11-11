@@ -21,7 +21,23 @@ function pct(n: number): string {
   return `${n.toLocaleString("fr-FR", { maximumFractionDigits: 2 })}%`;
 }
 function fmt(n: number): string {
-  return Math.round(n).toLocaleString("fr-FR").replace(/ /g, " ");
+  return Math.round(n).toLocaleString("fr-FR").replace(/ /g, " ");
+}
+
+// Verdict S/P basé sur la clause RÉELLE de la compagnie (2026-11) —
+// voir demande utilisateur : "l'analyse n'est pas très exacte concernant
+// le s/p et le tableau d'ajustement". Remplace l'ancien verdictSp() qui
+// utilisait des seuils génériques (70/90/110%) pouvant CONTREDIRE le
+// résultat de la clause : un S/P de 76% classé "à surveiller" alors que
+// la compagnie réclame une majoration réelle de 35%. Le verdict est
+// désormais déduit exclusivement du regularisationPct calculé par
+// trouverTranche() dans statistiques.service.ts.
+function verdictDepuisClause(regularisationPct: number): string {
+  if (regularisationPct === 0) return "sain";
+  if (regularisationPct >= 999) return "résiliation";
+  if (regularisationPct <= 20) return "à surveiller";
+  if (regularisationPct <= 50) return "limite";
+  return "déficitaire";
 }
 
 function analyseConsommationTotale(evolution: EvolutionMensuelleLigne[], total: number, du: string, au: string, periodeCloturee: boolean): AnalyseSection {
@@ -128,30 +144,48 @@ function analysePrestataire(prestataires: RepartitionLigne[]): AnalyseSection {
   return { titre: "4. Consommation par Prestataire", lignes };
 }
 
-function analyseSp(sans: SpBloc, avec: SpBloc): AnalyseSection {
+// Tableau complet des clauses d'ajustement de la compagnie (2026-11) —
+// voir demande utilisateur : "le tableau d'ajustement de prime des
+// différentes compagnies doit être précis et correct".
+// spMin/spMax sont stockés en ratio (0.75 = 75%) — formatBorne * 100.
+function lignesTableauClauses(clauses: { spMin: number; spMax: number | null; tauxAjustement: number }[]): string[] {
+  if (clauses.length === 0) return ["(Aucune clause d'ajustement renseignée pour cette compagnie.)"];
+  const fb = (v: number) => `${Math.round(v * 100)} %`;
+  return clauses.map((c) => {
+    const borne = c.spMax === null ? `S/P >= ${fb(c.spMin)}` : `${fb(c.spMin)} <= S/P <= ${fb(c.spMax)}`;
+    const taux = c.tauxAjustement >= 999 ? "Résiliation / majoration non plafonnée" : c.tauxAjustement === 0 ? "Aucun ajustement" : `Majoration de prime : +${c.tauxAjustement} %`;
+    return `  ${borne}  =>  ${taux}`;
+  });
+}
+
+function analyseSp(
+  sans: SpBloc, avec: SpBloc,
+  clauses: { spMin: number; spMax: number | null; tauxAjustement: number }[],
+): AnalyseSection {
   const lignes = [
     "Sans chargement", "",
     `Sinistres : ${fmt(sans.sinistres)} FCFA`, `Primes : ${fmt(sans.primes)} FCFA`, `S/P : ${pct(sans.ratioPct)}`,
     "", "Avec chargement", "",
     `Sinistres chargés : ${fmt(avec.sinistres)} FCFA`, `Primes : ${fmt(avec.primes)} FCFA`, `S/P : ${pct(avec.ratioPct)}`,
+    "", "Tableau des clauses d'ajustement de la compagnie", "",
+    ...lignesTableauClauses(clauses),
   ];
   return { titre: "5. Analyse du Rapport S/P (Sinistres / Primes)", lignes };
 }
 
-// Lecture qualitative du S/P — convention actuarielle usuelle, indépendante
-// des tranches d'ajustement propres à chaque compagnie (CompagnieClauseAjustement,
-// affichées séparément dans spSansChargement.tranche/regularisationPct).
-function verdictSp(ratioPct: number): string {
-  if (ratioPct < 70) return "sain";
-  if (ratioPct < 90) return "à surveiller";
-  if (ratioPct < 110) return "limite";
-  return "déficitaire";
-}
-
 function conclusionSp(sans: SpBloc, avec: SpBloc): AnalyseSection {
+  // Verdict dérivé de la clause réelle, plus des seuils génériques (70/90/110%)
+  const verdictSans = verdictDepuisClause(sans.regularisationPct);
+  const verdictAvec = verdictDepuisClause(avec.regularisationPct);
   const lignes = [
-    "Sans chargement", `${pct(sans.ratioPct)} — ${verdictSp(sans.ratioPct)}`, `Tranche : ${sans.tranche}`, `Régularisation : ${pct(sans.regularisationPct)}`,
-    "", "Avec chargement", `${pct(avec.ratioPct)} — ${verdictSp(avec.ratioPct)}`, `Tranche : ${avec.tranche}`, `Régularisation : ${pct(avec.regularisationPct)}`,
+    "Sans chargement",
+    `S/P : ${pct(sans.ratioPct)} — ${verdictSans}`,
+    `Tranche applicable : ${sans.tranche}`,
+    `Ajustement de prime selon clause : ${sans.regularisationPct >= 999 ? "Résiliation" : sans.regularisationPct === 0 ? "Aucun" : `+${pct(sans.regularisationPct)}`}`,
+    "", "Avec chargement",
+    `S/P : ${pct(avec.ratioPct)} — ${verdictAvec}`,
+    `Tranche applicable : ${avec.tranche}`,
+    `Ajustement de prime selon clause : ${avec.regularisationPct >= 999 ? "Résiliation" : avec.regularisationPct === 0 ? "Aucun" : `+${pct(avec.regularisationPct)}`}`,
   ];
   return { titre: "6. Conclusion S/P", lignes };
 }
@@ -165,6 +199,10 @@ export function genererAnalyseNarrative(donnees: {
   consommationParPrestataire: RepartitionLigne[];
   spSansChargement: SpBloc;
   spAvecChargement: SpBloc;
+  // Clauses d'ajustement complètes de la compagnie (2026-11) — passées
+  // ici pour afficher le tableau ENTIER dans la section S/P et non
+  // seulement la tranche matchée. spMin/spMax en ratio (0–1).
+  clausesAjustement?: { spMin: number; spMax: number | null; tauxAjustement: number }[];
   // Exercice(s) recouvrant la période DÉJÀ clôturé(s) (2026-09) — voir
   // StatistiquesService.calculer. Bascule l'ensemble de cette analyse d'un
   // langage prédictif ("si la tendance se poursuit", "projection annuelle")
@@ -178,20 +216,29 @@ export function genererAnalyseNarrative(donnees: {
   periodeCloturee?: boolean;
 }): AnalyseNarrative {
   const periodeCloturee = donnees.periodeCloturee ?? false;
+  const clauses = donnees.clausesAjustement ?? [];
   const sections = [
     analyseConsommationTotale(donnees.evolutionMensuelle, donnees.totalConsomme, donnees.periode.du, donnees.periode.au, periodeCloturee),
     analyseBeneficiaire(donnees.repartitionBeneficiaire),
     analyseRubrique(donnees.consommationParRubrique),
     analysePrestataire(donnees.consommationParPrestataire),
-    analyseSp(donnees.spSansChargement, donnees.spAvecChargement),
+    analyseSp(donnees.spSansChargement, donnees.spAvecChargement, clauses),
     conclusionSp(donnees.spSansChargement, donnees.spAvecChargement),
   ];
 
   const posteDominant = donnees.consommationParRubrique[0];
   const facteursDerive = [posteDominant?.libelle, "la pharmacie", "les gros consommateurs"].filter((v, i, arr) => v && arr.indexOf(v) === i);
+
+  // Verdict basé sur la clause réelle de la compagnie (2026-11) — voir
+  // commentaire sur verdictDepuisClause() ci-dessus. L'ancien `sain =
+  // ratioPct < 90` hardcodé pouvait contredire un tableau d'ajustement
+  // réel (ex. S/P 76% dit "sain" mais la compagnie réclame +35%).
+  const regularisationDue = donnees.spSansChargement.regularisationPct !== 0;
+  const sain = !regularisationDue;
+
   const conclusionGenerale = [
     "Le contrat présente :", "",
-    `• une sinistralité ${donnees.spSansChargement.ratioPct < 50 ? "faible" : donnees.spSansChargement.ratioPct < 90 ? "modérée" : "élevée"} sur la période observée`,
+    `• une sinistralité ${sain ? "maîtrisée" : "en zone d'ajustement"} sur la période observée (S/P ${pct(donnees.spSansChargement.ratioPct)} sans chargement)`,
     periodeCloturee ? "• une dynamique de consommation actée sur l'ensemble de l'exercice, désormais clôturé" : "• une dynamique de consommation à surveiller sur la durée du contrat",
     periodeCloturee ? "• les postes ayant le plus contribué à la consommation de l'exercice :" : "• une dérive potentielle liée principalement à :",
     ...facteursDerive.map((f) => `   - ${f}`),
@@ -221,11 +268,19 @@ export function genererAnalyseNarrative(donnees: {
     const montantAnnuelEstime = moyenneMensuelle * 12;
     const spProjeteMin = donnees.spSansChargement.primes > 0 ? (montantAnnuelEstime / donnees.spSansChargement.primes) * 100 * 0.9 : 0;
     const spProjeteMax = donnees.spSansChargement.primes > 0 ? (montantAnnuelEstime / donnees.spSansChargement.primes) * 100 * 1.1 : 0;
+    // Tendance réelle (2026-11) — l'ancien texte disait toujours "passe
+    // à un niveau plus élevé" même quand la consommation baissait.
+    const evolution = donnees.evolutionMensuelle;
+    const tendance = evolution.length >= 2
+      ? (evolution[evolution.length - 1].montant >= evolution[0].montant ? "à la hausse" : "à la baisse")
+      : "stable";
+    const premierMois = evolution[0]?.label ?? "—";
+    const dernierMois = evolution[evolution.length - 1]?.label ?? "—";
     projection = {
       titre: "Projection",
       spProjeteMin, spProjeteMax, montantAnnuelEstime,
       lignes: [
-        `Le contrat passe de ${donnees.evolutionMensuelle[0]?.label ?? "—"} à un niveau plus élevé sur les mois suivants.`,
+        `Tendance observée de ${premierMois} à ${dernierMois} : ${tendance}.`,
         "Si la tendance se maintient :", "",
         `• Projection annuelle estimée : ~ ${fmt(montantAnnuelEstime)} FCFA`,
         `• S/P projeté : ~ ${pct(spProjeteMin)} – ${pct(spProjeteMax)}`,
@@ -241,26 +296,14 @@ export function genererAnalyseNarrative(donnees: {
   const conclusionStrategique = periodeCloturee
     ? [
       `• Résultat définitif (sans chargement) : S/P ${pct(donnees.spSansChargement.ratioPct)} — tranche ${donnees.spSansChargement.tranche}`,
-      `• Régularisation applicable selon la clause d'ajustement de la compagnie : ${pct(donnees.spSansChargement.regularisationPct)}`,
+      `• Ajustement de prime applicable selon clause compagnie : ${donnees.spSansChargement.regularisationPct >= 999 ? "Résiliation" : donnees.spSansChargement.regularisationPct === 0 ? "Aucun" : `+${pct(donnees.spSansChargement.regularisationPct)}`}`,
       donnees.spSansChargement.regularisationPct !== 0
         ? "• Ajustement de prime à appliquer au prochain exercice, conformément à cette clause."
         : "• Aucun ajustement de prime requis d'après cette clause.",
     ]
     : ["• Surveillance du portefeuille recommandée", "• Ajustement de prime probable au prochain exercice si la tendance se confirme"];
 
-  const sain = donnees.spSansChargement.ratioPct < 90;
   const hausseFinPeriode = donnees.evolutionMensuelle.length >= 2 && donnees.evolutionMensuelle[donnees.evolutionMensuelle.length - 1].montant > donnees.evolutionMensuelle[0].montant * 1.2;
-  // Nécessité d'un ajustement — sur un exercice clôturé, ce verdict doit
-  // se baser EXACTEMENT sur la régularisation issue de la clause
-  // d'ajustement de la compagnie (donnees.spSansChargement.regularisationPct,
-  // déjà calculée par StatistiquesService.trouverTranche), jamais sur le
-  // seuil générique `sain` (<90%, une simple convention actuarielle
-  // indépendante des tranches propres à chaque compagnie — voir
-  // verdictSp ci-dessus) : les deux pouvaient auparavant se contredire
-  // (ex. "OK — sain" à 79% affiché à côté d'une régularisation de 15%
-  // bien réelle) — voir demande utilisateur : "une analyse exacte quant à
-  // la police et ses consommations par rapport aux clauses d'ajustement".
-  const regularisationDue = donnees.spSansChargement.regularisationPct !== 0;
   const conclusionFinale = periodeCloturee
     ? [
       "L'exercice clôturé est :", "",
@@ -268,14 +311,16 @@ export function genererAnalyseNarrative(donnees: {
       hausseFinPeriode ? "ATTENTION — Exercice terminé sur une hausse de consommation marquée en fin de période" : "OK — Évolution maîtrisée sur l'ensemble de l'exercice",
       "",
       regularisationDue
-        ? `Un ajustement de prime est à appliquer au prochain exercice, conformément à la clause d'ajustement de la compagnie (régularisation ${pct(donnees.spSansChargement.regularisationPct)}).`
+        ? `Un ajustement de prime est à appliquer au prochain exercice, conformément à la clause d'ajustement de la compagnie (régularisation ${donnees.spSansChargement.regularisationPct >= 999 ? "résiliation" : `+${pct(donnees.spSansChargement.regularisationPct)}`}).`
         : "Aucun ajustement de prime requis — le S/P constaté sur cet exercice reste dans la tranche sans régularisation de la clause d'ajustement.",
     ]
     : [
       "Le contrat est :", "",
-      sain ? "OK — Sain à ce jour" : "ATTENTION — Déjà en zone de vigilance",
-      hausseFinPeriode ? "ATTENTION — Mais en phase de montée en charge" : "OK — Avec une évolution maîtrisée",
-      "", "À moyen terme, le contrat risque un ajustement de prime si la dynamique observée se poursuit.",
+      sain ? "OK — Sain à ce jour (aucun ajustement requis selon la clause compagnie)" : "ATTENTION — En zone d'ajustement selon la clause compagnie",
+      hausseFinPeriode ? "ATTENTION — En phase de montée en charge" : "OK — Avec une évolution maîtrisée",
+      "", sain
+        ? "Le S/P reste dans la tranche sans ajustement — pas d'action requise sur la prime à ce stade."
+        : "Un ajustement de prime est probable au prochain exercice si la dynamique actuelle se maintient.",
     ];
 
   return { sections, conclusionGenerale, projection, conclusionStrategique, conclusionFinale };

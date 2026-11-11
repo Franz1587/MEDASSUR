@@ -397,7 +397,15 @@ export class StatistiquesService {
       consommationParPrestataire, detailParPrestataire, top20Prestataires, spSansChargement, spAvecChargement,
     };
 
-    const analyse = genererAnalyseNarrative({ ...payloadSansAnalyse, periodeCloturee });
+    // Clauses converties en { spMin, spMax, tauxAjustement } numériques
+    // (Prisma renvoie des Decimal) pour afficher le tableau ENTIER dans
+    // l'analyse narrative (2026-11) — voir analyse-narrative.util.ts.
+    const clausesNum = clauses.map((c) => ({
+      spMin: Number(c.spMin),
+      spMax: c.spMax !== null ? Number(c.spMax) : null,
+      tauxAjustement: Number(c.tauxAjustement),
+    }));
+    const analyse = genererAnalyseNarrative({ ...payloadSansAnalyse, periodeCloturee, clausesAjustement: clausesNum });
 
     return { ...payloadSansAnalyse, analyse };
   }
