@@ -8,9 +8,15 @@
 // comme groupes-actes.util.ts) pour rester importable depuis n'importe quel
 // module sans créer de dépendance de module.
 export interface ActeInfoRubrique {
+  libelle?: string | null;
   famille: string;
   categorieGarantie: string | null;
 }
+
+// Famille de l'acte placeholder de reprise d'antériorité — même valeur
+// que FAMILLE_REPRISE dans resolution-designation.util.ts, répliquée ici
+// pour éviter une dépendance circulaire entre les utils.
+const FAMILLE_REPRISE_UTIL = "ACTES REPRIS (ANCIEN SYSTÈME)";
 
 // Rubriques canoniques (2026-09) — voir demande utilisateur : "on voit des
 // rubriques qui se répètent : dentisterie = soins dentaires, frais
@@ -99,7 +105,7 @@ const RUBRIQUES_GENERIQUES = new Set(["Ambulatoire", "Consultations", "Actes de 
 
 export function resoudreRubriqueContrat(
   garantiesContrat: { categorie: string }[],
-  ligne: { type: string; prestataireType?: string | null },
+  ligne: { type: string; prestataireType?: string | null; prestataire?: string | null },
   acteInfo?: ActeInfoRubrique | null,
 ): string {
   // Garde "DIVERS" — un import d'historique en masse ("reprise
@@ -114,14 +120,47 @@ export function resoudreRubriqueContrat(
   let rubrique = candidat ? normaliserRubrique(candidat) : "Non précisé";
   const rubriquePrestataire = ligne.prestataireType ? RUBRIQUE_PAR_TYPE_PRESTATAIRE[ligne.prestataireType] : undefined;
   if (rubriquePrestataire && RUBRIQUES_GENERIQUES.has(rubrique)) rubrique = rubriquePrestataire;
-  // "Ambulatoire" encore présent après substitution prestataire → essayer la
-  // famille d'acte (si disponible et non-DIVERS) pour trouver quelque chose
-  // de plus précis (voir demande utilisateur : "Ambulatoire ça ne veut rien
-  // dire quand il s'agit de retracer les rubriques des actes médicaux").
-  if (rubrique === "Ambulatoire" && acteInfo?.famille && acteInfo.famille.trim().toUpperCase() !== "DIVERS") {
-    const viaFamille = normaliserRubrique(acteInfo.famille);
-    if (viaFamille !== "Ambulatoire") rubrique = viaFamille;
+  // Cascade de précision pour toutes les rubriques génériques (2026-11) —
+  // voir demande utilisateur : "une consultation ophtalmologique est
+  // appelée actes de spécialité... il y a beaucoup de problème dans ce
+  // sens." Les actes importés avec famille="DIVERS" ont souvent une
+  // categorieGarantie précise (ex. "Optique", "Consultations
+  // ophtalmologie", "Soins dentaires") que resoudreRubriqueContrat
+  // ignorait car famille=DIVERS bloquait l'accès à categorieActe.
+  // S'applique à toutes les rubriques RUBRIQUES_GENERIQUES (pas seulement
+  // "Ambulatoire") : "ACTES DE SPECIALITES" → "Actes de Spécialités"
+  // (générique) peut et doit céder la place à "Consultations" si
+  // categorieGarantie dit "Consultations ophtalmologie".
+  // Ordre : libellé de l'acte > categorieGarantie (si pas DIVERS) >
+  // famille (si pas DIVERS) > categorieGarantie (même DIVERS) >
+  // "Consultations" (si Ambulatoire en dernier recours).
+  if (RUBRIQUES_GENERIQUES.has(rubrique) && acteInfo) {
+    const tenter = (v: string): string | null => {
+      const r = normaliserRubrique(v);
+      return !RUBRIQUES_GENERIQUES.has(r) && r !== "Non précisé" ? r : null;
+    };
+    const estDivers = acteInfo.famille === FAMILLE_REPRISE_UTIL
+      || acteInfo.famille.trim().toUpperCase() === "DIVERS";
+    if (!estDivers) {
+      if (acteInfo.libelle) { const r = tenter(acteInfo.libelle); if (r) rubrique = r; }
+      if (RUBRIQUES_GENERIQUES.has(rubrique) && acteInfo.categorieGarantie) {
+        const r = tenter(acteInfo.categorieGarantie); if (r) rubrique = r;
+      }
+      if (RUBRIQUES_GENERIQUES.has(rubrique)) {
+        const r = tenter(acteInfo.famille); if (r) rubrique = r;
+      }
+    }
+    if (RUBRIQUES_GENERIQUES.has(rubrique) && acteInfo.categorieGarantie) {
+      const r = tenter(acteInfo.categorieGarantie); if (r) rubrique = r;
+    }
   }
+  // Nom du prestataire en dernier recours ("PHARMACIE DU CENTRE" sans
+  // prestataireType renseigné) — avant le fallback "Consultations".
+  if (RUBRIQUES_GENERIQUES.has(rubrique) && ligne.prestataire) {
+    const r = normaliserRubrique(ligne.prestataire);
+    if (!RUBRIQUES_GENERIQUES.has(r) && r !== "Non précisé") rubrique = r;
+  }
+  if (rubrique === "Ambulatoire") rubrique = "Consultations";
   if (rubrique === "Non précisé") return rubrique;
 
   // Rubrique plafonnée (a besoin d'une ligne Garantie pour avoir un

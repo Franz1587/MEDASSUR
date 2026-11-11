@@ -106,29 +106,11 @@ export class StatistiquesService {
     const racineParId = new Map(racines.map((r) => [r.id, r]));
 
     // actes + toutesLesLignes chargés en parallèle dans Promise.all ci-dessus.
-    const acteInfoParActeId = new Map(actes.map((a) => [a.id, { famille: a.famille, categorieGarantie: a.categorieGarantie }]));
+    const acteInfoParActeId = new Map(actes.map((a) => [a.id, { libelle: a.libelle, famille: a.famille, categorieGarantie: a.categorieGarantie }]));
     const libelleParActeId = new Map(actes.map((a) => [a.id, a.libelle]));
     const garantiesContrat = contrat.garanties;
-    const resoudreFamille = (p: (typeof lignes)[number]): string => {
-      const rubrique = resoudreRubriqueContrat(garantiesContrat, { type: p.type, prestataireType: p.prestataireRef?.type }, p.acteMedicalId ? acteInfoParActeId.get(p.acteMedicalId) : null);
-      if (rubrique !== "Ambulatoire") return rubrique;
-      // "Ambulatoire" ne doit jamais remonter (demande utilisateur). Cascade
-      // de 4 tentatives : libellé → catégorieGarantie (actes précis) →
-      // nom brut du prestataire (pharmacies/cabinets sans FK résolue) →
-      // catégorieGarantie des actes DIVERS (reprise d'antériorité).
-      const VALIDES = new Set(["Dentisterie", "Optique", "Kinésithérapie & Cure thermale", "Maternité", "Évacuation Sanitaire", "Transport", "Orthophonie", "Orthoptie", "Hospitalisation", "Pharmacie", "Analyses Médicale", "Imagerie", "Consultations", "Actes de Spécialités", "Petite Chirurgie/Soins"]);
-      const tenter = (v: string): string | null => { const r = normaliserRubrique(v); return VALIDES.has(r) ? r : null; };
-      const info = p.acteMedicalId ? acteInfoParActeId.get(p.acteMedicalId) : null;
-      const estDivers = !info || info.famille === FAMILLE_REPRISE || info.famille?.trim().toUpperCase() === "DIVERS";
-      if (!estDivers) {
-        const lib = p.acteMedicalId ? libelleParActeId.get(p.acteMedicalId) : null;
-        if (lib) { const r = tenter(lib); if (r) return r; }
-        if (info?.categorieGarantie) { const r = tenter(info.categorieGarantie); if (r) return r; }
-      }
-      if (p.prestataire) { const r = tenter(p.prestataire); if (r) return r; }
-      if (estDivers && info?.categorieGarantie) { const r = tenter(info.categorieGarantie); if (r) return r; }
-      return "Consultations";
-    };
+    const resoudreFamille = (p: (typeof lignes)[number]): string =>
+      resoudreRubriqueContrat(garantiesContrat, { type: p.type, prestataireType: p.prestataireRef?.type, prestataire: p.prestataire }, p.acteMedicalId ? acteInfoParActeId.get(p.acteMedicalId) : null);
     // Famille D'ACTES (2026-09/2026-10) — ActeMedical.famille brut (le
     // regroupement fin du catalogue), jamais categorieGarantie (déjà
     // utilisé par resoudreFamille pour la rubrique du tableau de garanties).

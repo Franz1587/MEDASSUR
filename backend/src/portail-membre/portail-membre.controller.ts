@@ -1,10 +1,8 @@
-import * as fs from "fs";
 import {
-  BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Query, Req, Res, UploadedFile, UploadedFiles, UseGuards, UseInterceptors,
+  BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Query, Req, Res, UploadedFile, UseGuards, UseInterceptors,
 } from "@nestjs/common";
 import type { Request, Response } from "express";
-import { FileFieldsInterceptor, FileInterceptor } from "@nestjs/platform-express";
-import { CHAMPS_PIECES, TAILLE_MAX_PIECE, piecesRecues, reunirEnUnFichier, type PiecesRecues } from "../lib/pieces-jointes.util";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
@@ -20,7 +18,6 @@ import { UpdateInformationsMedicalesDto } from "./dto/update-informations-medica
 import { CreateRemboursementMembreDto } from "./dto/create-remboursement-membre.dto";
 import { GrantDelegationDto } from "./dto/grant-delegation.dto";
 import { UpdateDelegationModulesDto } from "./dto/update-delegation-modules.dto";
-import { EnregistrerPushTokenDto } from "./dto/enregistrer-push-token.dto";
 import { resoudreCategorieConsommation, resoudreExercice } from "./portail-membre.util";
 import { RUBRIQUES_PLAFONNEES } from "../sante/dto/create-facture-ligne.dto";
 import { CarnetSanteService } from "./carnet-sante.service";
@@ -34,9 +31,6 @@ type PortailMembreRequest = Request & { user: { userId: string; nom: string; rol
 // (User.assureSanteId, voir schema.prisma) — jamais aux données d'un autre
 // assuré/famille. Même patron que PortailClientController (façade fine,
 // aucune logique métier dupliquée, délègue aux services internes existants).
-import { PrescriptionsService } from "../prescriptions/prescriptions.service";
-import { ValiderBonNumeriseDto } from "../prescriptions/dto/bon-numerise.dto";
-import { idsFamilleDe } from "./famille.util";
 @Controller("portail-membre")
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("assure_principal")
@@ -50,7 +44,6 @@ export class PortailMembreController {
     private readonly carnetSante: CarnetSanteService,
     private readonly agentIa: MessagerieAgentIaService,
     private readonly pushNotifications: PushNotificationsService,
-    private readonly prescriptions: PrescriptionsService,
   ) {}
 
   private assureSanteIdDe(req: PortailMembreRequest): string {
@@ -58,32 +51,9 @@ export class PortailMembreController {
     return req.user.assureSanteId;
   }
 
-  private idsFamilleDe(assureSanteId: string): Promise<string[]> {
-    return idsFamilleDe(this.prisma, assureSanteId);
-  }
-
-  // Abonnement individuel (2026-10) — migration DB non encore appliquée en
-  // prod. Version dégradée : renvoie le statut d'accès sans consulter
-  // AbonnementIndividuel (table inexistante). Réactiver la vraie logique
-  // après migration (ALTER TABLE + CREATE TABLE AbonnementIndividuel).
-  @Get("statut-acces")
-  async statutAcces(@Req() req: PortailMembreRequest) {
-    const assureId = this.assureSanteIdDe(req);
-    const assure = await this.prisma.assureSante.findUnique({ where: { id: assureId }, select: { statut: true } });
-    const statut = assure?.statut ?? "Actif";
-    const accesBloqueStatuts = ["Suspendu (radié)", "Suspendu", "Radié"];
-    return {
-      statut,
-      accesBloque: accesBloqueStatuts.includes(statut),
-      abonnementActif: false,
-      abonnement: null,
-      prixAnnuelXaf: null,
-    };
-  }
-
-  @Post("abonnement/demander")
-  async demanderAbonnement(@Req() _req: PortailMembreRequest) {
-    throw new BadRequestException("Fonctionnalité en cours de déploiement — réessayez dans quelques heures.");
+  private async idsFamilleDe(assureSanteId: string): Promise<string[]> {
+    const membres = await this.prisma.assureSante.findMany({ where: { familleId: assureSanteId } });
+    return [assureSanteId, ...membres.map((m) => m.id)];
   }
 
   // Jeton Expo Push (2026-09) — voir demande utilisateur : "l'application
@@ -93,7 +63,7 @@ export class PortailMembreController {
   // (voir mobile/src/utils/pushNotifications.ts) — un seul jeton par
   // compte pour l'instant (voir User.pushToken).
   @Post("push-token")
-  async enregistrerPushToken(@Body() body: EnregistrerPushTokenDto, @Req() req: PortailMembreRequest) {
+  async enregistrerPushToken(@Body() body: { token?: string }, @Req() req: PortailMembreRequest) {
     const token = (body.token ?? "").trim();
     if (!token) throw new BadRequestException("Jeton manquant.");
     await this.prisma.user.update({ where: { id: req.user.userId }, data: { pushToken: token } });
@@ -199,7 +169,7 @@ export class PortailMembreController {
     const [pecEnAttente, dernierRemboursement, lignes] = await Promise.all([
       this.prisma.accordPrealable.count({ where: { assureId: { in: idsFamille }, decision: "En attente" } }),
       this.prisma.priseEnCharge.findFirst({ where: { assureId: { in: idsFamille }, modePaiement: "Remboursement" }, orderBy: { date: "desc" } }),
-      this.sante.findPrisesEnCharge(idsFamille, undefined, undefined, true),
+      this.sante.findPrisesEnCharge(idsFamille),
     ]);
 
     let totalConsommation = 0;
@@ -216,7 +186,7 @@ export class PortailMembreController {
       entree.total += montant;
       parBeneficiaireMap.set(l.assureId, entree);
 
-      const rubrique = resoudreCategorieConsommation(assure.contrat.garanties, l.type, l.acteMedical, l.prestataireRef?.type);
+      const rubrique = resoudreCategorieConsommation(assure.contrat.garanties, l.type, l.acteMedical, l.prestataire);
       parRubriqueMap.set(rubrique, (parRubriqueMap.get(rubrique) ?? 0) + montant);
     }
 
@@ -241,7 +211,6 @@ export class PortailMembreController {
       const cible = await this.prisma.assureSante.findUnique({ where: { id: assureId } });
       if (!cible || cible.familleId !== assureSanteId) throw new ForbiddenException(`Carte ${assureId} inaccessible`);
     }
-    res.setHeader("X-Signature", "integree"); // QR d'authentification déjà intégré dans le PDF par ajouterCarteRectoVerso
     return this.documents.renderCarteUnique(assureId, res);
   }
 
@@ -280,11 +249,11 @@ export class PortailMembreController {
       this.idsFamilleDe(assureSanteId),
     ]);
     if (!assure) throw new NotFoundException("Assuré introuvable");
-    const lignes = await this.sante.findPrisesEnCharge(idsFamille, undefined, undefined, true);
+    const lignes = await this.sante.findPrisesEnCharge(idsFamille);
     const filtrees = modePaiement ? lignes.filter((l) => l.modePaiement === modePaiement) : lignes;
     const enrichies = filtrees.map((l) => ({
       ...l,
-      rubrique: resoudreCategorieConsommation(assure.contrat.garanties, l.type, l.acteMedical, l.prestataireRef?.type),
+      rubrique: resoudreCategorieConsommation(assure.contrat.garanties, l.type, l.acteMedical, l.prestataire),
       exercice: resoudreExercice(assure.contrat.exercices, l.date),
       acteLibelle: l.acteMedical?.libelle ?? null,
       // acteFamille (2026-08) — voir demande utilisateur : "chaque fiche de
@@ -378,8 +347,7 @@ export class PortailMembreController {
   async feuilleExamenBon(@Param("prescriptionId") prescriptionId: string, @Req() req: PortailMembreRequest, @Res() res: Response) {
     const idsFamille = await this.idsFamilleDe(this.assureSanteIdDe(req));
     const prescription = await this.prisma.prescription.findUnique({ where: { id: prescriptionId }, include: { priseEnCharge: true } });
-    const patient = prescription?.priseEnCharge?.assureId ?? prescription?.assureId;
-    if (!prescription || !patient || !idsFamille.includes(patient)) throw new ForbiddenException(`Bon ${prescriptionId} inaccessible`);
+    if (!prescription || !idsFamille.includes(prescription.priseEnCharge.assureId)) throw new ForbiddenException(`Bon ${prescriptionId} inaccessible`);
     return this.documents.renderFeuilleExamenPrescription(prescriptionId, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId });
   }
 
@@ -393,7 +361,7 @@ export class PortailMembreController {
   async accordsPrealables(@Req() req: PortailMembreRequest) {
     const assureSanteId = this.assureSanteIdDe(req);
     const idsFamille = await this.idsFamilleDe(assureSanteId);
-    return (await this.accordPrealable.findAll({ assureIds: idsFamille })).items;
+    return this.accordPrealable.findAll({ assureIds: idsFamille });
   }
 
   // Certificat de prise en charge (2026-08) — voir demande utilisateur : "les
@@ -455,17 +423,15 @@ export class PortailMembreController {
   }
 
   @Post("accords-prealables/:id/ordonnance")
-  @UseInterceptors(FileFieldsInterceptor(CHAMPS_PIECES, { storage: memoryStorage(), limits: { fileSize: TAILLE_MAX_PIECE } }))
-  async uploaderOrdonnance(@Param("id") id: string, @UploadedFiles() recues: PiecesRecues, @Req() req: PortailMembreRequest) {
-    const file = (await reunirEnUnFichier(piecesRecues(recues))) as Express.Multer.File;
+  @UseInterceptors(FileInterceptor("fichier", { storage: memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } }))
+  async uploaderOrdonnance(@Param("id") id: string, @UploadedFile() file: Express.Multer.File, @Req() req: PortailMembreRequest) {
     await this.verifierAccordAppartientA(id, await this.idsFamilleDe(this.assureSanteIdDe(req)));
     return this.accordPrealable.uploadDocument(id, "ordonnance", file);
   }
 
   @Post("accords-prealables/:id/devis")
-  @UseInterceptors(FileFieldsInterceptor(CHAMPS_PIECES, { storage: memoryStorage(), limits: { fileSize: TAILLE_MAX_PIECE } }))
-  async uploaderDevis(@Param("id") id: string, @UploadedFiles() recues: PiecesRecues, @Req() req: PortailMembreRequest) {
-    const file = (await reunirEnUnFichier(piecesRecues(recues))) as Express.Multer.File;
+  @UseInterceptors(FileInterceptor("fichier", { storage: memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } }))
+  async uploaderDevis(@Param("id") id: string, @UploadedFile() file: Express.Multer.File, @Req() req: PortailMembreRequest) {
     await this.verifierAccordAppartientA(id, await this.idsFamilleDe(this.assureSanteIdDe(req)));
     return this.accordPrealable.uploadDocument(id, "devis", file);
   }
@@ -503,14 +469,13 @@ export class PortailMembreController {
   }
 
   @Post("remboursements/:id/document")
-  @UseInterceptors(FileFieldsInterceptor(CHAMPS_PIECES, { storage: memoryStorage(), limits: { fileSize: TAILLE_MAX_PIECE } }))
+  @UseInterceptors(FileInterceptor("fichier", { storage: memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } }))
   async uploaderDocumentRemboursement(
     @Param("id") id: string,
     @Query("type") type: "prescription" | "facture" | "quittance" | "autre",
-    @UploadedFiles() recues: PiecesRecues,
+    @UploadedFile() file: Express.Multer.File,
     @Req() req: PortailMembreRequest,
   ) {
-    const file = (await reunirEnUnFichier(piecesRecues(recues))) as Express.Multer.File;
     const assureSanteId = this.assureSanteIdDe(req);
     const pec = await this.prisma.priseEnCharge.findUnique({ where: { id } });
     if (!pec || pec.assureId !== assureSanteId) throw new ForbiddenException(`Remboursement ${id} inaccessible`);
@@ -547,38 +512,10 @@ export class PortailMembreController {
     return this.carnetSante.liste(idsFamille, rubrique);
   }
 
-  // Conversion d'un document papier du carnet en ordonnance / bon d'examen
-  // électronique (2026-11) : ARIANA lit le document, l'assuré relit puis valide.
-  @Post("carnet-sante/:id/lire")
-  async lireBonPapier(@Param("id") id: string, @Req() req: PortailMembreRequest) {
-    const idsFamille = await this.idsFamilleDe(this.assureSanteIdDe(req));
-    const { doc, pdf } = await this.carnetSante.document(id, idsFamille);
-    // ARIANA lit le JPEG source (coordonnées pixel exactes pour le cachet)
-    // et replie sur le PDF si le JPEG n'existe pas (anciens documents).
-    const jpegPath = doc.fichier ? this.carnetSante.cheminJpeg(doc.fichier) : null;
-    const jpeg = jpegPath ? await fs.promises.readFile(jpegPath).catch(() => null) : null;
-    return { assureId: doc.assureId, ...(await this.prescriptions.lireBonPapier(jpeg ?? pdf, jpeg ? "image/jpeg" : "application/pdf")) };
-  }
-
-  @Post("carnet-sante/:id/convertir")
-  async convertirBonPapier(@Param("id") id: string, @Body() dto: ValiderBonNumeriseDto, @Req() req: PortailMembreRequest) {
-    const idsFamille = await this.idsFamilleDe(this.assureSanteIdDe(req));
-    await this.carnetSante.document(id, idsFamille);
-    if (!idsFamille.includes(dto.assureId)) throw new ForbiddenException(`Assuré ${dto.assureId} inaccessible`);
-    return this.prescriptions.creerNumerise(id, dto);
-  }
-
   @Delete("carnet-sante/:id")
   async supprimerCarnetSante(@Param("id") id: string, @Req() req: PortailMembreRequest) {
     const idsFamille = await this.idsFamilleDe(this.assureSanteIdDe(req));
     await this.carnetSante.supprimer(id, idsFamille);
-    return { ok: true };
-  }
-
-  @Delete("carnet-sante/bon/:prescriptionId")
-  async supprimerBonNumerise(@Param("prescriptionId") prescriptionId: string, @Req() req: PortailMembreRequest) {
-    const idsFamille = await this.idsFamilleDe(this.assureSanteIdDe(req));
-    await this.prescriptions.supprimerNumerise(prescriptionId, idsFamille);
     return { ok: true };
   }
 }

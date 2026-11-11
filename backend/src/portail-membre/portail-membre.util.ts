@@ -12,10 +12,12 @@ import { resoudreRubriqueContrat } from "../actes-medicaux/rubrique-contrat.util
 // désormais exactement les mêmes libellés de rubrique que le contrat/le
 // souscripteur.
 export function resoudreCategorieConsommation(
-  garanties: { categorie: string; libelle: string }[], type: string, acteInfo?: { famille: string; categorieGarantie: string | null } | null,
-  prestataireType?: string | null,
+  garanties: { categorie: string; libelle: string }[],
+  type: string,
+  acteInfo?: { libelle?: string | null; famille: string; categorieGarantie: string | null } | null,
+  prestataire?: string | null,
 ): string {
-  return resoudreRubriqueContrat(garanties, { type, prestataireType }, acteInfo);
+  return resoudreRubriqueContrat(garanties, { type, prestataire }, acteInfo);
 }
 
 function parseDateFr(s?: string | null): Date | null {
