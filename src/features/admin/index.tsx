@@ -276,7 +276,7 @@ function UserDetailModal({ user, initialTab = "infos", modulesAutorises, onClose
                 </label>
                 <label className="block"><div className={labelCls}>Rôle (modèle de droits par défaut)</div>
                   <select value={form.roleId} onChange={(e) => setForm((v) => ({ ...v, roleId: e.target.value as RoleId }))} className={fieldCls}>
-                    {roleList.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+                    {roleList.filter((r) => r.id !== "super_admin").map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
                   </select>
                   <p className="text-[11px] text-muted-foreground mt-1">Pré-remplit l'onglet "Droits" depuis ce rôle — ajustable ensuite librement dans cet écran.</p>
                 </label>
@@ -593,7 +593,7 @@ export default function AdminView() {
             <p className="text-[11px] text-muted-foreground mt-0.5">Champ générique par type d'utilisateur — pré-remplit les droits à la création, modifiable ici. Chaque utilisateur reste ensuite ajustable individuellement via "Droits".</p>
           </div>
           <div className="divide-y divide-border/50">
-            {roleSummaries.map((r) => (
+            {roleSummaries.filter((r) => r.id !== "super_admin").map((r) => (
               <div key={r.id} className="flex items-center justify-between px-4 py-3">
                 <p className="text-sm font-semibold text-foreground">{r.label}</p>
                 <div className="flex items-center gap-3 flex-shrink-0 ml-3">
