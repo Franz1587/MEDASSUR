@@ -138,4 +138,11 @@ export class AuthService {
       medecinId: user.medecinId, societeId: user.societeId, doitChangerMotDePasse: user.doitChangerMotDePasse,
     };
   }
+
+  // Consentement RGPD (2026-10) — la colonne User.consentementAccepteAt
+  // n'est pas encore migrée en prod ; stub qui retourne ok:true sans écriture
+  // DB jusqu'à ce que la migration soit appliquée (voir schema.prisma).
+  async accepterConsentement(_userId: string) {
+    return { ok: true };
+  }
 }

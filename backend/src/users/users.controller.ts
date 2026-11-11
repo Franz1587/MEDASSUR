@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UploadedFile, UseGuards, UseInterceptors, HttpCode } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import * as QRCode from "qrcode";
@@ -9,9 +9,6 @@ import { UpdateModulesDto } from "./dto/update-modules.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../auth/roles.decorator";
-import type { Acteur } from "../auth/role-hierarchy";
-
-type ActeurRequest = { user: Acteur };
 
 // Gestion des comptes utilisateurs + droits par fonctionnalité (2026-08,
 // voir demande utilisateur : "c'est l'administrateur qui donne les droits
@@ -41,18 +38,23 @@ export class UsersController {
   }
 
   @Post()
-  create(@Body() dto: CreateUserDto, @Req() req: ActeurRequest) {
-    return this.service.create(dto, req.user);
+  create(@Body() dto: CreateUserDto) {
+    return this.service.create(dto);
   }
 
   @Patch(":id")
-  update(@Param("id") id: string, @Body() dto: UpdateUserDto, @Req() req: ActeurRequest) {
-    return this.service.update(id, dto, req.user);
+  update(@Param("id") id: string, @Body() dto: UpdateUserDto) {
+    return this.service.update(id, dto);
   }
 
   @Patch(":id/modules")
-  updateModules(@Param("id") id: string, @Body() dto: UpdateModulesDto, @Req() req: ActeurRequest) {
-    return this.service.updateModules(id, dto, req.user);
+  updateModules(@Param("id") id: string, @Body() dto: UpdateModulesDto) {
+    return this.service.updateModules(id, dto);
+  }
+
+  @Delete(":id")
+  remove(@Param("id") id: string) {
+    return this.service.remove(id);
   }
 
   // Réinitialisation du mot de passe par un administrateur (2026-11) —
@@ -66,21 +68,14 @@ export class UsersController {
     return this.service.reinitialiserMotDePasse(id, dto);
   }
 
-  @Delete(":id")
-  remove(@Param("id") id: string, @Req() req: ActeurRequest) {
-    return this.service.remove(id, req.user);
-  }
-
   @Post(":id/photo")
   @UseInterceptors(FileInterceptor("photo", { storage: memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } }))
-  async uploadPhoto(@Param("id") id: string, @UploadedFile() file: Express.Multer.File, @Req() req: ActeurRequest) {
-    await this.service.autoriserSurCompte(id, req.user);
+  uploadPhoto(@Param("id") id: string, @UploadedFile() file: Express.Multer.File) {
     return this.service.uploadPhoto(id, file);
   }
 
   @Delete(":id/photo")
-  async deletePhoto(@Param("id") id: string, @Req() req: ActeurRequest) {
-    await this.service.autoriserSurCompte(id, req.user);
+  deletePhoto(@Param("id") id: string) {
     return this.service.deletePhoto(id);
   }
 
@@ -93,14 +88,12 @@ export class UsersController {
   // de ce contrôleur), jamais du token de la personne signée.
   @Post(":id/signature")
   @UseInterceptors(FileInterceptor("signature", { storage: memoryStorage(), limits: { fileSize: 4 * 1024 * 1024 } }))
-  async uploadSignature(@Param("id") id: string, @UploadedFile() file: Express.Multer.File, @Req() req: ActeurRequest) {
-    await this.service.autoriserSurCompte(id, req.user);
+  uploadSignature(@Param("id") id: string, @UploadedFile() file: Express.Multer.File) {
     return this.service.uploadSignature(id, file);
   }
 
   @Delete(":id/signature")
-  async deleteSignature(@Param("id") id: string, @Req() req: ActeurRequest) {
-    await this.service.autoriserSurCompte(id, req.user);
+  deleteSignature(@Param("id") id: string) {
     return this.service.deleteSignature(id);
   }
 
@@ -111,8 +104,7 @@ export class UsersController {
   // libre-service (GET /users/moi/signature/qr/:token/statut) — elle ne
   // contrôle que le jeton, pas son propriétaire.
   @Post(":id/signature/qr")
-  async genererQrSignature(@Param("id") id: string, @Req() req: ActeurRequest) {
-    await this.service.autoriserSurCompte(id, req.user);
+  async genererQrSignature(@Param("id") id: string) {
     const { token, expiresAt } = await this.service.genererJetonSignature(id);
     const url = `${process.env.APP_URL ?? "https://medassur.cloud"}/signer/${token}`;
     const qrDataUrl = await QRCode.toDataURL(url, { margin: 1, width: 320 });
