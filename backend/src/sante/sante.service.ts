@@ -1076,16 +1076,39 @@ export class SanteService {
         prestataireRef: { select: { type: true } },
       },
     });
-    // Dedup : un import PEC puis un import factures pour le même événement
-    // crée deux lignes (factureId null vs non null). On garde la plus complète
-    // (factureId > null). Clé = assureId + date + montant + prestataire.
+    // Passe 1 : dédup exact (même jour — factureId > null remporte).
     const seenPec = new Map<string, (typeof lignes)[0]>();
     for (const l of lignes) {
       const key = `${l.assureId}|${String(l.date).slice(0, 10)}|${l.montant}|${l.prestataire}`;
       const prev = seenPec.get(key);
       if (!prev || (l.factureId && !prev.factureId)) seenPec.set(key, l);
     }
-    const lignesUniques = [...seenPec.values()];
+    // Passe 2 : dédup fuzzy ±14 jours (date de soin ≠ date de facturation
+    // pour le même événement réel — doublon d'import classique). Ne fusionne
+    // QUE si l'une des deux entrées a factureId et l'autre non.
+    const lignesArr = [...seenPec.values()];
+    const skipped = new Set<number>();
+    const lignesUniques: (typeof lignesArr) = [];
+    for (let i = 0; i < lignesArr.length; i++) {
+      if (skipped.has(i)) continue;
+      const a = lignesArr[i];
+      let merged = false;
+      for (let j = i + 1; j < lignesArr.length; j++) {
+        if (skipped.has(j)) continue;
+        const b = lignesArr[j];
+        if (a.assureId !== b.assureId || a.prestataire !== b.prestataire) continue;
+        if (String(a.montant) !== String(b.montant)) continue;
+        const dayDiff = Math.abs(new Date(a.date).getTime() - new Date(b.date).getTime()) / 86_400_000;
+        if (dayDiff > 14) continue;
+        if (Boolean(a.factureId) !== Boolean(b.factureId)) {
+          lignesUniques.push(a.factureId ? a : b);
+          skipped.add(i); skipped.add(j);
+          merged = true;
+          break;
+        }
+      }
+      if (!merged) lignesUniques.push(a);
+    }
     // rubrique (2026-09) — voir demande utilisateur : "les statistiques
     // doivent être en harmonie parfaite avec le tableau de garantie du
     // contrat" — pré-résolue ici (même resolver canonique que
