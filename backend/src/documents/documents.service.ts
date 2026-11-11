@@ -29,6 +29,7 @@ import { DocumentSignatureService } from "./document-signature.service";
 import { UPLOADS_ROOT, ASSETS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
 import { genererGraphiqueBarres, genererGraphiqueBarresEtiquetees, genererGraphiqueCamembert } from "./graphiques.util";
+import { genererReseauSoins, paletteReseau, type SocieteAnnuaire, type ProvinceAnnuaire, type VilleAnnuaire } from "./reseau-soins.pdf";
 import { montantEnLettresFcfa } from "../lib/montant-en-lettres.util";
 import { policePourNomFichier } from "../lib/police.util";
 import { TAUX_TPS } from "../sante/sante.service";
@@ -4841,46 +4842,55 @@ export class DocumentsService {
     doc.end();
   }
 
-  // Réseau de soins — annuaire des prestataires conventionnés (aucun
-  // argument : c'est un document global, pas scopé à un contrat).
+  // Réseau de soins — annuaire officiel 24 pages, reproduit à l'identique
+  // du modèle La Ruche (voir reseau-soins.pdf.ts). La version simplifiée
+  // inline a été remplacée ici pour utiliser le vrai moteur.
   async renderReseauSoins(res: Response) {
-    const prestataires = await this.prestataires.findAllReseau({});
+    const prestatairesRaw = await this.prestataires.findAllReseau({});
     const p = await this.parametresEntreprise.findOne();
-    const doc = new PDFDocument({ size: "A4", margin: 40 });
+
+    // Regrouper les prestataires par province → ville
+    const parProvince = new Map<string, Map<string, typeof prestatairesRaw>>();
+    const SANS = "(Province non renseignée)";
+    for (const pr of prestatairesRaw) {
+      const prov = pr.province?.trim() || SANS;
+      const ville = pr.ville?.trim() || "(Ville non renseignée)";
+      if (!parProvince.has(prov)) parProvince.set(prov, new Map());
+      const parVille = parProvince.get(prov)!;
+      if (!parVille.has(ville)) parVille.set(ville, []);
+      parVille.get(ville)!.push(pr);
+    }
+    const provinces: ProvinceAnnuaire[] = [...parProvince.entries()]
+      .sort((a, b) => a[0] === SANS ? 1 : b[0] === SANS ? -1 : a[0].localeCompare(b[0], "fr"))
+      .map(([nom, parVille]): ProvinceAnnuaire => ({
+        nom,
+        villes: [...parVille.entries()]
+          .sort((a, b) => a[0].localeCompare(b[0], "fr"))
+          .map(([vNom, prs]): VilleAnnuaire => ({
+            nom: vNom,
+            prestataires: prs.map((pr) => ({
+              nom: pr.nom, type: pr.type, adresse: pr.adresse, telephone: pr.telephone,
+              latitude: pr.latitude, longitude: pr.longitude,
+            })),
+          })),
+      }));
+
+    const soc: SocieteAnnuaire = {
+      nom: p.nom, sousTitre: p.sousTitre, adresse: p.adresse,
+      boitePostale: p.boitePostale, ville: p.ville, pays: p.pays,
+      telephone: p.telephone, email: p.email, siteWeb: p.siteWeb,
+      couleurPrimaire: p.couleurPrimaire, couleurSecondaire: p.couleurSecondaire,
+    };
+
+    const logoPath = p.logo ? path.join(UPLOADS_ROOT, "logos", p.logo) : null;
+    const logo = logoPath && fs.existsSync(logoPath) ? logoPath : null;
+    const palette = paletteReseau(p.couleurPrimaire, p.couleurSecondaire);
+
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", 'inline; filename="Reseau-de-Soins.pdf"');
+    const doc = new PDFDocument({ size: "A4", margin: 0, autoFirstPage: false });
     doc.pipe(res);
-
-    const left = doc.page.margins.left;
-    const right = doc.page.width - doc.page.margins.right;
-    const width = right - left;
-    let y = 40;
-
-    doc.fontSize(13).font("Helvetica-Bold").fillColor(p.couleurPrimaire).text(p.nom, left, y);
-    doc.fontSize(12).font("Helvetica-Bold").fillColor("#000").text("RÉSEAU DE SOINS CONVENTIONNÉ", left, y, { width, align: "right" });
-    doc.fillColor("#000");
-    y += 30;
-
-    const cols = [{ h: "Prestataire", w: width * 0.3 }, { h: "Type", w: width * 0.18 }, { h: "Ville", w: width * 0.15 }, { h: "Adresse", w: width * 0.22 }, { h: "Téléphone", w: width * 0.15 }];
-    const drawHeader = () => {
-      doc.rect(left, y, width, 16).fill(p.couleurPrimaire);
-      let cx = left;
-      doc.fillColor("#fff").fontSize(7.5).font("Helvetica-Bold");
-      for (const c of cols) { doc.text(c.h, cx + 3, y + 4, { width: c.w - 6 }); cx += c.w; }
-      doc.fillColor("#000");
-      y += 16;
-    };
-    drawHeader();
-    doc.font("Helvetica").fontSize(7.5);
-    for (const pr of prestataires) {
-      const rowH = 14;
-      if (y + rowH > doc.page.height - 50) { doc.addPage(); y = 40; drawHeader(); doc.font("Helvetica").fontSize(7.5); }
-      let cx = left;
-      const vals = [pr.nom, pr.type ?? "—", pr.ville ?? "—", pr.adresse ?? "—", pr.telephone ?? "—"];
-      for (let i = 0; i < cols.length; i++) { doc.text(vals[i], cx + 3, y + 3, { width: cols[i].w - 6 }); cx += cols[i].w; }
-      doc.moveTo(left, y + rowH).lineTo(right, y + rowH).strokeColor("#eee").stroke();
-      y += rowH;
-    }
+    genererReseauSoins(doc, soc, logo, provinces);
     doc.end();
   }
 
