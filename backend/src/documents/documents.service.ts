@@ -13,7 +13,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { PrismaService } from "../prisma/prisma.service";
 import { ParametresEntrepriseService } from "../parametres-entreprise/parametres-entreprise.service";
 import { groupeDeFamille } from "../actes-medicaux/groupes-actes.util";
-import { resoudreRubriqueContrat, rubriqueAccordPrealable } from "../actes-medicaux/rubrique-contrat.util";
+import { normaliserRubrique, resoudreRubriqueContrat, rubriqueAccordPrealable } from "../actes-medicaux/rubrique-contrat.util";
 import { StatistiquesService } from "../statistiques/statistiques.service";
 import type { RubriqueId, StatistiquesPayload } from "../statistiques/statistiques.types";
 import { BordereauxService, type BordereauSinistresPayload, type BordereauProductionPayload } from "../bordereaux/bordereaux.service";
@@ -2865,12 +2865,13 @@ export class DocumentsService {
     encadre(left, y, colW, boxH1);
     encadre(left + colW, y, colW, boxH1);
     doc.font("Helvetica").fontSize(8);
-    champ(doc, left + 8, y + 8, "DOSSIER N°", accord.id, 90, colW - 98, { boldLabel: true });
+    champ(doc, left + 8, y + 8, "DOSSIER N°", accord.prescriptionRef ?? accord.id, 90, colW - 98, { boldLabel: true });
     champ(doc, left + 8, y + 22, "Editer le :", fmtDate(dateBase), 90, colW - 98, { boldLabel: true });
     champ(doc, left + 8, y + 34, "Valable jusqu'au:", dateValidite, 90, colW - 98, { boldLabel: true });
-    champ(doc, left + colW + 8, y + 8, "Demandeur:", accord.demandeur?.nom ?? "—", 75, colW - 83, { boldLabel: true, boldValeur: true });
+    const nomAssurePourDemandeur = `${accord.assure.nom} ${accord.assure.prenom ?? ""}`.trim();
+    champ(doc, left + colW + 8, y + 8, "Demandeur:", accord.demandeur?.nom ?? nomAssurePourDemandeur, 75, colW - 83, { boldLabel: true, boldValeur: true });
     const estAyantDroit = accord.assure.familleId !== null;
-    const tauxCouverture = this.tauxCouvertureParRubrique(accord.lignes, accord.assure.contrat.garanties, estAyantDroit);
+    const tauxCouverture = this.tauxCouvertureParRubrique(accord.lignes, accord.assure.contrat.garanties, estAyantDroit, accord.type, accord.description);
     champ(doc, left + colW + 8, y + 24, "Taux de couverture:", tauxCouverture != null ? `${tauxCouverture} %` : "—", 105, colW - 113, { boldLabel: true });
     y += boxH1 + 10;
 
@@ -3022,11 +3023,21 @@ export class DocumentsService {
     lignes: { acteMedical: { categorieGarantie: string | null } | null; categorieGarantie: string | null }[],
     garanties: { categorie: string; tauxAssure: Prisma.Decimal | null; tauxAyantsDroit: Prisma.Decimal | null }[],
     estAyantDroit: boolean,
+    accordType?: string | null,
+    accordDescription?: string | null,
   ): number | null {
-    const rubrique = lignes.find((l) => l.acteMedical?.categorieGarantie ?? l.categorieGarantie)?.acteMedical?.categorieGarantie
+    // Source 1 : catégorie de garantie portée par les lignes d'acte
+    const rubriqueParLigne = lignes.find((l) => l.acteMedical?.categorieGarantie ?? l.categorieGarantie)?.acteMedical?.categorieGarantie
       ?? lignes.find((l) => l.categorieGarantie)?.categorieGarantie;
-    if (!rubrique) return null;
-    const garantie = garanties.find((g) => g.categorie === rubrique);
+    // Source 2 (reprise/import) : rubrique normalisée depuis type + description de l'accord
+    const rubriqueParAccord = (!rubriqueParLigne && (accordType || accordDescription))
+      ? rubriqueAccordPrealable(accordType, accordDescription)
+      : null;
+    const rubrique = rubriqueParLigne ?? rubriqueParAccord;
+    if (!rubrique || rubrique === "Non précisé") return null;
+    // Correspondance directe puis normalisée (garantie peut avoir "Consultation/Divers" vs "Consultations")
+    const garantie = garanties.find((g) => g.categorie === rubrique)
+      ?? garanties.find((g) => normaliserRubrique(g.categorie) === normaliserRubrique(rubrique));
     if (!garantie) return null;
     const taux = estAyantDroit ? (garantie.tauxAyantsDroit ?? garantie.tauxAssure) : garantie.tauxAssure;
     return taux != null ? Number(taux) : null;
