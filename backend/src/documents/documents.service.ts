@@ -13,7 +13,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { PrismaService } from "../prisma/prisma.service";
 import { ParametresEntrepriseService } from "../parametres-entreprise/parametres-entreprise.service";
 import { groupeDeFamille } from "../actes-medicaux/groupes-actes.util";
-import { resoudreRubriqueContrat } from "../actes-medicaux/rubrique-contrat.util";
+import { resoudreRubriqueContrat, rubriqueAccordPrealable } from "../actes-medicaux/rubrique-contrat.util";
 import { StatistiquesService } from "../statistiques/statistiques.service";
 import type { RubriqueId, StatistiquesPayload } from "../statistiques/statistiques.types";
 import { BordereauxService, type BordereauSinistresPayload, type BordereauProductionPayload } from "../bordereaux/bordereaux.service";
@@ -2921,8 +2921,8 @@ export class DocumentsService {
     const rubriquesGarantie = Array.from(new Set(
       accord.lignes.map((l) => resoudreRubriqueContrat(accord.assure.contrat.garanties, { type: l.categorieGarantie ?? l.description ?? "" }, l.acteMedical)),
     ));
-    const objetPriseEnCharge = rubriquesGarantie.length > 0 ? rubriquesGarantie.join(", ") : (accord.lignes[0]?.description ?? accord.description);
-    doc.font("Helvetica").fontSize(8).text(`Code: ${objetPriseEnCharge}`, left + 8, y + 20, { width: colW - 20 });
+    const objetPriseEnCharge = rubriquesGarantie.length > 0 ? rubriquesGarantie.join(", ") : rubriqueAccordPrealable(accord.type, accord.description);
+    doc.font("Helvetica").fontSize(8).text(objetPriseEnCharge, left + 8, y + 20, { width: colW - 20 });
     // Coordonnées RÉELLES du prestataire, pas celles du courtier (2026-09)
     // — voir demande utilisateur : "faire remonter toutes les informations
     // exactes présentes dans l'écran du prestataire" — même source que le
