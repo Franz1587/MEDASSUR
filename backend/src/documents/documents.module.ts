@@ -3,6 +3,7 @@ import { DocumentsService } from "./documents.service";
 import { DocumentsController } from "./documents.controller";
 import { DocumentSignatureService } from "./document-signature.service";
 import { VerificationPubliqueController } from "./verification-publique.controller";
+import { CartePubliqueController } from "./carte-publique.controller";
 import { ParametresEntrepriseModule } from "../parametres-entreprise/parametres-entreprise.module";
 import { StatistiquesModule } from "../statistiques/statistiques.module";
 import { SanteModule } from "../sante/sante.module";
@@ -26,7 +27,7 @@ import { CommunicationsModule } from "../communications/communications.module";
     CommunicationsModule,
   ],
   providers: [DocumentsService, DocumentSignatureService],
-  controllers: [DocumentsController, VerificationPubliqueController],
+  controllers: [DocumentsController, VerificationPubliqueController, CartePubliqueController],
   exports: [DocumentsService, DocumentSignatureService],
 })
 export class DocumentsModule {}

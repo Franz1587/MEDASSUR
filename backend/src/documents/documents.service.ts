@@ -1535,7 +1535,9 @@ export class DocumentsService {
     // voir demande utilisateur : "fais remonter le QR code... et mets-le
     // en noir").
     const styleLaRuche = !fondRecto && modele?.styleCode === "la-ruche";
-    const qrBuffer = await QRCode.toBuffer(assure.numeroAssure ?? assure.matricule, { margin: 0, width: 240, color: { dark: styleLaRuche ? "#000000" : primaire, light: "#ffffff" } });
+    const appUrl = process.env.APP_URL ?? "https://medassur.cloud";
+    const qrUrl = `${appUrl}/api/carte/v/${assure.matricule}`;
+    const qrBuffer = await QRCode.toBuffer(qrUrl, { margin: 0, width: 240, color: { dark: styleLaRuche ? "#000000" : primaire, light: "#ffffff" } });
 
     // ── Recto ──────────────────────────────────────────────────────────
     doc.addPage({ size: [CARD_WIDTH, CARD_HEIGHT], margin: 0 });
