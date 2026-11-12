@@ -1,4 +1,5 @@
 import * as QRCode from "qrcode";
+import { randomUUID } from "crypto";
 import { referenceLisible } from "../factures/reference-facture.util";
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
@@ -40,24 +41,23 @@ export class DocumentSignatureService {
   constructor(private prisma: PrismaService) {}
 
   async signer(documentType: string, documentRef: string, acteur: ActeurSignature): Promise<{ id: string; qrBuffer: Buffer; dateSignature: Date }> {
-    const signature = await this.prisma.documentSignature.create({
-      data: {
-        documentType, documentRef,
-        acteurId: acteur.id ?? undefined, acteurNom: acteur.nom, acteurRole: acteur.roleId,
-        origine: origineDe(acteur.roleId),
-      },
-    });
-    // URL publique de vérification (2026-09 — corrigé : un ancien format
-    // propriétaire "MEDASSUR-DOC:id|ref" était encodé ici, illisible par un
-    // simple appareil photo puisqu'aucune page ne consommait ce format,
-    // rendant le QR inutilisable en pratique). Même convention que le QR de
-    // signature déjà en place (`/signer/:token`, voir
-    // SignaturePubliqueController) : une vraie URL, ouvrable par n'importe
-    // quel téléphone jamais connecté à l'application. Le statut, lui,
-    // n'est JAMAIS encodé ici (il changerait avec le temps) — voir
-    // verifier() ci-dessous, qui le recalcule en direct à chaque scan.
+    // UUID pré-généré localement pour paralléliser l'insert DB et le QR
+    // (le QR encode l'URL de vérification qui dépend de l'id — on le
+    // calcule en même temps qu'on insère plutôt qu'après).
+    const id = randomUUID();
     const base = process.env.APP_URL ?? "https://medassur.cloud";
-    const qrBuffer = await QRCode.toBuffer(`${base}/verifier/${signature.id}`, { margin: 0, width: 160 });
+    const [signature, qrBuffer] = await Promise.all([
+      this.prisma.documentSignature.create({
+        data: {
+          id, documentType, documentRef,
+          acteurId: acteur.id ?? undefined, acteurNom: acteur.nom, acteurRole: acteur.roleId,
+          origine: origineDe(acteur.roleId),
+        },
+      }),
+      // URL publique de vérification — voir verifier() pour le calcul du
+      // statut en direct (jamais encodé ici, il changerait avec le temps).
+      QRCode.toBuffer(`${base}/verifier/${id}`, { margin: 0, width: 160 }),
+    ]);
     return { id: signature.id, qrBuffer, dateSignature: signature.dateSignature };
   }
 

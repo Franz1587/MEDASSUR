@@ -1914,7 +1914,16 @@ export class DocumentsService {
 
   /** Recto PDF d'une carte par matricule — endpoint public, pas de JWT requis (2026-11). */
   async renderCartePdfPublic(matricule: string, res: Response) {
+    // Exclure societe-bootstrap pour toujours retourner la société réelle
+    // (un assure test y reste Actif même quand la vraie copie est Suspendue,
+    // et findFirst sans ordre est non-déterministe).
     const assure = await this.prisma.assureSante.findFirst({
+      where: { matricule, NOT: { contrat: { societeId: "societe-bootstrap" } } },
+      include: {
+        contrat: { include: { client: true, compagnie: true } },
+        famille: { select: { telephone: true, nom: true, prenom: true } },
+      },
+    }) ?? await this.prisma.assureSante.findFirst({
       where: { matricule },
       include: {
         contrat: { include: { client: true, compagnie: true } },

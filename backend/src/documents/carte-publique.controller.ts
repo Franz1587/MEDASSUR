@@ -56,6 +56,21 @@ export class CartePubliqueController {
   @Get("v/:matricule")
   async afficher(@Param("matricule") matricule: string, @Res() res: Response): Promise<void> {
     const assure = await this.prisma.assureSante.findFirst({
+      where: { matricule, NOT: { contrat: { societeId: "societe-bootstrap" } } },
+      include: {
+        contrat: {
+          select: {
+            statut: true,
+            tauxCouvertureAmbulatoire: true,
+            tauxCouvertureHospitalisation: true,
+            nomCarteSante: true,
+            societeId: true,
+            client: { select: { nom: true } },
+          },
+        },
+        famille: { select: { nom: true, prenom: true } },
+      },
+    }) ?? await this.prisma.assureSante.findFirst({
       where: { matricule },
       include: {
         contrat: {
@@ -97,6 +112,12 @@ export class CartePubliqueController {
     const normalise = q.replace(/[\s\-().+]/g, "");
 
     let assure = await this.prisma.assureSante.findFirst({
+      where: { matricule: q, NOT: { contrat: { societeId: "societe-bootstrap" } } },
+      include: {
+        contrat: { select: { statut: true, societeId: true, client: { select: { nom: true } } } },
+        famille: { select: { nom: true, prenom: true } },
+      },
+    }) ?? await this.prisma.assureSante.findFirst({
       where: { matricule: q },
       include: {
         contrat: { select: { statut: true, societeId: true, client: { select: { nom: true } } } },
