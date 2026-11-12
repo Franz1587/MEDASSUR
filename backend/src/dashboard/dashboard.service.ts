@@ -41,7 +41,7 @@ function joursRestants(dateFinFr: string): number {
 // Cache pilotage par (societeId, annee) — TTL 3 min (voir demande 2026-11 :
 // la requête charge tous les prises en charge / contrats / sinistres en DB ;
 // les KPI d'un tableau de bord de gestion ne changent pas à la seconde).
-const _pilotageCache = new Map<string, { ts: number; data: unknown }>();
+const _pilotageCache = new Map<string, { ts: number; data: any }>();
 const PILOTAGE_TTL_MS = 3 * 60 * 1000;
 
 function pilotageKey(societeId: string | null, annee: string | number): string {
