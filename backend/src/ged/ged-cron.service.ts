@@ -4,11 +4,13 @@ import { PrismaService } from "../prisma/prisma.service";
 import { GedService } from "./ged.service";
 
 // ARIANA — rapprochement automatique GED (2026-11).
-// Toutes les minutes : re-passe sur les documents "Non traité" ou
+// Toutes les 5 minutes : re-passe sur les documents "Non traité" ou
 // "Traité partiellement" de type "Facture prestataire" et tente un
 // nouveau rapprochement (Facture, BordereauReglement, PriseEnCharge).
 // Idempotent : un doc déjà "Traité totalement" ou "Sans objet" n'est
 // jamais retouché ici.
+// Passage de 1 min → 5 min (2026-11) : un document bloqué en "Traité
+// partiellement" relançait la DB toutes les 60 s — 5 min suffit.
 @Injectable()
 export class GedCronService {
   private readonly logger = new Logger(GedCronService.name);
@@ -19,7 +21,7 @@ export class GedCronService {
     private readonly ged: GedService,
   ) {}
 
-  @Cron("*/1 * * * *")
+  @Cron("*/5 * * * *")
   async rapprochementsAuto() {
     if (this.running) return; // éviter les chevauchements si un lot met > 1 min
     this.running = true;

@@ -3,6 +3,7 @@ import { Injectable } from "@nestjs/common";
 import type { Response } from "express";
 import { PrismaService } from "../prisma/prisma.service";
 import { ParametresEntrepriseService } from "../parametres-entreprise/parametres-entreprise.service";
+import { TenantContext } from "../tenant/tenant-context";
 
 function fmt(n: number): string {
   return Math.round(n).toLocaleString("fr-FR").replace(/ /g, " ");
@@ -37,11 +38,26 @@ function joursRestants(dateFinFr: string): number {
   return Math.ceil((new Date(y, m - 1, d).getTime() - Date.now()) / 86_400_000);
 }
 
+// Cache pilotage par (societeId, annee) — TTL 3 min (voir demande 2026-11 :
+// la requête charge tous les prises en charge / contrats / sinistres en DB ;
+// les KPI d'un tableau de bord de gestion ne changent pas à la seconde).
+const _pilotageCache = new Map<string, { ts: number; data: unknown }>();
+const PILOTAGE_TTL_MS = 3 * 60 * 1000;
+
+function pilotageKey(societeId: string | null, annee: string | number): string {
+  return `${societeId ?? "global"}::${annee}`;
+}
+
 @Injectable()
 export class DashboardService {
   constructor(private prisma: PrismaService, private parametresEntreprise: ParametresEntrepriseService) {}
 
   async pilotage(anneeParam?: string) {
+    const societeId = TenantContext.getSocieteId();
+    const cacheKey = pilotageKey(societeId, anneeParam ?? "current");
+    const cached = _pilotageCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < PILOTAGE_TTL_MS) return cached.data;
+
     // Années réellement disponibles (2026-08) — dérivées des VRAIS contrats
     // en base, jamais une liste figée ("2024", "2025"...) qui désynchronise
     // dès que l'exploitation avance dans le temps.
@@ -218,7 +234,7 @@ export class DashboardService {
     const sinistresEnCoursLongs = sinistresEnCours.filter((s) => { const j = joursRestants(s.date); return j !== Infinity && -j > 15; });
     if (sinistresEnCoursLongs.length > 0) alertes.push({ message: `${sinistresEnCoursLongs.length} dossier(s) sinistre en cours depuis plus de 15 jours`, type: "warning", view: "sinistres" });
 
-    return {
+    const result = {
       annee, anneesDisponibles: anneesDisponibles.length > 0 ? anneesDisponibles : [anneeCourante],
       primesEmisesCumule, primesEmisesAnneePrecedente, variationPrimesPct, commissionsPercues,
       tauxCommissionMoyen: primesEmisesCumule > 0 ? (commissionsPercues / primesEmisesCumule) * 100 : 0,
@@ -232,6 +248,8 @@ export class DashboardService {
       productionMensuelle, portefeuilleParVille, sinistraliteParType, alertes,
       consommationMensuelle, consommationTotaleAnnee,
     };
+    _pilotageCache.set(cacheKey, { ts: Date.now(), data: result });
+    return result;
   }
 
   // "Rapport PDF" (2026-08) — voir demande utilisateur : le bouton ne
