@@ -4888,7 +4888,10 @@ export class DocumentsService {
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", 'inline; filename="Reseau-de-Soins.pdf"');
-    const doc = new PDFDocument({ size: "A4", margin: 0, autoFirstPage: false });
+    // bufferPages: true — garde toutes les pages en mémoire jusqu'à doc.end()
+    // afin que genererReseauSoins puisse faire switchToPage() sur les pages
+    // d'annuaire déjà générées pour y ajouter les numéros de pied de page.
+    const doc = new PDFDocument({ size: "A4", margin: 0, autoFirstPage: false, bufferPages: true });
     doc.pipe(res);
     genererReseauSoins(doc, soc, logo, provinces);
     doc.end();
