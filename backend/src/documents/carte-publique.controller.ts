@@ -124,16 +124,14 @@ export class CartePubliqueController {
     if (!assure) return htmlInconnu("—");
 
     const societeId: string | null = (assure.contrat as { societeId?: string } | null)?.societeId ?? null;
-    let params: {
-      nom: string; sousTitre: string | null;
-      couleurPrimaire: string; couleurSecondaire: string; logo: string | null;
-    } | null = null;
+    let params: ParamsEntreprise = null;
 
     if (societeId) {
-      params = await this.prisma.parametresEntreprise.findFirst({
-        where: { societeId } as never,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      params = await (this.prisma as any).parametresEntreprise.findFirst({
+        where: { societeId },
         select: { nom: true, sousTitre: true, couleurPrimaire: true, couleurSecondaire: true, logo: true },
-      }) as typeof params;
+      });
     }
 
     const actif = assure.statut === "Actif" && assure.contrat?.statut === "Actif";
@@ -173,6 +171,13 @@ export class CartePubliqueController {
     });
   }
 }
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
+type ParamsEntreprise = {
+  nom: string; sousTitre: string | null;
+  couleurPrimaire: string; couleurSecondaire: string; logo: string | null;
+} | null;
 
 // ── Helpers HTML ─────────────────────────────────────────────────────────────
 
