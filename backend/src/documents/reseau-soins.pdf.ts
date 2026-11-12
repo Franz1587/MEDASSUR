@@ -237,7 +237,7 @@ export function genererReseauSoins(doc: Doc, soc: SocieteAnnuaire, logo: Buffer 
     nbProvs: provinces.filter((p) => p.nom !== "Autres").length,
     nomMaj: (soc.nom || "").toUpperCase(),
   };
-  couverture(ctx);
+  doc.addPage(); couverture(ctx);
   doc.addPage(); statistiques(ctx);
   doc.addPage(); carte(ctx);
   doc.addPage();
