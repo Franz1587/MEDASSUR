@@ -127,11 +127,10 @@ export class CartePubliqueController {
     let params: ParamsEntreprise = null;
 
     if (societeId) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      params = await (this.prisma as any).parametresEntreprise.findFirst({
-        where: { societeId },
+      params = await this.prisma.parametresEntreprise.findFirst({
+        where: { id: societeId },
         select: { nom: true, sousTitre: true, couleurPrimaire: true, couleurSecondaire: true, logo: true },
-      });
+      }) as ParamsEntreprise;
     }
 
     const actif = assure.statut === "Actif" && assure.contrat?.statut === "Actif";
