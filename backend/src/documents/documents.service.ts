@@ -33,6 +33,7 @@ import { genererReseauSoins, paletteReseau, type SocieteAnnuaire, type ProvinceA
 import { montantEnLettresFcfa } from "../lib/montant-en-lettres.util";
 import { policePourNomFichier } from "../lib/police.util";
 import { TAUX_TPS } from "../sante/sante.service";
+import { EN_TETE_SIGNATURE } from "./signature-pdf.middleware";
 import { reconstituerPopulation } from "../mouvements/population-historique.util";
 import type { Prisma, ParametresEntreprise } from "@prisma/client";
 
@@ -1142,7 +1143,7 @@ export class DocumentsService {
   // Fusionnées en UNE méthode avec un curseur Y séquentiel : chaque bloc
   // démarre après la fin RÉELLEMENT mesurée du précédent, jamais une
   // position absolue devinée — ne peut plus recouvrir le bloc au-dessus.
-  private personnaliserVersoLaRuche(doc: PDFKit.PDFDocument, p: ParametresEntreprise) {
+  private personnaliserVersoLaRuche(doc: PDFKit.PDFDocument, p: ParametresEntreprise, qrBuffer?: Buffer | null) {
     try {
       if (p.carteVersoIntro) {
         // ⚠️ Rectangle blanc DYNAMIQUE, mesuré via `heightOfString` AVANT
@@ -1270,6 +1271,16 @@ export class DocumentsService {
         doc.fillColor("#1a1a1a").text(p.carteVersoQrExplication, departContenu, curseurY, { width: largeurTexte });
       }
       doc.restore();
+
+      // Remplacer l'icône QR décorative du verso (position mesurée sur
+      // l'image 8500×5400 → 242.65×153.01pt : cercle QR à x≈8-18, y≈123-135)
+      // par le vrai QR généré de l'assuré — l'icône d'origine est simplement
+      // "scanner votre QR", pas un vrai QR ; la couvrir rend le verso utile.
+      if (qrBuffer) {
+        const qrX = 3, qrY = 119, qrTaille = 17;
+        doc.rect(qrX - 1, qrY - 1, qrTaille + 2, qrTaille + 2).fill("#ffffff");
+        try { doc.image(qrBuffer, qrX, qrY, { width: qrTaille, height: qrTaille }); } catch { /* jamais bloquant */ }
+      }
     } catch { /* jamais bloquant */ }
   }
 
@@ -1810,7 +1821,7 @@ export class DocumentsService {
       // texte éditable, cette méthode devra être généralisée (coordonnées
       // par `ModeleCarte` plutôt que codées en dur) plutôt que réutilisée
       // telle quelle.
-      if (styleLaRuche) this.personnaliserVersoLaRuche(doc, p);
+      if (styleLaRuche) this.personnaliserVersoLaRuche(doc, p, qrBuffer);
     } else {
       this.dessinerFiligrane(doc, primaire, p.nom);
     }
@@ -1893,6 +1904,7 @@ export class DocumentsService {
     const doc = new PDFDocument({ size: [CARD_WIDTH, CARD_HEIGHT], margin: 0, autoFirstPage: false });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="Carte-${assure.matricule}.pdf"`);
+    res.setHeader(EN_TETE_SIGNATURE, "integree");
     doc.pipe(res);
     await this.ajouterCarteRectoVerso(doc, assure, p);
     doc.end();
@@ -1928,6 +1940,7 @@ export class DocumentsService {
     const doc = new PDFDocument({ size: [CARD_WIDTH, CARD_HEIGHT], margin: 0, autoFirstPage: false });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="Cartes-Assurance${dto.rectoUniquement ? "-Recto" : ""}.pdf"`);
+    res.setHeader(EN_TETE_SIGNATURE, "integree");
     doc.pipe(res);
 
     let nombreCartes = 0;
