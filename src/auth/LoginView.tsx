@@ -1,4 +1,4 @@
-import { Play } from "lucide-react";
+import { Play, QrCode } from "lucide-react";
 import { LoginForm } from "@/auth/LoginForm";
 import { ProfessionsCarousel } from "@/auth/ProfessionsCarousel";
 import logoFull from "@/assets/logo-full.png";
@@ -82,6 +82,21 @@ export function LoginView() {
           <span className="text-left leading-tight">
             <span className="block text-[10px] text-white/70 uppercase tracking-wide">Télécharger sur</span>
             <span className="block text-[15px] font-semibold text-white">Android</span>
+          </span>
+        </a>
+
+        {/* Lien vérification carte assuré (2026-11) */}
+        <a
+          href="/api/carte/check"
+          target="_blank" rel="noopener noreferrer"
+          className="mt-3 w-full max-w-sm flex items-center gap-3 h-11 px-4 rounded-xl border border-border/60 bg-card/70 hover:bg-card transition-colors shadow-sm"
+        >
+          <span className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+            <QrCode className="w-4 h-4 text-primary" />
+          </span>
+          <span className="text-left leading-tight">
+            <span className="block text-[11px] text-muted-foreground uppercase tracking-wide">Prestataire de soins</span>
+            <span className="block text-[13px] font-semibold text-foreground">Vérifier une carte assuré</span>
           </span>
         </a>
 
