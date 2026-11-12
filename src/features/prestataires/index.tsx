@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { referenceLisible } from "@/lib/referenceFacture";
 import { MedecinsPrestataire } from "./MedecinsPrestataire";
-import { Building2, Star, Clock, ShieldOff, ShieldCheck, Stethoscope, Plus, Pencil, ReceiptText, Printer, ClipboardList, FileStack, TrendingUp, Search, X, MapPin, MapPinOff, Loader2, FileDown, UserPlus, Merge } from "lucide-react";
+import { Building2, Star, Clock, ShieldOff, ShieldCheck, Stethoscope, Plus, Pencil, ReceiptText, Printer, ClipboardList, FileStack, TrendingUp, Search, X, MapPin, MapPinOff, Loader2, FileDown, UserPlus, Merge, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/shared/Badge";
 import { Btn } from "@/components/shared/Btn";
@@ -269,6 +269,18 @@ export default function PrestatairesView() {
           </>
         }
       />
+      <div className="mb-4 -mt-2 rounded-lg border border-border bg-card px-3 py-2 text-[12px] text-foreground flex items-center gap-3">
+        <QrCode className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+        <span className="text-muted-foreground">Lien de vérification des cartes (à communiquer aux prestataires) :</span>
+        <a
+          href="https://medassur.cloud/api/carte/check"
+          target="_blank" rel="noopener noreferrer"
+          className="font-semibold text-primary hover:underline"
+          style={{ fontFamily: "'DM Mono', monospace" }}
+        >
+          medassur.cloud/api/carte/check
+        </a>
+      </div>
       {geoProgres && (
         <div className="mb-4 -mt-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-[12px] text-foreground flex items-center gap-3">
           <MapPin className="w-3.5 h-3.5 text-primary flex-shrink-0" />
