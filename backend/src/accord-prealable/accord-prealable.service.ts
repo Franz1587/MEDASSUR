@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
-import { normaliserRubrique } from "../actes-medicaux/rubrique-contrat.util";
+import { normaliserRubrique, rubriqueAccordPrealable } from "../actes-medicaux/rubrique-contrat.util";
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -122,7 +122,7 @@ export class AccordPrealableService {
         ...a,
         assure: a.assure,
         lignes: a.lignes,
-        rubrique: normaliserRubrique(a.type ?? a.description ?? ""),
+        rubrique: rubriqueAccordPrealable(a.type, a.description),
         facture: a.prisesEnCharge.length > 0,
         montantFacture: a.prisesEnCharge.reduce((s, p) => s + Number(p.montant), 0),
         montantAutoriseSuggere: (Number(a.montantAutorise) || null) as number | null,

@@ -361,9 +361,7 @@ export class PortailMembreController {
     const assureSanteId = this.assureSanteIdDe(req);
     const idsFamille = await this.idsFamilleDe(assureSanteId);
     const { items } = await this.accordPrealable.findAll({ assureIds: idsFamille });
-    // Les consultations simples ne font pas l'objet d'un accord préalable —
-    // elles ne doivent pas apparaître dans la liste du portail assuré.
-    return items.filter((a) => a.type !== "Consultations");
+    return items;
   }
 
   // Certificat de prise en charge (2026-08) — voir demande utilisateur : "les

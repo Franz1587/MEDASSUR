@@ -87,6 +87,21 @@ export function normaliserRubrique(valeur: string): string {
   return trouvee ? trouvee.rubrique : valeur.trim();
 }
 
+// Rubrique d'un accord préalable (2026-11) — `type` est souvent un libellé
+// de garantie ("Consultation/Divers") qui normalise vers une rubrique
+// générique ; la `description` porte alors le vrai acte ("CHAMBRE" →
+// Hospitalisation, "PRELEVEMENT SANGUIN" → Analyses Médicale).
+// On raffine avec la description dès que le type est générique.
+export function rubriqueAccordPrealable(type: string | null | undefined, description: string | null | undefined): string {
+  const fromType = type ? normaliserRubrique(type) : null;
+  if (!fromType || RUBRIQUES_GENERIQUES.has(fromType) || fromType === "Non précisé") {
+    const fromDesc = description ? normaliserRubrique(description) : null;
+    if (fromDesc && !RUBRIQUES_GENERIQUES.has(fromDesc) && fromDesc !== "Non précisé") return fromDesc;
+  }
+  if (fromType) return fromType;
+  return description ? normaliserRubrique(description) : "Non précisé";
+}
+
 // Spécialité du prestataire → rubrique (2026-09) — voir demande
 // utilisateur : "l'optique souvent traduit en frais d'optique ou verre et
 // monture n'apparaît pas dans la statistique de DGDI." Les fichiers repris
