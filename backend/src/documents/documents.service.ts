@@ -4882,7 +4882,7 @@ export class DocumentsService {
       couleurPrimaire: p.couleurPrimaire, couleurSecondaire: p.couleurSecondaire,
     };
 
-    const logoPath = p.logo ? path.join(UPLOADS_ROOT, "logos", p.logo) : null;
+    const logoPath = p.logo ? path.join(UPLOADS_LOGOS_ENTREPRISES_DIR, p.logo) : null;
     const logo = logoPath && fs.existsSync(logoPath) ? logoPath : null;
     const palette = paletteReseau(p.couleurPrimaire, p.couleurSecondaire);
 
