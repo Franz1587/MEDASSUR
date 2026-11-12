@@ -5,6 +5,7 @@ import * as path from "path";
 import { Public } from "../auth/access.decorators";
 import { PrismaService } from "../prisma/prisma.service";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
+import { DocumentsService } from "./documents.service";
 
 // Vérification publique d'une carte santé — accessible SANS compte (2026-11).
 // Deux entrées :
@@ -15,7 +16,7 @@ import { UPLOADS_ROOT } from "../uploads-dir.util";
 @Public()
 @Controller("carte")
 export class CartePubliqueController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly documents: DocumentsService) {}
 
   // ── Formulaire de vérification manuelle ─────────────────────────────
   @Get("check")
@@ -67,6 +68,12 @@ export class CartePubliqueController {
     }
 
     res.send(await this.pageCarteAssure(assure));
+  }
+
+  // ── PDF recto public ────────────────────────────────────────────────
+  @Get("pdf/:matricule")
+  async pdf(@Param("matricule") matricule: string, @Res() res: Response): Promise<void> {
+    await this.documents.renderCartePdfPublic(matricule, res);
   }
 
   // ── Méthodes privées ─────────────────────────────────────────────────
@@ -196,18 +203,12 @@ const SHELL_CSS = `*{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,Helvetica,sans-serif;background:#eef2f7;padding:16px;min-height:100vh}`;
 
 function htmlCarte(d: CarteData): string {
-  const logoHtml = d.logoSrc
-    ? `<img src="${d.logoSrc}" alt="${esc(d.societeNom)}" style="max-height:36px;max-width:140px;object-fit:contain;">`
-    : `<span style="font-weight:bold;font-size:13px;color:${esc(d.primaire)}">${esc(d.societeNom)}</span>`;
-
   const statusIcon = d.actif
     ? `<svg viewBox="0 0 52 52" width="56" height="56"><circle cx="26" cy="26" r="25" fill="#43a047"/><path d="M14 26l9 9 15-16" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`
     : `<svg viewBox="0 0 52 52" width="56" height="56"><circle cx="26" cy="26" r="25" fill="#e53935"/><path d="M17 17l18 18M35 17l-18 18" stroke="#fff" stroke-width="4" stroke-linecap="round"/></svg>`;
   const statusTitre = d.actif ? "Carte active" : "Carte désactivée";
   const statusDesc = d.actif ? "Personne encore couverte" : "Cette personne n'est plus couverte";
-  const statusCss = d.actif
-    ? "background:#e8f5e9;border:2px solid #43a047"
-    : "background:#fce4ec;border:2px solid #e53935";
+  const statusCss = d.actif ? "background:#e8f5e9;border:2px solid #43a047" : "background:#fce4ec;border:2px solid #e53935";
   const titreCouleur = d.actif ? "#2e7d32" : "#c62828";
 
   return `<!DOCTYPE html>
@@ -218,55 +219,48 @@ function htmlCarte(d: CarteData): string {
 <title>Carte Santé – Vérification</title>
 <style>
 ${SHELL_CSS}
-.card{background:#fff;border-radius:14px;max-width:420px;margin:0 auto;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.14)}
-.card-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px 0}
-.carte-titre{font-size:17px;font-weight:bold;color:${esc(d.primaire)};letter-spacing:.5px}
-.card-sep{height:2px;background:${esc(d.primaire)};margin:8px 14px 0}
-.card-body{padding:12px 14px 8px}
-.principal{font-size:11px;font-weight:bold;color:#333;margin-bottom:6px}
-.champ{margin-bottom:5px;font-size:12px;color:#333}
-.champ b{font-size:13px;color:#111}
-.taux-bar{background:#f5f5f5;padding:8px 14px;font-size:12px;font-weight:bold;color:#333}
-.taux-bar span{color:${esc(d.secondaire)}}
-.chevron{height:46px;position:relative;overflow:hidden}
-.chevron::before{content:'';position:absolute;inset:0;background:${esc(d.secondaire)};clip-path:polygon(0 55%,100% 0,100% 100%,0 100%)}
-.chevron::after{content:'';position:absolute;bottom:0;right:0;width:22%;height:68%;background:${esc(d.primaire)};clip-path:polygon(100% 0,100% 100%,0 100%)}
-.status{max-width:420px;margin:16px auto 0;border-radius:14px;padding:22px 16px;text-align:center;${statusCss}}
+.pdf-wrap{max-width:420px;margin:0 auto 16px;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.14);background:#fff;min-height:120px}
+.pdf-wrap canvas{width:100%;display:block}
+.pdf-loading{padding:40px;text-align:center;color:#888;font-size:14px}
+.status{max-width:420px;margin:0 auto 16px;border-radius:14px;padding:22px 16px;text-align:center;${statusCss}}
 .status-titre{font-size:22px;font-weight:bold;margin:8px 0 4px;color:${titreCouleur}}
 .status-desc{font-size:15px;color:#444}
-.footer{text-align:center;margin-top:20px;font-size:11px;color:#aaa;padding-bottom:16px}
-.check-link{display:block;text-align:center;margin-top:12px;font-size:12px;color:#888}
-.check-link a{color:#004a9f}
+.check-box{max-width:420px;margin:0 auto 20px;background:#fff;border-radius:14px;padding:14px 16px;box-shadow:0 2px 10px rgba(0,0,0,.08);text-align:center}
+.check-box-label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.check-box-url{font-size:14px;font-weight:bold;color:#004a9f;word-break:break-all}
+.footer{text-align:center;font-size:11px;color:#aaa;padding-bottom:16px}
 </style>
 </head>
 <body>
-<div class="card">
-  <div class="card-header">
-    ${logoHtml}
-    <div class="carte-titre">CARTE SANTÉ</div>
-  </div>
-  <div class="card-sep"></div>
-  <div class="card-body">
-    <div class="principal">Assuré Principal : ${esc(d.nomPrincipal)}</div>
-    <div class="champ">NOM : <b>${esc(d.nom)}</b></div>
-    <div class="champ">PRÉNOM : <b>${esc(d.prenom)}</b></div>
-    <div class="champ">NÉ(E) LE : <b>${esc(d.dateNaissance)}</b></div>
-    <div class="champ">MATRICULE : <b>${esc(d.matricule)}</b></div>
-    <div class="champ">SOCIÉTÉ : <b>${esc(d.societeContrat)}</b></div>
-  </div>
-  <div class="taux-bar">
-    FRAIS MÉDICAUX : <span>${esc(d.tauxAmbulatoire)}</span>
-    &nbsp;–&nbsp;
-    HOSPITALISATION : <span>${esc(d.tauxHospitalisation)}</span>
-  </div>
-  <div class="chevron"></div>
+<div class="pdf-wrap">
+  <div class="pdf-loading" id="pdfLoading">Chargement de la carte…</div>
+  <canvas id="pdfCanvas" style="display:none"></canvas>
 </div>
 <div class="status">
   ${statusIcon}
   <div class="status-titre">${statusTitre}</div>
   <div class="status-desc">${statusDesc}</div>
 </div>
+<div class="check-box">
+  <div class="check-box-label">Vérification manuelle (sans scanner)</div>
+  <div class="check-box-url">medassur.cloud/api/carte/check</div>
+</div>
 <div class="footer">Vérification MEDASSUR+ &middot; medassur.cloud</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+pdfjsLib.getDocument('/api/carte/pdf/${esc(d.matricule)}').promise.then(function(pdf){
+  return pdf.getPage(1);
+}).then(function(page){
+  var dpr=window.devicePixelRatio||1;
+  var vp=page.getViewport({scale:dpr*1.6});
+  var canvas=document.getElementById('pdfCanvas');
+  canvas.width=vp.width; canvas.height=vp.height;
+  canvas.style.display='block';
+  document.getElementById('pdfLoading').style.display='none';
+  return page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+}).catch(function(){ document.getElementById('pdfLoading').textContent='Carte indisponible.'; });
+</script>
 </body>
 </html>`;
 }
@@ -341,6 +335,7 @@ ${SHELL_CSS}
 <div class="hero">
   <h1>Vérifier une carte santé</h1>
   <p>Saisissez le numéro matricule ou le numéro de téléphone de l'assuré pour vérifier sa couverture.</p>
+  <p style="margin-top:10px;font-size:13px;color:#888">Lien à communiquer aux prestataires&nbsp;: <b style="color:#004a9f">medassur.cloud/api/carte/check</b></p>
 </div>
 <div class="form-box">
   <form method="GET" action="/api/carte/check/search">

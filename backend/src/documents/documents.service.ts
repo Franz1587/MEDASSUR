@@ -1912,6 +1912,28 @@ export class DocumentsService {
     doc.end();
   }
 
+  /** Recto PDF d'une carte par matricule — endpoint public, pas de JWT requis (2026-11). */
+  async renderCartePdfPublic(matricule: string, res: Response) {
+    const assure = await this.prisma.assureSante.findFirst({
+      where: { matricule },
+      include: {
+        contrat: { include: { client: true, compagnie: true } },
+        famille: { select: { telephone: true, nom: true, prenom: true } },
+      },
+    });
+    if (!assure) throw new NotFoundException(`Assuré ${matricule} introuvable`);
+    const societeId = (assure.contrat as any)?.societeId as string | null;
+    const p = societeId ? await this.prisma.parametresEntreprise.findUnique({ where: { id: societeId } }) : null;
+    if (!p) throw new NotFoundException(`Société introuvable`);
+    const doc = new PDFDocument({ size: [CARD_WIDTH, CARD_HEIGHT], margin: 0, autoFirstPage: false });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="Carte-${assure.matricule}.pdf"`);
+    res.setHeader(EN_TETE_SIGNATURE, "integree");
+    doc.pipe(res);
+    await this.ajouterCarteRectoVerso(doc, assure, p, true);
+    doc.end();
+  }
+
   // Génération en masse (contrat entier ou liste explicite d'ids — famille/
   // sélection). Un seul PDFDocument streamé directement vers la réponse
   // HTTP (doc.pipe(res)) : les pages sont écrites au fil de l'eau, jamais
