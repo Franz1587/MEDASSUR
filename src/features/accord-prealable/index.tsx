@@ -24,7 +24,7 @@ import { getActesMedicaux } from "@/services/acteMedical.service";
 import { getPrestataires } from "@/services/prestataires.service";
 import { getContrats } from "@/services/contrats.service";
 import { getLettresCles } from "@/services/lettresCles.service";
-import { openCertificatPriseEnCharge } from "@/services/documents.service";
+import { openCertificatPriseEnCharge, openDocument } from "@/services/documents.service";
 import { useShellNavigation } from "@/layout/ShellNavigationContext";
 import type { AccordPrealable } from "@/types/accordPrealable";
 import type { AssureSante } from "@/types/sante";
@@ -856,7 +856,7 @@ export default function AccordPrealableView() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border">
-              {["Réf.", "Origine", "Assuré", "Prestataire", "Type", "Description", "Pièces jointes", "Devis", "Analyse médicale", "Validation financière", "Décision", "Montant autorisé", "Facturé", "Pris en charge", "Actions"].map((h) => (
+              {["Réf.", "Date de soins", "Origine", "Assuré", "Prestataire", "Type", "Description", "Pièces jointes", "Devis", "Analyse médicale", "Validation financière", "Décision", "Montant autorisé", "Facturé", "Pris en charge", "Actions"].map((h) => (
                 <th key={h} className="text-left text-xs text-muted-foreground font-semibold uppercase tracking-wide px-4 py-3 whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -865,6 +865,7 @@ export default function AccordPrealableView() {
             {pagination.pageItems.map((a) => (
               <tr key={a.id} onClick={() => openEdit(a)} className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer">
                 <td className="px-4 py-3 text-xs font-semibold text-primary whitespace-nowrap" style={{ fontFamily: "'DM Mono', monospace" }}>{a.prescriptionRef ?? a.id}</td>
+                <td className="px-4 py-3 text-foreground whitespace-nowrap">{a.dateDemande || "—"}</td>
                 <td className="px-4 py-3 whitespace-nowrap"><Badge variant="neutral">{a.origine ?? "Agent"}</Badge></td>
                 <td className="px-4 py-3 font-semibold text-foreground whitespace-nowrap">{a.assureNom}</td>
                 <td className="px-4 py-3 text-foreground whitespace-nowrap">{a.prestataire}</td>
@@ -1418,15 +1419,14 @@ export default function AccordPrealableView() {
                       </div>
                     </div>
                     {editingAccord.documentNumerise && (
-                      <a
-                        href={`${API_URL}/accord-prealable/${editingAccord.id}/document-numerise`}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => openDocument(`/accord-prealable/${editingAccord.id}/document-numerise`)}
                         className="inline-flex items-center gap-2 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-[12px] hover:opacity-90"
                       >
                         <FileText className="w-3.5 h-3.5" />
-                        Télécharger la réplique PDF
-                      </a>
+                        Ouvrir la réplique PDF
+                      </button>
                     )}
                   </div>
                 </div>

@@ -166,8 +166,8 @@ export default function MembrePriseEnChargeView() {
               {d.montantDevis != null && (
                 <p className="text-[12px] text-muted-foreground mt-2">Devis : <span className="text-foreground font-semibold" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(Number(d.montantDevis))} FCFA</span></p>
               )}
-              {d.motifDecision && (
-                <p className={`text-[12px] mt-1.5 ${d.decision === "Refusé" ? "text-destructive" : "text-muted-foreground"}`}>{d.motifDecision}</p>
+              {d.motifDecision && d.decision === "Refusé" && (
+                <p className="text-[12px] mt-1.5 text-destructive">{d.motifDecision}</p>
               )}
               {d.decision === "Accordé" && (
                 <button
