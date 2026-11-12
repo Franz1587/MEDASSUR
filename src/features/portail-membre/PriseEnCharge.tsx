@@ -152,8 +152,17 @@ export default function MembrePriseEnChargeView() {
             <div key={d.id} className="bg-card border border-border rounded-2xl p-3.5">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-[13px] font-semibold text-foreground truncate">{d.rubrique ?? d.description}</p>
-                  <p className="text-[11.5px] text-muted-foreground mt-0.5">{d.prestataire} · {d.dateDemande}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[13px] font-semibold text-foreground truncate">{d.rubrique ?? d.description}</p>
+                    {(d.prescriptionRef ?? d.id) && (
+                      <span className="shrink-0 font-mono text-[10.5px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">
+                        {d.prescriptionRef ?? d.id.slice(0, 8).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11.5px] text-muted-foreground mt-0.5">
+                    {d.assure ? `${d.assure.nom}${d.assure.prenom ? " " + d.assure.prenom : ""} · ` : ""}{d.prestataire} · {d.dateDemande}
+                  </p>
                 </div>
                 <Badge variant={decisionVariant(d.decision)}>{d.decision}</Badge>
               </div>

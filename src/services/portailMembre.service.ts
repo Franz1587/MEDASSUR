@@ -273,9 +273,11 @@ export const uploaderAutreRemboursement = (id: string, files: File[]) => uploadF
 
 export interface MembreAccordPrealable {
   id: string;
+  prescriptionRef?: string | null;
   type: string;
   description: string;
   rubrique?: string;
+  assure?: { nom: string; prenom?: string | null };
   dateDemande: string;
   prestataire: string;
   decision: string;
