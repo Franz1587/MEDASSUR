@@ -40,7 +40,7 @@ export class UsersMoiController {
   // UpdateMoiDto.
   @Patch()
   modifierMonProfil(@Body() dto: UpdateMoiDto, @Req() req: MoiRequest) {
-    return this.service.update(req.user.userId, dto, req.user);
+    return this.service.update(req.user.userId, dto);
   }
 
   @Patch("mot-de-passe")

@@ -75,7 +75,7 @@ export class MouvementsService implements OnModuleInit {
     await this.radierHorsLimiteAge();
   }
 
-  async appliquerMouvement(contratId: string, dateEffet: string, ajouts: AjoutMouvement[], retraits: RetraitMouvement[]) {
+  async appliquerMouvement(contratId: string, dateEffet: string, ajouts: AjoutMouvement[], retraits: RetraitMouvement[], opts?: { ignorerAge?: boolean }) {
     const contrat = await this.prisma.contrat.findUnique({ where: { id: contratId } });
     if (!contrat) throw new NotFoundException(`Contrat ${contratId} introuvable`);
     const primeAvant = Number(contrat.prime);
@@ -84,7 +84,7 @@ export class MouvementsService implements OnModuleInit {
     const dateReference = parseDateFr(dateEffet);
     for (const a of ajouts) {
       const erreurAge = verifierAge(contrat, { typeAssure: a.typeAssure ?? (a.familleId ? undefined : "AS"), dateNaissance: a.dateNaissance, scolarise: a.scolarise }, dateReference);
-      if (erreurAge) throw new BadRequestException(erreurAge);
+      if (erreurAge && !opts?.ignorerAge) throw new BadRequestException(erreurAge);
     }
 
     // Préfixe matricule propre à la société (2026-09) — voir
@@ -255,7 +255,7 @@ export class MouvementsService implements OnModuleInit {
   // Un CJ/EF basculé seul (avecFamille=false, ou personne non racine) est
   // détaché de sa famille d'origine et devient AS de sa propre fiche dans
   // le contrat destination.
-  async basculerVersContrat(assureId: string, contratDestinationId: string, avecFamille: boolean, dateEffet: string) {
+  async basculerVersContrat(assureId: string, contratDestinationId: string, avecFamille: boolean, dateEffet: string, opts?: { ignorerAge?: boolean }) {
     const assure = await this.prisma.assureSante.findUnique({ where: { id: assureId }, include: { membres: true } });
     if (!assure) throw new NotFoundException(`Assuré ${assureId} introuvable`);
     if (assure.contratId === contratDestinationId) {

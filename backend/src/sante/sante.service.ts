@@ -889,7 +889,7 @@ export class SanteService {
         await this.prisma.assureSante.update({ where: { id: item.id }, data });
         return 1;
       }));
-      updated += compteurs.reduce((s, c) => s + c, 0);
+      updated += compteurs.reduce((s: number, c: number) => s + c, 0);
     }
 
     // Prime de l'exercice courant réalignée sur la population importée
@@ -1029,7 +1029,7 @@ export class SanteService {
   // contratId dénormalisé (voir PriseEnCharge.contratId, posé une fois à la
   // création — reste rattaché au contrat en vigueur au moment des faits même
   // si l'assuré bascule ensuite vers un autre contrat).
-  async findPrisesEnCharge(assureIds?: string[], contratId?: string, gestionnaireId?: string, portailMode = false) {
+  async findPrisesEnCharge(assureIds?: string[], contratId?: string, gestionnaireId?: string, portailMode = false, modePaiement?: string, sansRemboursement?: boolean) {
     const where: Prisma.PriseEnChargeWhereInput = {
       ...(contratId ? { contratId } : assureIds && assureIds.length > 0 ? { assureId: { in: assureIds } } : {}),
       ...(gestionnaireId ? { gestionnaireId } : {}),
@@ -1037,6 +1037,8 @@ export class SanteService {
       // facturation) — la PEC n'est une consommation réelle que quand le
       // prestataire a facturé et que factureId est renseigné.
       ...(portailMode ? { NOT: { modePaiement: "TiersPayant", factureId: null } } : {}),
+      ...(modePaiement ? { modePaiement } : {}),
+      ...(sansRemboursement ? { montantRembourse: null } : {}),
     };
     // Identité transverse (voir schema.prisma IdentiteAssuree) : demandées
     // par assuré (portail membre, agent IA...), les prestations de la

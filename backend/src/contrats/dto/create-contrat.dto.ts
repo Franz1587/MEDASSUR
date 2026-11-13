@@ -118,4 +118,15 @@ export class CreateContratDto {
   @IsOptional() @IsNumber() @Min(0) montantAccessoires?: number;
   @IsOptional() @IsNumber() tauxCommission?: number;
   @IsOptional() @IsNumber() @Min(0) tauxChargement?: number;
+
+  // Contrats Maladie liés à un Assistance multi-maladie (2026-09)
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  contratsMaladieIds?: string[];
+
+  // Nom sur la carte de santé (2026-09) — libellé personnalisé
+  @IsOptional()
+  @IsString()
+  nomCarteSante?: string;
 }

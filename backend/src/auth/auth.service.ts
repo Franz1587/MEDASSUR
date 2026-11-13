@@ -23,7 +23,7 @@ export class AuthService {
   // un ayant droit délégué par téléphone d'avoir un numéro DISTINCT de celui
   // de l'assuré principal (voir demande utilisateur). Tous les autres rôles
   // continuent de se connecter par User.email, inchangé.
-  async login(identifiant: string, password: string) {
+  async login(identifiant: string, password: string, _ip?: string) {
     const identifiantNettoye = identifiant.trim();
     const emailNormalisee = identifiantNettoye.toLowerCase();
 

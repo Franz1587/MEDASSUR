@@ -1,4 +1,4 @@
-import type { ParsedMail } from "mailparser";
+interface ParsedMail { headerLines?: readonly { key: string; line: string }[] }
 
 export interface ResultatAuthEmail {
   authentifie: boolean;

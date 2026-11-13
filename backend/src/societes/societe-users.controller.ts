@@ -27,26 +27,26 @@ export class SocieteUsersController {
 
   @Post()
   create(@Param("societeId") societeId: string, @Body() dto: CreateUserDto, @Req() req: ActeurRequest) {
-    return this.service.create(societeId, dto, req.user);
+    return this.service.create(societeId, dto);
   }
 
   @Patch(":userId")
   update(@Param("societeId") societeId: string, @Param("userId") userId: string, @Body() dto: UpdateUserDto, @Req() req: ActeurRequest) {
-    return this.service.update(societeId, userId, dto, req.user);
+    return this.service.update(societeId, userId, dto);
   }
 
   @Patch(":userId/modules")
   updateModules(@Param("societeId") societeId: string, @Param("userId") userId: string, @Body() dto: UpdateModulesDto, @Req() req: ActeurRequest) {
-    return this.service.updateModules(societeId, userId, dto, req.user);
+    return this.service.updateModules(societeId, userId, dto);
   }
 
   @Patch(":userId/reinitialiser-mot-de-passe")
   reinitialiserMotDePasse(@Param("societeId") societeId: string, @Param("userId") userId: string, @Req() req: ActeurRequest) {
-    return this.service.reinitialiserMotDePasse(societeId, userId, req.user);
+    return this.service.reinitialiserMotDePasse(societeId, userId);
   }
 
   @Delete(":userId")
   remove(@Param("societeId") societeId: string, @Param("userId") userId: string, @Req() req: ActeurRequest) {
-    return this.service.remove(societeId, userId, req.user);
+    return this.service.remove(societeId, userId);
   }
 }
