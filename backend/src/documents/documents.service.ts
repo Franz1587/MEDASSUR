@@ -2737,6 +2737,8 @@ export class DocumentsService {
       include: {
         medecin: true,
         priseEnCharge: { include: { assure: { include: { contrat: { include: { client: true, compagnie: true } }, famille: true } }, prestataireRef: true } },
+        // Prescriptions numérisées : assure porté directement (pas de priseEnCharge)
+        assure: { include: { contrat: { include: { client: true, compagnie: true } }, famille: true } },
         lignes: { where: { type: "Examen" }, include: { traitements: { include: { priseEnCharge: { include: { acteMedical: true } } } } } },
       },
     });
@@ -2759,13 +2761,21 @@ export class DocumentsService {
         familleActe: traite?.acteMedical?.famille ?? null,
       };
     });
+    // Prescriptions numérisées (origine="Numérisée") : pas de priseEnCharge —
+    // construire pec depuis l'assure direct + champs libres prescripteurNom/structureNom.
+    const assureSource = prescription.priseEnCharge?.assure ?? prescription.assure;
+    if (!assureSource) throw new BadRequestException("Assuré introuvable pour ce bon.");
+    const dateSource = prescription.priseEnCharge?.date ?? prescription.createdAt.toISOString().slice(0, 10);
     const pec: FormulairePec = {
-      date: prescription.priseEnCharge!.date, type: prescription.priseEnCharge!.type, createdAt: prescription.createdAt,
-      assure: prescription.priseEnCharge!.assure as unknown as FormulairePec["assure"],
-      prestataireRef: prescription.priseEnCharge!.prestataireRef,
-      // Pas de section pharmacie sur la Feuille d'Examen — tableau vide,
-      // jamais utilisé par genererFormulaire côté "examen".
-      prescriptionOrigine: { medecin: prescription.medecin as any, numeroBonExamen: prescription.numeroBonExamen, medicaments: [] },
+      date: dateSource, type: prescription.priseEnCharge?.type ?? "Consultation", createdAt: prescription.createdAt,
+      assure: assureSource as unknown as FormulairePec["assure"],
+      prestataireRef: prescription.priseEnCharge?.prestataireRef ?? null,
+      // Pas de section pharmacie sur la Feuille d'Examen — tableau vide.
+      prescriptionOrigine: {
+        medecin: prescription.medecin ?? (prescription.prescripteurNom ? { nom: prescription.prescripteurNom, prenom: null, titre: null, specialite: null } as any : null),
+        numeroBonExamen: prescription.numeroBonExamen,
+        medicaments: [],
+      },
     };
     await this.genererFormulaire("examen", prescription.numeroBonExamen, pec, lignes, res, prescriptionId, utilisateur, prestataireFiltre);
   }

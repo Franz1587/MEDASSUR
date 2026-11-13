@@ -565,8 +565,15 @@ export class PrestatairesService {
   // Répertoire médecins (2026-11) — tous les médecins actifs avec leurs
   // établissements, pour la tile "Médecins" du réseau de soins portail.
   async findMedecinsReseau() {
+    // MedecinPrestataire n'a pas de societeId — le middleware Prisma ne filtre
+    // que le modèle racine. On injecte manuellement le scope sur les deux
+    // relations imbriquées pour éviter de mélanger des médecins test (societe-
+    // bootstrap) avec ceux d'un vrai client (LA RUCHE, etc.).
+    const societeId = TenantContext.getSocieteId();
+    const scopeMedecin = societeId ? { actif: true, societeId } : { actif: true };
+    const scopePrestataire = societeId ? { statutConvention: "Conventionné", societeId } : { statutConvention: "Conventionné" };
     const liens = await this.prisma.medecinPrestataire.findMany({
-      where: { medecin: { actif: true } },
+      where: { medecin: scopeMedecin, prestataire: scopePrestataire },
       include: {
         medecin: { select: { id: true, nom: true, prenom: true, titre: true, specialite: true, telephone: true } },
         prestataire: { select: { id: true, nom: true, type: true, ville: true, province: true, statutConvention: true } },
