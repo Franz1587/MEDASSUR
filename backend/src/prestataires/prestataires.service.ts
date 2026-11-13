@@ -577,7 +577,7 @@ export class PrestatairesService {
       const m = l.medecin;
       if (!parMedecin.has(m.id)) parMedecin.set(m.id, { id: m.id, nom: m.nom, prenom: m.prenom, titre: m.titre, specialite: m.specialite, telephone: m.telephone, prestataires: [] });
       if (l.prestataire.statutConvention === "Conventionné") {
-        parMedecin.get(m.id)!.prestataires.push({ id: l.prestataire.id, nom: l.prestataire.nom, type: l.prestataire.type, ville: l.prestataire.ville, province: l.prestataire.province });
+        parMedecin.get(m.id)!.prestataires.push({ id: l.prestataire.id, nom: l.prestataire.nom ?? "", type: l.prestataire.type ?? "", ville: l.prestataire.ville ?? "", province: l.prestataire.province });
       }
     }
     return [...parMedecin.values()].sort((a, b) => (a.specialite ?? "").localeCompare(b.specialite ?? "", "fr") || a.nom.localeCompare(b.nom, "fr"));
