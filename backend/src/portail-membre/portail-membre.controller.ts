@@ -346,7 +346,10 @@ export class PortailMembreController {
   async feuilleExamenBon(@Param("prescriptionId") prescriptionId: string, @Req() req: PortailMembreRequest, @Res() res: Response) {
     const idsFamille = await this.idsFamilleDe(this.assureSanteIdDe(req));
     const prescription = await this.prisma.prescription.findUnique({ where: { id: prescriptionId }, include: { priseEnCharge: true } });
-    if (!prescription || !prescription.priseEnCharge || !idsFamille.includes(prescription.priseEnCharge.assureId)) throw new ForbiddenException(`Bon ${prescriptionId} inaccessible`);
+    // Prescriptions numérisées (origine="Numérisée") n'ont pas de priseEnCharge :
+    // l'assuré est porté directement dans prescription.assureId.
+    const assureId = prescription?.priseEnCharge?.assureId ?? prescription?.assureId;
+    if (!prescription || !assureId || !idsFamille.includes(assureId)) throw new ForbiddenException(`Bon ${prescriptionId} inaccessible`);
     return this.documents.renderFeuilleExamenPrescription(prescriptionId, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId });
   }
 
