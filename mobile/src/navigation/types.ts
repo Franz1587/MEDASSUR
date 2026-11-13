@@ -34,6 +34,7 @@ export type RootStackParamList = {
   MonProfil: undefined;
 
   ReseauSoinsDetail: { id: string };
+  ReseauSoinsMedecins: undefined;
 
   // Visionneuse PDF intégrée (2026-09) — voir demande utilisateur : "les
   // documents PDF doivent s'ouvrir dans l'application... au lieu de se

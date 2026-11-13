@@ -143,6 +143,12 @@ export function ReseauSoinsListScreen() {
           }
         />
 
+        <Pressable onPress={() => navigation.navigate("ReseauSoinsMedecins")} style={styles.medecinsBanner}>
+          <Ionicons name="people-outline" size={18} color={colors.primary} />
+          <Text style={styles.medecinsBannerText}>Répertoire des médecins</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.primary} style={{ marginLeft: "auto" }} />
+        </Pressable>
+
         <View style={styles.searchBox}>
           <Ionicons name="search-outline" size={16} color={colors.textSubtle} />
           <TextInput
@@ -226,6 +232,12 @@ const styles = StyleSheet.create({
   toggleRow: { flexDirection: "row", backgroundColor: colors.surfaceMuted, borderRadius: radius.pill, padding: 3, gap: 2 },
   toggleBtn: { width: 32, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
   toggleBtnActive: { backgroundColor: colors.primary },
+  medecinsBanner: {
+    flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.primary + "12",
+    borderWidth: 1, borderColor: colors.primary + "30", borderRadius: radius.md,
+    paddingHorizontal: 14, height: 44, marginBottom: spacing.sm,
+  },
+  medecinsBannerText: { fontSize: 13.5, fontWeight: "600", color: colors.primary },
   searchBox: {
     flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: colors.border,
     borderRadius: radius.md, paddingHorizontal: 12, height: 42, backgroundColor: colors.surface, marginBottom: spacing.sm,

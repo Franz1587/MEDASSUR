@@ -14,6 +14,7 @@ import { RemboursementDetailScreen } from "../screens/remboursement/Remboursemen
 import { RemboursementNouveauScreen } from "../screens/remboursement/RemboursementNouveauScreen";
 import { ReseauSoinsListScreen } from "../screens/reseauSoins/ReseauSoinsListScreen";
 import { ReseauSoinsDetailScreen } from "../screens/reseauSoins/ReseauSoinsDetailScreen";
+import { ReseauSoinsMedecinsScreen } from "../screens/reseauSoins/ReseauSoinsMedecinsScreen";
 import { HistoriqueScreen } from "../screens/historique/HistoriqueScreen";
 import { HistoriqueDetailScreen } from "../screens/historique/HistoriqueDetailScreen";
 import { FamilleScreen } from "../screens/famille/FamilleScreen";
@@ -75,6 +76,7 @@ export function RootNavigator() {
           <Stack.Screen name="RemboursementNouveau" component={RemboursementNouveauScreen} options={{ title: "Nouvelle demande" }} />
           <Stack.Screen name="ReseauSoins" component={ReseauSoinsListScreen} options={{ title: "Réseau de soins" }} />
           <Stack.Screen name="ReseauSoinsDetail" component={ReseauSoinsDetailScreen} options={{ title: "Prestataire" }} />
+          <Stack.Screen name="ReseauSoinsMedecins" component={ReseauSoinsMedecinsScreen} options={{ title: "Médecins" }} />
           <Stack.Screen name="Historique" component={HistoriqueScreen} options={{ title: "Historique de soins" }} />
           <Stack.Screen name="HistoriqueDetail" component={HistoriqueDetailScreen} options={{ title: "Détail" }} />
           <Stack.Screen name="Famille" component={FamilleScreen} options={{ title: "Ma famille" }} />

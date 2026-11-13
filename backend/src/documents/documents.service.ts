@@ -2769,7 +2769,8 @@ export class DocumentsService {
     const pec: FormulairePec = {
       date: dateSource, type: prescription.priseEnCharge?.type ?? "Consultation", createdAt: prescription.createdAt,
       assure: assureSource as unknown as FormulairePec["assure"],
-      prestataireRef: prescription.priseEnCharge?.prestataireRef ?? null,
+      prestataireRef: prescription.priseEnCharge?.prestataireRef ??
+        (prescription.structureNom ? { id: "", nom: prescription.structureNom, secteur: null } as any : null),
       // Pas de section pharmacie sur la Feuille d'Examen — tableau vide.
       prescriptionOrigine: {
         medecin: prescription.medecin ?? (prescription.prescripteurNom ? { nom: prescription.prescripteurNom, prenom: null, titre: null, specialite: null } as any : null),
