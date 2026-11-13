@@ -217,7 +217,7 @@ export default function MembreCarnetSanteView() {
                 d.prescriptionId ? (
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <button type="button"
-                      onClick={() => openFeuilleExamenBonDe(d.prescriptionId!)}
+                      onClick={() => openFeuilleExamenBonDe(d.prescriptionId!).catch((err) => toast.error(err instanceof Error ? err.message : "Impossible d'ouvrir le bon électronique."))}
                       className="text-[11.5px] font-medium text-primary hover:underline"
                     >Électronique</button>
                     {d.fichier && <a href={urlCarnetSante(d.fichier)} target="_blank" rel="noreferrer"
@@ -233,7 +233,7 @@ export default function MembreCarnetSanteView() {
                 <button
                   type="button"
                   // Bon numérisé : l'original photographié (servi par la route du bon).
-                  onClick={() => (d.rubrique === "Ordonnance" && !d.numerise ? openFeuilleSoinsDe(d.priseEnChargeId!) : openFeuilleExamenBonDe(d.prescriptionId!))}
+                  onClick={() => (d.rubrique === "Ordonnance" && !d.numerise ? openFeuilleSoinsDe(d.priseEnChargeId!) : openFeuilleExamenBonDe(d.prescriptionId!)).catch((err) => toast.error(err instanceof Error ? err.message : "Impossible d'ouvrir le document."))}
                   className="text-[11.5px] font-medium text-primary hover:underline flex-shrink-0"
                 >
                   Voir

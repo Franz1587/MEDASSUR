@@ -6,7 +6,7 @@ import { MapPin, Phone, Stethoscope, Search, X, ArrowLeft, FileDown, ChevronRigh
 import { Badge, type BadgeVariant } from "@/components/shared/Badge";
 import { Pager } from "@/components/shared/Pagination";
 import { usePagination } from "@/hooks/usePagination";
-import { getReseauSoins, getPrestataireReseau, type PrestataireReseau, type PrestataireReseauDetail } from "@/services/reseauSoins.service";
+import { getReseauSoins, getMedecinsReseau, getPrestataireReseau, type PrestataireReseau, type PrestataireReseauDetail, type MedecinReseau } from "@/services/reseauSoins.service";
 import { openReseauSoins } from "@/services/documents.service";
 import { toast } from "sonner";
 
@@ -41,9 +41,154 @@ const CAT_CONFIG: Record<string, { Icon: LucideIcon; color: string; bg: string; 
 };
 const CAT_DEFAULT = { Icon: Hospital, color: "text-muted-foreground", bg: "bg-secondary/40", ring: "border-border" };
 
+function VueMedecins({ onRetour }: { onRetour: () => void }) {
+  const [medecins, setMedecins] = useState<MedecinReseau[] | null>(null);
+  const [recherche, setRecherche] = useState("");
+  const [specialite, setSpecialite] = useState<string | null>(null);
+  const [selectionId, setSelectionId] = useState<string | null>(null);
+
+  useEffect(() => { getMedecinsReseau().then(setMedecins).catch(() => toast.error("Chargement des médecins impossible.")); }, []);
+
+  const specialites = useMemo(() => {
+    const s = new Set<string>();
+    for (const m of medecins ?? []) if (m.specialite) s.add(m.specialite);
+    return [...s].sort((a, b) => a.localeCompare(b, "fr"));
+  }, [medecins]);
+
+  const filtres = useMemo(() => {
+    const q = recherche.trim().toLowerCase();
+    return (medecins ?? []).filter((m) => {
+      if (specialite && m.specialite !== specialite) return false;
+      if (q && !`${m.titre ?? ""} ${m.nom} ${m.prenom ?? ""} ${m.specialite ?? ""} ${m.prestataires.map((p) => p.nom).join(" ")}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [medecins, recherche, specialite]);
+
+  const pag = usePagination(filtres, 25);
+  const selection = useMemo(() => selectionId ? (medecins ?? []).find((m) => m.id === selectionId) : null, [selectionId, medecins]);
+
+  return (
+    <div className="p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={onRetour} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground"><ArrowLeft className="w-4 h-4" /></button>
+        <div>
+          <span className="text-[14px] font-semibold text-foreground">Médecins</span>
+          {medecins && <span className="ml-2 text-[12px] text-muted-foreground">({filtres.length} sur {medecins.length})</span>}
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            value={recherche}
+            onChange={(e) => { setRecherche(e.target.value); pag.setPage(1); }}
+            placeholder="Nom, prénom, spécialité, établissement…"
+            className="w-full h-10 pl-9 pr-8 rounded-lg border border-border bg-background text-[13px] text-foreground placeholder:text-muted-foreground"
+          />
+          {recherche && <button type="button" onClick={() => setRecherche("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"><X className="w-3.5 h-3.5" /></button>}
+        </div>
+        {specialites.length > 0 && (
+          <select
+            value={specialite ?? ""}
+            onChange={(e) => { setSpecialite(e.target.value || null); pag.setPage(1); }}
+            className="h-10 px-3 rounded-lg border border-border bg-background text-[13px] text-foreground sm:w-56"
+          >
+            <option value="">Toutes les spécialités</option>
+            {specialites.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
+      </div>
+
+      {medecins === null ? (
+        <div className="bg-card border border-dashed border-border rounded-2xl p-10 text-center text-muted-foreground text-[13px]">Chargement…</div>
+      ) : filtres.length === 0 ? (
+        <div className="bg-card border border-dashed border-border rounded-2xl p-10 text-center text-muted-foreground text-[13px]">Aucun médecin ne correspond à ces critères.</div>
+      ) : (
+        <div className="space-y-1.5">
+          {pag.pageItems.map((m) => {
+            const prevM = pag.pageItems[pag.pageItems.indexOf(m) - 1];
+            const showSpec = m.specialite && (!prevM || prevM.specialite !== m.specialite);
+            return (
+              <div key={m.id}>
+                {showSpec && (
+                  <p className="text-[10.5px] font-bold uppercase tracking-widest text-muted-foreground pt-3 pb-1.5 px-1">{m.specialite}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setSelectionId(m.id)}
+                  className="w-full flex items-center justify-between gap-3 px-3.5 py-2.5 bg-card border border-border rounded-xl text-left hover:border-primary/40 transition-colors"
+                >
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <Stethoscope className="w-5 h-5 flex-shrink-0 text-sky-500" />
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium text-foreground">{m.titre ? `${m.titre} ` : ""}{m.nom}{m.prenom ? ` ${m.prenom}` : ""}</span>
+                      <span className="block text-[11.5px] text-muted-foreground truncate">{m.specialite ?? "Généraliste"}{m.prestataires.length > 0 ? ` · ${m.prestataires[0].ville}` : ""}</span>
+                    </span>
+                  </span>
+                  {m.prestataires.length > 0 && (
+                    <span className="text-[11px] text-muted-foreground flex-shrink-0 hidden sm:block">{m.prestataires[0].nom}</span>
+                  )}
+                </button>
+              </div>
+            );
+          })}
+          <Pager p={pag} />
+        </div>
+      )}
+
+      {selection && (
+        <div className="fixed inset-0 z-30 bg-black/40 flex items-end sm:items-center justify-center" onClick={() => setSelectionId(null)}>
+          <div className="w-full max-w-lg bg-card border-t sm:border border-border rounded-t-2xl sm:rounded-2xl max-h-[88vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 py-3.5 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Stethoscope className="w-6 h-6 flex-shrink-0 text-sky-500" />
+                <div className="min-w-0">
+                  <h3 className="text-[14px] font-semibold text-foreground">{selection.titre ? `${selection.titre} ` : ""}{selection.nom}{selection.prenom ? ` ${selection.prenom}` : ""}</h3>
+                  <p className="text-[11px] text-muted-foreground">{selection.specialite ?? "Médecin généraliste"}</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setSelectionId(null)} className="h-8 w-8 flex-shrink-0 rounded-lg border border-border text-muted-foreground hover:bg-secondary/40 flex items-center justify-center"><X className="w-3.5 h-3.5" /></button>
+            </div>
+            <div className="p-4 space-y-3.5">
+              {selection.telephone && (
+                <div className="flex items-center gap-2 text-[13px] p-3 rounded-xl bg-secondary/20 border border-border">
+                  <Phone className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <span className="text-foreground">{selection.telephone}</span>
+                </div>
+              )}
+              {selection.prestataires.length > 0 && (
+                <div>
+                  <p className="text-[10.5px] font-bold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5" />Établissements ({selection.prestataires.length})
+                  </p>
+                  <div className="space-y-1.5">
+                    {selection.prestataires.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-secondary/25 border border-border/40">
+                        <div className="min-w-0">
+                          <p className="text-[12.5px] font-medium text-foreground truncate">{p.nom}</p>
+                          <p className="text-[11px] text-muted-foreground">{p.type} · {p.ville}{p.province ? `, ${p.province}` : ""}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {selection.prestataires.length === 0 && !selection.telephone && (
+                <p className="text-[12.5px] text-muted-foreground italic text-center py-4">Aucune information complémentaire disponible.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function MembreReseauSoinsView() {
   const [tous, setTous] = useState<PrestataireReseau[] | null>(null);
   const [categorie, setCategorie] = useState<string | null>(null);
+  const [vueMedecins, setVueMedecins] = useState(false);
   const [recherche, setRecherche] = useState("");
   const [selectionId, setSelectionId] = useState<string | null>(null);
   const [detail, setDetail] = useState<PrestataireReseauDetail | null>(null);
@@ -109,6 +254,8 @@ export default function MembreReseauSoinsView() {
 
   const handleDownload = () => openReseauSoins().catch(() => toast.error("Ouverture du document impossible."));
 
+  if (vueMedecins) return <VueMedecins onRetour={() => setVueMedecins(false)} />;
+
   return (
     <div className="p-5 space-y-4">
       {/* En-tête */}
@@ -154,6 +301,19 @@ export default function MembreReseauSoinsView() {
                   </button>
                 );
               })}
+              {/* Tile répertoire médecins — toujours visible, données indépendantes des prestataires */}
+              <button
+                type="button"
+                onClick={() => setVueMedecins(true)}
+                className="bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-2xl p-4 flex flex-col items-start gap-2.5 hover:shadow-sm transition-all text-left"
+              >
+                <Stethoscope className="w-6 h-6 text-sky-500" />
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-semibold text-foreground">Médecins</span>
+                  <span className="block text-[11px] text-muted-foreground mt-0.5">Répertoire des médecins</span>
+                </span>
+                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground self-end" />
+              </button>
             </div>
           )}
         </>

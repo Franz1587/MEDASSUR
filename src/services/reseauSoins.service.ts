@@ -28,6 +28,16 @@ export interface PrestataireReseauDetail extends PrestataireReseau {
   medecins: PrestataireReseau[];
 }
 
+export interface MedecinReseau {
+  id: string;
+  nom: string;
+  prenom: string | null;
+  titre: string | null;
+  specialite: string | null;
+  telephone: string | null;
+  prestataires: { id: string; nom: string; type: string; ville: string; province: string | null }[];
+}
+
 export async function getReseauSoins(filtres?: { type?: string; ville?: string; q?: string }): Promise<PrestataireReseau[]> {
   const params = new URLSearchParams();
   if (filtres?.type) params.set("type", filtres.type);
@@ -39,4 +49,8 @@ export async function getReseauSoins(filtres?: { type?: string; ville?: string; 
 
 export async function getPrestataireReseau(id: string): Promise<PrestataireReseauDetail> {
   return http.get<PrestataireReseauDetail>(`/prestataires/reseau/${id}`);
+}
+
+export async function getMedecinsReseau(): Promise<MedecinReseau[]> {
+  return http.get<MedecinReseau[]>(`/prestataires/reseau/medecins`);
 }

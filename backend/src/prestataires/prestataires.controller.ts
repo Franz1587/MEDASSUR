@@ -28,6 +28,12 @@ export class PrestatairesController {
   }
 
   @AllowExternal()
+  @Get("reseau/medecins")
+  findMedecinsReseau() {
+    return this.prestatairesService.findMedecinsReseau();
+  }
+
+  @AllowExternal()
   @Get("reseau/:id")
   findOneReseau(@Param("id") id: string) {
     return this.prestatairesService.findOneReseau(id);

@@ -562,6 +562,27 @@ export class PrestatairesService {
   // MedecinPrestataire (voir schema.prisma, remplace l'ancienne
   // auto-relation Prestataire.etablissementId) — reformaté dans la même
   // forme PrestataireReseau pour ne rien casser côté frontend
+  // Répertoire médecins (2026-11) — tous les médecins actifs avec leurs
+  // établissements, pour la tile "Médecins" du réseau de soins portail.
+  async findMedecinsReseau() {
+    const liens = await this.prisma.medecinPrestataire.findMany({
+      where: { medecin: { actif: true } },
+      include: {
+        medecin: { select: { id: true, nom: true, prenom: true, titre: true, specialite: true, telephone: true } },
+        prestataire: { select: { id: true, nom: true, type: true, ville: true, province: true, statutConvention: true } },
+      },
+    });
+    const parMedecin = new Map<string, { id: string; nom: string; prenom: string | null; titre: string | null; specialite: string | null; telephone: string | null; prestataires: { id: string; nom: string; type: string; ville: string; province: string | null }[] }>();
+    for (const l of liens) {
+      const m = l.medecin;
+      if (!parMedecin.has(m.id)) parMedecin.set(m.id, { id: m.id, nom: m.nom, prenom: m.prenom, titre: m.titre, specialite: m.specialite, telephone: m.telephone, prestataires: [] });
+      if (l.prestataire.statutConvention === "Conventionné") {
+        parMedecin.get(m.id)!.prestataires.push({ id: l.prestataire.id, nom: l.prestataire.nom, type: l.prestataire.type, ville: l.prestataire.ville, province: l.prestataire.province });
+      }
+    }
+    return [...parMedecin.values()].sort((a, b) => (a.specialite ?? "").localeCompare(b.specialite ?? "", "fr") || a.nom.localeCompare(b.nom, "fr"));
+  }
+
   // (src/services/reseauSoins.service.ts, PrestataireReseauDetail.medecins).
   async findOneReseau(id: string) {
     // Même règle que la liste : un prestataire suspendu ou non conventionné n'est pas visible, même par lien direct.
