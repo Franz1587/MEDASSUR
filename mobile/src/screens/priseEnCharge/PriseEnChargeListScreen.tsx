@@ -92,8 +92,8 @@ export function PriseEnChargeListScreen() {
             <ListRow
               key={d.id}
               icon="medkit-outline"
-              label={d.type}
-              sublabel={`${d.prestataire} · ${formatDate(d.dateDemande)}`}
+              label={d.rubrique ?? d.description}
+              sublabel={`${d.assure ? `${d.assure.nom}${d.assure.prenom ? " " + d.assure.prenom : ""} · ` : ""}${d.prestataire} · ${formatDate(d.dateDemande)}`}
               onPress={() => navigation.navigate("AccordDetail", { id: d.id })}
               right={<Badge label={d.decision} variant={statutVariant(d.decision)} />}
             />

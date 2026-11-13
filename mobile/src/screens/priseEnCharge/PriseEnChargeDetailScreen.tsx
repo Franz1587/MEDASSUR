@@ -139,7 +139,7 @@ export function PriseEnChargeDetailScreen() {
 
   return (
     <Screen>
-      <ScreenHeader title={dossier.type} subtitle={dossier.prestataire} />
+      <ScreenHeader title={dossier.rubrique ?? dossier.description} subtitle={dossier.prestataire} />
 
       <Card>
         <View style={styles.headerRow}>

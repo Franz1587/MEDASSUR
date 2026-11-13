@@ -233,8 +233,11 @@ export interface MembreAccordPrealableLigne {
 
 export interface MembreAccordPrealable {
   id: string;
+  prescriptionRef?: string | null;
   type: string;
   description: string;
+  rubrique?: string | null;
+  assure?: { nom: string; prenom?: string | null };
   dateDemande: string;
   prestataire: string;
   decision: string;
@@ -246,6 +249,7 @@ export interface MembreAccordPrealable {
   dateValidite: string | null;
   ordonnanceFichier: string | null;
   devisFichier: string | null;
+  codeAccesPharmacie?: string | null;
   lignes?: MembreAccordPrealableLigne[];
 }
 
