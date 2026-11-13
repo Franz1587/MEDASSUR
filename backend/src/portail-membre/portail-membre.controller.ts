@@ -251,12 +251,17 @@ export class PortailMembreController {
     if (!assure) throw new NotFoundException("Assuré introuvable");
     const lignes = await this.sante.findPrisesEnCharge(idsFamille, undefined, undefined, true);
     const filtrees = modePaiement ? lignes.filter((l) => l.modePaiement === modePaiement) : lignes;
-    const enrichies = filtrees.map((l) => ({
-      ...l,
-      exercice: resoudreExercice(assure.contrat.exercices, l.date),
-      acteLibelle: l.acteMedical?.libelle ?? null,
-      acteFamille: l.acteMedical?.famille ?? null,
-    }));
+    const enrichies = filtrees.map((l) => {
+      const exNum = resoudreExercice(assure.contrat.exercices, l.date);
+      const exObj = exNum != null ? assure.contrat.exercices.find((e) => e.numero === exNum) : null;
+      return {
+        ...l,
+        exercice: exNum,
+        anneeExercice: exObj ? parseInt(exObj.dateDebut.split("/")[2], 10) : null,
+        acteLibelle: l.acteMedical?.libelle ?? null,
+        acteFamille: l.acteMedical?.famille ?? null,
+      };
+    });
 
     // Regroupement par facture + rubrique (2026-08) — voir demande
     // utilisateur : "dans le cas où une facture a plusieurs actes de même

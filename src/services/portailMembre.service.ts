@@ -166,6 +166,7 @@ export interface MembrePriseEnCharge {
   assureNom: string;
   rubrique: string;
   exercice: number | null;
+  anneeExercice: number | null;
   // Détail de la prestation (2026-08) — voir demande utilisateur : "on
   // doit pouvoir accéder aux détails de la prestation". Champs déjà
   // renvoyés bruts par PortailMembreController (spread de la ligne Prisma),

@@ -144,7 +144,7 @@ export default function ContratDetail({ contrat, onRetour }: Props) {
             <div><div className="text-[11px] text-muted-foreground">Date d'échéance</div><div className="text-foreground font-medium">{contrat.dateFin}</div></div>
             <div><div className="text-[11px] text-muted-foreground">Périodicité</div><div className="text-foreground font-medium">{contrat.periodicite ?? "—"}</div></div>
             <div><div className="text-[11px] text-muted-foreground">Prime</div><div className="text-foreground font-medium">{fmtM(contrat.prime)} FCFA</div></div>
-            <div><div className="text-[11px] text-muted-foreground">Exercice en cours</div><div className="text-foreground font-medium">N° {contrat.exerciceNumero ?? "—"}</div></div>
+            <div><div className="text-[11px] text-muted-foreground">Exercice en cours</div><div className="text-foreground font-medium">{contrat.dateDebut?.split("/")[2] ?? contrat.exerciceNumero ?? "—"}</div></div>
             <div><div className="text-[11px] text-muted-foreground">Compagnie</div><div className="text-foreground font-medium">{contrat.compagnie}</div></div>
           </div>
 

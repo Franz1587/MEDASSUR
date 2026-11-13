@@ -45,7 +45,7 @@ export default function MembreHistoriqueView() {
   const [beneficiaires, setBeneficiaires] = useState<Beneficiaire[] | null>(null);
   const [beneficiaireId, setBeneficiaireId] = useState<string | null>(null);
   const [rubrique, setRubrique] = useState<string | null>(null);
-  const [exerciceFiltre, setExerciceFiltre] = useState<number | null>(null);
+  const [exerciceFiltre, setExerciceFiltre] = useState<number | null>(null); // filtre par ANNÉE (anneeExercice)
   const [detailOuvert, setDetailOuvert] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -61,15 +61,18 @@ export default function MembreHistoriqueView() {
   const rubriques = useMemo(() => [...new Set((lignes ?? []).map((l) => l.rubrique))].sort(), [lignes]);
 
   const exercices = useMemo(() => {
-    const vals = [...new Set((lignes ?? []).map((l) => l.exercice).filter((e): e is number => e != null))];
-    return vals.sort((a, b) => b - a);
+    const seen = new Map<number, number>();
+    for (const l of lignes ?? []) {
+      if (l.anneeExercice != null && l.exercice != null && !seen.has(l.anneeExercice)) seen.set(l.anneeExercice, l.exercice);
+    }
+    return [...seen.keys()].sort((a, b) => b - a);
   }, [lignes]);
 
   const filtrees = useMemo(() => {
     return (lignes ?? []).filter((l) => {
       if (beneficiaireId && l.assureId !== beneficiaireId) return false;
       if (rubrique && l.rubrique !== rubrique) return false;
-      if (exerciceFiltre != null && l.exercice !== exerciceFiltre) return false;
+      if (exerciceFiltre != null && l.anneeExercice !== exerciceFiltre) return false;
       return true;
     });
   }, [lignes, beneficiaireId, rubrique, exerciceFiltre]);
@@ -101,7 +104,7 @@ export default function MembreHistoriqueView() {
   const groupesExercice = useMemo(() => {
     const parExercice = new Map<string, MembrePriseEnCharge[]>();
     for (const l of filtrees) {
-      const cle = l.exercice != null ? `Exercice ${l.exercice}` : "Hors exercice";
+      const cle = l.anneeExercice != null ? String(l.anneeExercice) : l.exercice != null ? `Exercice ${l.exercice}` : "Hors exercice";
       (parExercice.get(cle) ?? parExercice.set(cle, []).get(cle)!).push(l);
     }
     return [...parExercice.entries()]
@@ -141,7 +144,7 @@ export default function MembreHistoriqueView() {
             options={exercices}
             value={exerciceFiltre}
             onChange={(e) => { setExerciceFiltre(e); pagExercices.setPage(1); }}
-            getLabel={(e) => `Exercice ${e}`} getId={(e) => String(e)}
+            getLabel={(e) => String(e)} getId={(e) => String(e)}
             allowClear clearLabel="Tous les exercices"
           />
         </div>
