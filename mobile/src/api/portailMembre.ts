@@ -143,6 +143,7 @@ export interface MembrePriseEnCharge {
   assureNom: string;
   rubrique: string;
   exercice: number | null;
+  anneeExercice: number | null;
   statutControleMedical?: string | null;
   motifRejet?: string | null;
   nSinistre?: string | null;

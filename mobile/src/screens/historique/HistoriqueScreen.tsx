@@ -37,6 +37,7 @@ export function HistoriqueScreen() {
   const [error, setError] = useState<string | null>(null);
   const [beneficiaireId, setBeneficiaireId] = useState<string | null>(null);
   const [rubrique, setRubrique] = useState<string | null>(null);
+  const [anneeFiltre, setAnneeFiltre] = useState<number | null>(null);
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
@@ -59,18 +60,24 @@ export function HistoriqueScreen() {
 
   const rubriques = useMemo(() => [...new Set((lignes ?? []).map((l) => l.rubrique))].sort(), [lignes]);
 
+  const annees = useMemo(() => {
+    const vals = [...new Set((lignes ?? []).map((l) => l.anneeExercice).filter((a): a is number => a != null))];
+    return vals.sort((a, b) => b - a);
+  }, [lignes]);
+
   const filtrees = useMemo(() => {
     return (lignes ?? []).filter((l) => {
       if (beneficiaireId && l.assureId !== beneficiaireId) return false;
       if (rubrique && l.rubrique !== rubrique) return false;
+      if (anneeFiltre != null && l.anneeExercice !== anneeFiltre) return false;
       return true;
     });
-  }, [lignes, beneficiaireId, rubrique]);
+  }, [lignes, beneficiaireId, rubrique, anneeFiltre]);
 
   const groupesExercice = useMemo(() => {
     const parExercice = new Map<string, MembrePriseEnCharge[]>();
     for (const l of filtrees) {
-      const cle = l.exercice != null ? `Exercice ${l.exercice}` : "Hors exercice";
+      const cle = l.anneeExercice != null ? String(l.anneeExercice) : l.exercice != null ? `Exercice ${l.exercice}` : "Hors exercice";
       (parExercice.get(cle) ?? parExercice.set(cle, []).get(cle)!).push(l);
     }
     return [...parExercice.entries()]
@@ -118,6 +125,15 @@ export function HistoriqueScreen() {
           />
         ))}
       </ScrollView>
+
+      {annees.length > 1 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.sm }} contentContainerStyle={{ gap: spacing.sm }}>
+          <Chip label="Tous les exercices" active={anneeFiltre === null} onPress={() => setAnneeFiltre(null)} />
+          {annees.map((a) => (
+            <Chip key={a} label={String(a)} active={anneeFiltre === a} onPress={() => setAnneeFiltre(a)} />
+          ))}
+        </ScrollView>
+      ) : null}
 
       {rubriques.length > 0 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.lg }} contentContainerStyle={{ gap: spacing.sm }}>
