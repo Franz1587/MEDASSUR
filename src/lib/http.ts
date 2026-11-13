@@ -1,4 +1,5 @@
-import { lireCache, ecrireCache, ajouterActionEnAttente, genererCleIdempotence } from "./offlineStore";
+import { lireCache, ecrireCache, viderCacheApi, ajouterActionEnAttente, genererCleIdempotence } from "./offlineStore";
+const PREFIXE_CACHE = "medassur-cache-api::";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "/api";
 const TOKEN_KEY = "medassur-access-token";
@@ -231,6 +232,14 @@ export async function uploadFile<T>(path: string, file: File, champ = "fichier")
   });
   if (!res.ok) throw new Error(`POST ${path} failed (${res.status}): ${await res.text()}`);
   return res.json() as Promise<T>;
+}
+
+export function invaliderCache(path: string): void {
+  try { localStorage.removeItem(PREFIXE_CACHE + path); } catch { /* jamais bloquant */ }
+}
+
+export function viderCacheMemoire(): void {
+  viderCacheApi();
 }
 
 export function withAuthToken(url: string): string {
