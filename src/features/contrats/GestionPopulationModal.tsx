@@ -21,7 +21,7 @@ export default function GestionPopulationModal({ contrat, onClose, onUpdated }: 
         <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
           <div>
             <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2"><UserCog className="w-4 h-4 text-primary" />Gestion des assurés — {numeroPolice(contrat)}</h3>
-            <p className="text-[12px] text-muted-foreground mt-0.5">{contrat.client} · Exercice n°{contrat.exerciceNumero ?? 1}</p>
+            <p className="text-[12px] text-muted-foreground mt-0.5">{contrat.client} · Exercice {contrat.dateDebut.split("/")[2] ?? contrat.exerciceNumero ?? 1}</p>
           </div>
           <button type="button" onClick={onClose} className="h-8 px-3 rounded-lg border border-border text-[12px] text-foreground hover:bg-secondary/40">Fermer</button>
         </div>

@@ -643,7 +643,7 @@ export default function ContratsView() {
 
   const supprimerExerciceDoublon = async (ex: ExerciceCompagnie) => {
     if (!editing) return;
-    if (!window.confirm(`Supprimer l'exercice N°${ex.numero} (${ex.dateDebut} → ${ex.dateFin}, ${fmt(toNumber(ex.prime))} FCFA) ?`)) return;
+    if (!window.confirm(`Supprimer l'exercice ${ex.dateDebut.split("/")[2] ?? ex.numero} (${ex.dateDebut} → ${ex.dateFin}, ${fmt(toNumber(ex.prime))} FCFA) ?`)) return;
     try {
       const historique = await supprimerExercice(editing.id, ex.numero);
       setHistoriqueCompagnie(historique);
@@ -1441,7 +1441,7 @@ export default function ContratsView() {
                         {historiqueCompagnie.map((ex) => (
                           exerciceEnEdition === ex.numero ? (
                             <div key={ex.id} className="flex items-center gap-2 px-3 py-2 text-[12px] bg-primary/5">
-                              <span className="flex-shrink-0 text-[11px] font-semibold text-muted-foreground med-num">N°{ex.numero}</span>
+                              <span className="flex-shrink-0 text-[11px] font-semibold text-muted-foreground med-num">{ex.dateDebut.split("/")[2] ?? ex.numero}</span>
                               <DateInput value={brouillonExercice.dateDebut} onChange={(v) => setBrouillonExercice((b) => ({ ...b, dateDebut: v }))} className="border border-border rounded-md px-2 py-1 bg-background text-[12px] text-foreground flex-1 min-w-0" />
                               <span className="text-muted-foreground flex-shrink-0">→</span>
                               <DateInput value={brouillonExercice.dateFin} onChange={(v) => setBrouillonExercice((b) => ({ ...b, dateFin: v }))} className="border border-border rounded-md px-2 py-1 bg-background text-[12px] text-foreground flex-1 min-w-0" />
@@ -1455,7 +1455,7 @@ export default function ContratsView() {
                           ) : (
                             <div key={ex.id} className="group flex items-center justify-between gap-3 px-3 py-2 text-[12px]">
                               <div className="flex items-center gap-2 min-w-0">
-                                <span className="flex-shrink-0 text-[11px] font-semibold text-muted-foreground med-num">N°{ex.numero}</span>
+                                <span className="flex-shrink-0 text-[11px] font-semibold text-muted-foreground med-num">{ex.dateDebut.split("/")[2] ?? ex.numero}</span>
                                 <span className="text-foreground truncate">{ex.compagnie?.nom ?? selectedCompagnie?.nom ?? "—"}</span>
                               </div>
                               <span className="flex-shrink-0 text-muted-foreground med-num">{ex.dateDebut} → {ex.dateFin}</span>

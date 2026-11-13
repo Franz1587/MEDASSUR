@@ -376,7 +376,7 @@ export default function PopulationPanel({ contrat, onUpdated }: Props) {
               <div className={labelCls}>Exercice (remplit Du/Au automatiquement)</div>
               <select value={exerciceId} onChange={(e) => choisirExercice(e.target.value)} className={fieldCls}>
                 <option value="">— Choisir un exercice —</option>
-                {exercices.map((ex) => <option key={ex.id} value={ex.id}>Exercice n°{ex.numero} ({ex.dateDebut} au {ex.dateFin})</option>)}
+                {exercices.map((ex) => <option key={ex.id} value={ex.id}>{ex.dateDebut.split("/")[2] ?? ex.numero} ({ex.dateDebut} au {ex.dateFin})</option>)}
               </select>
             </label>
           )}

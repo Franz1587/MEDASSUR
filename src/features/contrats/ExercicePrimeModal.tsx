@@ -108,7 +108,7 @@ export default function ExercicePrimeModal({ contratId, contratEchu = false, gri
       setError(null);
       const { dateDebut, dateFin, ...dto } = form;
       const historique = await mettreAJourPrimeExercice(contratId, exercice.numero, dto);
-      toast.success(`Prime de l'exercice n°${exercice.numero} mise à jour — utilisée pour le calcul du S/P sur cette période.`);
+      toast.success(`Prime de l'exercice ${exercice.dateDebut.split("/")[2] ?? exercice.numero} mise à jour — utilisée pour le calcul du S/P sur cette période.`);
       onDone(historique);
       onClose();
     } catch (err) {
@@ -123,7 +123,7 @@ export default function ExercicePrimeModal({ contratId, contratEchu = false, gri
       <div className="w-full max-w-3xl bg-card border border-border rounded-xl shadow-2xl max-h-[92vh] overflow-hidden flex flex-col">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
           <div>
-            <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2"><Calculator className="w-4 h-4 text-primary" />Prime de l'exercice n°{exercice.numero}</h3>
+            <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2"><Calculator className="w-4 h-4 text-primary" />Prime de l'exercice {exercice.dateDebut.split("/")[2] ?? exercice.numero}</h3>
             <p className="text-[12px] text-muted-foreground mt-0.5">{exercice.dateDebut} → {exercice.dateFin} — nécessaire pour calculer le S/P sur cette période (reprise de données)</p>
           </div>
           <button type="button" onClick={onClose} className="h-8 px-3 rounded-lg border border-border text-[12px] text-foreground hover:bg-secondary/40">Fermer</button>

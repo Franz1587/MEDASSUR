@@ -752,7 +752,7 @@ export function CompagnieParamsDrawer({ compagnie: selected, onClose, onSaved, t
                         <td className="px-3 py-2 text-foreground">{c.client}</td>
                         <td className="px-3 py-2 text-muted-foreground">{c.branche}</td>
                         <td className="px-3 py-2 text-muted-foreground med-num">{c.dateDebut} → {c.dateFin}</td>
-                        <td className="px-3 py-2 text-muted-foreground med-num">{c.exerciceNumero ?? "—"}</td>
+                        <td className="px-3 py-2 text-muted-foreground med-num">{c.dateDebut.split("/")[2] ?? c.exerciceNumero ?? "—"}</td>
                         <td className="px-3 py-2 text-right text-foreground med-num">{fmtM(c.prime)} FCFA</td>
                         <td className="px-3 py-2">
                           <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
