@@ -2762,19 +2762,31 @@ export class DocumentsService {
         familleActe: traite?.acteMedical?.famille ?? null,
       };
     });
-    // Prescriptions numérisées (origine="Numérisée") : pas de priseEnCharge —
-    // construire pec depuis l'assure direct + champs libres prescripteurNom/structureNom.
-    const assureSource = prescription.priseEnCharge?.assure ?? prescription.assure;
-    if (!assureSource) throw new BadRequestException("Assuré introuvable pour ce bon.");
-    const dateSource = prescription.priseEnCharge?.date ?? prescription.createdAt.toISOString().slice(0, 10);
+    if (!prescription.priseEnCharge) {
+      // Bon numérisé sans PEC associée : assure porté directement sur la prescription.
+      // Si même l'assuré direct est absent, renvoyer l'original PDF scanné.
+      if (!prescription.assure) return this.renderOriginalNumerise(prescriptionId, res);
+      const mecin = prescription.medecin ?? (prescription.prescripteurNom
+        ? { id: "", nom: prescription.prescripteurNom, prenom: null, titre: null, specialite: null, codePraticien: null } as any
+        : null);
+      const pec: FormulairePec = {
+        date: prescription.dateOrdonnance ?? prescription.createdAt.toISOString().slice(0, 10),
+        type: "Examen", createdAt: prescription.createdAt,
+        assure: prescription.assure as unknown as FormulairePec["assure"],
+        prestataireRef: prescription.structureNom
+          ? { id: "", nom: prescription.structureNom, secteur: null } as any
+          : null,
+        prescriptionOrigine: { medecin: mecin, numeroBonExamen: prescription.numeroBonExamen, medicaments: [] },
+      };
+      return this.genererFormulaire("examen", prescription.numeroBonExamen, pec, lignes, res, prescriptionId, utilisateur, prestataireFiltre);
+    }
+    // Cas normal : PEC associée à la prescription.
     const pec: FormulairePec = {
-      date: dateSource, type: prescription.priseEnCharge?.type ?? "Consultation", createdAt: prescription.createdAt,
-      assure: assureSource as unknown as FormulairePec["assure"],
-      prestataireRef: prescription.priseEnCharge?.prestataireRef ??
-        (prescription.structureNom ? { id: "", nom: prescription.structureNom, secteur: null } as any : null),
-      // Pas de section pharmacie sur la Feuille d'Examen — tableau vide.
+      date: prescription.priseEnCharge.date, type: prescription.priseEnCharge.type, createdAt: prescription.createdAt,
+      assure: prescription.priseEnCharge.assure as unknown as FormulairePec["assure"],
+      prestataireRef: prescription.priseEnCharge.prestataireRef,
       prescriptionOrigine: {
-        medecin: prescription.medecin ?? (prescription.prescripteurNom ? { nom: prescription.prescripteurNom, prenom: null, titre: null, specialite: null } as any : null),
+        medecin: prescription.medecin,
         numeroBonExamen: prescription.numeroBonExamen,
         medicaments: [],
       },
