@@ -233,4 +233,11 @@ export async function uploadFile<T>(path: string, file: File, champ = "fichier")
   return res.json() as Promise<T>;
 }
 
+export function withAuthToken(url: string): string {
+  const token = getAccessToken();
+  if (!token) return url;
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}token=${encodeURIComponent(token)}`;
+}
+
 export { API_URL };
