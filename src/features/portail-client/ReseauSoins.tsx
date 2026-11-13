@@ -1,10 +1,10 @@
 import "leaflet/dist/leaflet.css";
 import "@/lib/leafletIconFix";
 import { useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import {
   MapPin, Phone, Building2, Stethoscope, Search, X, ChevronDown, ChevronRight,
-  FileDown, Shield, MapPinned, LocateFixed, Loader2,
+  FileDown, Shield, MapPinned, LocateFixed, Loader2, List,
   Hospital, Pill, Package, FlaskConical, ScanLine, Dumbbell, Eye, Smile,
   type LucideIcon,
 } from "lucide-react";
@@ -15,6 +15,18 @@ import { usePagination } from "@/hooks/usePagination";
 import { getReseauSoins, getPrestataireReseau, type PrestataireReseau, type PrestataireReseauDetail } from "@/services/reseauSoins.service";
 import { openReseauSoins } from "@/services/documents.service";
 import { toast } from "sonner";
+
+const GABON_BOUNDS: [[number, number], [number, number]] = [[-5.2, 8.0], [2.5, 15.0]];
+const GABON_CENTER: [number, number] = [0.39, 9.45];
+
+function CentrerSurPosition({ coords }: { coords: { lat: number; lng: number } | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (coords) map.setView([coords.lat, coords.lng], 14);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coords?.lat, coords?.lng]);
+  return null;
+}
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
@@ -68,14 +80,24 @@ export default function PortailReseauSoinsView() {
   const [detail, setDetail] = useState<PrestataireReseauDetail | null>(null);
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
+  const [vueCarte, setVueCarte] = useState(false);
 
   useEffect(() => {
     getReseauSoins().then((liste) => {
       setTous(liste);
-      // Ouvrir la première province par défaut
       const premiereProvince = ORDRE_PROVINCES.find((p) => liste.some((x) => (x.province || "Autres") === p));
       setProvinceOuverte(premiereProvince ?? null);
     });
+  }, []);
+
+  // GPS auto au montage (silencieux)
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setGpsCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => { /* permission refusée : mode dégradé silencieux */ },
+      { enableHighAccuracy: true, timeout: 15000 },
+    );
   }, []);
 
   useEffect(() => {
@@ -188,21 +210,51 @@ export default function PortailReseauSoinsView() {
           <input value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Rechercher un nom, une ville, une spécialité…" className="w-full h-10 pl-9 pr-3 rounded-lg border border-border bg-background text-[13px] text-foreground placeholder:text-muted-foreground" />
           {recherche && <button type="button" onClick={() => setRecherche("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="w-3.5 h-3.5" /></button>}
         </div>
+        {/* Toggle liste / carte */}
+        <div className="flex border border-border rounded-lg overflow-hidden flex-shrink-0">
+          <button type="button" onClick={() => setVueCarte(false)} title="Vue liste" className={`h-10 px-3 flex items-center transition-colors ${!vueCarte ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary/50"}`}>
+            <List className="w-4 h-4" />
+          </button>
+          <button type="button" onClick={() => setVueCarte(true)} title="Vue carte" className={`h-10 px-3 flex items-center transition-colors border-l border-border ${vueCarte ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary/50"}`}>
+            <MapPinned className="w-4 h-4" />
+          </button>
+        </div>
         <button
           type="button"
           onClick={gpsCoords ? () => setGpsCoords(null) : localiserMoi}
           disabled={gpsLoading}
-          title={gpsCoords ? "Désactiver le tri par proximité" : "Afficher les prestataires les plus proches"}
-          className={`h-10 px-3.5 rounded-lg border text-[12.5px] font-medium flex items-center gap-1.5 flex-shrink-0 transition-colors ${gpsCoords ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-secondary/50 hover:text-foreground"}`}
+          title={gpsCoords ? "Position active" : "Me localiser"}
+          className={`h-10 px-3.5 rounded-lg border text-[12.5px] font-medium flex items-center gap-1.5 flex-shrink-0 transition-colors ${gpsCoords ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400" : "border-border text-muted-foreground hover:bg-secondary/50 hover:text-foreground"}`}
         >
           {gpsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LocateFixed className="w-4 h-4" />}
-          {gpsCoords ? "Près de moi ✓" : "Près de moi"}
+          {gpsCoords ? "Localisé ✓" : "Me localiser"}
         </button>
       </div>
 
       {/* Contenu */}
       {tous === null ? (
         <div className="bg-card border border-dashed border-border rounded-2xl p-12 text-center text-muted-foreground text-[13px]">Chargement…</div>
+      ) : vueCarte ? (
+        /* ── Vue carte ── */
+        <div className="h-[calc(100vh-280px)] min-h-96 rounded-2xl overflow-hidden border border-border">
+          <MapContainer
+            center={gpsCoords ? [gpsCoords.lat, gpsCoords.lng] : GABON_CENTER}
+            zoom={gpsCoords ? 14 : 7}
+            maxBounds={GABON_BOUNDS}
+            maxBoundsViscosity={1.0}
+            style={{ height: "100%", width: "100%" }}
+          >
+            <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            <CentrerSurPosition coords={gpsCoords} />
+            {filtres.filter((p) => p.latitude != null && p.longitude != null).map((p) => (
+              <Marker key={p.id} position={[p.latitude!, p.longitude!]}>
+                <Popup>
+                  <strong>{p.nom}</strong><br />{p.type}{p.ville ? ` · ${p.ville}` : ""}
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
+        </div>
       ) : gpsCoords ? (
         /* ── Vue proximité ── */
         filtresProximite.length === 0 ? (
@@ -353,7 +405,7 @@ export default function PortailReseauSoinsView() {
 
                   {detail.latitude != null && detail.longitude != null ? (
                     <div className="h-56 rounded-xl overflow-hidden border border-border">
-                      <MapContainer center={[detail.latitude, detail.longitude]} zoom={15} style={{ height: "100%", width: "100%" }}>
+                      <MapContainer center={[detail.latitude, detail.longitude]} zoom={15} maxBounds={GABON_BOUNDS} maxBoundsViscosity={1.0} style={{ height: "100%", width: "100%" }}>
                         <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                         <Marker position={[detail.latitude, detail.longitude]}>
                           <Popup>{detail.nom}<br />{detail.adresse}</Popup>

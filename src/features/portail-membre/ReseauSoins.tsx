@@ -1,14 +1,26 @@
 import "leaflet/dist/leaflet.css";
 import "@/lib/leafletIconFix";
 import { useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import { MapPin, Phone, Stethoscope, Search, X, ArrowLeft, FileDown, ChevronRight, Hospital, Building2, Pill, Package, FlaskConical, ScanLine, Dumbbell, Eye, Smile, LocateFixed, Loader2, type LucideIcon } from "lucide-react";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapPin, Phone, Stethoscope, Search, X, ArrowLeft, FileDown, ChevronRight, Hospital, Building2, Pill, Package, FlaskConical, ScanLine, Dumbbell, Eye, Smile, LocateFixed, Loader2, List, MapPinned, type LucideIcon } from "lucide-react";
 import { Badge, type BadgeVariant } from "@/components/shared/Badge";
 import { Pager } from "@/components/shared/Pagination";
 import { usePagination } from "@/hooks/usePagination";
 import { getReseauSoins, getMedecinsReseau, getPrestataireReseau, type PrestataireReseau, type PrestataireReseauDetail, type MedecinReseau } from "@/services/reseauSoins.service";
 import { openReseauSoins } from "@/services/documents.service";
 import { toast } from "sonner";
+
+const GABON_BOUNDS: [[number, number], [number, number]] = [[-5.2, 8.0], [2.5, 15.0]];
+const GABON_CENTER: [number, number] = [0.39, 9.45]; // Libreville
+
+function CentrerSurPosition({ coords }: { coords: { lat: number; lng: number } | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (coords) map.setView([coords.lat, coords.lng], 14);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coords?.lat, coords?.lng]);
+  return null;
+}
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
@@ -189,6 +201,7 @@ export default function MembreReseauSoinsView() {
   const [tous, setTous] = useState<PrestataireReseau[] | null>(null);
   const [categorie, setCategorie] = useState<string | null>(null);
   const [vueMedecins, setVueMedecins] = useState(false);
+  const [vueCarte, setVueCarte] = useState(false);
   const [recherche, setRecherche] = useState("");
   const [selectionId, setSelectionId] = useState<string | null>(null);
   const [detail, setDetail] = useState<PrestataireReseauDetail | null>(null);
@@ -196,6 +209,17 @@ export default function MembreReseauSoinsView() {
   const [gpsLoading, setGpsLoading] = useState(false);
 
   useEffect(() => { getReseauSoins().then(setTous); }, []);
+
+  // Demande de position automatique au montage (silencieuse — pas de toast
+  // si refusé) ; active le tri par proximité et centre la carte sur l'utilisateur.
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setGpsCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => { /* permission refusée : mode dégradé silencieux */ },
+      { enableHighAccuracy: true, timeout: 15000 },
+    );
+  }, []);
 
   useEffect(() => {
     if (!selectionId) { setDetail(null); return; }
@@ -345,26 +369,55 @@ export default function MembreReseauSoinsView() {
                 <button type="button" onClick={() => setRecherche("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"><X className="w-3.5 h-3.5" /></button>
               )}
             </div>
+            {/* Toggle liste / carte */}
+            <div className="flex border border-border rounded-lg overflow-hidden flex-shrink-0">
+              <button type="button" onClick={() => setVueCarte(false)} title="Vue liste" className={`h-10 px-3 flex items-center gap-1.5 text-[11.5px] transition-colors ${!vueCarte ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary/50"}`}>
+                <List className="w-4 h-4" />
+              </button>
+              <button type="button" onClick={() => setVueCarte(true)} title="Vue carte" className={`h-10 px-3 flex items-center gap-1.5 text-[11.5px] transition-colors border-l border-border ${vueCarte ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary/50"}`}>
+                <MapPinned className="w-4 h-4" />
+              </button>
+            </div>
             <button
               type="button"
               onClick={gpsCoords ? () => setGpsCoords(null) : localiserMoi}
               disabled={gpsLoading}
-              title={gpsCoords ? "Désactiver le tri par proximité" : "Trier par proximité GPS"}
-              className={`h-10 px-3 rounded-lg border text-[11.5px] flex items-center gap-1.5 flex-shrink-0 transition-colors ${gpsCoords ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-secondary/50 hover:text-foreground"}`}
+              title={gpsCoords ? "Position active" : "Localiser ma position"}
+              className={`h-10 px-3 rounded-lg border text-[11.5px] flex items-center gap-1.5 flex-shrink-0 transition-colors ${gpsCoords ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400" : "border-border text-muted-foreground hover:bg-secondary/50 hover:text-foreground"}`}
             >
               {gpsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LocateFixed className="w-4 h-4" />}
-              <span className="hidden sm:inline">{gpsCoords ? "Près de moi ✓" : "Près de moi"}</span>
             </button>
           </div>
 
-          {gpsCoords && (
-            <p className="text-[11.5px] text-primary flex items-center gap-1.5">
+          {gpsCoords && !vueCarte && (
+            <p className="text-[11.5px] text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
               <LocateFixed className="w-3.5 h-3.5" />
-              Tri par proximité activé — les prestataires les plus proches apparaissent en premier.
+              Tri par proximité actif · prestataires les plus proches en premier.
             </p>
           )}
 
-          {filtres.length === 0 ? (
+          {vueCarte ? (
+            <div className="h-[calc(100vh-290px)] min-h-72 rounded-2xl overflow-hidden border border-border">
+              <MapContainer
+                center={gpsCoords ? [gpsCoords.lat, gpsCoords.lng] : GABON_CENTER}
+                zoom={gpsCoords ? 14 : 7}
+                maxBounds={GABON_BOUNDS}
+                maxBoundsViscosity={1.0}
+                style={{ height: "100%", width: "100%" }}
+              >
+                <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                <CentrerSurPosition coords={gpsCoords} />
+                {filtres.filter((p) => p.latitude != null && p.longitude != null).map((p) => (
+                  <Marker key={p.id} position={[p.latitude!, p.longitude!]}>
+                    <Popup>
+                      <strong>{p.nom}</strong><br />{p.type}{p.ville ? ` · ${p.ville}` : ""}
+                      {gpsCoords && (p as any)._dist != null && <><br /><span style={{ color: "#059669" }}>{fmtDist((p as any)._dist)}</span></>}
+                    </Popup>
+                  </Marker>
+                ))}
+              </MapContainer>
+            </div>
+          ) : filtres.length === 0 ? (
             <div className="bg-card border border-dashed border-border rounded-2xl p-10 text-center text-muted-foreground text-[13px]">Aucun prestataire ne correspond à ces critères.</div>
           ) : (
             <div className="space-y-1.5">
@@ -391,8 +444,8 @@ export default function MembreReseauSoinsView() {
                         </span>
                       </span>
                       <span className="flex items-center gap-1.5 flex-shrink-0">
-                        {gpsCoords && p._dist != null && (
-                          <span className="text-[11px] font-medium text-primary">{fmtDist(p._dist)}</span>
+                        {gpsCoords && (p as any)._dist != null && (
+                          <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">{fmtDist((p as any)._dist)}</span>
                         )}
                         {p.secteur && <Badge variant={secteurVariant(p.secteur)}>{p.secteur}</Badge>}
                         {p.latitude != null && <MapPin className="w-3.5 h-3.5 text-emerald-500" />}
@@ -440,7 +493,7 @@ export default function MembreReseauSoinsView() {
 
                   {detail.latitude != null && detail.longitude != null ? (
                     <div className="h-52 rounded-xl overflow-hidden border border-border">
-                      <MapContainer center={[detail.latitude, detail.longitude]} zoom={15} style={{ height: "100%", width: "100%" }}>
+                      <MapContainer center={[detail.latitude, detail.longitude]} zoom={15} maxBounds={GABON_BOUNDS} maxBoundsViscosity={1.0} style={{ height: "100%", width: "100%" }}>
                         <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                         <Marker position={[detail.latitude, detail.longitude]}>
                           <Popup>{detail.nom}<br />{detail.adresse}</Popup>

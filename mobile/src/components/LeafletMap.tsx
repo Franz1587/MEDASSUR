@@ -45,9 +45,12 @@ function construireHtml(points: PointCarte[], position: Props["position"], inter
   const pointsSurs = points.map((p) => ({ ...p, titre: echapper(p.titre), description: p.description ? echapper(p.description) : undefined }));
   const pointsJson = JSON.stringify(pointsSurs);
   const positionJson = JSON.stringify(position ?? null);
-  const centre = points[0] ? { latitude: points[0].latitude, longitude: points[0].longitude } : (position ?? { latitude: 0.39, longitude: 9.45 });
-  const zoomInitial = zoomFixe ?? (points.length > 0 || position ? 13 : 6);
-  const ajusterAutomatiquement = zoomFixe === undefined;
+  // Centrer sur la position de l'utilisateur si disponible, sinon Libreville.
+  const centre = position ?? (points[0] ? { latitude: points[0].latitude, longitude: points[0].longitude } : { latitude: 0.39, longitude: 9.45 });
+  const zoomInitial = zoomFixe ?? (position ? 14 : points.length > 0 ? 13 : 7);
+  // fitBounds désactivé quand la position est connue (évite le dézoom qui
+  // englobe tout le Gabon), ou quand un zoom fixe est imposé.
+  const ajusterAutomatiquement = zoomFixe === undefined && !position;
   const inter = interactive ? "true" : "false";
 
   return `<!DOCTYPE html>
@@ -99,6 +102,9 @@ function construireHtml(points: PointCarte[], position: Props["position"], inter
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap',
     }).addTo(carte);
+
+    // Restreindre la navigation aux limites du Gabon
+    carte.setMaxBounds([[-5.2, 8.0], [2.5, 15.0]]);
 
     var bornes = [];
     points.forEach(function (p) {
