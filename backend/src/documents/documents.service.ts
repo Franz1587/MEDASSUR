@@ -2138,6 +2138,7 @@ export class DocumentsService {
     const doc = new PDFDocument({ size: "A4", margins: { top: 28, left: 28, right: 28, bottom: 0 } });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${kind === "soins" ? "Feuille-Soins" : "Feuille-Examen"}-${numero.replace(/\//g, "-")}.pdf"`);
+    res.setHeader(EN_TETE_SIGNATURE, "integree");
     doc.pipe(res);
 
     const boite = (x: number, y: number, w: number, h: number) => doc.rect(x, y, w, h).strokeColor("#000").lineWidth(0.7).stroke();
@@ -3244,6 +3245,7 @@ export class DocumentsService {
     const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 21 });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="Decompte-${facture.id}.pdf"`);
+    res.setHeader(EN_TETE_SIGNATURE, "integree");
     doc.pipe(res);
 
     let premierePage = true;
@@ -5574,6 +5576,7 @@ export class DocumentsService {
     const doc = new PDFDocument({ size: "A4", margin: 21 });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="Reglement-${b.numero}.pdf"`);
+    res.setHeader(EN_TETE_SIGNATURE, "integree");
     doc.pipe(res);
 
     const dessinerCorps = async (exemplaire: string) => {
