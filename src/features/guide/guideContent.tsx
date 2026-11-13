@@ -1002,7 +1002,7 @@ export const chapitresInterne: GuideChapitre[] = [
           },
           {
             titre: "Ajuster les droits",
-            texte: "Dans l'onglet « Droits », cochez/décochez individuellement chaque fonctionnalité (regroupées par zone) — un module non couvert par l'abonnement de votre société apparaît verrouillé (🔒) et ne peut pas être coché. Le lien « Réinitialiser au modèle du rôle » revient à la sélection par défaut. Cliquez sur « Créer » — un mot de passe initial est communiqué.",
+            texte: "Dans l'onglet « Droits », cochez/décochez individuellement chaque fonctionnalité (regroupées par zone) — un module non couvert par l'abonnement de votre société apparaît verrouillé (icône cadenas) et ne peut pas être coché. Le lien « Réinitialiser au modèle du rôle » revient à la sélection par défaut. Cliquez sur « Créer » — un mot de passe initial est communiqué.",
           },
           {
             titre: "Modifier ou retirer un accès",

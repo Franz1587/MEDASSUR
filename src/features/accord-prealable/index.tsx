@@ -1415,7 +1415,9 @@ export default function AccordPrealableView() {
                     <div>
                       <div className={labelCls}>Signature sur le document original</div>
                       <div className={`text-[13px] font-semibold ${editingAccord.signaturePresente ? "text-green-600" : "text-amber-600"}`}>
-                        {editingAccord.signaturePresente ? "✓ Signature présente" : "✗ Aucune signature détectée"}
+                        {editingAccord.signaturePresente
+                          ? <span className="flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Signature présente</span>
+                          : <span className="flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Aucune signature détectée</span>}
                       </div>
                     </div>
                     {editingAccord.documentNumerise && (

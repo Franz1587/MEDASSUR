@@ -500,6 +500,7 @@ export class PrescriptionsService {
     const prescripteur = await resoudreOuCreerPrescripteur(this.prisma, {
       prescripteurNom: dto.prescripteurNom ?? "",
       titrePrescripteur: dto.titrePrescripteur,
+      specialitePrescripteur: dto.specialitePrescripteur,
       codePraticien: dto.codePraticien ?? "",
       structureNom: dto.structureNom ?? "",
       codeEtablissement: dto.codeEtablissement ?? "",

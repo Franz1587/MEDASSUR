@@ -2,14 +2,28 @@
 // doit rester lisible/retapable depuis un SMS. Même convention que
 // ComptesMobileService.genererMotDePasseTemporaire (2026-08), extraite ici
 // pour être réutilisable (2026-09, voir PrestatairesService.creerComptePortail).
-const ALPHABET_MOT_DE_PASSE = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+import { randomInt } from "crypto";
 
-export function genererMotDePasseTemporaire(longueur = 9): string {
-  let mdp = "";
-  for (let i = 0; i < longueur; i++) {
-    mdp += ALPHABET_MOT_DE_PASSE[Math.floor(Math.random() * ALPHABET_MOT_DE_PASSE.length)];
+const MINUSCULES = "abcdefghjkmnpqrstuvwxyz";
+const MAJUSCULES = "ABCDEFGHJKMNPQRSTUVWXYZ";
+const CHIFFRES = "23456789";
+const SYMBOLES = "!@#$%*+?";
+const ALPHABET_MOT_DE_PASSE = MINUSCULES + MAJUSCULES + CHIFFRES + SYMBOLES;
+
+const tirer = (alphabet: string) => alphabet[randomInt(alphabet.length)];
+
+// Mot de passe temporaire cryptographiquement aléatoire (crypto.randomInt) —
+// au moins 12 caractères, avec au moins une minuscule, une majuscule, un
+// chiffre et un symbole.
+export function genererMotDePasseTemporaire(longueur = 12): string {
+  const n = Math.max(12, longueur);
+  const caracteres = [tirer(MINUSCULES), tirer(MAJUSCULES), tirer(CHIFFRES), tirer(SYMBOLES)];
+  while (caracteres.length < n) caracteres.push(tirer(ALPHABET_MOT_DE_PASSE));
+  for (let i = caracteres.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [caracteres[i], caracteres[j]] = [caracteres[j], caracteres[i]];
   }
-  return mdp;
+  return caracteres.join("");
 }
 
 // Identifiant lisible dérivé d'un nom (2026-09) — voir demande utilisateur :

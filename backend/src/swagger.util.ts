@@ -11,6 +11,7 @@
 import type { INestApplication } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import type { Request, Response, NextFunction } from "express";
+import { createHash, timingSafeEqual } from "crypto";
 
 export function buildOpenApiDocument(app: INestApplication) {
   const config = new DocumentBuilder()
@@ -31,17 +32,43 @@ export function buildOpenApiDocument(app: INestApplication) {
 // est accessible publiquement — jamais le même mécanisme que
 // l'authentification applicative (JWT), volontairement séparé et simple
 // (identifiants dédiés SWAGGER_USER/SWAGGER_PASSWORD, jamais commités,
-// voir .env.example). Sans ces variables (dev local non configuré) : laisse
-// passer sans prompt, pour ne jamais gêner le développement quotidien.
+// voir .env.example).
+//  - Production : désactivé (404) tant que SWAGGER_USER ET SWAGGER_PASSWORD
+//    ne sont pas tous deux définis.
+//  - Hors production sans identifiants : accessible uniquement depuis la
+//    machine locale (adresse de la socket, jamais X-Forwarded-For).
+const empreinte = (s: string) => createHash("sha256").update(s).digest();
+const egal = (a: string, b: string) => timingSafeEqual(empreinte(a), empreinte(b));
+const ADRESSES_LOCALES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+
+/** Swagger doit-il être monté ? (faux en production sans identifiants) */
+export function swaggerActif(): boolean {
+  if (process.env.NODE_ENV !== "production") return true;
+  return !!process.env.SWAGGER_USER && !!process.env.SWAGGER_PASSWORD;
+}
+
 export function protegerSwagger(req: Request, res: Response, next: NextFunction) {
   const user = process.env.SWAGGER_USER;
   const pass = process.env.SWAGGER_PASSWORD;
-  if (!user || !pass) return next();
+
+  if (!user || !pass) {
+    if (process.env.NODE_ENV === "production") return res.status(404).send("Not found");
+    if (ADRESSES_LOCALES.has(req.socket.remoteAddress ?? "")) return next();
+    return res.status(403).send("Accès local uniquement.");
+  }
 
   const header = req.headers.authorization;
   if (header?.startsWith("Basic ")) {
-    const [fourni, motDePasseFourni] = Buffer.from(header.slice(6), "base64").toString("utf8").split(":");
-    if (fourni === user && motDePasseFourni === pass) return next();
+    const decode = Buffer.from(header.slice(6), "base64").toString("utf8");
+    const i = decode.indexOf(":");
+    if (i >= 0) {
+      const fourniUser = decode.slice(0, i);
+      const fourniPass = decode.slice(i + 1);
+      // Les deux comparaisons sont toujours évaluées (pas de court-circuit).
+      const userOk = egal(fourniUser, user);
+      const passOk = egal(fourniPass, pass);
+      if (userOk && passOk) return next();
+    }
   }
   res.setHeader("WWW-Authenticate", "Basic realm=\"MEDASSUR+ API docs\"");
   res.status(401).send("Authentification requise.");

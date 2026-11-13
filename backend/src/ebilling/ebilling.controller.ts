@@ -5,10 +5,22 @@ import {
   Param,
   Post,
   Query,
-  UseGuards,
+  Req,
 } from '@nestjs/common';
 import { EbillingService } from './ebilling.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Public, RequireModule } from '../auth/access.decorators';
+import { Roles } from '../auth/roles.decorator';
+import { CreatePayinDto } from './dto/payin.dto';
+import { CreatePayoutDto } from './dto/payout.dto';
+
+// Rôles financiers/direction : encaissements et consultation des transactions.
+const ROLES_FINANCE = ['administrateur', 'direction_generale', 'comptable'] as const;
+// Décaissement : + directeur technique (règlement prestataire par Mobile Money).
+const ROLES_PAYOUT = [...ROLES_FINANCE, 'directeur_technique'] as const;
+
+interface RequeteAuth {
+  user?: { userId?: string };
+}
 
 @Controller('ebilling')
 export class EbillingController {
@@ -17,79 +29,44 @@ export class EbillingController {
   // ── PAYIN : initier un encaissement ────────────────────────────────────
 
   @Post('payin')
-  @UseGuards(JwtAuthGuard)
-  creerPayin(
-    @Body()
-    body: {
-      montant: number;
-      description: string;
-      operateur: string;
-      msisdn?: string;
-      nom?: string;
-      email?: string;
-      contratId?: string;
-      gestionnaireId?: string;
-    },
-  ) {
-    return this.service.creerPayin(body);
+  @Roles(...ROLES_FINANCE)
+  @RequireModule('ebilling')
+  creerPayin(@Body() body: CreatePayinDto, @Req() req: RequeteAuth) {
+    return this.service.creerPayin(body, req.user?.userId);
   }
 
-  // ── Callback PAYIN — pas de JwtAuthGuard (appelé par E-Billing) ────────
+  // ── Callback PAYIN — public (appelé par E-Billing), authentifié par ?sig= ──
 
+  @Public()
   @Post('callback/payin')
-  async callbackPayin(@Body() body: unknown) {
-    await this.service.handlePayinCallback(
-      body as {
-        reference?: string;
-        external_reference?: string;
-        status?: string;
-        bill_id?: string;
-        transaction_id?: string;
-        payment_system?: string;
-      },
-    );
+  async callbackPayin(@Body() body: unknown, @Query('sig') sig?: string) {
+    await this.service.handlePayinCallback(body, sig);
     return { ok: true };
   }
 
   // ── PAYOUT : initier un décaissement ───────────────────────────────────
 
   @Post('payout')
-  @UseGuards(JwtAuthGuard)
-  creerPayout(
-    @Body()
-    body: {
-      montant: number;
-      msisdn: string;
-      operateur: string;
-      description: string;
-      nom?: string;
-      prestataireId?: string;
-      gestionnaireId?: string;
-      bordereauIds?: string[];
-    },
-  ) {
-    return this.service.creerPayout(body);
+  @Roles(...ROLES_PAYOUT)
+  @RequireModule('ebilling', 'reglementPrestataire')
+  creerPayout(@Body() body: CreatePayoutDto, @Req() req: RequeteAuth) {
+    return this.service.creerPayout(body, req.user?.userId);
   }
 
-  // ── Callback PAYOUT — pas de JwtAuthGuard (appelé par SHAP) ───────────
+  // ── Callback PAYOUT — public (appelé par SHAP), authentifié par ?sig= ───
 
+  @Public()
   @Post('callback/payout')
-  async callbackPayout(@Body() body: unknown) {
-    await this.service.handlePayoutCallback(
-      body as {
-        reference?: string;
-        status?: string;
-        payout_id?: string;
-        transaction_id?: string;
-      },
-    );
+  async callbackPayout(@Body() body: unknown, @Query('sig') sig?: string) {
+    await this.service.handlePayoutCallback(body, sig);
     return { ok: true };
   }
 
   // ── Liste des transactions ──────────────────────────────────────────────
 
   @Get('transactions')
-  @UseGuards(JwtAuthGuard)
+  @Roles(...ROLES_FINANCE)
+  @RequireModule('ebilling')
   lister(
     @Query('type') type?: string,
     @Query('statut') statut?: string,
@@ -98,7 +75,8 @@ export class EbillingController {
   }
 
   @Get('transactions/:reference')
-  @UseGuards(JwtAuthGuard)
+  @Roles(...ROLES_FINANCE)
+  @RequireModule('ebilling')
   detail(@Param('reference') reference: string) {
     return this.service.detail(reference);
   }

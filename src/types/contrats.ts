@@ -1,24 +1,17 @@
 import type { mockContrats } from "@/data/mock/contrats.mock";
 
-// Assistance liée (2026-08, multiple depuis 2026-09) — ajouté par
-// intersection plutôt que dans le mock (voir contratAssistanceId dans
-// schema.prisma) : porté par le contrat MALADIE, qui désigne le contrat
-// Assistance partageant sa population ; un contrat Assistance peut ainsi
-// réunir la population de plusieurs contrats Maladie.
+// Assistance liée (2026-08) — ajouté par intersection plutôt que dans le
+// mock (voir contratMaladieLieId dans schema.prisma) : un contrat
+// Assistance lié partage exactement la population de son contrat Maladie.
 export type Contrat = (typeof mockContrats)[number] & {
   clientId: string;
-  contratAssistanceId?: string | null;
+  contratMaladieLieId?: string | null;
   // Numéro de police (2026-08) — référence propre à la compagnie, distincte
   // de l'id technique CTR-... (voir schema.prisma Contrat.numeroPolice).
   numeroPolice?: string | null;
   nomCarteSante?: string | null;
-  // Bureau de rattachement (2026-09) — voir demande utilisateur : "LA RUCHE
-  // a un bureau à Port-Gentil qui gère ses contrats de façon autonome" —
-  // voir schema.prisma Contrat.agenceId. Facultatif, agences paramétrées
-  // dans l'écran Agences.
-  agenceId?: string | null;
   // Déclinaison structure publique/privée du résumé global (2026-08) —
-  // ajoutée par intersection pour la même raison que contratAssistanceId
+  // ajoutée par intersection pour la même raison que contratMaladieLieId
   // ci-dessus. Voir schema.prisma pour l'usage (carte d'assurance + calcul
   // PriseEnCharge).
   tauxAmbulatoirePublique?: string | null;

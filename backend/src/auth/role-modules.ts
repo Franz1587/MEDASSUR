@@ -34,6 +34,7 @@ export const ALL_VIEWS = [
   "rapportsIa",
   "communications",
   "ebilling",
+  "consentements",
 ];
 
 
@@ -77,7 +78,7 @@ export const ROLE_MODULES: Record<RoleId, string[]> = {
   // famille". Réservé à l'assuré principal racine : jamais accordable à un
   // ayant droit délégué (voir DelegationsFamilleService.MODULES_DELEGABLES,
   // qui l'exclut explicitement de la liste des rubriques accordables).
-  assure_principal: ["membreDashboard", "membreCarte", "membreGaranties", "membrePriseEnCharge", "membreRemboursement", "membreReseauSoins", "membreCarnetSante", "membreHistorique", "membreRendezVous", "membreSuiviSante", "membreAccesDossier", "membreFamille", "membreDelegations", "messagerie"],
+  assure_principal: ["membreDashboard", "membreCarte", "membreGaranties", "membrePriseEnCharge", "membreRemboursement", "membreReseauSoins", "membreCarnetSante", "membreHistorique", "membreRendezVous", "membreSuiviSante", "membreAccesDossier", "membreFamille", "membreDelegations", "membreConsentement", "messagerie"],
   // Portail médecin (2026-08) — voir demande utilisateur : "le médecin doit
   // avoir ses accès différents de ceux de la clinique ou l'hôpital... il
   // n'a pas besoin d'identifier un assuré, il doit voir la liste des

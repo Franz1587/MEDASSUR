@@ -2810,7 +2810,9 @@ export class DocumentsService {
 
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="Certificat-Prise-En-Charge-${accord.id}.pdf"`);
+    const refPec = accord.prescriptionRef ?? accord.id;
+    const nomBenefPdf = `${accord.assure.nom}_${accord.assure.prenom ?? ""}`.trim().replace(/\s+/g, "-").replace(/[^A-Za-z0-9_\-]/g, "");
+    res.setHeader("Content-Disposition", `inline; filename="PEC_${refPec}_${nomBenefPdf}.pdf"`);
     doc.pipe(res);
 
     const left = doc.page.margins.left;
@@ -2930,9 +2932,10 @@ export class DocumentsService {
     // bloc DESTINATAIRE ci-dessus (accord.prestataireRef), jamais p.nom/
     // p.ville/p.pays (les coordonnées de la société utilisatrice, sans
     // rapport avec qui délivre réellement la prestation).
-    doc.text(`Nom: ${accord.prestataireRef?.nom ?? accord.prestataire}`, left + colW + 8, y + 18, { width: colW - 20 });
-    doc.text(`Téléphone: ${accord.prestataireRef?.telephone ?? "—"}`, left + colW + 8, y + 29, { width: colW - 20 });
-    doc.text(`Adresse: ${accord.prestataireRef?.adresse ?? accord.prestataireRef?.ville ?? "—"}`, left + colW + 8, y + 40, { width: colW - 20 });
+    // DELIVRE PAR = société d'assurance (émettrice du document), pas le prestataire.
+    doc.text(`Nom: ${p.nom}`, left + colW + 8, y + 18, { width: colW - 20 });
+    doc.text(`Téléphone: ${p.telephone ?? "—"}`, left + colW + 8, y + 29, { width: colW - 20 });
+    doc.text(`Adresse: ${[p.boitePostale, p.ville, p.pays].filter(Boolean).join(" ") || "—"}`, left + colW + 8, y + 40, { width: colW - 20 });
     y += boxH3 + 10;
 
     // ── Tableau des actes ─────────────────────────────────────────────
@@ -3041,6 +3044,61 @@ export class DocumentsService {
     if (!garantie) return null;
     const taux = estAyantDroit ? (garantie.tauxAyantsDroit ?? garantie.tauxAssure) : garantie.tauxAssure;
     return taux != null ? Number(taux) : null;
+  }
+
+  // ── Attestation de consentement RGPD ────────────────────────────────────
+  async renderAttestationConsentement(userId: string, res: Response) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { nom: true, email: true, roleId: true, consentementAccepteAt: true } });
+    if (!user || !user.consentementAccepteAt) throw new NotFoundException("Aucun consentement enregistré pour cet utilisateur.");
+    const p = await this.parametresEntreprise.findOne();
+    const logoImage = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
+    const clausesProfil: Record<string, string[]> = {
+      assure: ["Données personnelles (nom, prénom, date de naissance, coordonnées) collectées pour la gestion de la couverture santé.", "Données de santé (consultations, ordonnances, actes médicaux) traitées dans le strict respect du secret médical.", "Données des ayants droit bénéficiant des mêmes protections.", "Conservation pendant la durée de couverture et 5 ans après résiliation (réglementation gabonaise).", "Droit d'accès, de rectification et d'opposition auprès de la société d'assurance."],
+      professionnel: ["Données professionnelles (nom, spécialité, numéro de convention, coordonnées) collectées pour les relations contractuelles assureurs.", "Données de facturation et prestations transmises aux organismes assureurs dans le cadre du tiers payant.", "Prescriptions et actes couverts par le secret professionnel, accessibles aux seules parties autorisées.", "Responsabilité sur la confidentialité des identifiants de connexion.", "Conservation pendant la durée de convention et 10 ans après résiliation."],
+      client: ["Données de l'organisation (raison sociale, coordonnées, représentants légaux) pour la gestion du contrat d'assurance collective.", "Données des affiliés traitées exclusivement dans le cadre de la gestion de leurs droits.", "Autorisation confirmée de transmettre les données des affiliés à MEDASSUR+ et à la société d'assurance.", "Données financières conservées conformément aux obligations légales gabonaises.", "Droit d'accès et de rectification des données auprès de l'interlocuteur assureur."],
+    };
+    const profil = user.roleId === "assure_principal" ? "assure" : (user.roleId === "medecin_prescripteur" || user.roleId === "prestataire_sante" ? "professionnel" : "client");
+    const clauses = clausesProfil[profil];
+    const fmtDate = (d: Date) => `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()} à ${String(d.getHours()).padStart(2, "0")}h${String(d.getMinutes()).padStart(2, "0")}`;
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="Attestation-Consentement-${user.nom.replace(/\s+/g, "-")}.pdf"`);
+    doc.pipe(res);
+    const left = doc.page.margins.left;
+    const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    // En-tête
+    if (logoImage) { try { doc.image(logoImage, left, 40, { height: 60, fit: [160, 60] }); } catch { /* non bloquant */ } }
+    doc.font("Helvetica-Bold").fontSize(14).fillColor("#1a1a2e").text("ATTESTATION DE CONSENTEMENT", left, 120, { align: "center", width });
+    doc.font("Helvetica").fontSize(9).fillColor("#555").text("Protection des données personnelles — Loi gabonaise", left, 138, { align: "center", width });
+    doc.moveDown(1.5);
+    // Encadré identité
+    const iy = doc.y;
+    doc.rect(left, iy, width, 60).lineWidth(0.8).strokeColor("#ccc").stroke();
+    doc.font("Helvetica").fontSize(9).fillColor("#333");
+    doc.text(`Nom : ${user.nom}`, left + 10, iy + 10, { width: width / 2 });
+    doc.text(`Email : ${user.email}`, left + 10, iy + 23, { width: width / 2 });
+    doc.text(`Date d'acceptation : ${fmtDate(user.consentementAccepteAt)}`, left + 10, iy + 36, { width: width / 2 });
+    doc.text(`Référence : CONSENT-${userId.slice(0, 8).toUpperCase()}`, left + width / 2, iy + 10, { width: width / 2, align: "right" });
+    doc.text(`Généré le : ${fmtDate(new Date())}`, left + width / 2, iy + 23, { width: width / 2, align: "right" });
+    doc.y = iy + 70;
+    // Corps : certification
+    doc.font("Helvetica").fontSize(9).fillColor("#222").text(`La société ${p.nom} atteste que l'utilisateur ci-dessus a lu et accepté les conditions de traitement de ses données personnelles en cochant la case « J'ai lu et j'accepte » sur la plateforme MEDASSUR+, à la date et l'heure mentionnées ci-dessus.`, { align: "justify" });
+    doc.moveDown(1);
+    doc.font("Helvetica-Bold").fontSize(9).text("Articles acceptés :");
+    doc.moveDown(0.5);
+    clauses.forEach((c, i) => {
+      doc.font("Helvetica").fontSize(8.5).fillColor("#333");
+      const startY = doc.y;
+      doc.rect(left, startY, 16, 16).lineWidth(0.5).strokeColor("#aaa").stroke();
+      doc.font("Helvetica-Bold").fontSize(8).fillColor("#1a1a2e").text(`${i + 1}`, left + 5, startY + 4, { width: 10, align: "center" });
+      doc.font("Helvetica").fontSize(8.5).fillColor("#333").text(c, left + 22, startY + 2, { width: width - 22 });
+      doc.moveDown(0.3);
+    });
+    doc.moveDown(1);
+    doc.font("Helvetica").fontSize(8).fillColor("#555").text("Ce document constitue une preuve de l'acceptation des conditions de traitement des données personnelles, conformément à la loi gabonaise sur la protection des données personnelles. Il peut être présenté à toute autorité compétente.", { align: "justify" });
+    // Pied de page
+    doc.font("Helvetica").fontSize(7.5).fillColor("#888").text(`MEDASSUR+ — ${p.nom} · Document officiel de consentement RGPD · ${new Date().getFullYear()}`, left, doc.page.height - 50, { align: "center", width });
+    doc.end();
   }
 
   // Numéro de sinistre PARTAGÉ par tous les décomptes d'un même (contrat,

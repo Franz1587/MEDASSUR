@@ -5,6 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { BadRequestException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { assertSameTenant } from "../tenant/tenant-guard.util";
 import { avecInfosProspect, type ParametresOffre } from "../cotation/contenu-offre";
 import { CreateAppelOffresDto } from "./dto/create-appel-offres.dto";
 import { UpdateAppelOffresDto } from "./dto/update-appel-offres.dto";
@@ -13,6 +14,7 @@ import { UpdatePropositionDto } from "./dto/update-proposition.dto";
 import { UploadAppelOffresDocumentDto } from "./dto/upload-document.dto";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
+import { sanitizeUpload } from "../storage/upload-security.util";
 import { ParametresEntrepriseService } from "../parametres-entreprise/parametres-entreprise.service";
 
 // Même mécanique que Compagnie.logo (CompagniesService.uploadLogo) — fichier
@@ -69,7 +71,8 @@ export class AppelOffresService {
     return ao;
   }
 
-  create(dto: CreateAppelOffresDto) {
+  async create(dto: CreateAppelOffresDto) {
+    await assertSameTenant(this.prisma, "Prospect", dto.prospectId, "Prospect");
     const id = `AO-${new Date().getFullYear()}-${randomUUID().slice(0, 6).toUpperCase()}`;
     return this.prisma.appelOffres.create({
       data: { id, ...dto, statut: "En cours", dateCreation: new Date().toLocaleDateString("fr-FR") },
@@ -79,6 +82,7 @@ export class AppelOffresService {
 
   async update(id: string, dto: UpdateAppelOffresDto) {
     await this.findOne(id);
+    await assertSameTenant(this.prisma, "Prospect", dto.prospectId, "Prospect");
     await this.prisma.appelOffres.update({ where: { id }, data: dto });
     return this.findOne(id);
   }
@@ -86,6 +90,7 @@ export class AppelOffresService {
   async ajouterProposition(appelOffresId: string, dto: CreatePropositionDto) {
     await this.findOne(appelOffresId);
     const { cotationIds, ...champs } = dto;
+    await assertSameTenant(this.prisma, "Cotation", cotationIds, "Cotation");
     const created = await this.prisma.propositionCommerciale.create({
       data: { appelOffresId, ...champs, statut: "Envoyée" },
     });
@@ -96,6 +101,7 @@ export class AppelOffresService {
   }
 
   private async findPropositionOrThrow(appelOffresId: string, propositionId: string) {
+    await this.findOne(appelOffresId);
     const proposition = await this.prisma.propositionCommerciale.findUnique({ where: { id: propositionId } });
     if (!proposition || proposition.appelOffresId !== appelOffresId) {
       throw new NotFoundException(`Proposition ${propositionId} introuvable pour l'appel d'offres ${appelOffresId}`);
@@ -106,6 +112,7 @@ export class AppelOffresService {
   async modifierProposition(appelOffresId: string, propositionId: string, dto: UpdatePropositionDto) {
     await this.findPropositionOrThrow(appelOffresId, propositionId);
     const { cotationIds, ...champs } = dto;
+    await assertSameTenant(this.prisma, "Cotation", cotationIds, "Cotation");
     await this.prisma.propositionCommerciale.update({ where: { id: propositionId }, data: champs });
     if (cotationIds) {
       // Détache tout ce qui était rattaché, puis rattache exactement la
@@ -130,10 +137,10 @@ export class AppelOffresService {
   async uploaderDocument(appelOffresId: string, file: Express.Multer.File, dto: UploadAppelOffresDocumentDto) {
     await this.findOne(appelOffresId);
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
-    const ext = path.extname(file.originalname) || "";
-    const fichier = `${randomUUID()}${ext.toLowerCase()}`;
+    await assertSameTenant(this.prisma, "Compagnie", dto.compagnieId, "Compagnie");
+    const { storedName: fichier, mime } = sanitizeUpload({ originalName: file.originalname, mimetype: file.mimetype, buffer: file.buffer, category: "document" });
     if (this.storage.actif) {
-      await this.storage.upload("appel-offres", fichier, file.buffer, file.mimetype);
+      await this.storage.upload("appel-offres", fichier, file.buffer, mime);
     } else {
       await fs.promises.mkdir(UPLOADS_APPEL_OFFRES_DIR, { recursive: true });
       await fs.promises.writeFile(path.join(UPLOADS_APPEL_OFFRES_DIR, fichier), file.buffer);
@@ -202,6 +209,7 @@ export class AppelOffresService {
   }
 
   async supprimerDocument(appelOffresId: string, documentId: string) {
+    await this.findOne(appelOffresId);
     const document = await this.prisma.appelOffresDocument.findUnique({ where: { id: documentId } });
     if (!document || document.appelOffresId !== appelOffresId) {
       throw new NotFoundException(`Document ${documentId} introuvable pour l'appel d'offres ${appelOffresId}`);

@@ -1,11 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../auth/roles.decorator";
+import type { Acteur } from "../auth/role-hierarchy";
 import { SocieteUsersService } from "./societe-users.service";
 import { CreateUserDto } from "../users/dto/create-user.dto";
 import { UpdateUserDto } from "../users/dto/update-user.dto";
 import { UpdateModulesDto } from "../users/dto/update-modules.dto";
+
+type ActeurRequest = { user: Acteur };
 
 // Utilisateurs d'une société précise, gérés par le Super Admin (2026-09) —
 // voir demande utilisateur : "il doit pouvoir créer et gérer des
@@ -23,27 +26,27 @@ export class SocieteUsersController {
   }
 
   @Post()
-  create(@Param("societeId") societeId: string, @Body() dto: CreateUserDto) {
-    return this.service.create(societeId, dto);
+  create(@Param("societeId") societeId: string, @Body() dto: CreateUserDto, @Req() req: ActeurRequest) {
+    return this.service.create(societeId, dto, req.user);
   }
 
   @Patch(":userId")
-  update(@Param("societeId") societeId: string, @Param("userId") userId: string, @Body() dto: UpdateUserDto) {
-    return this.service.update(societeId, userId, dto);
+  update(@Param("societeId") societeId: string, @Param("userId") userId: string, @Body() dto: UpdateUserDto, @Req() req: ActeurRequest) {
+    return this.service.update(societeId, userId, dto, req.user);
   }
 
   @Patch(":userId/modules")
-  updateModules(@Param("societeId") societeId: string, @Param("userId") userId: string, @Body() dto: UpdateModulesDto) {
-    return this.service.updateModules(societeId, userId, dto);
+  updateModules(@Param("societeId") societeId: string, @Param("userId") userId: string, @Body() dto: UpdateModulesDto, @Req() req: ActeurRequest) {
+    return this.service.updateModules(societeId, userId, dto, req.user);
   }
 
   @Patch(":userId/reinitialiser-mot-de-passe")
-  reinitialiserMotDePasse(@Param("societeId") societeId: string, @Param("userId") userId: string) {
-    return this.service.reinitialiserMotDePasse(societeId, userId);
+  reinitialiserMotDePasse(@Param("societeId") societeId: string, @Param("userId") userId: string, @Req() req: ActeurRequest) {
+    return this.service.reinitialiserMotDePasse(societeId, userId, req.user);
   }
 
   @Delete(":userId")
-  remove(@Param("societeId") societeId: string, @Param("userId") userId: string) {
-    return this.service.remove(societeId, userId);
+  remove(@Param("societeId") societeId: string, @Param("userId") userId: string, @Req() req: ActeurRequest) {
+    return this.service.remove(societeId, userId, req.user);
   }
 }

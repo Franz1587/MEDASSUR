@@ -7,6 +7,7 @@ import { MouvementsService, type AjoutMouvement } from "../mouvements/mouvements
 import type { RoleId } from "../auth/role.enum";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
+import { sanitizeUpload } from "../storage/upload-security.util";
 import { CreateDemandeClientDto } from "./dto/create-demande-client.dto";
 import { DecisionDemandeClientDto } from "./dto/decision-demande-client.dto";
 import { numeroPolice } from "../lib/police.util";
@@ -94,15 +95,18 @@ export class DemandesClientService {
     if (beneficiaire.demandeClient.clientId !== clientId) throw new ForbiddenException(`Bénéficiaire ${beneficiaireId} inaccessible`);
     if (beneficiaire.demandeClient.statut !== "En attente") throw new BadRequestException("Cette demande est déjà traitée.");
 
-    const ext = path.extname(file.originalname) || ".jpg";
-    const filename = `dcl-${beneficiaireId}${ext.toLowerCase()}`;
+    const { storedName: filename, mime } = sanitizeUpload({ originalName: file.originalname, mimetype: file.mimetype, buffer: file.buffer, category: "image" });
     if (this.storage.actif) {
-      await this.storage.upload("photos", filename, file.buffer, file.mimetype);
+      await this.storage.upload("photos", filename, file.buffer, mime);
     } else {
       await fs.promises.mkdir(UPLOADS_PHOTOS_DIR, { recursive: true });
       await fs.promises.writeFile(path.join(UPLOADS_PHOTOS_DIR, filename), file.buffer);
     }
-    return this.prisma.demandeClientBeneficiaire.update({ where: { id: beneficiaireId }, data: { photo: filename } });
+    const maj = await this.prisma.demandeClientBeneficiaire.update({ where: { id: beneficiaireId }, data: { photo: filename } });
+    if (beneficiaire.photo && beneficiaire.photo !== filename) {
+      await fs.promises.unlink(path.join(UPLOADS_PHOTOS_DIR, path.basename(beneficiaire.photo))).catch(() => undefined);
+    }
+    return maj;
   }
 
   findMine(clientId: string) {

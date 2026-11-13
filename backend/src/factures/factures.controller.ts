@@ -12,9 +12,14 @@ import { RejeterLigneFactureDto } from "../sante/dto/rejeter-ligne-facture.dto";
 import { AnnulerLigneFactureDto } from "../sante/dto/annuler-ligne-facture.dto";
 import { AjouterNumeroDto } from "./dto/ajouter-numero.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { RequireModule } from "../auth/access.decorators";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_SANTE } from "../auth/access-roles";
 
+// Saisie des factures (prises en charge, tableau de bord sinistres/santé) et écrans de règlement (éligibles).
 @Controller("factures")
 @UseGuards(JwtAuthGuard)
+@RequireModule("prisesEnCharge", "reglementPrestataire", "reglementComptable")
 export class FacturesController {
   constructor(private readonly service: FacturesService) {}
 
@@ -64,11 +69,13 @@ export class FacturesController {
     return this.service.create(dto, req.user.userId);
   }
 
+  @Roles(...ROLES_SANTE)
   @Patch(":id")
   update(@Param("id") id: string, @Body() dto: UpdateFactureDto) {
     return this.service.update(id, dto);
   }
 
+  @Roles(...ROLES_SANTE)
   @Patch(":id/annuler")
   annuler(@Param("id") id: string, @Body() dto: AnnulerFactureDto) {
     return this.service.annuler(id, dto.motif);
@@ -89,16 +96,19 @@ export class FacturesController {
     return this.service.modifierLigne(id, ligneId, dto);
   }
 
+  @Roles(...ROLES_SANTE)
   @Patch(":id/lignes/:ligneId/rejeter")
   rejeterLigne(@Param("id") id: string, @Param("ligneId") ligneId: string, @Body() dto: RejeterLigneFactureDto) {
     return this.service.rejeterLigne(id, ligneId, dto.motifRejet);
   }
 
+  @Roles(...ROLES_SANTE)
   @Patch(":id/lignes/:ligneId/annuler")
   annulerLigne(@Param("id") id: string, @Param("ligneId") ligneId: string, @Body() dto: AnnulerLigneFactureDto) {
     return this.service.annulerLigne(id, ligneId, dto.motif);
   }
 
+  @Roles(...ROLES_SANTE)
   @Delete(":id/lignes/:ligneId")
   supprimerLigne(@Param("id") id: string, @Param("ligneId") ligneId: string) {
     return this.service.supprimerLigne(id, ligneId);
@@ -109,6 +119,7 @@ export class FacturesController {
     return this.service.ajouterNumero(id, dto.numero);
   }
 
+  @Roles(...ROLES_SANTE)
   @Delete(":id/numeros/:numeroId")
   supprimerNumero(@Param("id") id: string, @Param("numeroId") numeroId: string) {
     return this.service.supprimerNumero(id, numeroId);

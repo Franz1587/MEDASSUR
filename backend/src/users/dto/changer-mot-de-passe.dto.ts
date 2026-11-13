@@ -1,4 +1,5 @@
-import { IsNotEmpty, IsString, MinLength } from "class-validator";
+import { IsNotEmpty, IsString } from "class-validator";
+import { MotDePasseConforme } from "../../auth/password-policy";
 
 // Changement de mot de passe en LIBRE-SERVICE (2026-09) — voir demande
 // utilisateur : "un vrai formulaire Mon profil... c'est là qu'il pourra
@@ -12,6 +13,6 @@ export class ChangerMotDePasseDto {
   @IsString() @IsNotEmpty()
   ancienMotDePasse: string;
 
-  @IsString() @MinLength(8, { message: "Le nouveau mot de passe doit contenir au moins 8 caractères." })
+  @IsString() @MotDePasseConforme()
   nouveauMotDePasse: string;
 }

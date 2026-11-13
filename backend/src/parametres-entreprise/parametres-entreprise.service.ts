@@ -6,6 +6,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { TenantContext } from "../tenant/tenant-context";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
+import { sanitizeUpload } from "../storage/upload-security.util";
 import { UpdateParametresEntrepriseDto } from "./dto/update-parametres-entreprise.dto";
 
 const ID_DEFAUT = "default";
@@ -121,22 +122,24 @@ export class ParametresEntrepriseService {
   // CompagniesService.uploadLogo/deleteLogo.
   async uploadLogo(id: string, file: Express.Multer.File) {
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
-    const ext = path.extname(file.originalname) || ".png";
-    const filename = `${id}${ext.toLowerCase()}`;
+    const { storedName: filename, mime } = sanitizeUpload({ originalName: file.originalname, mimetype: file.mimetype, buffer: file.buffer, category: "logo" });
+    const ancien = (await this.prisma.parametresEntreprise.findUnique({ where: { id }, select: { logo: true } }))?.logo;
     // Supabase Storage si configuré (production), sinon disque local
     // (dev — voir StorageService, comportement inchangé quand
     // SUPABASE_URL/SUPABASE_SERVICE_KEY sont absents).
     if (this.storage.actif) {
-      await this.storage.upload(CAT_LOGOS_ENTREPRISES, filename, file.buffer, file.mimetype);
+      await this.storage.upload(CAT_LOGOS_ENTREPRISES, filename, file.buffer, mime);
     } else {
       await fs.promises.mkdir(UPLOADS_LOGOS_ENTREPRISES_DIR, { recursive: true });
       await fs.promises.writeFile(path.join(UPLOADS_LOGOS_ENTREPRISES_DIR, filename), file.buffer);
     }
-    return this.prisma.parametresEntreprise.upsert({
+    const maj = await this.prisma.parametresEntreprise.upsert({
       where: { id },
       update: { logo: filename },
       create: { id, logo: filename },
     });
+    if (ancien && ancien !== filename) await fs.promises.unlink(path.join(UPLOADS_LOGOS_ENTREPRISES_DIR, path.basename(ancien))).catch(() => undefined);
+    return maj;
   }
 
   // Wrappers pour l'écran interne (société connectée, TenantContext) — le
@@ -172,19 +175,21 @@ export class ParametresEntrepriseService {
   // (id explicite, réutilisable par le Super Admin sur une autre société).
   async uploadPageGardeStatistiques(id: string, file: Express.Multer.File) {
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
-    const ext = path.extname(file.originalname) || ".png";
-    const filename = `${id}${ext.toLowerCase()}`;
+    const { storedName: filename, mime } = sanitizeUpload({ originalName: file.originalname, mimetype: file.mimetype, buffer: file.buffer, category: "image", maxBytes: 6 * 1024 * 1024 });
+    const ancien = (await this.prisma.parametresEntreprise.findUnique({ where: { id }, select: { statistiquesPageGarde: true } }))?.statistiquesPageGarde;
     if (this.storage.actif) {
-      await this.storage.upload(CAT_PAGES_GARDE_STATISTIQUES, filename, file.buffer, file.mimetype);
+      await this.storage.upload(CAT_PAGES_GARDE_STATISTIQUES, filename, file.buffer, mime);
     } else {
       await fs.promises.mkdir(UPLOADS_PAGES_GARDE_STATISTIQUES_DIR, { recursive: true });
       await fs.promises.writeFile(path.join(UPLOADS_PAGES_GARDE_STATISTIQUES_DIR, filename), file.buffer);
     }
-    return this.prisma.parametresEntreprise.upsert({
+    const maj = await this.prisma.parametresEntreprise.upsert({
       where: { id },
       update: { statistiquesPageGarde: filename },
       create: { id, statistiquesPageGarde: filename },
     });
+    if (ancien && ancien !== filename) await fs.promises.unlink(path.join(UPLOADS_PAGES_GARDE_STATISTIQUES_DIR, path.basename(ancien))).catch(() => undefined);
+    return maj;
   }
 
   uploadPageGardeStatistiquesCourante(file: Express.Multer.File) {

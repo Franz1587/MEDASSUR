@@ -76,8 +76,7 @@ export class SocietesService {
   // revient au super Admin de donner accès à ces modules là en fonction du
   // type d'abonnement souscrit") — jamais tous les modules par défaut.
   async create(dto: CreateSocieteDto) {
-    const adminEmail = dto.adminEmail.trim().toLowerCase();
-    const emailExistant = await this.prisma.user.findFirst({ where: { email: { equals: adminEmail, mode: "insensitive" } } });
+    const emailExistant = await this.prisma.user.findUnique({ where: { email: dto.adminEmail } });
     if (emailExistant) throw new ConflictException(`L'email "${dto.adminEmail}" est déjà utilisé par un autre utilisateur.`);
 
     const modules = await this.resoudreModules(dto.planAbonnementId, dto.modules);
@@ -97,7 +96,7 @@ export class SocietesService {
       });
       const admin = await tx.user.create({
         data: {
-          nom: dto.adminNom.trim(), email: adminEmail, initiales, passwordHash,
+          nom: dto.adminNom.trim(), email: dto.adminEmail, initiales, passwordHash,
           roleId: "administrateur",
           // Plafonné à l'abonnement, jamais ROLE_MODULES.administrateur brut.
           modules: ROLE_MODULES.administrateur.filter((m) => modules.includes(m)),
@@ -151,7 +150,7 @@ export class SocietesService {
     if (smsEnvoye) {
       await this.messaging.envoyer(
         dto.telephone,
-        `Vos accès administrateur MEDASSUR+ pour ${dto.nom.trim()}\nIdentifiant : ${dto.adminEmail}\nMot de passe temporaire : ${MOT_DE_PASSE_INITIAL}\nCe mot de passe vous sera demandé de changer dès la première connexion.`,
+        `Vos accès administrateur MedAssur pour ${dto.nom.trim()}\nIdentifiant : ${dto.adminEmail}\nMot de passe temporaire : ${MOT_DE_PASSE_INITIAL}\nCe mot de passe vous sera demandé de changer dès la première connexion.`,
       );
     }
 

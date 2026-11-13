@@ -3,11 +3,16 @@ import type { Response } from "express";
 import * as fs from "fs";
 import * as path from "path";
 import { ASSETS_ROOT } from "../uploads-dir.util";
+import { Public } from "../auth/access.decorators";
 
 const GUIDE_DIR = path.join(ASSETS_ROOT, "guide");
 
 const NOM_VALIDE = /^[a-zA-Z0-9_\-.]+\.png$/;
 
+// Public : consommé par des balises <img src> du guide, qui ne peuvent pas
+// envoyer d'en-tête Authorization. Seuls des PNG au nom strictement validé
+// (aucun séparateur de chemin) du dossier guide sont servis.
+@Public()
 @Controller("guide-assets")
 export class GuideAssetsController {
   @Get(":filename")

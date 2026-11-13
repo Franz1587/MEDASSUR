@@ -6,12 +6,14 @@ import { CommunicationsService } from "./communications.service";
 import { BrouillonCommunicationDto, EnvoyerCommunicationDto, MajCommunicationDto, SignatureDto } from "./dto/envoyer-communication.dto";
 import { RetourCommunicationDto } from "./dto/retour-communication.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { Roles } from "../auth/roles.decorator";
 
 type Req2 = Request & { user: { userId: string } };
 const UPLOAD = FilesInterceptor("fichiers", 20, { storage: memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 @Controller("communications")
 @UseGuards(JwtAuthGuard)
+@Roles("administrateur", "direction_generale", "gestionnaire_entreprises", "commercial")
 export class CommunicationsController {
   constructor(private readonly service: CommunicationsService) {}
 

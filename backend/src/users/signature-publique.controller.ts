@@ -1,6 +1,7 @@
 import { BadRequestException, Body, Controller, Get, Param, Post } from "@nestjs/common";
 import { IsString, MinLength } from "class-validator";
 import { UsersService } from "./users.service";
+import { Public } from "../auth/access.decorators";
 
 class SignerDto {
   // Image PNG encodée en data URL ("data:image/png;base64,...."), exportée
@@ -17,6 +18,7 @@ class SignerDto {
 // UsersService.genererJetonSignature) identifie le compte à signer. Ne
 // JAMAIS exposer autre chose que le nom du titulaire (voir infoJetonSignature)
 // — aucune autre donnée du compte n'est accessible depuis cette route.
+@Public()
 @Controller("signer")
 export class SignaturePubliqueController {
   constructor(private readonly service: UsersService) {}

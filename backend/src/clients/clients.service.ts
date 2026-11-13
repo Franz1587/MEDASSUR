@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import ExcelJS from "exceljs";
+import { verifierTailleXlsx } from "../import/safe-xlsx.util";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -9,6 +10,7 @@ import { UpdateClientDto } from "./dto/update-client.dto";
 import { ImportClientRowDto } from "./dto/import-clients.dto";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
+import { sanitizeUpload } from "../storage/upload-security.util";
 import { genererIdNumerique } from "../lib/numeric-id.util";
 import { texteBrutDeCellule } from "../lib/excel-cell.util";
 import { numeroPolice } from "../lib/police.util";
@@ -180,17 +182,17 @@ export class ClientsService {
 
   // Même pattern que CompagniesService.uploadLogo/deleteLogo.
   async uploadLogo(id: string, file: Express.Multer.File) {
-    await this.findOne(id);
+    const existant = await this.findOne(id);
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
-    const ext = path.extname(file.originalname) || ".png";
-    const filename = `${id}${ext.toLowerCase()}`;
+    const { storedName: filename, mime } = sanitizeUpload({ originalName: file.originalname, mimetype: file.mimetype, buffer: file.buffer, category: "logo" });
     if (this.storage.actif) {
-      await this.storage.upload("logos-clients", filename, file.buffer, file.mimetype);
+      await this.storage.upload("logos-clients", filename, file.buffer, mime);
     } else {
       await fs.promises.mkdir(UPLOADS_LOGOS_DIR, { recursive: true });
       await fs.promises.writeFile(path.join(UPLOADS_LOGOS_DIR, filename), file.buffer);
     }
     await this.prisma.client.update({ where: { id }, data: { logo: filename } });
+    if (existant.logo && existant.logo !== filename) await fs.promises.unlink(path.join(UPLOADS_LOGOS_DIR, path.basename(existant.logo))).catch(() => undefined);
     return this.findOne(id);
   }
 
@@ -280,6 +282,7 @@ export class ClientsService {
   // confirmation (voir importer() ci-dessous), qui relit la base à jour.
   async parseImportFile(buffer: Buffer): Promise<{ lignes: ImportClientRowDto[]; rejets: { ligne: number; nom: string; motif: string }[] }> {
     const classeur = new ExcelJS.Workbook();
+    verifierTailleXlsx(buffer);
     await classeur.xlsx.load(buffer as unknown as ExcelJS.Buffer);
     const feuille = classeur.worksheets[0];
     if (!feuille) throw new BadRequestException("Fichier illisible ou vide.");

@@ -6,6 +6,8 @@ import { CotationService } from "./cotation.service";
 import { CreateCotationDto } from "./dto/create-cotation.dto";
 import { UpdateCotationDto } from "./dto/update-cotation.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_COMMERCIAL } from "../auth/access-roles";
 
 @Controller("cotation")
 @UseGuards(JwtAuthGuard)
@@ -32,6 +34,7 @@ export class CotationController {
     return this.service.update(id, dto);
   }
 
+  @Roles(...ROLES_COMMERCIAL, "directeur_technique")
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.service.remove(id);

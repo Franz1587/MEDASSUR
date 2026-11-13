@@ -1,8 +1,10 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Res, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import * as QRCode from "qrcode";
+import type { Response } from "express";
 import { UsersService } from "./users.service";
+import { DocumentsService } from "../documents/documents.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UpdateModulesDto } from "./dto/update-modules.dto";
@@ -25,7 +27,7 @@ import { Roles } from "../auth/roles.decorator";
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("administrateur", "direction_generale", "super_admin")
 export class UsersController {
-  constructor(private readonly service: UsersService) {}
+  constructor(private readonly service: UsersService, private readonly documents: DocumentsService) {}
 
   @Get()
   findAll() {
@@ -95,6 +97,16 @@ export class UsersController {
   @Delete(":id/signature")
   deleteSignature(@Param("id") id: string) {
     return this.service.deleteSignature(id);
+  }
+
+  @Get("consentements")
+  listConsentements(@Query("q") q?: string, @Query("roleId") roleId?: string) {
+    return this.service.findConsentements({ q, roleId });
+  }
+
+  @Get(":id/attestation-consentement")
+  attestationConsentement(@Param("id") id: string, @Res() res: Response) {
+    return this.documents.renderAttestationConsentement(id, res);
   }
 
   // QR "signer depuis son téléphone" généré par l'administrateur pour LA

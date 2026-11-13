@@ -3,6 +3,7 @@ import { UsersService } from "./users.service";
 import { UsersController } from "./users.controller";
 import { UsersMoiController } from "./users-moi.controller";
 import { SignaturePubliqueController } from "./signature-publique.controller";
+import { DocumentsModule } from "../documents/documents.module";
 
 // Ordre des contrôleurs (2026-09) — comblé après coup : Nest/Express
 // résolvent les routes dans l'ordre d'enregistrement, jamais par
@@ -14,6 +15,7 @@ import { SignaturePubliqueController } from "./signature-publique.controller";
 // le tout début de cette fonctionnalité. UsersMoiController (routes plus
 // spécifiques) DOIT rester déclaré en premier.
 @Module({
+  imports: [DocumentsModule],
   providers: [UsersService],
   controllers: [UsersMoiController, SignaturePubliqueController, UsersController],
   exports: [UsersService],

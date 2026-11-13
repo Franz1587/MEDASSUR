@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { assertSameTenant } from "../tenant/tenant-guard.util";
 import { CreateHonorairesDto } from "./dto/create-honoraires.dto";
 
 @Injectable()
@@ -10,7 +11,8 @@ export class HonorairesService {
     return this.prisma.honorairesGestion.findMany({ include: { contrat: { include: { client: true } } } });
   }
 
-  create(dto: CreateHonorairesDto) {
+  async create(dto: CreateHonorairesDto) {
+    await assertSameTenant(this.prisma, "Contrat", dto.contratId, "Contrat");
     const brut = (dto.montantSinistres * dto.tauxHonoraires) / 100;
     // FCFA sans sous-unité utilisée en pratique — toujours arrondi.
     const montantHonoraires = Math.round(dto.plafond !== undefined ? Math.min(brut, dto.plafond) : brut);

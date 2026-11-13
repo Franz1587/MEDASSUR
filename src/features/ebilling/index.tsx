@@ -1,7 +1,7 @@
 import { Pager } from "@/components/shared/Pagination";
 import { usePagination } from "@/hooks/usePagination";
 import { useEffect, useState } from "react";
-import { Smartphone, ArrowDownCircle, ArrowUpCircle, RefreshCw, X, Download } from "lucide-react";
+import { Smartphone, ArrowDownCircle, ArrowUpCircle, RefreshCw, X, Download, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
@@ -317,7 +317,7 @@ function PayoutModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
                 </p>
               )}
               {prestataire && !prestataire.telephone && (
-                <p className="text-[11px] text-amber-600 mt-1">⚠ Aucun numéro enregistré pour ce prestataire — saisie manuelle requise.</p>
+                <p className="text-[11px] text-amber-600 mt-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3 flex-shrink-0" /> Aucun numéro enregistré pour ce prestataire — saisie manuelle requise.</p>
               )}
             </div>
           )}

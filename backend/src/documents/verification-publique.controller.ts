@@ -1,4 +1,5 @@
 import { Controller, Get, NotFoundException, Param } from "@nestjs/common";
+import { Public } from "../auth/access.decorators";
 import { DocumentSignatureService } from "./document-signature.service";
 
 // PUBLIC — SANS authentification (2026-09) — voir demande utilisateur :
@@ -8,6 +9,7 @@ import { DocumentSignatureService } from "./document-signature.service";
 // (jamais connecté à l'application sur cet appareil) doit pouvoir vérifier
 // son authenticité et son statut actuel sans compte — même convention que
 // SignaturePubliqueController (`/signer/:token`), aucun JwtAuthGuard ici.
+@Public()
 @Controller("verification")
 export class VerificationPubliqueController {
   constructor(private readonly signatures: DocumentSignatureService) {}

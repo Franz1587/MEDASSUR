@@ -78,6 +78,20 @@ export class AuthService {
       user = candidats[0] ?? null;
     }
 
+    // Connexion par code praticien (2026-11) — voir demande utilisateur :
+    // "les médecins puisse se connecter... avec le numéro de prescripteur +
+    // un mot de passe". Résout le Medecin par codePraticien exact, puis remonte
+    // au User via la relation medecinId.
+    if (!user) {
+      const medecin = await this.prisma.medecin.findFirst({
+        where: { codePraticien: { equals: identifiantNettoye, mode: "insensitive" } },
+        select: { id: true },
+      });
+      if (medecin) {
+        user = await this.prisma.user.findFirst({ where: { medecinId: medecin.id } });
+      }
+    }
+
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       throw new UnauthorizedException("Identifiants invalides");
     }
@@ -111,24 +125,33 @@ export class AuthService {
       clientId: user.clientId, assureSanteId: user.assureSanteId, prestataireId: user.prestataireId,
       medecinId: user.medecinId, societeId: user.societeId,
     };
+
+    // Structures médicales du médecin (2026-11) — voir demande utilisateur :
+    // "si lié à plusieurs structures, l'application ouvre une fenêtre pour
+    // sélectionner la structure pour lequel il s'apprête à faire une
+    // consultation." Incluses dans la réponse login quand medecinId est défini,
+    // pour que le frontend affiche le modal de choix immédiatement après login.
+    let structuresMedecin: { id: string; nom: string }[] | undefined;
+    if (user.medecinId) {
+      const med = await this.prisma.medecin.findUnique({
+        where: { id: user.medecinId },
+        select: { structures: { select: { prestataire: { select: { id: true, nom: true } } } } },
+      });
+      structuresMedecin = med?.structures.map((s) => s.prestataire) ?? [];
+    }
+
     return {
       accessToken: await this.jwt.signAsync(payload),
       user: {
         id: user.id, nom: user.nom, email: user.email, roleId: user.roleId, initiales: user.initiales,
         modules: user.modules, clientId: user.clientId, assureSanteId: user.assureSanteId, prestataireId: user.prestataireId,
         medecinId: user.medecinId, societeId: user.societeId, doitChangerMotDePasse: user.doitChangerMotDePasse,
+        consentementAccepteAt: user.consentementAccepteAt?.toISOString() ?? null,
       },
+      structuresMedecin,
     };
   }
 
-  // Rafraîchissement de session (2026-09) — voir demande utilisateur : les
-  // droits/modules d'un compte peuvent changer PENDANT qu'il est connecté
-  // (Super Admin qui étend/réduit un abonnement, administrateur qui modifie
-  // les droits d'un collaborateur) — sans ce point d'entrée, le menu latéral
-  // restait figé sur l'instantané `User.modules` capturé à la connexion
-  // jusqu'à une déconnexion/reconnexion explicite. Utilisé par AuthContext
-  // au montage (et sur un retour d'onglet) pour resynchroniser `modules`
-  // sans redemander de mot de passe.
   async moi(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException("Compte introuvable");
@@ -136,13 +159,15 @@ export class AuthService {
       id: user.id, nom: user.nom, email: user.email, roleId: user.roleId, initiales: user.initiales,
       modules: user.modules, clientId: user.clientId, assureSanteId: user.assureSanteId, prestataireId: user.prestataireId,
       medecinId: user.medecinId, societeId: user.societeId, doitChangerMotDePasse: user.doitChangerMotDePasse,
+      consentementAccepteAt: user.consentementAccepteAt?.toISOString() ?? null,
     };
   }
 
-  // Consentement RGPD (2026-10) — la colonne User.consentementAccepteAt
-  // n'est pas encore migrée en prod ; stub qui retourne ok:true sans écriture
-  // DB jusqu'à ce que la migration soit appliquée (voir schema.prisma).
-  async accepterConsentement(_userId: string) {
+  async accepterConsentement(userId: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { consentementAccepteAt: new Date() },
+    });
     return { ok: true };
   }
 }

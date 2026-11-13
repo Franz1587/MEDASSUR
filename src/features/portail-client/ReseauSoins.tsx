@@ -4,25 +4,47 @@ import { useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import {
   MapPin, Phone, Building2, Stethoscope, Search, X, ChevronDown, ChevronRight,
-  FileDown, Shield, MapPinned, LayoutGrid,
+  FileDown, Shield, MapPinned, LocateFixed, Loader2,
+  Hospital, Pill, Package, FlaskConical, ScanLine, Dumbbell, Eye, Smile,
+  type LucideIcon,
 } from "lucide-react";
 import { Badge, type BadgeVariant } from "@/components/shared/Badge";
 import { Combobox } from "@/components/shared/Combobox";
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { getReseauSoins, getPrestataireReseau, type PrestataireReseau, type PrestataireReseauDetail } from "@/services/reseauSoins.service";
 import { openReseauSoins } from "@/services/documents.service";
 import { toast } from "sonner";
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+function fmtDist(km: number): string {
+  return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
+}
 
 const ORDRE_PROVINCES = [
   "Estuaire","Ogooué-Maritime","Haut-Ogooué","Ngounié",
   "Woleu-Ntem","Nyanga","Ogooué-Lolo","Moyen-Ogooué","Ogooué-Ivindo",
 ];
 
-const TYPE_ICONES: Record<string, string> = {
-  "Hôpital": "🏥", "Clinique": "🏨", "Cabinet": "🩺",
-  "Cabinet Dentaire": "🦷", "Pharmacie": "💊", "Dépôt pharmaceutique": "📦",
-  "Laboratoire": "🔬", "Centre d'Imagerie": "🖥", "Centre de Kinésithérapie": "🏋",
-  "Opticien": "👁",
+const TYPE_ICONES: Record<string, { Icon: LucideIcon; color: string }> = {
+  "Hôpital":                 { Icon: Hospital,     color: "text-red-500" },
+  "Clinique":                { Icon: Building2,    color: "text-blue-500" },
+  "Cabinet":                 { Icon: Stethoscope,  color: "text-sky-500" },
+  "Cabinet Dentaire":        { Icon: Smile,        color: "text-indigo-500" },
+  "Pharmacie":               { Icon: Pill,         color: "text-green-500" },
+  "Dépôt pharmaceutique":    { Icon: Package,      color: "text-teal-500" },
+  "Laboratoire":             { Icon: FlaskConical, color: "text-violet-500" },
+  "Centre d'Imagerie":       { Icon: ScanLine,     color: "text-purple-500" },
+  "Centre de Kinésithérapie":{ Icon: Dumbbell,     color: "text-orange-500" },
+  "Opticien":                { Icon: Eye,          color: "text-amber-500" },
 };
+const TYPE_ICONE_DEFAULT = { Icon: Hospital, color: "text-muted-foreground" };
 
 function secteurVariant(secteur?: string | null): BadgeVariant {
   return secteur === "Public" ? "info" : secteur === "Privé" ? "gold" : "neutral";
@@ -44,6 +66,8 @@ export default function PortailReseauSoinsView() {
   const [provinceOuverte, setProvinceOuverte] = useState<string | null>(null);
   const [selectionId, setSelectionId] = useState<string | null>(null);
   const [detail, setDetail] = useState<PrestataireReseauDetail | null>(null);
+  const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [gpsLoading, setGpsLoading] = useState(false);
 
   useEffect(() => {
     getReseauSoins().then((liste) => {
@@ -95,6 +119,30 @@ export default function PortailReseauSoinsView() {
   const nbVilles = useMemo(() => new Set(filtres.map((p) => p.ville)).size, [filtres]);
   const nbProvs = useMemo(() => new Set(filtres.map((p) => p.province || "Autres")).size, [filtres]);
 
+  const filtresProximite = useMemo(() => {
+    if (!gpsCoords) return [];
+    return filtres
+      .map((p) => ({
+        ...p,
+        _dist: p.latitude != null && p.longitude != null
+          ? haversineKm(gpsCoords.lat, gpsCoords.lng, p.latitude, p.longitude)
+          : Infinity,
+      }))
+      .sort((a, b) => a._dist - b._dist);
+  }, [filtres, gpsCoords]);
+
+  const pagProximite = usePagination(filtresProximite, 20);
+
+  const localiserMoi = () => {
+    if (!navigator.geolocation) { toast.error("Géolocalisation non disponible sur cet appareil."); return; }
+    setGpsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { setGpsCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setGpsLoading(false); },
+      () => { toast.error("Impossible d'obtenir votre position. Vérifiez les autorisations."); setGpsLoading(false); },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  };
+
   const handleDownload = () => openReseauSoins().catch(() => toast.error("Ouverture du document impossible."));
 
   return (
@@ -140,11 +188,52 @@ export default function PortailReseauSoinsView() {
           <input value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Rechercher un nom, une ville, une spécialité…" className="w-full h-10 pl-9 pr-3 rounded-lg border border-border bg-background text-[13px] text-foreground placeholder:text-muted-foreground" />
           {recherche && <button type="button" onClick={() => setRecherche("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="w-3.5 h-3.5" /></button>}
         </div>
+        <button
+          type="button"
+          onClick={gpsCoords ? () => setGpsCoords(null) : localiserMoi}
+          disabled={gpsLoading}
+          title={gpsCoords ? "Désactiver le tri par proximité" : "Afficher les prestataires les plus proches"}
+          className={`h-10 px-3.5 rounded-lg border text-[12.5px] font-medium flex items-center gap-1.5 flex-shrink-0 transition-colors ${gpsCoords ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-secondary/50 hover:text-foreground"}`}
+        >
+          {gpsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LocateFixed className="w-4 h-4" />}
+          {gpsCoords ? "Près de moi ✓" : "Près de moi"}
+        </button>
       </div>
 
       {/* Contenu */}
       {tous === null ? (
         <div className="bg-card border border-dashed border-border rounded-2xl p-12 text-center text-muted-foreground text-[13px]">Chargement…</div>
+      ) : gpsCoords ? (
+        /* ── Vue proximité ── */
+        filtresProximite.length === 0 ? (
+          <div className="bg-card border border-dashed border-border rounded-2xl p-12 text-center text-muted-foreground text-[13px]">Aucun prestataire ne correspond à ces critères.</div>
+        ) : (
+          <div className="space-y-1.5">
+            <p className="text-[11.5px] text-primary flex items-center gap-1.5 mb-3"><LocateFixed className="w-3.5 h-3.5" />Tri par proximité activé — les prestataires les plus proches apparaissent en premier.</p>
+            {pagProximite.pageItems.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setSelectionId(p.id)}
+                className="w-full flex items-center justify-between gap-3 px-3.5 py-2.5 bg-card border border-border rounded-xl text-left hover:border-primary/40 transition-colors"
+              >
+                <span className="flex items-center gap-2.5 min-w-0">
+                  {(() => { const c = TYPE_ICONES[p.type] ?? TYPE_ICONE_DEFAULT; return <c.Icon className={`w-5 h-5 flex-shrink-0 ${c.color}`} />; })()}
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-medium text-foreground truncate">{p.titre ? `${p.titre} ` : ""}{p.nom}</span>
+                    <span className="block text-[11.5px] text-muted-foreground truncate">{p.type}{p.specialite ? ` · ${p.specialite.split("·")[0].trim()}` : ""} · {p.ville}</span>
+                  </span>
+                </span>
+                <span className="flex items-center gap-1.5 flex-shrink-0">
+                  {p._dist !== Infinity && <span className="text-[11px] font-semibold text-primary">{fmtDist(p._dist)}</span>}
+                  {p.secteur && <Badge variant={secteurVariant(p.secteur)}>{p.secteur}</Badge>}
+                  {p.latitude != null && <MapPin className="w-3.5 h-3.5 text-emerald-500" />}
+                </span>
+              </button>
+            ))}
+            <Pager p={pagProximite} />
+          </div>
+        )
       ) : provinces.length === 0 ? (
         <div className="bg-card border border-dashed border-border rounded-2xl p-12 text-center text-muted-foreground text-[13px]">Aucun prestataire ne correspond à ces critères.</div>
       ) : (
@@ -198,7 +287,7 @@ export default function PortailReseauSoinsView() {
                                 className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-left hover:bg-secondary/40 transition-colors border border-transparent hover:border-border"
                               >
                                 <span className="flex items-center gap-2.5 min-w-0">
-                                  <span className="text-lg flex-shrink-0 leading-none">{TYPE_ICONES[p.type] ?? "🏥"}</span>
+                                  {(() => { const c = TYPE_ICONES[p.type] ?? TYPE_ICONE_DEFAULT; return <c.Icon className={`w-4 h-4 flex-shrink-0 ${c.color}`} />; })()}
                                   <span className="min-w-0">
                                     <span className="block text-[12.5px] font-medium text-foreground truncate">{p.titre ? `${p.titre} ` : ""}{p.nom}</span>
                                     <span className="block text-[11px] text-muted-foreground truncate">{p.type}{p.specialite ? ` · ${p.specialite.split("·")[0].trim()}` : ""}</span>
@@ -232,8 +321,8 @@ export default function PortailReseauSoinsView() {
               <>
                 <div className="px-5 py-4 border-b border-border flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-xl flex-shrink-0">
-                      {TYPE_ICONES[detail.type] ?? "🏥"}
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      {(() => { const c = TYPE_ICONES[detail.type] ?? TYPE_ICONE_DEFAULT; return <c.Icon className={`w-5 h-5 ${c.color}`} />; })()}
                     </div>
                     <div>
                       <h3 className="text-[15px] font-semibold text-foreground">{detail.titre ? `${detail.titre} ` : ""}{detail.nom}</h3>

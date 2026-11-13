@@ -1,5 +1,5 @@
 import type { UsePaginationResult } from "@/hooks/usePagination";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 
 // Barre de pagination générique (2026-09) — voir usePagination.ts et
 // demande utilisateur : "il faut mettre à présent une pagination avec une
@@ -41,8 +41,16 @@ export function Pagination({ page, pageCount, pageSize, pageSizeOptions, total, 
       {pageCount > 1 && (
         <div className="flex items-center gap-1">
           <button
+            type="button" disabled={page <= 1} onClick={() => onPageChange(1)}
+            className="p-1 rounded-md border border-border disabled:opacity-40 disabled:cursor-not-allowed hover:bg-secondary/60"
+            title="Première page"
+          >
+            <ChevronsLeft className="w-3.5 h-3.5" />
+          </button>
+          <button
             type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)}
             className="p-1 rounded-md border border-border disabled:opacity-40 disabled:cursor-not-allowed hover:bg-secondary/60"
+            title="Page précédente"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
@@ -50,8 +58,16 @@ export function Pagination({ page, pageCount, pageSize, pageSizeOptions, total, 
           <button
             type="button" disabled={page >= pageCount} onClick={() => onPageChange(page + 1)}
             className="p-1 rounded-md border border-border disabled:opacity-40 disabled:cursor-not-allowed hover:bg-secondary/60"
+            title="Page suivante"
           >
             <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button" disabled={page >= pageCount} onClick={() => onPageChange(pageCount)}
+            className="p-1 rounded-md border border-border disabled:opacity-40 disabled:cursor-not-allowed hover:bg-secondary/60"
+            title="Dernière page"
+          >
+            <ChevronsRight className="w-3.5 h-3.5" />
           </button>
         </div>
       )}

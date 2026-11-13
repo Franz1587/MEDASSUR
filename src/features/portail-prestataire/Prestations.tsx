@@ -1,10 +1,9 @@
-import { Pager } from "@/components/shared/Pagination";
-import { usePagination } from "@/hooks/usePagination";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { referenceCorrespond, referenceLisible } from "@/lib/referenceFacture";
 import { toast } from "sonner";
 import { parse, isValid } from "date-fns";
 import { Plus, Trash2, Send, ArrowLeft, FileText, Search, RotateCcw, Pencil, Ban, History, X, Check, Stethoscope, FlaskConical } from "lucide-react";
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { Badge, type BadgeVariant } from "@/components/shared/Badge";
 import { Combobox } from "@/components/shared/Combobox";
 import { DateInput } from "@/components/shared/DateInput";
@@ -20,8 +19,6 @@ import {
   type MedecinPrestataireOption,
 } from "@/services/portailPrestataire.service";
 import { IdentificationAssure } from "./IdentificationAssure";
-import { useClientSociete } from "./ClientSocieteContext";
-import { SocieteGate } from "./SelecteurClientSociete";
 import { GROUPES_ACTES, PRESTATION_HANDOFF_KEY, TYPES_PRESTATION_LABELS, type PrestationHandoff } from "./prestationTypes";
 
 // "dd/mm/yyyy" — même repère que partout ailleurs dans l'app.
@@ -57,16 +54,14 @@ const GROUPES_EXAMEN = new Set(["Analyse", "Imagerie", "ActesSpecialites"]);
 function typeFormulaire(type: string | undefined, famille: string | undefined): "soins" | "examen" | null {
   const typeNormalise = type?.trim().toLowerCase();
   if (typeNormalise === "consultation" || typeNormalise === "consultations") return "soins";
-  if (typeNormalise === "pharmacie") return "soins";
   if (typeNormalise === "analyse" || typeNormalise === "analyses médicale" || typeNormalise === "imagerie" || typeNormalise === "actes de spécialités") return "examen";
   const groupe = groupeDeFamilleActe(famille);
-  if (groupe === "Consultation" || groupe === "Autre") return "soins";
+  if (groupe === "Consultation") return "soins";
   if (groupe && GROUPES_EXAMEN.has(groupe)) return "examen";
   return null;
 }
 
 function statutVariant(s: string): BadgeVariant {
-  if (s === "Payée") return "gold";
   if (s === "Soumise") return "success";
   if (s === "Annulée") return "danger";
   return "warning";
@@ -94,9 +89,6 @@ type Vue = "liste" | "identification" | "creation" | "detail";
 // PortailPrestataireController) — visible et traitable côté interne comme
 // côté portail assuré, sans synchronisation supplémentaire.
 export default function PrestatairePrestationsView() {
-  const { clientActif, setClientActif } = useClientSociete();
-  // Porte bloquante — réinitialisée à chaque visite de l'onglet (montage).
-  const [societeOk, setSocieteOk] = useState(false);
   const [vue, setVue] = useState<Vue>("liste");
   const [prestations, setPrestations] = useState<Prestation[] | null>(null);
   const [detail, setDetail] = useState<Prestation | null>(null);
@@ -161,29 +153,26 @@ export default function PrestatairePrestationsView() {
   const [rechercheAu, setRechercheAu] = useState("");
   const [filtre, setFiltre] = useState({ ref: "", patient: "", du: "", au: "" });
 
-  const rafraichir = () => getPrestations(clientActif?.id).then(setPrestations);
+  const rafraichir = () => getPrestations().then(setPrestations);
 
   const prestationsFiltrees = useMemo(() => {
     const ref = filtre.ref.trim().toLowerCase();
     const nom = filtre.patient.trim().toLowerCase();
     return (prestations ?? []).filter((p) =>
-      referenceCorrespond(p.referenceFacture, ref)
+      p.referenceFacture.toLowerCase().includes(ref)
       && (nom === "" || p.lignes.some((l) => l.assureNom.toLowerCase().includes(nom)))
       && dansPeriode(p.dateReception, filtre.du, filtre.au));
-  }, [prestations, filtre, clientActif]);
+  }, [prestations, filtre]);
   const rechercheActive = filtre.ref || filtre.patient || filtre.du || filtre.au;
-  const lancerRecherche = () => setFiltre({ ref: rechercheRef, patient: recherchePatient, du: rechercheDu, au: rechercheAu });
+  const pagPrestations = usePagination(prestationsFiltrees, 20);
+  const lancerRecherche = () => { setFiltre({ ref: rechercheRef, patient: recherchePatient, du: rechercheDu, au: rechercheAu }); pagPrestations.setPage(1); };
   const reinitialiserRecherche = () => {
     setRechercheRef(""); setRecherchePatient(""); setRechercheDu(""); setRechercheAu("");
     setFiltre({ ref: "", patient: "", du: "", au: "" });
   };
 
   useEffect(() => {
-    setPrestations(null);
-    getPrestations(clientActif?.id).then(setPrestations);
-  }, [clientActif?.id]);
-
-  useEffect(() => {
+    rafraichir();
     getActesMedicaux().then(setActes);
     getMoiPrestataire().then((p) => setCategoriesActesVisibles(p.categoriesActesVisibles));
     getMedecinsPrestataire().then(setMedecins).catch(() => undefined);
@@ -208,7 +197,7 @@ export default function PrestatairePrestationsView() {
   // (voir plus bas) — évite d'avoir deux implémentations qui divergent.
   const chargerApercu = async (assureId: string, typePrestationLigne: string, montant: number, acteMedicalId?: string, quantite?: number) => {
     try {
-      return await apercuLignePrestation({ assureId, typePrestation: typePrestationLigne, montant, acteMedicalId, quantite, clientSocieteId: clientActif?.id });
+      return await apercuLignePrestation({ assureId, typePrestation: typePrestationLigne, montant, acteMedicalId, quantite });
     } catch {
       return null;
     }
@@ -324,7 +313,7 @@ export default function PrestatairePrestationsView() {
     setEnvoi(true);
     try {
       const cree = await creerPrestation({
-        assureId: patient.id, typePrestation, date, clientSocieteId: clientActif?.id,
+        assureId: patient.id, typePrestation, date,
         lignes: lignesForm.map((l) => ({ acteMedicalId: l.acteMedicalId, montant: l.montant, quantite: l.quantite, natureMaladie, medecinId: medecinId ?? undefined })),
       });
       toast.success("Prestation enregistrée.");
@@ -600,10 +589,6 @@ export default function PrestatairePrestationsView() {
     }
   };
 
-  const pagHistorique = usePagination(historique ?? []);
-  const pagLignesDetail = usePagination(detail?.lignes ?? []);
-  const pagPrestations = usePagination(prestationsFiltrees);
-
   if (vue === "identification") {
     return (
       <div className="p-6 space-y-4">
@@ -822,7 +807,7 @@ export default function PrestatairePrestationsView() {
         </button>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-[1.2rem] font-bold text-foreground">Détails prestation : {referenceLisible(detail.referenceFacture)}</h1>
+            <h1 className="text-[1.2rem] font-bold text-foreground">Détails prestation : {detail.referenceFacture}</h1>
             <p className="text-[11.5px] text-muted-foreground mt-0.5">{detail.dateReception}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -852,7 +837,7 @@ export default function PrestatairePrestationsView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {pagLignesDetail.pageItems.map((l) => {
+              {detail.lignes.map((l) => {
                 const annulee = l.statut === "Annulé";
                 const enEdition = ligneEnEdition?.id === l.id;
                 if (enEdition) {
@@ -988,7 +973,6 @@ export default function PrestatairePrestationsView() {
               </tr>
             </tfoot>
           </table>
-          <Pager p={pagLignesDetail} />
           </div>
         </div>
 
@@ -1170,9 +1154,9 @@ export default function PrestatairePrestationsView() {
             ) : historique.length === 0 ? (
               <p className="px-4 py-6 text-center text-muted-foreground text-[12.5px]">Aucune modification enregistrée.</p>
             ) : (
-              <><table className="w-full text-[12px]">
+              <table className="w-full text-[12px]">
                 <tbody className="divide-y divide-border/60">
-                  {pagHistorique.pageItems.map((h) => (
+                  {historique.map((h) => (
                     <tr key={h.id}>
                       <td className="px-4 py-2 text-foreground font-medium whitespace-nowrap">{h.action}</td>
                       <td className="px-4 py-2 text-foreground">{h.utilisateurNom}</td>
@@ -1181,7 +1165,6 @@ export default function PrestatairePrestationsView() {
                   ))}
                 </tbody>
               </table>
-              <Pager p={pagHistorique} /></>
             )}
           </div>
         )}
@@ -1219,7 +1202,7 @@ export default function PrestatairePrestationsView() {
                 <p className="text-[13.5px] font-semibold text-foreground">Annuler cette facture</p>
                 <button type="button" onClick={() => setAnnulationFactureOuverte(false)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
               </div>
-              <p className="text-[12.5px] text-muted-foreground">{referenceLisible(detail.referenceFacture)} — toutes les lignes seront exclues des relevés et des règlements. Cette facture ne pourra plus être complétée.</p>
+              <p className="text-[12.5px] text-muted-foreground">{detail.referenceFacture} — toutes les lignes seront exclues des relevés et des règlements. Cette facture ne pourra plus être complétée.</p>
               <label className="block">
                 <div className="text-[12px] text-muted-foreground mb-1.5">Motif de l'annulation *</div>
                 <textarea
@@ -1240,18 +1223,12 @@ export default function PrestatairePrestationsView() {
   }
 
   return (
-    <SocieteGate societeOk={societeOk} onSelect={(c) => { setClientActif(c); setSocieteOk(true); }}>
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-[1.2rem] font-bold text-foreground uppercase tracking-wide">Liste des prestations financières</h1>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setSocieteOk(false)} className="h-9 px-3 rounded-lg border border-border text-[12.5px] text-muted-foreground hover:text-foreground hover:bg-secondary/40">
-            {clientActif?.nom ?? "Organisme"} ↺
-          </button>
-          <button type="button" onClick={ouvrirCreation} className="h-9 px-3.5 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium inline-flex items-center gap-1.5">
-            <Plus className="w-4 h-4" />Créer une prestation
-          </button>
-        </div>
+        <button type="button" onClick={ouvrirCreation} className="h-9 px-3.5 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium inline-flex items-center gap-1.5">
+          <Plus className="w-4 h-4" />Créer une prestation
+        </button>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -1295,7 +1272,7 @@ export default function PrestatairePrestationsView() {
           <tbody className="divide-y divide-border/60">
             {pagPrestations.pageItems.map((p) => (
               <tr key={p.id} className="hover:bg-secondary/25 cursor-pointer" onClick={() => ouvrirDetail(p.id)}>
-                <td className="px-4 py-2.5 text-foreground font-medium">{referenceLisible(p.referenceFacture)}</td>
+                <td className="px-4 py-2.5 text-foreground font-medium">{p.referenceFacture}</td>
                 <td className="px-4 py-2.5 text-muted-foreground">{[...new Set(p.lignes.map((l) => l.assureNom))].join(", ") || "—"}</td>
                 <td className="px-4 py-2.5 text-muted-foreground">{p.dateReception}</td>
                 <td className="px-4 py-2.5 text-right text-foreground" style={{ fontFamily: "'DM Mono', monospace" }}>{fmtM(p.lignes.reduce((s, l) => s + l.montant, 0))} FCFA</td>
@@ -1312,9 +1289,8 @@ export default function PrestatairePrestationsView() {
             )}
           </tbody>
         </table>
-        <Pager p={pagPrestations} />
+        <div className="px-4"><Pager p={pagPrestations} /></div>
       </div>
     </div>
-    </SocieteGate>
   );
 }

@@ -18,6 +18,10 @@ export class ValiderBonNumeriseDto {
 
   @IsOptional()
   @IsString()
+  specialitePrescripteur?: string;
+
+  @IsOptional()
+  @IsString()
   codePraticien?: string;
 
   @IsOptional()

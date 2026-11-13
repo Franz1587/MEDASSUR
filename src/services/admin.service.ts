@@ -92,6 +92,24 @@ export async function resetUserPassword(id: string, nouveauMotDePasse?: string):
   return http.patch<{ motDePasse: string }>(`/users/${id}/reset-password`, { nouveauMotDePasse });
 }
 
+export interface ConsentementRecord {
+  id: string;
+  nom: string;
+  email: string;
+  roleId: string;
+  consentementAccepteAt: string | null;
+  societeId: string | null;
+  societe: { nom: string } | null;
+}
+
+export async function getConsentements(filtres?: { q?: string; roleId?: string }): Promise<ConsentementRecord[]> {
+  const params = new URLSearchParams();
+  if (filtres?.q) params.set("q", filtres.q);
+  if (filtres?.roleId) params.set("roleId", filtres.roleId);
+  const qs = params.toString();
+  return http.get<ConsentementRecord[]>(`/users/consentements${qs ? `?${qs}` : ""}`);
+}
+
 // Dérivé des comptes réels — plus de liste figée à part (voir demande
 // "pas de données codées en dur") : le libellé vient de roles.ts, le
 // nombre d'utilisateurs est compté sur les comptes chargés.

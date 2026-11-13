@@ -229,7 +229,7 @@ function DetailDocumentModal({ doc: docInitial, onClose, onRapport, onRapprocher
                   <p className="text-[10px] text-muted-foreground mt-0.5">Agent d'Analyse IA · {doc.statutOcr === "Analysé" ? `Analysé le ${doc.date}` : `Échec · ${doc.date}`}</p>
                 </div>
                 <span className={`text-[10px] font-bold px-2 py-1 rounded-md ${doc.statutOcr === "Analysé" ? "bg-primary/15 text-primary" : "bg-destructive/15 text-destructive"}`}>
-                  {doc.statutOcr === "Analysé" ? "✓ Signé" : "✗ Échec"}
+                  {doc.statutOcr === "Analysé" ? <span className="flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Signé</span> : <span className="flex items-center gap-1"><X className="w-3 h-3" /> Échec</span>}
                 </span>
               </div>
               {doc.statutOcr === "Analysé" && (doc.type || doc.referenceExtraite || doc.montantExtrait != null || doc.nomEmetteurExtrait) && (
@@ -311,7 +311,7 @@ function DetailDocumentModal({ doc: docInitial, onClose, onRapport, onRapprocher
                       !pNom.toLowerCase().includes(doc.nomEmetteurExtrait.toLowerCase().slice(0, 8)) &&
                       !doc.nomEmetteurExtrait.toLowerCase().includes(pNom.toLowerCase().slice(0, 8));
                     return mismatch
-                      ? <p className="text-xs text-amber-600 font-semibold mt-0.5">⚠ ARIANA a lu : « {doc.nomEmetteurExtrait} » — vérifier le prestataire sélectionné.</p>
+                      ? <p className="text-xs text-amber-600 font-semibold mt-0.5 flex items-center gap-1"><AlertTriangle className="w-3 h-3 flex-shrink-0" /> ARIANA a lu : « {doc.nomEmetteurExtrait} » — vérifier le prestataire sélectionné.</p>
                       : <p className="text-xs text-muted-foreground">ARIANA : {doc.nomEmetteurExtrait}</p>;
                   })()}
                 </>
@@ -779,9 +779,9 @@ export default function GedView() {
                           !d.prestataire.nom.toLowerCase().includes(d.nomEmetteurExtrait.toLowerCase().slice(0, 8)) &&
                           !d.nomEmetteurExtrait.toLowerCase().includes(d.prestataire.nom.toLowerCase().slice(0, 8)) && (
                             <span
-                              title={`⚠ ARIANA a lu : « ${d.nomEmetteurExtrait} »\nEnregistré : « ${d.prestataire.nom} »\nVérifier que le bon prestataire est sélectionné.`}
+                              title={`ARIANA a lu : « ${d.nomEmetteurExtrait} »\nEnregistré : « ${d.prestataire.nom} »\nVérifier que le bon prestataire est sélectionné.`}
                               className="text-amber-500 cursor-help flex-shrink-0"
-                            >⚠</span>
+                            ><AlertTriangle className="w-3.5 h-3.5" /></span>
                           )}
                       </span>
                     : "—"}

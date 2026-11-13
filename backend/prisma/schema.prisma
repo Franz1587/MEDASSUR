@@ -43,9 +43,9 @@ model User {
   // la connexion par email reste toujours possible ; seuls les comptes qui
   // ont un username peuvent aussi se connecter par ce raccourci.
   username String? @unique
-  // consentementAccepteAt — champ non encore migré en prod (2026-10).
-  // Réintégrer dans le schéma après avoir appliqué la migration SQL :
-  // ALTER TABLE "User" ADD COLUMN "consentementAccepteAt" TIMESTAMP(3);
+  // Consentement RGPD (2026-11) — date du premier "J'accepte" par l'utilisateur.
+  // null = jamais accepté (modal bloquant à la prochaine connexion externe).
+  consentementAccepteAt DateTime?
   createdAt    DateTime @default(now())
 
   // Coordonnées personnelles + photo de profil (2026-08) — voir demande

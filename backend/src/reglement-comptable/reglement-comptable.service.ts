@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { assertSameTenant } from "../tenant/tenant-guard.util";
 import { GenererLettreChequeDto } from "./dto/generer-lettre-cheque.dto";
 import { montantNetPrisesEnCharge as montantNetBordereau } from "../lib/montant-net.util";
 
@@ -122,6 +123,10 @@ export class ReglementComptableService {
   // bancaire : `referenceVirement` porte désormais le numéro de chèque
   // réel, et chaque bordereau reste lié à sa LettreCheque.
   async genererLettreCheque(dto: GenererLettreChequeDto) {
+    await assertSameTenant(this.prisma, "Banque", dto.banqueId, "Banque");
+    await assertSameTenant(this.prisma, "Prestataire", dto.prestataireId, "Prestataire");
+    await assertSameTenant(this.prisma, "Compagnie", dto.compagnieId, "Compagnie");
+    await assertSameTenant(this.prisma, "CompteReglement", dto.compteReglementId, "Compte de règlement");
     const bordereaux = await this.prisma.bordereauReglement.findMany({
       where: { id: { in: dto.bordereauIds }, prestataireId: dto.prestataireId, statut: "Validé", lettreChequeId: null },
       include: { prisesEnCharge: true },

@@ -24,6 +24,7 @@ import SelecteurClientSociete from "@/features/portail-prestataire/SelecteurClie
 import { ConsentementModal } from "@/features/consentement/ConsentementModal";
 import { AbonnementGate } from "@/features/membre/AbonnementGate";
 import { getStatutAccesMembre } from "@/services/portailMembre.service";
+import { ChoixStructureMedecin } from "@/features/portail-medecin/ChoixStructureMedecin";
 
 // Cloche de notification (2026-08) — voir demande utilisateur : "que ce soit
 // du côté de l'assuré principal ou côté client, il faut mettre la cloche de
@@ -67,6 +68,9 @@ export function PortalShell({ meta }: { meta: PortalMeta }) {
   const { currentRole } = useAuth();
   if (currentRole?.id === "prestataire_sante") {
     return <ClientSocieteProvider><PortalShellCore meta={meta} /></ClientSocieteProvider>;
+  }
+  if (currentRole?.id === "medecin_prescripteur") {
+    return <><ChoixStructureMedecin /><PortalShellCore meta={meta} /></>;
   }
   return <PortalShellCore meta={meta} />;
 }

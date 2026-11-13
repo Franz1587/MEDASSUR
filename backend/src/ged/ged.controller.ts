@@ -3,10 +3,15 @@ import type { Request, Response } from "express";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import { GedService } from "./ged.service";
+import { UpdateGedDocumentDto } from "./dto/update-ged-document.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { RequireModule } from "../auth/access.decorators";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_SANTE } from "../auth/access-roles";
 
 @Controller("ged/documents")
 @UseGuards(JwtAuthGuard)
+@RequireModule("ged")
 export class GedController {
   constructor(private readonly service: GedService) {}
 
@@ -43,7 +48,7 @@ export class GedController {
   }
 
   @Patch(":id")
-  update(@Param("id") id: string, @Body() body: { prestataireId?: string | null; entiteLiee?: string; dateCachet?: string | null }) {
+  update(@Param("id") id: string, @Body() body: UpdateGedDocumentDto) {
     return this.service.update(id, body);
   }
 
@@ -57,6 +62,7 @@ export class GedController {
     return this.service.genererRapportLiaison(id);
   }
 
+  @Roles(...ROLES_SANTE)
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.service.remove(id);

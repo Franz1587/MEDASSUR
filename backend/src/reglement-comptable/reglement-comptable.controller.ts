@@ -2,9 +2,12 @@ import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/co
 import { ReglementComptableService } from "./reglement-comptable.service";
 import { GenererLettreChequeDto } from "./dto/generer-lettre-cheque.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_REGLEMENT } from "../auth/access-roles";
 
 @Controller("reglement-comptable")
 @UseGuards(JwtAuthGuard)
+@Roles(...ROLES_REGLEMENT)
 export class ReglementComptableController {
   constructor(private readonly service: ReglementComptableService) {}
 

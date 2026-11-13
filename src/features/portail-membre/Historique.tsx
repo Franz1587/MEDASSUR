@@ -3,6 +3,8 @@ import { History, Layers, FileDown, ChevronDown, ChevronUp } from "lucide-react"
 import { toast } from "sonner";
 import { Badge, type BadgeVariant } from "@/components/shared/Badge";
 import { Combobox } from "@/components/shared/Combobox";
+import { Pager } from "@/components/shared/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import { getMesPrisesEnCharge, getMaFamille, getMoi, openDecompteDe, openFeuilleSoinsDe, openFeuilleExamenDe, type MembrePriseEnCharge } from "@/services/portailMembre.service";
 import { useAuth } from "@/auth/AuthContext";
@@ -43,6 +45,7 @@ export default function MembreHistoriqueView() {
   const [beneficiaires, setBeneficiaires] = useState<Beneficiaire[] | null>(null);
   const [beneficiaireId, setBeneficiaireId] = useState<string | null>(null);
   const [rubrique, setRubrique] = useState<string | null>(null);
+  const [exerciceFiltre, setExerciceFiltre] = useState<number | null>(null);
   const [detailOuvert, setDetailOuvert] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -57,13 +60,19 @@ export default function MembreHistoriqueView() {
 
   const rubriques = useMemo(() => [...new Set((lignes ?? []).map((l) => l.rubrique))].sort(), [lignes]);
 
+  const exercices = useMemo(() => {
+    const vals = [...new Set((lignes ?? []).map((l) => l.exercice).filter((e): e is number => e != null))];
+    return vals.sort((a, b) => b - a);
+  }, [lignes]);
+
   const filtrees = useMemo(() => {
     return (lignes ?? []).filter((l) => {
       if (beneficiaireId && l.assureId !== beneficiaireId) return false;
       if (rubrique && l.rubrique !== rubrique) return false;
+      if (exerciceFiltre != null && l.exercice !== exerciceFiltre) return false;
       return true;
     });
-  }, [lignes, beneficiaireId, rubrique]);
+  }, [lignes, beneficiaireId, rubrique, exerciceFiltre]);
 
   const telechargerDecompte = async (l: MembrePriseEnCharge) => {
     try {
@@ -107,6 +116,8 @@ export default function MembreHistoriqueView() {
       });
   }, [filtrees]);
 
+  const pagExercices = usePagination(groupesExercice, 3);
+
   return (
     <div className="p-6 space-y-4">
       <div>
@@ -123,6 +134,15 @@ export default function MembreHistoriqueView() {
             getLabel={(b) => b.id === currentUser?.assureSanteId ? `${b.nom} (vous)` : b.nom}
             getId={(b) => b.id}
             allowClear clearLabel="Tous les bénéficiaires"
+          />
+        </div>
+        <div className="w-44">
+          <Combobox
+            options={exercices}
+            value={exerciceFiltre}
+            onChange={(e) => { setExerciceFiltre(e); pagExercices.setPage(1); }}
+            getLabel={(e) => `Exercice ${e}`} getId={(e) => String(e)}
+            allowClear clearLabel="Tous les exercices"
           />
         </div>
         <div className="w-56">
@@ -142,7 +162,7 @@ export default function MembreHistoriqueView() {
         <div className="bg-card border border-dashed border-border rounded-2xl p-10 text-center text-muted-foreground text-[13px]">Aucun soin enregistré pour ces critères.</div>
       ) : (
         <div className="space-y-6">
-          {groupesExercice.map((g) => (
+          {pagExercices.pageItems.map((g) => (
             <div key={g.exercice}>
               <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground mb-2.5 flex items-center gap-1.5"><History className="w-3.5 h-3.5" />{g.exercice}</p>
               <div className="space-y-4">
@@ -285,6 +305,7 @@ export default function MembreHistoriqueView() {
               </div>
             </div>
           ))}
+          <Pager p={pagExercices} />
         </div>
       )}
     </div>

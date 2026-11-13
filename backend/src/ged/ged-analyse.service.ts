@@ -34,6 +34,7 @@ export interface AnalyseGedResultat {
   // Prescripteur extrait (renseigné uniquement pour type = "Prescription médicale")
   nomPrescripteurExtrait: string | null;
   titrePrescripteurExtrait: string | null;
+  specialitePrescripteurExtraite: string | null;
   codePraticienExtrait: string | null;
   codeEtablissementExtrait: string | null;
   // Chèque bancaire extrait (2026-11)
@@ -44,7 +45,8 @@ export interface AnalyseGedResultat {
 const RESULTAT_ECHEC: AnalyseGedResultat = {
   statutOcr: "Échec", type: null, objet: null, resume: null,
   referenceExtraite: null, montantExtrait: null, dateCachet: null, nomEmetteurExtrait: null,
-  nomPrescripteurExtrait: null, titrePrescripteurExtrait: null, codePraticienExtrait: null, codeEtablissementExtrait: null,
+  nomPrescripteurExtrait: null, titrePrescripteurExtrait: null, specialitePrescripteurExtraite: null,
+  codePraticienExtrait: null, codeEtablissementExtrait: null,
   numeroChequeExtrait: null, nomBanqueExtrait: null,
 };
 
@@ -103,7 +105,13 @@ export class GedAnalyseService {
         system:
           "Tu es ARIANA, l'agent d'analyse documentaire IA de MEDASSUR+, un assureur santé gabonais. " +
           "Lis VRAIMENT le contenu du fichier joint (facture, courrier, contrat…) et réponds UNIQUEMENT " +
-          "avec un objet JSON strict, sans texte autour, sans balise markdown, au format exact suivant :\n" +
+          "avec un objet JSON strict, sans texte autour, sans balise markdown, au format exact suivant.\n\n" +
+          "IMPORTANT — lecture omnidirectionnelle : le document peut être photographié ou scanné " +
+          "dans n'importe quelle orientation (portrait, paysage, retourné à 180°, incliné à 90° ou " +
+          "à 270°). Examine le contenu dans TOUTES les orientations (0°, 90°, 180°, 270°) pour " +
+          "déchiffrer l'intégralité du texte visible. Les cachets / tampons du médecin sont souvent " +
+          "imprimés à un angle différent du reste du document : lis-les aussi à 360°. " +
+          "Ne renonce jamais à extraire un champ sous prétexte qu'il est incliné ou retourné.\n\n" +
           `{"type": "<une valeur EXACTE parmi ${TYPES_GED.map((t) => `\\"${t}\\"`).join(", ")}>", ` +
           "\"objet\": \"<objet court du document, une ligne>\", " +
           "\"resume\": \"<résumé factuel en 2-4 phrases : nature du document, montants clés, parties impliquées>\", " +
@@ -120,8 +128,9 @@ export class GedAnalyseService {
           "'factures de [NOM]', ou la phrase décrivant l'émetteur réel des soins. " +
           "Si l'en-tête et le corps désignent des entités différentes, PRIORITÉ au corps (la structure qui soigne). " +
           "Null si aucune structure médicale identifiable.>, " +
-          "\"nomPrescripteur\": <si type = \"Prescription médicale\" : nom du médecin prescripteur SANS le titre Dr/Pr, tel qu'écrit sur le cachet ; null sinon>, " +
+          "\"nomPrescripteur\": <si type = \"Prescription médicale\" : nom du médecin prescripteur SANS le titre Dr/Pr, tel qu'écrit sur le cachet (lis à 360° si nécessaire) ; null sinon>, " +
           "\"titrePrescripteur\": <si type = \"Prescription médicale\" : titre professionnel visible (\"Dr\", \"Pr\"…) ; null sinon>, " +
+          "\"specialitePrescripteur\": <si type = \"Prescription médicale\" : spécialité médicale du prescripteur lisible sur le cachet (ex. \"Médecin généraliste\", \"Cardiologue\", \"Pédiatre\"…), souvent inscrite sous le nom sur le tampon ; null sinon>, " +
           "\"codePraticien\": <si type = \"Prescription médicale\" : numéro d'ordre / code praticien lisible sur le tampon ou la case \"Code praticien\" ; null sinon>, " +
           "\"codeEtablissement\": <si type = \"Prescription médicale\" : code officiel de la structure lisible sur le tampon ou la case \"Code établissement\" ; null sinon>, " +
           "\"numeroCheque\": <si le document EST un chèque bancaire OU mentionne explicitement le N° d'un chèque qui accompagne ce règlement (ex : \"Chèque N° 5309183\", \"N° chèque : 5309183\", numéro imprimé sur un chèque scanné) : ce numéro EXACT en entier ; null sinon — NE PAS extraire un numéro de facture ou de bordereau>, " +
@@ -139,6 +148,7 @@ export class GedAnalyseService {
         referenceFacture?: string | null; montant?: number | string | null;
         dateCachet?: string | null; nomEmetteur?: string | null;
         nomPrescripteur?: string | null; titrePrescripteur?: string | null;
+        specialitePrescripteur?: string | null;
         codePraticien?: string | null; codeEtablissement?: string | null;
         numeroCheque?: number | string | null; nomBanque?: string | null;
       };
@@ -155,6 +165,7 @@ export class GedAnalyseService {
         nomEmetteurExtrait: parsed.nomEmetteur?.trim() || null,
         nomPrescripteurExtrait: parsed.nomPrescripteur?.trim() || null,
         titrePrescripteurExtrait: parsed.titrePrescripteur?.trim() || null,
+        specialitePrescripteurExtraite: parsed.specialitePrescripteur?.trim() || null,
         codePraticienExtrait: parsed.codePraticien?.trim() || null,
         codeEtablissementExtrait: parsed.codeEtablissement?.trim() || null,
         numeroChequeExtrait: numeroChequeRaw != null && !Number.isNaN(numeroChequeRaw) ? numeroChequeRaw : null,

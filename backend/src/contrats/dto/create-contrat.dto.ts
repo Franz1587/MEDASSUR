@@ -36,12 +36,6 @@ export class CreateContratDto {
   @IsString()
   numeroPolice?: string;
 
-  // Nom imprimé sur la carte santé (voir schema.prisma Contrat.nomCarteSante) —
-  // chaîne vide = retour au nom du souscripteur.
-  @IsOptional()
-  @IsString()
-  nomCarteSante?: string;
-
   // Bureau de rattachement (2026-09) — voir schema.prisma Contrat.agenceId :
   // "LA RUCHE a un bureau à Port-Gentil qui gère ses contrats de façon
   // autonome". Facultatif, aucun bureau particulier par défaut.
@@ -68,16 +62,12 @@ export class CreateContratDto {
   @IsString({ each: true })
   extensionsTerritorialite?: string[];
 
-  // Assistance liée (2026-08, multiple depuis 2026-09) — renseigné
-  // uniquement sur un contrat Assistance : ses contrats Maladie, dont il
-  // partage exactement la population (voir schema.prisma
-  // Contrat.contratAssistanceId). Jamais une colonne : ContratsService
-  // l'écrit sur chaque contrat Maladie. Absent = liens inchangés ; [] =
-  // plus aucun contrat Maladie lié.
+  // Assistance liée (2026-08) — renseigné uniquement sur un contrat
+  // Assistance : pointe vers son contrat Maladie, dont il partage
+  // exactement la population (voir schema.prisma, model Contrat).
   @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  contratsMaladieIds?: string[];
+  @IsString()
+  contratMaladieLieId?: string;
 
   @IsOptional()
   @IsString()

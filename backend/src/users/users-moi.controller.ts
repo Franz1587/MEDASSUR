@@ -7,8 +7,10 @@ import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { UsersService } from "./users.service";
 import { UpdateMoiDto } from "./dto/update-moi.dto";
 import { ChangerMotDePasseDto } from "./dto/changer-mot-de-passe.dto";
+import { AllowExternal } from "../auth/access.decorators";
+import { AllowTemporaryPassword } from "../auth/temporary-password.decorator";
 
-type MoiRequest = Request & { user: { userId: string } };
+type MoiRequest = Request & { user: { userId: string; roleId: string; societeId: string | null } };
 
 // Libre-service (2026-09) — voir demande utilisateur : "le médecin puisse
 // dans son compte mettre sa signature". Distinct de UsersController
@@ -19,6 +21,7 @@ type MoiRequest = Request & { user: { userId: string } };
 // toujours du token JWT, jamais d'un paramètre de route.
 @Controller("users/moi")
 @UseGuards(JwtAuthGuard)
+@AllowExternal()
 export class UsersMoiController {
   constructor(private readonly service: UsersService) {}
 
@@ -37,10 +40,11 @@ export class UsersMoiController {
   // UpdateMoiDto.
   @Patch()
   modifierMonProfil(@Body() dto: UpdateMoiDto, @Req() req: MoiRequest) {
-    return this.service.update(req.user.userId, dto);
+    return this.service.update(req.user.userId, dto, req.user);
   }
 
   @Patch("mot-de-passe")
+  @AllowTemporaryPassword()
   changerMotDePasse(@Body() dto: ChangerMotDePasseDto, @Req() req: MoiRequest) {
     return this.service.changerMotDePasse(req.user.userId, dto);
   }

@@ -44,6 +44,7 @@
     "cmdk": "1.1.1",
     "date-fns": "3.6.0",
     "docx": "^9.7.1",
+    "dompurify": "^3.4.17",
     "embla-carousel-react": "8.6.0",
     "file-saver": "^2.0.5",
     "input-otp": "1.4.2",

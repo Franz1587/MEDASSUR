@@ -5,18 +5,7 @@ import { MessagingService } from "../messaging/messaging.service";
 import { GenererComptesMobileDto } from "./dto/generer-comptes-mobile.dto";
 import { construireMessageAcces } from "./envoi.util";
 import { ROLE_MODULES } from "../auth/role-modules";
-
-// Alphabet sans caractères ambigus (0/O, 1/l/I) — un mot de passe temporaire
-// doit rester lisible/retapable depuis un SMS.
-const ALPHABET_MOT_DE_PASSE = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-
-function genererMotDePasseTemporaire(longueur = 9): string {
-  let mdp = "";
-  for (let i = 0; i < longueur; i++) {
-    mdp += ALPHABET_MOT_DE_PASSE[Math.floor(Math.random() * ALPHABET_MOT_DE_PASSE.length)];
-  }
-  return mdp;
-}
+import { genererMotDePasseTemporaire } from "../shared/mot-de-passe.util";
 
 // Canal demandé côté écran ("WhatsApp+SMS" par défaut) → canal Zavu réel
 // (voir MessagingService.envoyer) : "auto" fait tenter WhatsApp puis

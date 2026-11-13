@@ -2,11 +2,14 @@ import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from "@nest
 import type { Request } from "express";
 import { NotificationsService } from "./notifications.service";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { AllowExternal } from "../auth/access.decorators";
+import { Roles } from "../auth/roles.decorator";
 
 type AuthRequest = Request & { user: { userId: string } };
 
 @Controller("notifications")
 @UseGuards(JwtAuthGuard)
+@AllowExternal()
 export class NotificationsController {
   constructor(private readonly service: NotificationsService) {}
 
@@ -18,6 +21,9 @@ export class NotificationsController {
     return this.service.findPourUtilisateur(req.user.userId);
   }
 
+  // Création arbitraire d'une notification pour n'importe quel destinataire :
+  // jamais ouverte aux comptes externes ni au personnel non administrateur.
+  @Roles("administrateur", "direction_generale")
   @Post()
   create(@Body() body: { destinataireType: string; destinataireId: string; message: string }) {
     return this.service.create(body.destinataireType, body.destinataireId, body.message);

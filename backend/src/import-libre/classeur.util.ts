@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { lireXlsxSur } from "../import/safe-xlsx.util";
 
 // Lecture déterministe d'un classeur Excel MULTI-FEUILLES (2026-11) — voir
 // demande utilisateur : « Ariana doit pouvoir lire les classeurs avec
@@ -20,7 +21,7 @@ export const normaliserCle = (s: unknown): string =>
 const MOTS_ENTETE = /contrat|police|matricule|prenom|nom|statut|produit|souscripteur|tel|assure|participant|etat|type|naissance|sexe/;
 
 export function lireClasseur(buffer: Buffer): FeuilleLue[] {
-  const wb = XLSX.read(buffer, { type: "buffer" });
+  const wb = lireXlsxSur(buffer);
   const feuilles: FeuilleLue[] = [];
   for (const nom of wb.SheetNames) {
     const rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nom], { header: 1, defval: "", raw: false, blankrows: false });

@@ -1,10 +1,13 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { HonorairesService } from "./honoraires.service";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_FINANCE } from "../auth/access-roles";
 import { CreateHonorairesDto } from "./dto/create-honoraires.dto";
 
 @Controller("honoraires")
 @UseGuards(JwtAuthGuard)
+@Roles(...ROLES_FINANCE)
 export class HonorairesController {
   constructor(private readonly service: HonorairesService) {}
 

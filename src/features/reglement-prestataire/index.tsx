@@ -2,7 +2,7 @@ import { Pagination } from "@/components/shared/Pagination";
 import { optionsTaillePage } from "@/hooks/usePagination";
 import { useEffect, useState } from "react";
 import { referenceLisible } from "@/lib/referenceFacture";
-import { FileStack, Plus, CheckCircle, XCircle, Banknote, HandCoins, Printer, Search, History, Smartphone, X } from "lucide-react";
+import { FileStack, Plus, CheckCircle, XCircle, Banknote, HandCoins, Printer, Search, History, Smartphone, X, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/shared/Badge";
 import { Btn } from "@/components/shared/Btn";
@@ -107,7 +107,7 @@ function PayerMobileMoneyModal({
               onChange={(e) => { setMsisdn(e.target.value); if (e.target.value) setOperateur(operateurFromMsisdn(e.target.value)); }}
               placeholder="Ex. 077000001" />
             {!bordereau.prestataireTelephone && (
-              <p className="text-[11px] text-amber-600 mt-0.5">⚠ Aucun numéro enregistré pour ce prestataire.</p>
+              <p className="text-[11px] text-amber-600 mt-0.5 flex items-center gap-1"><AlertTriangle className="w-3 h-3 flex-shrink-0" /> Aucun numéro enregistré pour ce prestataire.</p>
             )}
           </div>
           <div>

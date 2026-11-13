@@ -3,6 +3,7 @@ import type { Response } from "express";
 import * as fs from "fs";
 import * as path from "path";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { AllowExternal } from "../auth/access.decorators";
 import { ASSETS_ROOT } from "../uploads-dir.util";
 import { EN_TETE_SIGNATURE } from "../documents/signature-pdf.middleware";
 
@@ -22,8 +23,11 @@ const SOURCES: Record<string, string> = {
   "en-pdf":  "medassur-plus-presentation-en.pdf",
 };
 
+// Plaquette commerciale proposée dans tous les shells (portails inclus) :
+// téléchargement authentifié (fetch + Bearer), fichiers limités à la liste blanche ci-dessus.
 @Controller("presentations")
 @UseGuards(JwtAuthGuard)
+@AllowExternal()
 export class PresentationsController {
   @Get("download")
   download(

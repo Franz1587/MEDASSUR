@@ -5,13 +5,11 @@ export const chapitresGlobal: GuideChapitre[] = [
   {
     id: "global-premiers-pas",
     titre: "Premiers pas",
-    sources: ["src/layout", "src/features/sante/admin", "src/portals/PortalShell.tsx"],
-    majLe: "2026-09-27",
     sections: [
       {
         titre: "Identifier votre compte et accéder au bon espace",
         texte: [
-          "MEDASSUR+ propose un accès unique pour tous les profils : personnel interne, souscripteur, assuré, médecin, prestataire et super admin. La page de connexion demande votre email ou votre identifiant et votre mot de passe. Si vous êtes dans un portail externe, l’application reprend souvent votre profil fonctionnel directement après connexion et ouvre l’écran adapté à votre rôle.",
+          "MedAssur propose un accès unique pour tous les profils : personnel interne, souscripteur, assuré, médecin, prestataire et super admin. La page de connexion demande votre email ou votre identifiant et votre mot de passe. Si vous êtes dans un portail externe, l’application reprend souvent votre profil fonctionnel directement après connexion et ouvre l’écran adapté à votre rôle.",
           "Avant de commencer, vérifiez que vous êtes bien connectés au bon espace. Le rôle affiché dans le coin supérieur droit de l’écran vous indique le type de compte actif. Si vous changez de contexte ou si votre compte donne accès à plusieurs profils, il faut relancer la connexion sur le bon environnement avant de lancer une action importante.",
           "Le bouton de profil permet ensuite de consulter vos informations, modifier votre mot de passe et enregistrer votre signature électronique si le rôle le nécessite.",
         ],
@@ -36,13 +34,11 @@ export const chapitresGlobal: GuideChapitre[] = [
   {
     id: "global-navigation",
     titre: "Navigation générale",
-    sources: ["src/layout", "src/features/sante/admin", "src/portals/PortalShell.tsx"],
-    majLe: "2026-09-27",
     sections: [
       {
         titre: "Comprendre les écrans, les filtres et les actions de base",
         texte: [
-          "La navigation de MEDASSUR+ repose sur une barre latérale ou un menu principal, selon le profil. Chaque écran correspond à un module fonctionnel : Tableau de bord, Contrats, Patients, Prestations, Messagerie, Mon profil, Statistiques et gestion des dossiers selon les accès autorisés.",
+          "La navigation de MedAssur repose sur une barre latérale ou un menu principal, selon le profil. Chaque écran correspond à un module fonctionnel : Tableau de bord, Contrats, Patients, Prestations, Messagerie, Mon profil, Statistiques et gestion des dossiers selon les accès autorisés.",
           "Le bouton de recherche, les filtres de dates, les sélecteurs de contrat et les listes de résultats permettent de cibler rapidement un dossier. Les écrans de gestion sont conçus pour agir dans le bon ordre : créer, compléter, vérifier, enregistrer puis valider.",
           "Les notifications apparaissent dans le coin supérieur droit. Elles servent à signaler les nouveaux messages, les demandes arrivées, les dossiers en attente de traitement ou les changements importants sur un contrat ou un dossier patient.",
         ],
@@ -67,8 +63,6 @@ export const chapitresGlobal: GuideChapitre[] = [
   {
     id: "global-interne",
     titre: "Espace interne / société",
-    sources: ["src/layout", "src/features/sante/admin", "src/portals/PortalShell.tsx"],
-    majLe: "2026-09-27",
     sections: [
       {
         titre: "Le cœur de la gestion opérationnelle",
@@ -84,8 +78,6 @@ export const chapitresGlobal: GuideChapitre[] = [
   {
     id: "global-externes",
     titre: "Portails externes",
-    sources: ["src/layout", "src/features/sante/admin", "src/portals/PortalShell.tsx"],
-    majLe: "2026-09-27",
     sections: [
       {
         titre: "Le bon portail selon votre profil",
@@ -101,13 +93,11 @@ export const chapitresGlobal: GuideChapitre[] = [
   {
     id: "global-mobile",
     titre: "Application mobile",
-    sources: ["src/layout", "src/features/sante/admin", "src/portals/PortalShell.tsx"],
-    majLe: "2026-09-27",
     sections: [
       {
         titre: "Le même service, mobilisé au quotidien",
         texte: [
-          "L’application mobile MEDASSUR+ est pensée pour les assurés, avec un accès simple aux documents, aux garanties, aux demandes de remboursement, à l’e-carnet santé et à la messagerie. Elle reste très proche de l’expérience web, mais a été optimisée pour le tactil et les écrans plus petits.",
+          "L’application mobile MedAssur est pensée pour les assurés, avec un accès simple aux documents, aux garanties, aux demandes de remboursement, à l’e-carnet santé et à la messagerie. Elle reste très proche de l’expérience web, mais a été optimisée pour le tactil et les écrans plus petits.",
           "Elle permet de consulter sa carte, de visualiser les garanties et de photographier un document médical directement depuis le téléphone. Elle facilite aussi l’accès aux bons et ordonnances, la possibilité de suivre une demande de remboursement et de consulter les faits de soins sans ouvrir le portail web sur un ordinateur.",
           "L’authentification mobile suit les mêmes règles que le portail web, et les notifications doivent être activées pour recevoir les alertes utiles sur les demandes et les réponses en attente.",
         ],

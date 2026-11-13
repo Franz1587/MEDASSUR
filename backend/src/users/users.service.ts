@@ -27,7 +27,7 @@ const UPLOADS_SIGNATURES_DIR = path.join(UPLOADS_ROOT, "signatures");
 
 const SELECT_SANS_HASH = {
   id: true, roleId: true, nom: true, email: true, username: true, initiales: true, modules: true, createdAt: true,
-  doitChangerMotDePasse: true,
+  doitChangerMotDePasse: true, consentementAccepteAt: true,
   telephone: true, adresse: true, photo: true, signature: true,
   // societeId/societe (2026-09) — voir demande utilisateur : "une gestion
   // des utilisateurs" côté Super Admin, qui n'a lui-même aucune société
@@ -50,6 +50,18 @@ export class UsersService {
 
   findAll() {
     return this.prisma.user.findMany({ select: SELECT_SANS_HASH, orderBy: { nom: "asc" } });
+  }
+
+  findConsentements(filtres?: { q?: string; roleId?: string; avecConsentement?: boolean }) {
+    return this.prisma.user.findMany({
+      where: {
+        ...(filtres?.avecConsentement !== false ? { consentementAccepteAt: { not: null } } : {}),
+        ...(filtres?.roleId ? { roleId: filtres.roleId } : {}),
+        ...(filtres?.q ? { OR: [{ nom: { contains: filtres.q, mode: "insensitive" } }, { email: { contains: filtres.q, mode: "insensitive" } }] } : {}),
+      },
+      select: { id: true, nom: true, email: true, roleId: true, consentementAccepteAt: true, societeId: true, societe: { select: { nom: true } } },
+      orderBy: { consentementAccepteAt: "desc" },
+    });
   }
 
   async findOne(id: string) {

@@ -140,7 +140,13 @@ export type View =
   | "superAdminUtilisateurs"
   // Paiements électroniques E-Billing (2026-10) — Digitech Africa
   // PAYIN (Airtel Money / Moov Money / Visa-MC) + PAYOUT (décaissement).
-  | "ebilling";
+  | "ebilling"
+  // Consentement RGPD (2026-11) — écran admin listant les utilisateurs ayant
+  // accepté la politique de confidentialité + PDF attestation individuel.
+  | "consentements"
+  // Consentement portail assuré (2026-11) — l'assuré consulte son statut
+  // et télécharge son attestation d'acceptation.
+  | "membreConsentement";
 
 /** Full icon coverage for every `View`, used by the app's one shell
  * (AdminShell) and by the external portal headers. */
@@ -246,6 +252,8 @@ export const viewIcons: Record<View, React.ElementType> = {
   superAdminModelesCarte: IdCard,
   superAdminUtilisateurs: Users,
   ebilling: Smartphone,
+  consentements: ShieldCheck,
+  membreConsentement: ShieldCheck,
 };
 
 export const allViews: View[] = Object.keys(viewIcons) as View[];
@@ -337,4 +345,6 @@ export const viewLabels: Record<View, string> = {
   superAdminModelesCarte: "Modèles de carte",
   superAdminUtilisateurs: "Utilisateurs",
   ebilling: "Paiements électroniques",
+  consentements: "Consentement & Protection des données",
+  membreConsentement: "Protection des données",
 };

@@ -7,6 +7,9 @@ import { demarrerSynchronisationAutomatique } from "@/lib/syncManager";
 import { viderCacheApi } from "@/lib/offlineStore";
 
 const USER_STORAGE_KEY = "medassur-current-user";
+// Structure active du médecin (2026-11) — clé par medecinId pour ne pas
+// mélanger les sélections quand plusieurs médecins partagent le navigateur.
+const MEDECIN_STRUCTURE_KEY = (medecinId: string) => `medassur-structure-active-${medecinId}`;
 // Retour d'assistance (2026-09) — voir demande utilisateur : "le Super
 // Admin doit pouvoir accéder dans chaque interface dédiée aux société en
 // mode assistance." sessionStorage (pas localStorage) : ne doit PAS
@@ -58,6 +61,7 @@ export interface AuthUser {
 }
 
 type LoginResult = { ok: true } | { ok: false; error: string };
+export interface StructureMedecin { id: string; nom: string; }
 
 // Session super_admin mise de côté pendant une assistance (2026-09) — voir
 // demande utilisateur ci-dessus. Restaurée telle quelle par endAssistance.
@@ -88,6 +92,12 @@ interface AuthContextValue {
   // l'utilisateur coche et valide le modal. Met à jour currentUser localement
   // ET côté serveur (POST /auth/consentement).
   accepterConsentement: () => Promise<void>;
+  // Sélection de structure médicale (2026-11) — non-vide après connexion d'un
+  // médecin lié à plusieurs structures, tant que choisirStructureMedecin n'a
+  // pas été appelé. Le portal médecin affiche un modal bloquant dans ce cas.
+  structuresMedecin: StructureMedecin[];
+  structureActiveId: string | null;
+  choisirStructureMedecin: (prestataireId: string) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -127,6 +137,8 @@ function lireRetourAssistance(): AssistanceReturn | null {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [assistanceSocieteNom, setAssistanceSocieteNom] = useState<string | null>(null);
+  const [structuresMedecin, setStructuresMedecin] = useState<StructureMedecin[]>([]);
+  const [structureActiveId, setStructureActiveId] = useState<string | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem(USER_STORAGE_KEY);
@@ -156,15 +168,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAssistanceSocieteNom(lireRetourAssistance()?.societeNom ?? null);
   }, []);
 
+  const choisirStructureMedecin = (prestataireId: string) => {
+    setStructureActiveId(prestataireId);
+    setStructuresMedecin([]);
+    if (user?.medecinId) {
+      try { localStorage.setItem(MEDECIN_STRUCTURE_KEY(user.medecinId), prestataireId); } catch { undefined; }
+    }
+  };
+
   const login = async (email: string, password: string): Promise<LoginResult> => {
     try {
-      const { accessToken, user: authUser } = await http.post<{ accessToken: string; user: AuthUser }>(
-        "/auth/login",
-        { email, password },
-      );
+      const { accessToken, user: authUser, structuresMedecin: structs } = await http.post<{
+        accessToken: string; user: AuthUser; structuresMedecin?: StructureMedecin[];
+      }>("/auth/login", { email, password });
       setAccessToken(accessToken);
       stockerUtilisateur(authUser);
       setUser(authUser);
+      // Structure active restaurée depuis localStorage si déjà choisie, sinon
+      // si plusieurs structures → le modal de choix s'affiche
+      if (authUser.medecinId) {
+        const saved = localStorage.getItem(MEDECIN_STRUCTURE_KEY(authUser.medecinId));
+        if (saved) {
+          setStructureActiveId(saved);
+        } else if (structs && structs.length > 0) {
+          if (structs.length === 1) {
+            setStructureActiveId(structs[0].id);
+          } else {
+            setStructuresMedecin(structs);
+          }
+        }
+      }
       return { ok: true };
     } catch (err) {
       // Message réel du serveur quand disponible (2026-09) — voir demande
@@ -262,7 +295,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const assistance = assistanceSocieteNom ? { societeNom: assistanceSocieteNom } : null;
 
   return (
-    <AuthContext.Provider value={{ currentUser, currentRole, login, logout, assistance, startAssistance, endAssistance, refreshCurrentUser, accepterConsentement }}>
+    <AuthContext.Provider value={{ currentUser, currentRole, login, logout, assistance, startAssistance, endAssistance, refreshCurrentUser, accepterConsentement, structuresMedecin, structureActiveId, choisirStructureMedecin }}>
       {children}
     </AuthContext.Provider>
   );

@@ -8,6 +8,7 @@ import { PushNotificationsService } from "../notifications/push-notifications.se
 import { MessagerieAgentIaService } from "./agent-ia.service";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
+import { sanitizeUpload } from "../storage/upload-security.util";
 import type { RoleId } from "../auth/role.enum";
 import { CreateConversationDto } from "./dto/create-conversation.dto";
 
@@ -128,10 +129,9 @@ export class MessagerieService {
 
     const piecesJointes: (string | undefined)[] = [];
     for (const file of fichiers) {
-      const ext = path.extname(file.originalname) || "";
-      const nom = `${id}-${Date.now()}-${randomUUID().slice(0, 6)}${ext.toLowerCase()}`;
+      const { storedName: nom, mime } = sanitizeUpload({ originalName: file.originalname, mimetype: file.mimetype, buffer: file.buffer, category: "document" });
       if (this.storage.actif) {
-        await this.storage.upload("messagerie", nom, file.buffer, file.mimetype);
+        await this.storage.upload("messagerie", nom, file.buffer, mime);
       } else {
         await fs.promises.mkdir(UPLOADS_MESSAGERIE_DIR, { recursive: true });
         await fs.promises.writeFile(path.join(UPLOADS_MESSAGERIE_DIR, nom), file.buffer);

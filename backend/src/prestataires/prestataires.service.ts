@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import * as bcrypt from "bcryptjs";
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { TenantContext } from "../tenant/tenant-context";
 import { MessagingService } from "../messaging/messaging.service";
 import { ROLE_MODULES } from "../auth/role-modules";
 import { slugifier } from "../shared/mot-de-passe.util";
@@ -236,7 +237,10 @@ export class PrestatairesService {
         const existe = await tx.medecinPrestataire.findUnique({ where: { medecinId_prestataireId: { medecinId: l.medecinId, prestataireId: conserverId } } });
         if (!existe) await tx.medecinPrestataire.create({ data: { medecinId: l.medecinId, prestataireId: conserverId } });
       }
+      const societeCourante = TenantContext.getSocieteId();
       for (const a of await tx.portailSocieteAcces.findMany({ where: { prestataireId: { in: ids } } })) {
+        // Une société ne peut transférer que SES propres accès (voir prisma.service.ts).
+        if (societeCourante && a.societeId !== societeCourante) continue;
         await tx.portailSocieteAcces.upsert({
           where: { prestataireId_societeId: { prestataireId: conserverId, societeId: a.societeId } },
           create: { prestataireId: conserverId, societeId: a.societeId }, update: {},
@@ -665,6 +669,19 @@ export class PrestatairesService {
     return this.prisma.prestataire.update({
       where: { id },
       data: { latitude: trouve.lat, longitude: trouve.lon, geolocalisationEchec: false, ...(ville ? { ville } : {}) },
+      include: INCLUDE_GRILLES,
+    });
+  }
+
+  // Capture GPS directe depuis le navigateur (2026-11) — l'utilisateur clique
+  // "Capturer ma position" sur la fiche prestataire, le navigateur renvoie
+  // lat/lng exacts qu'on stocke sur le prestataire. Les médecins liés sont
+  // rattachés à la structure et n'ont pas de champ lat/lng propre (ils
+  // héritent implicitement de la position de leur prestataire).
+  async enregistrerPositionGps(id: string, lat: number, lng: number) {
+    return this.prisma.prestataire.update({
+      where: { id },
+      data: { latitude: lat, longitude: lng, geolocalisationEchec: false },
       include: INCLUDE_GRILLES,
     });
   }

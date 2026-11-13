@@ -348,7 +348,7 @@ function UserDetailModal({ user, initialTab = "infos", modulesAutorises, onClose
               </div>
               {modulesAutorises && (
                 <p className="text-[11px] text-muted-foreground bg-secondary/40 border border-border rounded-lg px-3 py-2">
-                  Votre abonnement inclut {modulesAutorises.length} fonctionnalité(s) — les autres, grisées ci-dessous 🔒, ne sont pas accessibles à vos utilisateurs. Contactez l'éditeur pour les débloquer.
+                  Votre abonnement inclut {modulesAutorises.length} fonctionnalité(s) — les autres, grisées ci-dessous <Lock className="w-3 h-3 inline align-middle mx-0.5" />, ne sont pas accessibles à vos utilisateurs. Contactez l'éditeur pour les débloquer.
                 </p>
               )}
               {GROUPES_MODULES.map((g) => (
@@ -434,7 +434,7 @@ function RoleTemplateModal({ template, modulesAutorises, onClose, onSaved }: { t
         <div className="p-5 overflow-y-auto flex-1 space-y-4">
           {modulesAutorises && (
             <p className="text-[11px] text-muted-foreground bg-secondary/40 border border-border rounded-lg px-3 py-2">
-              Votre abonnement inclut {modulesAutorises.length} fonctionnalité(s) — les autres, grisées ci-dessous 🔒, ne sont pas accessibles.
+              Votre abonnement inclut {modulesAutorises.length} fonctionnalité(s) — les autres, grisées ci-dessous <Lock className="w-3 h-3 inline align-middle mx-0.5" />, ne sont pas accessibles.
             </p>
           )}
           {GROUPES_MODULES.map((g) => (

@@ -1,8 +1,9 @@
 import { randomUUID } from "crypto";
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { echeanceParDefaut, echeanceValide, lendemain, normaliserEcheance } from "../contrats/echeance.util";
 import type { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { ecrireTraceAudit } from "../audit/audit-trail.util";
 import { withComputedPrime, type PrimeInput } from "../contrats/prime.util";
 import { CreateAvenantDto } from "./dto/create-avenant.dto";
 import { UpdateAvenantDto } from "./dto/update-avenant.dto";
@@ -22,6 +23,32 @@ const CHAMPS_PRIME = [
   "tauxMinoMajoration", "tauxReductionCommerciale",
   "montantAccessoires", "tauxCommission",
   "primeNette", "primeTotaleHT", "montantTaxe", "montantCommission",
+] as const;
+
+// Vocabulaire de statut d'un avenant (schema.prisma Avenant.statut, DTO
+// create-avenant, frontend services/avenants.service.ts) : "Brouillon" |
+// "Validé" | "Appliqué" | "Relancé" | "Perdu" | "À renouveler".
+// Les adaptateurs Résiliations ("Demandée"/"Validée"/"Effective") et
+// Renouvellements ("Renouvelé") exposent des libellés externes, ramenés ici
+// au vocabulaire interne.
+const STATUTS_AVENANT = ["Brouillon", "Validé", "Appliqué", "Relancé", "Perdu", "À renouveler"] as const;
+const ALIAS_STATUT: Record<string, string> = { "Demandée": "Brouillon", "Validée": "Validé", "Effective": "Appliqué", "Renouvelé": "Appliqué" };
+// États terminaux : plus aucune sortie possible ("Appliqué" ne s'atteint que
+// par appliquer(), "Perdu" par le circuit Renouvellement).
+const STATUTS_TERMINAUX = new Set<string>(["Appliqué", "Perdu"]);
+// Transitions autorisées hors appliquer() (voir verifierTransition).
+const TRANSITIONS: Record<string, readonly string[]> = {
+  "Brouillon": ["Validé", "Relancé", "Perdu"],
+  "À renouveler": ["Relancé", "Validé", "Perdu"],
+  "Relancé": ["Validé", "Perdu"],
+  "Validé": ["Relancé", "Perdu"],
+  "Appliqué": [],
+  "Perdu": [],
+};
+// Champs financiers/structurants figés dès qu'un avenant est terminal.
+const CHAMPS_FINANCIERS = [
+  "contratId", "type", "primeAvant", "primeApres", "dateEffet", "dateFin", "ristourne",
+  "compagnieAvantId", "compagnieApresId", ...CHAMPS_PRIME,
 ] as const;
 
 function veille(dateStr: string): string {
@@ -104,23 +131,87 @@ export class AvenantsService {
     });
   }
 
-  async update(id: string, dto: UpdateAvenantDto) {
-    await this.findOne(id);
-    return this.prisma.avenant.update({ where: { id }, data: dto, include: INCLUDE });
+  // Statut résolu vers le vocabulaire interne (les adaptateurs
+  // Résiliations/Renouvellements gèrent aussi des libellés externes) ; refuse
+  // tout statut inconnu.
+  private normaliserStatut(statut: string): string {
+    const interne = ALIAS_STATUT[statut] ?? statut;
+    if (!(STATUTS_AVENANT as readonly string[]).includes(interne)) {
+      throw new BadRequestException(`Statut d'avenant inconnu : « ${statut} ». Valeurs admises : ${STATUTS_AVENANT.join(", ")}.`);
+    }
+    return interne;
   }
 
+  // Transition manuelle (hors appliquer, seul chemin vers "Appliqué") :
+  // aucun retour depuis un état terminal, pas de saut hors de la carte.
+  private verifierTransition(de: string, vers: string) {
+    if (vers === de) {
+      if (STATUTS_TERMINAUX.has(de)) throw new ConflictException(`L'avenant est déjà « ${de} » : état terminal.`);
+      return;
+    }
+    if (vers === "Appliqué") throw new ConflictException("Un avenant ne passe à « Appliqué » qu'en l'appliquant au contrat (action « Appliquer »).");
+    if (!(TRANSITIONS[de] ?? []).includes(vers)) {
+      throw new ConflictException(`Transition de statut interdite : « ${de} » → « ${vers} ».`);
+    }
+  }
+
+  // Vérification préalable exposée aux adaptateurs (ex. marquer un
+  // renouvellement perdu) avant d'engager des effets de bord.
+  async verifierChangementStatut(id: string, statut: string) {
+    const avenant = await this.findOne(id);
+    this.verifierTransition(avenant.statut, this.normaliserStatut(statut));
+    return avenant;
+  }
+
+  async update(id: string, dto: UpdateAvenantDto) {
+    const courant = await this.findOne(id);
+    if (dto.statut !== undefined) this.verifierTransition(courant.statut, this.normaliserStatut(dto.statut));
+    if (STATUTS_TERMINAUX.has(courant.statut)) {
+      const touches = CHAMPS_FINANCIERS.filter((champ) => (dto as Record<string, unknown>)[champ] !== undefined);
+      if (touches.length > 0) {
+        throw new ConflictException(`Avenant « ${courant.statut} » : les champs financiers (${touches.join(", ")}) ne sont plus modifiables.`);
+      }
+    }
+    // Écriture conditionnelle sur le statut lu : une application concurrente
+    // entre-temps rend la mise à jour caduque (409) au lieu de l'écraser.
+    const r = await this.prisma.avenant.updateMany({ where: { id, statut: courant.statut }, data: dto });
+    if (r.count === 0) throw new ConflictException("L'avenant a été modifié entre-temps — rechargez puis recommencez.");
+    return this.findOne(id);
+  }
+
+  // Suppression refusée pour un avenant appliqué (effets déjà écrits sur le
+  // contrat), ayant émis une quittance (numeroQuittance) ou repris sur une
+  // facture de production. Trace d'audit écrite avec le détail supprimé.
   async remove(id: string) {
-    await this.findOne(id);
+    const avenant = await this.findOne(id);
+    if (avenant.statut === "Appliqué") {
+      throw new ConflictException("Impossible de supprimer un avenant déjà appliqué au contrat.");
+    }
+    if (avenant.numeroQuittance !== null) {
+      throw new ConflictException("Impossible de supprimer : une quittance a déjà été émise pour cet avenant.");
+    }
+    const lignesFacturees = await this.prisma.factureProductionLigne.count({ where: { avenantId: id } });
+    if (lignesFacturees > 0) {
+      throw new ConflictException("Impossible de supprimer : cet avenant figure sur une facture de production.");
+    }
     await this.prisma.avenant.delete({ where: { id } });
+    await ecrireTraceAudit(this.prisma, "avenants", id, "Supprimé", {
+      contratId: avenant.contratId, type: avenant.type, statut: avenant.statut, dateEffet: avenant.dateEffet,
+      primeAvant: avenant.primeAvant.toString(), primeApres: avenant.primeApres.toString(),
+    });
     return { id };
   }
 
   // Bascule de statut simple (utilisée par les adaptateurs Renouvellements/
   // Résiliations pour Relancer/Marquer perdu/Valider — pas de recalcul de
-  // prime, juste un changement d'état).
+  // prime, juste un changement d'état) : vocabulaire et transitions contrôlés.
   async setStatut(id: string, statut: string) {
-    await this.findOne(id);
-    return this.prisma.avenant.update({ where: { id }, data: { statut }, include: INCLUDE });
+    const courant = await this.findOne(id);
+    const cible = this.normaliserStatut(statut);
+    this.verifierTransition(courant.statut, cible);
+    const r = await this.prisma.avenant.updateMany({ where: { id, statut: courant.statut }, data: { statut: cible } });
+    if (r.count === 0) throw new ConflictException("L'avenant a été modifié entre-temps — rechargez puis recommencez.");
+    return this.findOne(id);
   }
 
   // Point d'exécution UNIQUE : "appliquer" un avenant écrit ses effets sur
@@ -128,21 +219,38 @@ export class AvenantsService {
   // RenouvellementsService.renouveler() et ResiliationsService.
   // rendreEffective() dupliquaient chacun leur propre logique déconnectée
   // d'Avenant — désormais tout passe par ici.
+  // Un avenant ne s'applique qu'UNE fois : le passage à "Appliqué" est
+  // réservé atomiquement avant d'écrire les effets (une seconde application
+  // concurrente ou tardive reçoit un 409) et restauré si les effets échouent.
   async appliquer(id: string, compagnieId?: string) {
     const avenant = await this.findOne(id);
+    if (avenant.statut === "Appliqué") throw new ConflictException("Cet avenant a déjà été appliqué au contrat.");
+    if (avenant.statut === "Perdu") throw new ConflictException("Un avenant « Perdu » ne peut pas être appliqué.");
+    const reserve = await this.prisma.avenant.updateMany({ where: { id, statut: avenant.statut }, data: { statut: "Appliqué" } });
+    if (reserve.count === 0) throw new ConflictException("L'avenant a été modifié ou appliqué entre-temps — rechargez puis recommencez.");
+    try {
+      await this.executerEffets(avenant, compagnieId);
+    } catch (err) {
+      await this.prisma.avenant.updateMany({ where: { id, statut: "Appliqué" }, data: { statut: avenant.statut } }).catch(() => undefined);
+      throw err;
+    }
+    return this.findOne(id);
+  }
+
+  private async executerEffets(avenant: Awaited<ReturnType<AvenantsService["findOne"]>>, compagnieId?: string) {
     const contrat = avenant.contrat;
 
     if (avenant.type === "Renouvellement") {
-      await this.prisma.exercice.updateMany({
-        where: { contratId: avenant.contratId, numero: contrat.exerciceNumero },
-        data: { statut: "Clôturé" },
-      });
       const nouvelExercice = contrat.exerciceNumero + 1;
       // Échéance = veille de l'anniversaire, jamais le même jour que la date d'effet.
       const nouvelleDateFin = avenant.dateFin ? normaliserEcheance(avenant.dateEffet, avenant.dateFin) : echeanceParDefaut(avenant.dateEffet);
       if (!echeanceValide(avenant.dateEffet, nouvelleDateFin)) {
         throw new BadRequestException(`Échéance ${nouvelleDateFin} invalide pour une date d'effet au ${avenant.dateEffet}.`);
       }
+      await this.prisma.exercice.updateMany({
+        where: { contratId: avenant.contratId, numero: contrat.exerciceNumero },
+        data: { statut: "Clôturé" },
+      });
       const contratMaj = await this.prisma.contrat.update({
         where: { id: avenant.contratId },
         data: {
@@ -216,7 +324,6 @@ export class AvenantsService {
     // Renouvellement / Résiliation : statut du souscripteur réaligné sur ses
     // contrats (voir clients/statut-souscripteur.util.ts).
     await synchroniserStatutSouscripteurs(this.prisma, [contrat.clientId]);
-    return this.prisma.avenant.update({ where: { id }, data: { statut: "Appliqué" }, include: INCLUDE });
   }
 
   private champsPrimeDepuisAvenant(avenant: Record<string, unknown>): Prisma.ContratUpdateInput {

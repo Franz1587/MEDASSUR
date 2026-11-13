@@ -5,21 +5,15 @@ import { Badge } from "@/components/shared/Badge";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { DateInput } from "@/components/shared/DateInput";
-import { Pagination } from "@/components/shared/Pagination";
-import { usePagination } from "@/hooks/usePagination";
 import { fmtM } from "@/lib/format";
 import {
   getAvenants, createAvenant, updateAvenantStatut, appliquerAvenant, deleteAvenant,
   type AvenantUpsertInput,
 } from "@/services/avenants.service";
 import { getContrats } from "@/services/contrats.service";
-import { getCompagnies } from "@/services/compagnies.service";
-import type { Compagnie } from "@/types/compagnies";
 import { openQuittanceAvenant, openAvenantDocument, openTableauGaranties } from "@/services/documents.service";
-import QuittancesLibresTab from "@/features/avenants/QuittancesLibres";
 import type { Avenant } from "@/types/avenants";
 import type { Contrat } from "@/types/contrats";
-import { numeroPolice } from "@/lib/police";
 
 const statutVariant: Record<string, "neutral" | "info" | "success"> = {
   "Brouillon": "neutral",
@@ -32,32 +26,20 @@ function emptyForm(): AvenantUpsertInput {
 }
 
 export default function AvenantsView() {
-  // Onglet Quittances libres (2026-09) — voir demande utilisateur : "j'ai
-  // remarqué qu'il y a des fonctionnalité qu'on avait déjà déployé en local
-  // qui ont totalement disparu comme la quittance libre par exemple."
-  // QuittancesLibresTab existait déjà, complet côté front et back, mais
-  // n'était rendu par aucune route — orpheline depuis sa création. Rebranchée
-  // ici en second onglet, sous le même libellé de menu "Quittances et
-  // Avenants" (voir navConfig.ts).
-  const [tab, setTab] = useState<"avenants" | "quittances">("avenants");
   const [avenants, setAvenants] = useState<Avenant[]>([]);
   const [contrats, setContrats] = useState<Contrat[]>([]);
-  const [compagnies, setCompagnies] = useState<Compagnie[]>([]);
-  const [pickerAvenant, setPickerAvenant] = useState<Avenant | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState<AvenantUpsertInput>(emptyForm());
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
   const toggleExpanded = (id: string) => setExpandedIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
-  const pagination = usePagination(avenants);
 
   const refresh = () => getAvenants().then(setAvenants);
 
   useEffect(() => {
     refresh();
     getContrats().then(setContrats);
-    getCompagnies().then(setCompagnies);
   }, []);
 
   const openCreate = () => {
@@ -99,22 +81,11 @@ export default function AvenantsView() {
     }
   };
 
-  const handleAppliquer = (a: Avenant) => {
-    if (a.type === "Renouvellement") {
-      setPickerAvenant(a);
-    } else {
-      appliquerAvenant(a.id).then(() => { refresh(); toast.success("Avenant appliqué — la prime du contrat a été mise à jour."); })
-        .catch((err) => toast.error(err instanceof Error ? err.message : "Application impossible."));
-    }
-  };
-
-  const handleAppliquerAvecCompagnie = async (compagnieId: string) => {
-    if (!pickerAvenant) return;
+  const handleAppliquer = async (a: Avenant) => {
     try {
-      await appliquerAvenant(pickerAvenant.id, compagnieId);
-      setPickerAvenant(null);
+      await appliquerAvenant(a.id);
       refresh();
-      toast.success("Renouvellement appliqué — la prime du contrat a été mise à jour.");
+      toast.success("Avenant appliqué — la prime du contrat a été mise à jour.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Application impossible.");
     }
@@ -134,20 +105,11 @@ export default function AvenantsView() {
 
   return (
     <div className="p-6">
-      <ModuleHeader title="Quittances et Avenants" subtitle="Quittancement libre, modifications de contrats en vigueur et traçabilité des changements" icon={Edit}
-        actions={tab === "avenants" ? <Btn variant="primary" onClick={openCreate}><Plus className="w-4 h-4" />Nouvel avenant</Btn> : undefined}
+      <ModuleHeader title="Avenants" subtitle="Modifications de contrats en vigueur et traçabilité des changements" icon={Edit}
+        actions={<Btn variant="primary" onClick={openCreate}><Plus className="w-4 h-4" />Nouvel avenant</Btn>}
       />
-
-      <div className="flex items-center gap-1 mb-5 bg-secondary/30 rounded-lg p-1 w-fit">
-        <button type="button" onClick={() => setTab("avenants")} className={`px-3 py-1.5 rounded-md text-[12.5px] font-medium ${tab === "avenants" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>Avenants</button>
-        <button type="button" onClick={() => setTab("quittances")} className={`px-3 py-1.5 rounded-md text-[12.5px] font-medium ${tab === "quittances" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>Quittances libres</button>
-      </div>
-
-      {tab === "quittances" ? (
-        <QuittancesLibresTab contrats={contrats} />
-      ) : (
       <div className="space-y-3">
-        {pagination.pageItems.map((a) => (
+        {avenants.map((a) => (
           <div key={a.id} className="bg-card border border-border rounded-xl p-4 hover:border-primary/30 transition-colors">
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="flex-1 min-w-[240px]">
@@ -204,34 +166,7 @@ export default function AvenantsView() {
         {avenants.length === 0 && (
           <div className="py-12 text-center text-muted-foreground text-sm">Aucun avenant enregistré</div>
         )}
-        <Pagination
-          page={pagination.page} pageCount={pagination.pageCount} pageSize={pagination.pageSize}
-          pageSizeOptions={pagination.pageSizeOptions} total={pagination.total} debut={pagination.debut} fin={pagination.fin}
-          onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize}
-        />
       </div>
-      )}
-
-      {pickerAvenant && (
-        <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-card border border-border rounded-xl shadow-2xl">
-            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-              <h3 className="text-[15px] font-semibold text-foreground">Compagnie d'assurance pour ce renouvellement</h3>
-              <button type="button" onClick={() => setPickerAvenant(null)} className="h-8 px-3 rounded-lg border border-border text-[12px] text-foreground hover:bg-secondary/40">Fermer</button>
-            </div>
-            <div className="p-5">
-              <p className="text-[12.5px] text-muted-foreground mb-4">Sélectionnez la compagnie à associer au nouvel exercice. Ce choix est enregistré dans l'historique du contrat.</p>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {compagnies.map((cp) => (
-                  <button key={cp.id} type="button" onClick={() => handleAppliquerAvecCompagnie(cp.id)}
-                    className="w-full text-left px-4 py-2.5 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 text-[13px] text-foreground transition-colors"
-                  >{cp.nom}</button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showCreate && (
         <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4">
@@ -245,7 +180,7 @@ export default function AvenantsView() {
                 <div className="text-[12px] text-muted-foreground mb-1.5">Contrat</div>
                 <select value={form.contratId} onChange={(e) => handleContratChange(e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 bg-background text-[13px] text-foreground">
                   <option value="">— Sélectionner —</option>
-                  {contrats.map((c) => <option key={c.id} value={c.id}>{numeroPolice(c)} · {c.client}</option>)}
+                  {contrats.map((c) => <option key={c.id} value={c.id}>{c.id} · {c.client}</option>)}
                 </select>
               </label>
               <label className="block">

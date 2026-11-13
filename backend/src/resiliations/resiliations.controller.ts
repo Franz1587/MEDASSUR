@@ -1,6 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { ResiliationsService } from "./resiliations.service";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_PRODUCTION } from "../auth/access-roles";
 import { CreateResiliationDto } from "./dto/create-resiliation.dto";
 
 @Controller("resiliations")
@@ -13,21 +15,25 @@ export class ResiliationsController {
     return this.service.findAll();
   }
 
+  @Roles(...ROLES_PRODUCTION)
   @Post()
   create(@Body() dto: CreateResiliationDto) {
     return this.service.create(dto);
   }
 
+  @Roles(...ROLES_PRODUCTION)
   @Patch(":id/valider")
   valider(@Param("id") id: string) {
     return this.service.valider(id);
   }
 
+  @Roles(...ROLES_PRODUCTION)
   @Patch(":id/effective")
   rendreEffective(@Param("id") id: string) {
     return this.service.rendreEffective(id);
   }
 
+  @Roles(...ROLES_PRODUCTION)
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.service.remove(id);

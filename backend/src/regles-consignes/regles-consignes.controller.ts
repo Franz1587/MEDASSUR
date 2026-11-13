@@ -3,6 +3,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
+import { AllowExternal } from "../auth/access.decorators";
 import { Roles } from "../auth/roles.decorator";
 import { ReglesConsignesService } from "./regles-consignes.service";
 import { CreateRegleConsigneDto } from "./dto/create-regle-consigne.dto";
@@ -19,11 +20,13 @@ const ROLES_GESTION = ["administrateur", "direction_generale"] as const;
 export class ReglesConsignesController {
   constructor(private readonly service: ReglesConsignesService) {}
 
+  @AllowExternal()
   @Get()
   findAll(@Query("actifSeulement") actifSeulement?: string) {
     return this.service.findAll(actifSeulement === "true");
   }
 
+  @AllowExternal()
   @Get(":id")
   findOne(@Param("id") id: string) {
     return this.service.findOne(id);

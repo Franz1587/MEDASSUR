@@ -17,7 +17,6 @@ import { getNotifications, marquerNotificationLue, marquerToutesNotificationsLue
 import { getNonLus as getMessagerieNonLus } from "@/services/messagerie.service";
 import type { AppNotification } from "@/types/notifications";
 import logoMark from "@/assets/logo-mark.png";
-import { runSilently } from "@/lib/http";
 
 // Rafraîchissement de la bulle de notification (2026-08) — pas de canal
 // temps réel (WebSocket) côté backend pour l'instant, un polling à
@@ -97,7 +96,6 @@ const zoneSections = [
       { label: "Trésorerie", view: "tresorerie" as const, icon: viewIcons.tresorerie },
       { label: "Fonds de Roulement", view: "fondsDeRoulement" as const, icon: viewIcons.fondsDeRoulement },
       { label: "Honoraires de Gestion", view: "honoraires" as const, icon: viewIcons.honoraires },
-      { label: "E-paiement", view: "ebilling" as const, icon: viewIcons.ebilling },
     ],
   },
   {
@@ -247,7 +245,7 @@ export function AdminShell({
   const [profileOpen, setProfileOpen] = useState(false);
   const [showProfilePage, setShowProfilePage] = useState(false);
   const [showGuidePage, setShowGuidePage] = useState(false);
-  const [guideProfil, setGuideProfil] = useState<GuideProfil>("interne");
+  const [guideProfil, setGuideProfil] = useState<GuideProfil>("global");
   const [phone, setPhone] = useState("+241 00 00 00 00");
   const [address, setAddress] = useState("Libreville, Gabon");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -262,16 +260,14 @@ export function AdminShell({
   const [messagerieNonLus, setMessagerieNonLus] = useState(0);
 
   useEffect(() => {
-    // Badge de fond (compteur non-lus) — jamais l'overlay de chargement
-    // plein écran (PageLoader), ni au premier chargement ni au sondage.
-    const refresh = () => runSilently(() => getNotifications()).then(setNotifications).catch(() => undefined);
+    const refresh = () => getNotifications().then(setNotifications).catch(() => undefined);
     refresh();
     const id = setInterval(refresh, NOTIFICATIONS_POLL_MS);
     return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
-    const refresh = () => runSilently(() => getMessagerieNonLus()).then(setMessagerieNonLus).catch(() => undefined);
+    const refresh = () => getMessagerieNonLus().then(setMessagerieNonLus).catch(() => undefined);
     refresh();
     const id = setInterval(refresh, MESSAGERIE_POLL_MS);
     return () => clearInterval(id);
@@ -296,7 +292,7 @@ export function AdminShell({
   const moduleAllowed = (currentRole?.allowedModules as string[] | undefined) ?? [];
   useAlertesDossiers({
     actif: moduleAllowed.includes("accordPrealable"),
-    recuperer: async () => (await getAccordsPrealables()).items.map((a) => ({
+    recuperer: async () => (await getAccordsPrealables()).map((a) => ({
       id: a.id, titre: `${a.type} — ${a.prestataire}`, enAttente: !a.assigneAId && a.decision === "En attente",
     })),
     labelNouveau: (d) => `Nouvelle prise en charge — ${d.titre}`,
@@ -422,15 +418,6 @@ export function AdminShell({
     contentRef.current?.scrollTo({ top: 0 });
   }, [nestedKey, activeNested]);
 
-  useEffect(() => {
-    contentRef.current?.scrollTo({ top: 0 });
-  }, [showGuidePage, showProfilePage]);
-
-  useEffect(() => {
-    setShowGuidePage(false);
-    setShowProfilePage(false);
-  }, [current]);
-
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-sidebar text-sidebar-foreground" style={{ fontFamily: "'Source Sans 3', sans-serif" }}>
       {/* Top bar */}
@@ -444,11 +431,11 @@ export function AdminShell({
             <Menu className="w-[18px] h-[18px]" />
           </button>
           <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center flex-shrink-0 shadow-sm p-1">
-            <img src={logoMark} alt="MEDASSUR+" className="w-full h-full object-contain" />
+            <img src={logoMark} alt="MedAssur" className="w-full h-full object-contain" />
           </div>
           {!collapsed && (
             <div className="leading-tight hidden sm:block">
-              <div className="text-sidebar-foreground font-bold text-[15px] tracking-wide">MEDASSUR+</div>
+              <div className="text-sidebar-foreground font-bold text-[15px] tracking-wide">MedAssur</div>
               <div className="text-sidebar-foreground/68 text-[10px] tracking-wide">Espace Santé Administration</div>
             </div>
           )}
@@ -534,8 +521,6 @@ export function AdminShell({
               <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive border border-sidebar" />
             )}
             {notifOpen && (
-              <>
-              <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
               <div className="absolute right-0 top-8 w-80 rounded-xl border border-sidebar-border bg-sidebar-accent text-sidebar-foreground shadow-xl z-50">
                 <div className="px-3 py-2 border-b border-sidebar-border/70 flex items-center justify-between">
                   <span className="text-[12px] font-semibold">Notifications {notificationsNonLues.length > 0 && `(${notificationsNonLues.length})`}</span>
@@ -565,7 +550,6 @@ export function AdminShell({
                   ))}
                 </div>
               </div>
-              </>
             )}
           </span>
           <span title="Guide d'utilisateur">
@@ -574,41 +558,37 @@ export function AdminShell({
               onClick={handleOpenGuide}
             />
           </span>
-          <span className="relative">
-            <button
-              type="button"
-              onClick={() => setProfileOpen((v) => !v)}
-              className="w-[26px] h-[26px] rounded-full border border-sidebar-border flex items-center justify-center hover:bg-sidebar-accent/70 transition-colors"
-              title="Profil utilisateur"
-            >
-              <UserCircle className="w-[18px] h-[18px]" />
-            </button>
-            {profileOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
-                <div className="absolute right-0 top-9 w-56 rounded-xl border border-sidebar-border bg-sidebar-accent text-sidebar-foreground shadow-xl z-50">
-                  <div className="px-3 py-2 border-b border-sidebar-border/70">
-                    <div className="text-[12px] font-semibold truncate">{currentUser?.nom ?? "Utilisateur"}</div>
-                    <div className="text-[11px] text-sidebar-foreground/70 truncate">{currentRole?.label ?? "Profil"}</div>
-                  </div>
-                  <button
-                    type="button"
-                    className="w-full text-left px-3 py-2 text-[12px] hover:bg-sidebar/40 transition-colors"
-                    onClick={handleOpenProfile}
-                  >
-                    Profil utilisateur
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full text-left px-3 py-2 text-[12px] text-red-200 hover:bg-red-500/20 transition-colors"
-                    onClick={logout}
-                  >
-                    Déconnexion
-                  </button>
-                </div>
-              </>
-            )}
-          </span>
+          <button
+            type="button"
+            onClick={() => setProfileOpen((v) => !v)}
+            className="w-[26px] h-[26px] rounded-full border border-sidebar-border flex items-center justify-center hover:bg-sidebar-accent/70 transition-colors"
+            title="Profil utilisateur"
+          >
+            <UserCircle className="w-[18px] h-[18px]" />
+          </button>
+
+          {profileOpen && (
+            <div className="absolute right-0 top-11 w-56 rounded-xl border border-sidebar-border bg-sidebar-accent text-sidebar-foreground shadow-xl z-50">
+              <div className="px-3 py-2 border-b border-sidebar-border/70">
+                <div className="text-[12px] font-semibold truncate">{currentUser?.nom ?? "Utilisateur"}</div>
+                <div className="text-[11px] text-sidebar-foreground/70 truncate">{currentRole?.label ?? "Profil"}</div>
+              </div>
+              <button
+                type="button"
+                className="w-full text-left px-3 py-2 text-[12px] hover:bg-sidebar/40 transition-colors"
+                onClick={handleOpenProfile}
+              >
+                Profil utilisateur
+              </button>
+              <button
+                type="button"
+                className="w-full text-left px-3 py-2 text-[12px] text-red-200 hover:bg-red-500/20 transition-colors"
+                onClick={logout}
+              >
+                Déconnexion
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -664,9 +644,9 @@ export function AdminShell({
           <div className="flex items-center justify-between px-4 h-14 border-b border-sidebar-border/70">
             <div className="flex items-center gap-2.5">
               <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center flex-shrink-0 shadow-sm p-1">
-                <img src={logoMark} alt="MEDASSUR+" className="w-full h-full object-contain" />
+                <img src={logoMark} alt="MedAssur" className="w-full h-full object-contain" />
               </div>
-              <span className="text-sidebar-foreground font-bold text-[13.5px] tracking-wide">MEDASSUR+</span>
+              <span className="text-sidebar-foreground font-bold text-[13.5px] tracking-wide">MedAssur</span>
             </div>
             <button
               type="button"
@@ -758,10 +738,6 @@ export function AdminShell({
               )}
             </div>
           )}
-
-          <div className={showProfilePage || showGuidePage ? "hidden" : ""}>
-            {children}
-          </div>
 
           {showProfilePage ? (
             <div className="p-4 md:p-5 pb-24">
@@ -888,7 +864,9 @@ export function AdminShell({
               onBack={() => setShowGuidePage(false)}
               onSelectProfil={setGuideProfil}
             />
-          ) : null}
+          ) : (
+            children
+          )}
         </div>
       </div>
     </div>

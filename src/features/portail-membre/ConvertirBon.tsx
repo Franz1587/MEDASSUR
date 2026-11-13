@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { Loader2, Plus, Sparkles, Trash2, X, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { Combobox } from "@/components/shared/Combobox";
 import { DateInput } from "@/components/shared/DateInput";
@@ -108,7 +108,7 @@ export function ConvertirBon({ documentId, assureId, onFermer, onConverti }: { d
             <div className="py-12 flex flex-col items-center gap-3 text-[13px] text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin text-primary" />ARIANA lit votre document…</div>
           ) : (
             <>
-              {remarque && <p className={`text-[12px] rounded-lg px-3 py-2 border ${lecture === "echec" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-border bg-secondary/30 text-foreground"}`}>{lecture === "echec" ? `${remarque} Saisissez les lignes à la main.` : `⚠ ${remarque}`}</p>}
+              {remarque && <p className={`text-[12px] rounded-lg px-3 py-2 border flex items-start gap-1.5 ${lecture === "echec" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-border bg-secondary/30 text-foreground"}`}>{lecture !== "echec" && <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />}{lecture === "echec" ? `${remarque} Saisissez les lignes à la main.` : remarque}</p>}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div><span className="text-[11.5px] text-muted-foreground">Établissement</span>
                   <Combobox options={structures} value={structure} onChange={(s) => { setStructure(s); if (s && medecin && !medecin.structures.some((x) => x.id === s.id)) setMedecin(null); }}

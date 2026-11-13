@@ -1,9 +1,14 @@
 import { randomUUID } from "crypto";
+import * as bcrypt from "bcryptjs";
 import { PrismaService } from "../prisma/prisma.service";
+import { TenantContext } from "../tenant/tenant-context";
+import { genererMotDePasseTemporaire, slugifier } from "../shared/mot-de-passe.util";
+import { ROLE_MODULES } from "../auth/role-modules";
 
 export interface InfoPrescripteur {
   prescripteurNom: string;
   titrePrescripteur?: string;
+  specialitePrescripteur?: string;
   codePraticien: string;
   structureNom: string;
   codeEtablissement: string;
@@ -40,14 +45,45 @@ export async function resoudreOuCreerPrescripteur(
     const TITRES_RE = /^(Dr\.?|Pr\.?|Docteur|Professeur|D[Rr]\.?)\s+/i;
     const nomSansTitre = nom.replace(TITRES_RE, "").trim();
     const [nomSeul, ...restPrenom] = (nomSansTitre || "Prescripteur").split(/\s+/);
+    const prenomSeul = restPrenom.join(" ") || null;
     medecin = await prisma.medecin.create({
-      data: { nom: nomSeul, prenom: restPrenom.join(" ") || null, codePraticien: code, titre: info.titrePrescripteur?.trim() || null },
+      data: {
+        nom: nomSeul, prenom: prenomSeul, codePraticien: code,
+        titre: info.titrePrescripteur?.trim() || null,
+        specialite: info.specialitePrescripteur?.trim() || null,
+      },
     });
+
+    // Compte medassur.cloud automatique pour tout nouveau médecin (2026-11)
+    // Idempotent : si un compte existe déjà pour ce medecinId, on ne recrée pas.
+    const compteExistant = await prisma.user.findFirst({ where: { medecinId: medecin.id }, select: { id: true } });
+    if (!compteExistant && prenomSeul && nomSeul) {
+      const baseEmail = `${slugifier(prenomSeul)}.${slugifier(nomSeul)}`;
+      let email = `${baseEmail}@medassur.cloud`;
+      for (let i = 2; i <= 99; i++) {
+        const pris = await prisma.user.findFirst({ where: { email }, select: { id: true } });
+        if (!pris) break;
+        email = `${baseEmail}${i}@medassur.cloud`;
+      }
+      const mdp = genererMotDePasseTemporaire();
+      await prisma.user.create({
+        data: {
+          nom: `${prenomSeul} ${nomSeul}`, email,
+          initiales: `${prenomSeul[0]}${nomSeul[0]}`.toUpperCase(),
+          passwordHash: await bcrypt.hash(mdp, 10),
+          roleId: "medecin_prescripteur", medecinId: medecin.id,
+          modules: ROLE_MODULES["medecin_prescripteur"],
+          societeId: TenantContext.getSocieteId() ?? null,
+          doitChangerMotDePasse: true,
+        },
+      });
+    }
   } else {
     // Enrichir le code praticien et le titre s'ils étaient manquants
     const updates: Record<string, string | null> = {};
     if (code && !medecin.codePraticien) updates.codePraticien = code;
     if (info.titrePrescripteur?.trim() && !medecin.titre) updates.titre = info.titrePrescripteur.trim();
+    if (info.specialitePrescripteur?.trim() && !medecin.specialite) updates.specialite = info.specialitePrescripteur.trim();
     if (Object.keys(updates).length)
       medecin = await prisma.medecin.update({ where: { id: medecin.id }, data: updates });
   }

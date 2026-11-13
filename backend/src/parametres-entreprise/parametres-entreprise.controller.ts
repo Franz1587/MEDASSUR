@@ -4,6 +4,8 @@ import { memoryStorage } from "multer";
 import { ParametresEntrepriseService } from "./parametres-entreprise.service";
 import { UpdateParametresEntrepriseDto } from "./dto/update-parametres-entreprise.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_DIRECTION } from "../auth/access-roles";
 
 @Controller("parametres-entreprise")
 @UseGuards(JwtAuthGuard)
@@ -15,6 +17,7 @@ export class ParametresEntrepriseController {
     return this.parametresEntrepriseService.findOne();
   }
 
+  @Roles(...ROLES_DIRECTION)
   @Patch()
   update(@Body() dto: UpdateParametresEntrepriseDto) {
     return this.parametresEntrepriseService.update(dto);
@@ -22,12 +25,14 @@ export class ParametresEntrepriseController {
 
   // Logo (2026-09) — voir demande utilisateur, même patron que
   // CompagniesService.uploadLogo/deleteLogo.
+  @Roles(...ROLES_DIRECTION)
   @Post("logo")
   @UseInterceptors(FileInterceptor("logo", { storage: memoryStorage(), limits: { fileSize: 4 * 1024 * 1024 } }))
   uploadLogo(@UploadedFile() file: Express.Multer.File) {
     return this.parametresEntrepriseService.uploadLogoCourant(file);
   }
 
+  @Roles(...ROLES_DIRECTION)
   @Delete("logo")
   deleteLogo() {
     return this.parametresEntrepriseService.deleteLogoCourant();
@@ -36,12 +41,14 @@ export class ParametresEntrepriseController {
   // Page de garde du rapport Statistiques (2026-09) — voir demande
   // utilisateur : "il faut seulement rendre possible la personnalisation de
   // la page de garde par client." Même patron que logo ci-dessus.
+  @Roles(...ROLES_DIRECTION)
   @Post("page-garde-statistiques")
   @UseInterceptors(FileInterceptor("pageGarde", { storage: memoryStorage(), limits: { fileSize: 6 * 1024 * 1024 } }))
   uploadPageGardeStatistiques(@UploadedFile() file: Express.Multer.File) {
     return this.parametresEntrepriseService.uploadPageGardeStatistiquesCourante(file);
   }
 
+  @Roles(...ROLES_DIRECTION)
   @Delete("page-garde-statistiques")
   deletePageGardeStatistiques() {
     return this.parametresEntrepriseService.deletePageGardeStatistiquesCourante();

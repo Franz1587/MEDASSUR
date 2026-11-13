@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateCourrierTypeDto } from "./dto/create-courrier-type.dto";
 import { UpdateCourrierTypeDto } from "./dto/update-courrier-type.dto";
+import { sanitizeHtmlRiche } from "../shared/sanitize-html.util";
 
 // Modèles de courrier paramétrables (2026-08) — voir schema.prisma
 // CourrierType. Même forme que LettresClesService (catalogue paramétrable
@@ -21,12 +22,12 @@ export class CourrierTypeService {
   }
 
   create(dto: CreateCourrierTypeDto) {
-    return this.prisma.courrierType.create({ data: dto });
+    return this.prisma.courrierType.create({ data: { ...dto, corpsModele: sanitizeHtmlRiche(dto.corpsModele) } });
   }
 
   async update(id: string, dto: UpdateCourrierTypeDto) {
     await this.findOne(id);
-    return this.prisma.courrierType.update({ where: { id }, data: dto });
+    return this.prisma.courrierType.update({ where: { id }, data: { ...dto, ...(typeof dto.corpsModele === "string" ? { corpsModele: sanitizeHtmlRiche(dto.corpsModele) } : {}) } });
   }
 
   async remove(id: string) {

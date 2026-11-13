@@ -35,6 +35,8 @@ export interface UserAccount {
   // remonte sur le décompte" (src/features/agences/index.tsx).
   agenceId?: string | null;
   agence?: { id: string; nom: string } | null;
+  // Consentement RGPD (2026-11) — date d'acceptation de la politique de confidentialité.
+  consentementAccepteAt?: string | null;
 }
 
 export interface RoleSummary {

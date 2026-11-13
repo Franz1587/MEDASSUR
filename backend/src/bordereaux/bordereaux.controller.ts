@@ -1,5 +1,7 @@
 import { Controller, Get, Query, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_BANQUES } from "../auth/access-roles";
 import { BordereauxService } from "./bordereaux.service";
 
 // Bordereaux (2026-08) — données JSON pour l'aperçu écran ; le
@@ -7,6 +9,7 @@ import { BordereauxService } from "./bordereaux.service";
 // DocumentsService.renderBordereauSinistres), même principe que État TPS.
 @Controller("bordereaux")
 @UseGuards(JwtAuthGuard)
+@Roles(...ROLES_BANQUES)
 export class BordereauxController {
   constructor(private readonly service: BordereauxService) {}
 

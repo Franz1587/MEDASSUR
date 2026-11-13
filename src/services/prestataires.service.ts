@@ -128,6 +128,13 @@ export async function geolocaliserPrestataire(id: string): Promise<Prestataire> 
   return mapPrestataire(data);
 }
 
+// Capture GPS directe (2026-11) — enregistre les coordonnées GPS saisies par
+// le navigateur de l'utilisateur pour ce prestataire.
+export async function enregistrerPositionGpsPrestataire(id: string, latitude: number, longitude: number): Promise<Prestataire> {
+  const data = await http.patch<ApiPrestataire>(`/prestataires/${id}/position-gps`, { latitude, longitude });
+  return mapPrestataire(data);
+}
+
 export interface GeolocalisationLotResultat {
   traites: number; trouves: number; villesCorrigees: number; restants: number; echecs: number; geolocalises: number; total: number;
 }

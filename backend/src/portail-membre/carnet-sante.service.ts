@@ -7,6 +7,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { PrismaService } from "../prisma/prisma.service";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
+import { sanitizeUpload } from "../storage/upload-security.util";
 
 const UPLOADS_CARNET_DIR = path.join(UPLOADS_ROOT, "carnet-sante");
 
@@ -70,15 +71,22 @@ export class CarnetSanteService {
       throw new BadRequestException("Seules les photos (JPEG, PNG, WebP, HEIC…) ou les scans PDF sont acceptés.");
     }
 
-    const base = `${assureId}-${Date.now()}-${randomUUID().slice(0, 6)}`;
+    // Nom 100% aléatoire (le propriétaire est retrouvé en base, voir uploads-authorizer).
+    const base = randomUUID();
     const estPdf = file.mimetype === "application/pdf";
     let pdf: Buffer;
     let jpeg: Buffer | undefined;
     if (estPdf) {
       // Scan PDF (CamScanner, etc.) : stocker tel quel, pas de JPEG.
       // ARIANA utilisera le PDF directement (chemin de secours existant).
+      sanitizeUpload({ originalName: "scan.pdf", mimetype: file.mimetype, buffer: file.buffer, category: "document" });
       pdf = file.buffer;
     } else {
+      // Le contenu doit être une vraie image : seul le PDF/JPEG régénéré est stocké.
+      const meta = await sharp(file.buffer).metadata().catch(() => null);
+      if (!meta?.format || !["jpeg", "png", "webp", "gif", "heif", "tiff", "avif"].includes(meta.format)) {
+        throw new BadRequestException("Le fichier reçu n'est pas une image valide.");
+      }
       const prepare = await this.preparerPhotoEtPdf(file.buffer);
       pdf = prepare.pdf;
       jpeg = prepare.jpeg;

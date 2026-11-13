@@ -4,6 +4,8 @@ import { memoryStorage } from "multer";
 import type { Request } from "express";
 import { CrmService } from "./crm.service";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_COMMERCIAL } from "../auth/access-roles";
 import { CreateProspectDto } from "./dto/create-prospect.dto";
 import { UpdateProspectDto } from "./dto/update-prospect.dto";
 import { AjouterNoteProspectDto } from "./dto/ajouter-note-prospect.dto";
@@ -59,6 +61,7 @@ export class CrmController {
     return this.service.lierClient(id, dto.clientId, req.user.userId);
   }
 
+  @Roles(...ROLES_COMMERCIAL)
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.service.remove(id);

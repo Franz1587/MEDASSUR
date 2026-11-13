@@ -5,6 +5,8 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { PrismaService } from "../prisma/prisma.service";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
+import { sanitizeUpload } from "../storage/upload-security.util";
+import { sanitizeHtmlRiche } from "../shared/sanitize-html.util";
 import { CreateRegleConsigneDto } from "./dto/create-regle-consigne.dto";
 import { UpdateRegleConsigneDto } from "./dto/update-regle-consigne.dto";
 
@@ -36,12 +38,12 @@ export class ReglesConsignesService {
   }
 
   create(dto: CreateRegleConsigneDto) {
-    return this.prisma.regleConsigne.create({ data: dto });
+    return this.prisma.regleConsigne.create({ data: { ...dto, contenu: sanitizeHtmlRiche(dto.contenu) } });
   }
 
   async update(id: string, dto: UpdateRegleConsigneDto) {
     await this.findOne(id);
-    return this.prisma.regleConsigne.update({ where: { id }, data: dto });
+    return this.prisma.regleConsigne.update({ where: { id }, data: { ...dto, ...(typeof dto.contenu === "string" ? { contenu: sanitizeHtmlRiche(dto.contenu) } : {}) } });
   }
 
   async remove(id: string) {
@@ -59,10 +61,9 @@ export class ReglesConsignesService {
   async uploadDocument(id: string, file: Express.Multer.File) {
     await this.findOne(id);
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
-    const ext = path.extname(file.originalname) || "";
-    const filename = `${id}-${randomUUID().slice(0, 6)}${ext.toLowerCase()}`;
+    const { storedName: filename, mime } = sanitizeUpload({ originalName: file.originalname, mimetype: file.mimetype, buffer: file.buffer, category: "document" });
     if (this.storage.actif) {
-      await this.storage.upload("regles-consignes", filename, file.buffer, file.mimetype);
+      await this.storage.upload("regles-consignes", filename, file.buffer, mime);
     } else {
       await fs.promises.mkdir(UPLOADS_REGLES_DIR, { recursive: true });
       await fs.promises.writeFile(path.join(UPLOADS_REGLES_DIR, filename), file.buffer);

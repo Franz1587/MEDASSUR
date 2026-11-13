@@ -1,5 +1,6 @@
 import * as path from "path";
 import * as XLSX from "xlsx";
+import { lireXlsxSur, verifierTailleXlsx } from "../import/safe-xlsx.util";
 import ExcelJS from "exceljs";
 import Anthropic from "@anthropic-ai/sdk";
 import { BadRequestException, Injectable } from "@nestjs/common";
@@ -405,7 +406,7 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
   private async extraireContenu(buffer: Buffer, ext: string): Promise<string> {
     if (ext === ".xls" || ext === ".xlsx") {
       // SheetJS gère XLS BIFF8 ET XLSX
-      const wb = XLSX.read(buffer, { type: "buffer" });
+      const wb = lireXlsxSur(buffer);
       const lignes: string[] = [];
       for (const nomFeuille of wb.SheetNames.slice(0, 3)) {
         const ws = wb.Sheets[nomFeuille];
@@ -506,7 +507,7 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
   private async extraireActesMedicaux(buffer: Buffer, ext: string): Promise<{ titre: string; lignesRaw: Omit<LigneActeMedical, "acteId" | "estNouvel" | "prixActuel" | "changementPrix" | "erreur">[] }> {
     // Pour XLS/XLSX : parsing direct (structure connue)
     if (ext === ".xls" || ext === ".xlsx") {
-      const wb = XLSX.read(buffer, { type: "buffer" });
+      const wb = lireXlsxSur(buffer);
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: "" });
 
@@ -698,6 +699,7 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
   // ── Parsing Excel Eyassur (factures) ────────────────────────────────────
   private async parserExcelEyassur(buffer: Buffer): Promise<{ contratRef: string; organisme: string; periode: string; lignesRaw: Omit<LigneApercu, "assureId" | "contratId" | "prestataireId" | "erreur" | "doublon" | "miseAJour" | "priseEnChargeId">[] }> {
     const classeur = new ExcelJS.Workbook();
+    verifierTailleXlsx(buffer);
     await classeur.xlsx.load(buffer as unknown as ExcelJS.Buffer);
     const feuille = classeur.worksheets[0];
     if (!feuille) throw new BadRequestException("Fichier Excel vide ou illisible.");
@@ -1017,7 +1019,7 @@ ${lot.map((t, k) => `${k}. ${t}`).join("\n")}`,
     let texteContenu = "";
 
     if (ext === ".xlsx" || ext === ".xls") {
-      const wb = XLSX.read(file.buffer, { type: "buffer" });
+      const wb = lireXlsxSur(file.buffer);
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: "" });
       texteContenu = rows.slice(0, 500).map((r) => (r as unknown[]).map((c) => String(c ?? "").trim()).filter(Boolean).join(" | ")).join("\n");

@@ -100,6 +100,9 @@ export class RenouvellementsService implements OnModuleInit {
   // utilise pour toute autre demande.
   async marquerPerdu(id: string, initiateur: string) {
     const avenant = await this.findOneOrThrow(id);
+    // Refus avant tout effet de bord : sans ce contrôle, la résiliation serait
+    // créée même si le renouvellement est déjà renouvelé/perdu.
+    await this.avenants.verifierChangementStatut(id, "Perdu");
     await this.resiliations.create({
       contratId: avenant.contratId,
       motif: "Non-renouvellement",

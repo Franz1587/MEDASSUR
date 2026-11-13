@@ -1,14 +1,11 @@
 import { useEffect, useState } from "react";
 import { jsPDF } from "jspdf";
-import { UploadCloud, Receipt, HandCoins, ClipboardCheck, Image as ImageIcon, FolderUp, FolderTree, CheckCircle2, AlertTriangle, Building2, FileText, Users, Globe2, RefreshCw, Clock, Bot } from "lucide-react";
+import { UploadCloud, Receipt, HandCoins, ClipboardCheck, Image as ImageIcon, FolderUp, FolderTree, CheckCircle2, AlertTriangle, Building2, FileText, Users, Globe2, RefreshCw, Clock, X } from "lucide-react";
 import { toast } from "sonner";
 import { ModuleHeader } from "@/components/shared/ModuleHeader";
 import { Btn } from "@/components/shared/Btn";
 import { Combobox } from "@/components/shared/Combobox";
 import { ImportEnMasseModal } from "@/components/shared/ImportEnMasseModal";
-import { ImportLibreModal } from "./ImportLibreModal";
-import { NettoyageDoublons } from "./NettoyageDoublons";
-import { NettoyagePec } from "./NettoyagePec";
 import {
   telechargerModeleImportFactures, apercuImportFactures, confirmerImportFactures, type ImportFactureRow,
   telechargerModeleImportFacturesGlobal, importerFacturesGlobal, type ResultatImportFacturesGlobal,
@@ -19,10 +16,8 @@ import {
   importerPhotosEnMasse,
 } from "@/services/import.service";
 import {
-  compterPersonnesEnAttenteTransfert, getPersonnesEnAttenteTransfert,
-  ignorerPersonneEnAttenteTransfert, ignorerToutesPersonnesEnAttenteTransfert,
-  validerTransfertPersonne, analyserEcartsTauxContrat, corrigerTypeAssureErreurs,
-  type PersonneEnAttenteTransfert,
+  compterPersonnesEnAttenteTransfert, getPersonnesEnAttenteTransfert, ignorerPersonneEnAttenteTransfert,
+  analyserEcartsTauxContrat, type PersonneEnAttenteTransfert,
 } from "@/services/sante.service";
 import {
   telechargerModeleImportClients, apercuImportClients, confirmerImportClients, type ImportClientRow,
@@ -31,7 +26,6 @@ import {
   telechargerModeleImportContrats, apercuImportContrats, confirmerImportContrats, type ImportContratRow, getContrats,
 } from "@/services/contrats.service";
 import type { Contrat } from "@/types/contrats";
-import { numeroPolice } from "@/lib/police";
 
 // Import de données (Système) — 2026-08 — voir demande utilisateur : "pour
 // permettre aux sociétés d'assurance qui voudraient changer de logiciel mais
@@ -66,7 +60,7 @@ import { numeroPolice } from "@/lib/police";
 // gérer de façon optimum plus de 50000 lignes en une fois") — alternative
 // à l'import par contrat ci-dessus, pour une reprise en masse sans devoir
 // pré-trier le fichier par contrat.
-type Categorie = "souscripteurs" | "contrats" | "assures" | "factures" | "facturesGlobal" | "importLibre" | "reglements" | "accordsPrealables" | "photos" | null;
+type Categorie = "souscripteurs" | "contrats" | "assures" | "factures" | "facturesGlobal" | "reglements" | "accordsPrealables" | "photos" | null;
 
 const CARTES: { id: Exclude<Categorie, null>; titre: string; description: string; icon: React.ElementType }[] = [
   { id: "souscripteurs", titre: "Souscripteurs", description: "Reprise des clients (personnes morales ou physiques) déjà connus de l'ancien système.", icon: Building2 },
@@ -76,7 +70,6 @@ const CARTES: { id: Exclude<Categorie, null>; titre: string; description: string
   { id: "factures", titre: "Factures", description: "Reprise des factures déjà saisies (en-tête + lignes de prestation) auprès de l'ancien système.", icon: Receipt },
   { id: "reglements", titre: "Règlements prestataires", description: "Reprise des règlements déjà effectués auprès des prestataires (bordereaux soldés).", icon: HandCoins },
   { id: "photos", titre: "Photos des bénéficiaires", description: "Import en une fois de tout un dossier de photos — chaque fichier doit être nommé avec le matricule du bénéficiaire.", icon: ImageIcon },
-  { id: "importLibre", titre: "Import libre (Ariana)", description: "Ariana lit un fichier PDF, Excel, CSV ou TXT de n'importe quel système (Eyassur…) et importe automatiquement les prestations sur le bon assuré et le bon exercice.", icon: Bot },
 ];
 
 export default function ImportDonneesView() {
@@ -98,18 +91,7 @@ export default function ImportDonneesView() {
   const [listeTransfert, setListeTransfert] = useState<PersonneEnAttenteTransfert[] | null>(null);
 
   const rafraichirEnAttente = () => { compterFacturesEnAttente().then((r) => setEnAttente(r.nombre)).catch(() => undefined); };
-  const rafraichirEnAttenteTransfert = (avecListe = false) => {
-    compterPersonnesEnAttenteTransfert().then((r) => setEnAttenteTransfert(r.nombre)).catch(() => undefined);
-    // Recharger la liste uniquement si elle était déjà ouverte (non-null),
-    // pour éviter les 404 sur des IDs périmés après analyser/corriger.
-    if (avecListe) {
-      setListeTransfert((prev) => {
-        if (prev === null) return null; // liste fermée → on ne la rouvre pas
-        getPersonnesEnAttenteTransfert().then((l) => setListeTransfert(l)).catch(() => undefined);
-        return prev; // conserve temporairement l'ancienne liste le temps du rechargement
-      });
-    }
-  };
+  const rafraichirEnAttenteTransfert = () => { compterPersonnesEnAttenteTransfert().then((r) => setEnAttenteTransfert(r.nombre)).catch(() => undefined); };
   useEffect(() => { rafraichirEnAttente(); rafraichirEnAttenteTransfert(); }, []);
 
   const toggleListeTransfert = async () => {
@@ -131,35 +113,6 @@ export default function ImportDonneesView() {
     }
   };
 
-  const handleValiderTransfert = async (id: string) => {
-    try {
-      const res = await validerTransfertPersonne(id);
-      setListeTransfert((v) => v?.filter((p) => p.id !== id) ?? null);
-      rafraichirEnAttenteTransfert();
-      if (res.dejaEffectue) {
-        toast.info(`${res.matricule} était déjà sur le contrat cible — alerte retirée.`);
-      } else if (res.typeAssureCorrige) {
-        toast.success(`Transfert validé — ${res.matricule} basculé. Type corrigé EF → AS (adulte enregistré comme enfant par erreur).`);
-      } else {
-        toast.success(`Transfert validé — ${res.matricule} basculé vers le contrat cible.`);
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Validation impossible.");
-    }
-  };
-
-  const handleIgnorerTout = async () => {
-    if (!confirm(`Ignorer les ${enAttenteTransfert} personne(s) en attente ? Cette action est irréversible.`)) return;
-    try {
-      const res = await ignorerToutesPersonnesEnAttenteTransfert();
-      setListeTransfert([]);
-      setEnAttenteTransfert(0);
-      toast.success(`${res.ignorees} entrée(s) supprimée(s).`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Impossible.");
-    }
-  };
-
   // Analyse a posteriori des écarts de taux (2026-09) — voir
   // SanteService.analyserEcartsTauxContrat : détecte, dans les
   // prestations déjà en base, un changement de contrat jamais annoncé
@@ -170,31 +123,13 @@ export default function ImportDonneesView() {
     setAnalyseEnCours(true);
     try {
       const res = await analyserEcartsTauxContrat();
-      rafraichirEnAttenteTransfert(true);
+      rafraichirEnAttenteTransfert();
       if (res.detectes > 0) toast.success(`${res.detectes} écart(s) de taux détecté(s) — ajouté(s) à la file de transfert pour validation.`);
       else toast.info("Aucun écart de taux détecté.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Analyse impossible.");
     } finally {
       setAnalyseEnCours(false);
-    }
-  };
-
-  const [correctionEnCours, setCorrectionEnCours] = useState(false);
-  const handleCorrigerTypeAssure = async () => {
-    setCorrectionEnCours(true);
-    try {
-      const res = await corrigerTypeAssureErreurs();
-      if (res.corriges > 0) {
-        toast.success(`${res.corriges} assuré(s) corrigé(s) : type EF (enfant) → AS (adulte).`);
-        rafraichirEnAttenteTransfert(true);
-      } else {
-        toast.info("Aucune erreur de type assuré détectée.");
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Correction impossible.");
-    } finally {
-      setCorrectionEnCours(false);
     }
   };
 
@@ -218,7 +153,7 @@ export default function ImportDonneesView() {
     <div>
       <ModuleHeader
         title="Import de données"
-        subtitle="Reprise d'antériorité — pour une société d'assurance qui bascule vers MEDASSUR+"
+        subtitle="Reprise d'antériorité — pour une société d'assurance qui bascule vers MedAssur"
         icon={UploadCloud}
       />
 
@@ -239,18 +174,10 @@ export default function ImportDonneesView() {
           <RefreshCw className="w-4 h-4 flex-shrink-0" />
           Analyse a posteriori : détecte, dans les prestations déjà en base, un changement de contrat jamais annoncé (taux de couverture observé correspondant à un autre contrat du même souscripteur — ex. changement de collège Agent/Cadre) — jamais de bascule automatique, seulement un signalement à confirmer ci-dessous.
         </p>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Btn variant="secondary" disabled={analyseEnCours} onClick={handleAnalyserEcartsTaux}>
-            <RefreshCw className={`w-4 h-4 ${analyseEnCours ? "animate-spin" : ""}`} />Analyser les écarts de taux
-          </Btn>
-          <Btn variant="secondary" disabled={correctionEnCours} onClick={handleCorrigerTypeAssure}>
-            <CheckCircle2 className={`w-4 h-4 ${correctionEnCours ? "animate-spin" : ""}`} />Corriger types EF adultes
-          </Btn>
-        </div>
+        <Btn variant="secondary" disabled={analyseEnCours} onClick={handleAnalyserEcartsTaux}>
+          <RefreshCw className={`w-4 h-4 ${analyseEnCours ? "animate-spin" : ""}`} />Analyser les écarts de taux
+        </Btn>
       </div>
-
-      <NettoyageDoublons />
-      <NettoyagePec />
 
       {enAttenteTransfert > 0 && (
         <div className="mb-5 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 space-y-3">
@@ -259,20 +186,14 @@ export default function ImportDonneesView() {
               <Clock className="w-4 h-4 flex-shrink-0" />
               <span><span className="font-semibold">{enAttenteTransfert}</span> personne(s) en attente de transfert (matricule déjà présent sur un autre contrat, ou écart de taux détecté) — résolu automatiquement au prochain import qui confirmera leur statut, ou à valider manuellement ci-dessous.</span>
             </p>
-            <div className="flex items-center gap-2">
-              <Btn variant="secondary" onClick={toggleListeTransfert}>{listeTransfert ? "Masquer" : "Voir le détail"}</Btn>
-              <button type="button" onClick={handleIgnorerTout} className="text-[11.5px] text-red-600 dark:text-red-400 underline">Ignorer tout</button>
-            </div>
+            <Btn variant="secondary" onClick={toggleListeTransfert}>{listeTransfert ? "Masquer" : "Voir le détail"}</Btn>
           </div>
           {listeTransfert && (
             <div className="space-y-1 max-h-56 overflow-y-auto">
               {listeTransfert.map((p) => (
                 <div key={p.id} className="text-[11.5px] text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/25 rounded-lg px-2.5 py-1.5 flex items-start justify-between gap-2">
                   <span className="flex-1"><span className="font-semibold">{p.nom} {p.prenom ?? ""}</span> (matricule {p.matricule}) — {p.motif}</span>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <button type="button" onClick={() => handleValiderTransfert(p.id)} className="text-[11px] text-green-600 dark:text-green-400 font-medium underline">Valider</button>
-                    <button type="button" onClick={() => handleIgnorerTransfert(p.id)} className="text-[11px] underline">Ignorer</button>
-                  </div>
+                  <button type="button" onClick={() => handleIgnorerTransfert(p.id)} className="text-[11px] underline flex-shrink-0">Ignorer</button>
                 </div>
               ))}
             </div>
@@ -342,7 +263,6 @@ export default function ImportDonneesView() {
             { key: "dateFin", label: "Échéance" },
             { key: "prime", label: "Prime" },
             { key: "numeroPolice", label: "N° Police" },
-            { key: "agence", label: "Agence" },
           ]}
         />
       )}
@@ -351,7 +271,7 @@ export default function ImportDonneesView() {
         <ChoixContratPuis titre="Import en masse d'assurés et ayants droit" onClose={() => setOuvert(null)}>
           {(contrat) => (
             <ImportEnMasseModal<ImportAssureRow>
-              titre={`Import en masse d'assurés — ${numeroPolice(contrat)} (${contrat.client})`}
+              titre={`Import en masse d'assurés — ${contrat.numeroPolice || contrat.id} (${contrat.client})`}
               onClose={() => setOuvert(null)}
               onImported={() => undefined}
               telechargerModele={telechargerModeleImportAssures}
@@ -385,7 +305,7 @@ export default function ImportDonneesView() {
         <ChoixContratPuis titre="Import en masse de factures" onClose={() => setOuvert(null)}>
           {(contrat) => (
             <ImportEnMasseModal<ImportFactureRow>
-              titre={`Import en masse de factures — ${numeroPolice(contrat)} (${contrat.client})`}
+              titre={`Import en masse de factures — ${contrat.numeroPolice || contrat.id} (${contrat.client})`}
               onClose={() => setOuvert(null)}
               onImported={() => undefined}
               telechargerModele={telechargerModeleImportFactures}
@@ -434,7 +354,7 @@ export default function ImportDonneesView() {
         <ChoixContratPuis titre="Import en masse de prises en charge" onClose={() => setOuvert(null)}>
           {(contrat) => (
             <ImportEnMasseModal<ImportAccordPrealableRow>
-              titre={`Import en masse de prises en charge — ${numeroPolice(contrat)} (${contrat.client})`}
+              titre={`Import en masse de prises en charge — ${contrat.numeroPolice || contrat.id} (${contrat.client})`}
               onClose={() => setOuvert(null)}
               onImported={() => undefined}
               telechargerModele={telechargerModeleImportAccordsPrealables}
@@ -455,8 +375,6 @@ export default function ImportDonneesView() {
       )}
 
       {ouvert === "photos" && <ImportPhotosModal onClose={() => setOuvert(null)} />}
-
-      <ImportLibreModal ouvert={ouvert === "importLibre"} onFermer={() => setOuvert(null)} />
     </div>
   );
 }
@@ -481,7 +399,7 @@ function ChoixContratPuis({ titre, onClose, children }: { titre: string; onClose
         <div className="w-full max-w-md bg-card border border-border rounded-xl shadow-2xl">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between">
             <h3 className="text-[15px] font-semibold text-foreground">{titre}</h3>
-            <button type="button" onClick={onClose} className="h-8 w-8 rounded-lg border border-border text-muted-foreground hover:text-foreground inline-flex items-center justify-center">✕</button>
+            <button type="button" onClick={onClose} className="h-8 w-8 rounded-lg border border-border text-muted-foreground hover:text-foreground inline-flex items-center justify-center"><X className="w-3.5 h-3.5" /></button>
           </div>
           <div className="p-5 space-y-3">
             <p className="text-[12px] text-muted-foreground">Choisissez d'abord le contrat concerné — le modèle se génère avec sa population, et les données importées y seront rattachées.</p>
@@ -489,7 +407,7 @@ function ChoixContratPuis({ titre, onClose, children }: { titre: string; onClose
               options={contrats}
               value={null}
               onChange={(c) => c && setContrat(c)}
-              getLabel={(c) => `${numeroPolice(c)} — ${c.client}`}
+              getLabel={(c) => `${c.numeroPolice || c.id} — ${c.client}`}
               getId={(c) => c.id}
             />
           </div>
@@ -538,8 +456,8 @@ function ImportFacturesGlobalModal({ onClose, onImporte }: { onClose: () => void
       const res = await importerFacturesGlobal(fichier);
       setResultat(res);
       onImporte();
-      if (res.crees > 0 || res.enAttente > 0 || res.corrigees > 0 || res.doublonsAnnules > 0) {
-        toast.success(`${res.crees} facture(s) créée(s)${res.corrigees > 0 ? `, ${res.corrigees} ligne(s) déjà importée(s) corrigée(s)` : ""}${res.doublonsAnnules > 0 ? `, ${res.doublonsAnnules} doublon(s) annulé(s)` : ""}${res.enAttente > 0 ? `, ${res.enAttente} mise(s) en attente` : ""}.`);
+      if (res.crees > 0 || res.enAttente > 0) {
+        toast.success(`${res.crees} facture(s) créée(s)${res.enAttente > 0 ? `, ${res.enAttente} mise(s) en attente` : ""}.`);
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Import impossible.");
@@ -553,7 +471,7 @@ function ImportFacturesGlobalModal({ onClose, onImporte }: { onClose: () => void
       <div className="w-full max-w-lg bg-card border border-border rounded-xl shadow-2xl max-h-[90vh] flex flex-col">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
           <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2"><Globe2 className="w-4 h-4 text-primary" />Import de factures — tous contrats confondus</h3>
-          <button type="button" onClick={onClose} className="h-8 w-8 rounded-lg border border-border text-muted-foreground hover:text-foreground inline-flex items-center justify-center">✕</button>
+          <button type="button" onClick={onClose} className="h-8 w-8 rounded-lg border border-border text-muted-foreground hover:text-foreground inline-flex items-center justify-center"><X className="w-3.5 h-3.5" /></button>
         </div>
         <div className="p-5 overflow-y-auto flex-1 space-y-4">
           <div className="rounded-xl border border-border p-4 space-y-3">
@@ -580,7 +498,7 @@ function ImportFacturesGlobalModal({ onClose, onImporte }: { onClose: () => void
           {resultat && (
             <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-2">
               <p className="text-[13px] font-semibold text-foreground flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-primary" />
-                {resultat.total} ligne(s) lue(s) — {resultat.crees} créée(s), {resultat.corrigees} corrigée(s), {resultat.doublonsAnnules} doublon(s) annulé(s), {resultat.enAttente} mise(s) en attente, {resultat.rejets.length} rejetée(s).
+                {resultat.total} ligne(s) lue(s) — {resultat.crees} créée(s), {resultat.enAttente} mise(s) en attente, {resultat.rejets.length} rejetée(s).
               </p>
               {resultat.enAttente > 0 && (
                 <p className="text-[11.5px] text-amber-700 dark:text-amber-300">Les lignes en attente seront synchronisées automatiquement dès que leur population sera chargée (ou via le bouton "Synchroniser maintenant" sur cet écran).</p>
@@ -684,7 +602,7 @@ function ImportPhotosModal({ onClose }: { onClose: () => void }) {
       <div className="w-full max-w-lg bg-card border border-border rounded-xl shadow-2xl max-h-[90vh] flex flex-col">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
           <h3 className="text-[15px] font-semibold text-foreground">Import en masse de photos</h3>
-          <button type="button" onClick={onClose} className="h-8 w-8 rounded-lg border border-border text-muted-foreground hover:text-foreground inline-flex items-center justify-center">✕</button>
+          <button type="button" onClick={onClose} className="h-8 w-8 rounded-lg border border-border text-muted-foreground hover:text-foreground inline-flex items-center justify-center"><X className="w-3.5 h-3.5" /></button>
         </div>
         <div className="p-5 overflow-y-auto flex-1 space-y-4">
           <div className="rounded-xl border border-border p-4">

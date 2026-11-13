@@ -115,6 +115,7 @@ export class GedService {
       resoudreOuCreerPrescripteur(this.prisma, {
         prescripteurNom: resultat.nomPrescripteurExtrait ?? "",
         titrePrescripteur: resultat.titrePrescripteurExtrait ?? undefined,
+        specialitePrescripteur: resultat.specialitePrescripteurExtraite ?? undefined,
         codePraticien: resultat.codePraticienExtrait ?? "",
         structureNom: resultat.nomEmetteurExtrait ?? "",
         codeEtablissement: resultat.codeEtablissementExtrait ?? "",

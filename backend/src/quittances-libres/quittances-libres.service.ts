@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { assertSameTenant } from "../tenant/tenant-guard.util";
 import { CreateQuittanceLibreDto } from "./dto/create-quittance-libre.dto";
 import { PayerTrancheDto } from "./dto/payer-tranche.dto";
 
@@ -127,6 +128,9 @@ export class QuittancesLibresService {
   async payerTranche(trancheId: string, dto: PayerTrancheDto) {
     const tranche = await this.prisma.quittanceLibreTranche.findUnique({ where: { id: trancheId }, include: { quittanceLibre: true } });
     if (!tranche) throw new NotFoundException(`Tranche ${trancheId} introuvable`);
+    // La tranche n'a pas de societeId : on vérifie sa quittance parente.
+    await assertSameTenant(this.prisma, "QuittanceLibre", tranche.quittanceLibreId, "Tranche");
+    await assertSameTenant(this.prisma, "Banque", dto.banqueId, "Banque");
     if (tranche.encaissementId) throw new BadRequestException("Cette tranche est déjà marquée payée.");
     if (tranche.quittanceLibre.statut === "Annulée") throw new BadRequestException("Cette quittance libre est annulée.");
 
@@ -149,6 +153,7 @@ export class QuittancesLibresService {
   async annulerPaiementTranche(trancheId: string) {
     const tranche = await this.prisma.quittanceLibreTranche.findUnique({ where: { id: trancheId } });
     if (!tranche) throw new NotFoundException(`Tranche ${trancheId} introuvable`);
+    await assertSameTenant(this.prisma, "QuittanceLibre", tranche.quittanceLibreId, "Tranche");
     if (!tranche.encaissementId) throw new BadRequestException("Cette tranche n'est pas payée.");
     const encaissementId = tranche.encaissementId;
     await this.prisma.quittanceLibreTranche.update({ where: { id: trancheId }, data: { encaissementId: null } });

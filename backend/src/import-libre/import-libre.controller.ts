@@ -2,6 +2,8 @@ import { BadRequestException, Body, Controller, Post, Query, UploadedFile, UseGu
 import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_IMPORT } from "../auth/access-roles";
 import { ImportLibreService, LigneApercu, LignePopulation, LigneActeMedical, TypeImportLibre } from "./import-libre.service";
 import { ImportClasseurService, type OptionsClasseur } from "./import-classeur.service";
 import { ImportPecService } from "./import-pec.service";
@@ -10,6 +12,7 @@ const LIMITE_FICHIER = 50 * 1024 * 1024; // 50 MB
 
 @Controller("import-libre")
 @UseGuards(JwtAuthGuard)
+@Roles(...ROLES_IMPORT)
 export class ImportLibreController {
   constructor(
     private readonly service: ImportLibreService,

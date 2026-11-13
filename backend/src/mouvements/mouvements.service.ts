@@ -6,9 +6,6 @@ import { PrismaService } from "../prisma/prisma.service";
 import { withComputedPrime } from "../contrats/prime.util";
 import { verifierAge } from "./age-limite.util";
 import { creerGenerateurMatricule } from "../sante/matricule.util";
-import { resoudreIdentite } from "../sante/identite-assuree.util";
-import { recalculerPrimeSelonPopulation } from "../contrats/prime-exercice.util";
-import { numeroPolice } from "../lib/police.util";
 
 type AssureAvecRelations = Prisma.AssureSanteGetPayload<{ include: { contrat: true; membres: true } }>;
 
@@ -78,23 +75,16 @@ export class MouvementsService implements OnModuleInit {
     await this.radierHorsLimiteAge();
   }
 
-  async appliquerMouvement(contratId: string, dateEffet: string, ajouts: AjoutMouvement[], retraits: RetraitMouvement[], opts?: { ignorerAge?: boolean }) {
+  async appliquerMouvement(contratId: string, dateEffet: string, ajouts: AjoutMouvement[], retraits: RetraitMouvement[]) {
     const contrat = await this.prisma.contrat.findUnique({ where: { id: contratId } });
-    if (!contrat) throw new NotFoundException("Contrat introuvable");
+    if (!contrat) throw new NotFoundException(`Contrat ${contratId} introuvable`);
     const primeAvant = Number(contrat.prime);
     const delta = { AS: 0, CJ: 0, EF: 0 };
 
     const dateReference = parseDateFr(dateEffet);
-    // Pré-calcul des violations d'âge : bloquant si ignorerAge=false,
-    // sinon l'assuré est créé en "Suspendu" pour ne pas déclencher
-    // la radiation automatique quotidienne (radierHorsLimiteAge).
-    const horsLimite = new Set<AjoutMouvement>();
     for (const a of ajouts) {
       const erreurAge = verifierAge(contrat, { typeAssure: a.typeAssure ?? (a.familleId ? undefined : "AS"), dateNaissance: a.dateNaissance, scolarise: a.scolarise }, dateReference);
-      if (erreurAge) {
-        if (!opts?.ignorerAge) throw new BadRequestException(erreurAge);
-        horsLimite.add(a);
-      }
+      if (erreurAge) throw new BadRequestException(erreurAge);
     }
 
     // Préfixe matricule propre à la société (2026-09) — voir
@@ -114,14 +104,10 @@ export class MouvementsService implements OnModuleInit {
       const suffix = randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase();
       const id = `ASS-${suffix}`;
       const matricule = a.matricule?.trim() || genererMatricule();
-      // Identité DANS LA SOCIÉTÉ DU CONTRAT : matricule, sinon même nom +
-      // prénom + date de naissance — voir sante/identite-assuree.util.ts.
-      const identite = await resoudreIdentite(this.prisma, contrat.societeId ?? null, { matricule, nom: a.nom, prenom: a.prenom, dateNaissance: a.dateNaissance });
       const cree = await this.prisma.assureSante.create({
         data: {
           id,
           contratId,
-          identiteId: identite.id,
           nom: a.nom,
           prenom: a.prenom,
           matricule,
@@ -143,7 +129,7 @@ export class MouvementsService implements OnModuleInit {
           fax: a.fax,
           photo: a.photo,
           dateAffiliation: dateEffet,
-          statut: horsLimite.has(a) ? "Suspendu" : "Actif",
+          statut: "Actif",
           numeroAssure: `MED-SAN-${suffix}`,
           qrCode: `QR-MED-${suffix}`,
           statutCarte: "Active",
@@ -225,11 +211,7 @@ export class MouvementsService implements OnModuleInit {
       }));
     }
 
-    // Prime de l'exercice courant réalignée sur la population réelle
-    // (exercice + contrat + avenant, voir prime-exercice.util.ts).
-    await recalculerPrimeSelonPopulation(this.prisma, [contratId]);
-    const contratFinal = await this.prisma.contrat.findUnique({ where: { id: contratId }, include: { client: true, compagnie: true, garanties: true } });
-    return { contrat: contratFinal ?? contratMisAJour, avenants, crees, radies };
+    return { contrat: contratMisAJour, avenants, crees, radies };
   }
 
   // Recalcule les compteurs agrégés (nombreAssuresPrincipaux/Conjoints/
@@ -273,16 +255,16 @@ export class MouvementsService implements OnModuleInit {
   // Un CJ/EF basculé seul (avecFamille=false, ou personne non racine) est
   // détaché de sa famille d'origine et devient AS de sa propre fiche dans
   // le contrat destination.
-  async basculerVersContrat(assureId: string, contratDestinationId: string, avecFamille: boolean, dateEffet: string, opts?: { ignorerAge?: boolean }) {
+  async basculerVersContrat(assureId: string, contratDestinationId: string, avecFamille: boolean, dateEffet: string) {
     const assure = await this.prisma.assureSante.findUnique({ where: { id: assureId }, include: { membres: true } });
     if (!assure) throw new NotFoundException(`Assuré ${assureId} introuvable`);
     if (assure.contratId === contratDestinationId) {
       throw new BadRequestException("Le contrat destination est identique au contrat actuel de cette personne.");
     }
     const contratDestination = await this.prisma.contrat.findUnique({ where: { id: contratDestinationId } });
-    if (!contratDestination) throw new NotFoundException("Contrat introuvable");
+    if (!contratDestination) throw new NotFoundException(`Contrat ${contratDestinationId} introuvable`);
     const contratSource = await this.prisma.contrat.findUnique({ where: { id: assure.contratId } });
-    if (!contratSource) throw new NotFoundException("Contrat introuvable");
+    if (!contratSource) throw new NotFoundException(`Contrat ${assure.contratId} introuvable`);
 
     const estRacine = assure.familleId === null;
     const basculeFamille = estRacine && avecFamille;
@@ -291,7 +273,7 @@ export class MouvementsService implements OnModuleInit {
     }
 
     const aBasculer = basculeFamille ? [assure, ...assure.membres] : [assure];
-    return this.basculerLot(aBasculer, contratSource, contratDestination, dateEffet, { detacherId: estRacine ? undefined : assureId, ignorerAge: opts?.ignorerAge });
+    return this.basculerLot(aBasculer, contratSource, contratDestination, dateEffet, { detacherId: estRacine ? undefined : assureId });
   }
 
   // Bascule de TOUTE une population (ou une sélection) d'un contrat vers un
@@ -307,9 +289,9 @@ export class MouvementsService implements OnModuleInit {
       throw new BadRequestException("Le contrat destination est identique au contrat source.");
     }
     const contratSource = await this.prisma.contrat.findUnique({ where: { id: contratSourceId } });
-    if (!contratSource) throw new NotFoundException("Contrat introuvable");
+    if (!contratSource) throw new NotFoundException(`Contrat ${contratSourceId} introuvable`);
     const contratDestination = await this.prisma.contrat.findUnique({ where: { id: contratDestinationId } });
-    if (!contratDestination) throw new NotFoundException("Contrat introuvable");
+    if (!contratDestination) throw new NotFoundException(`Contrat ${contratDestinationId} introuvable`);
 
     const selectionnees = await this.prisma.assureSante.findMany({ where: { id: { in: assureIds }, contratId: contratSourceId } });
     if (selectionnees.length === 0) throw new BadRequestException("Aucun assuré sélectionné pour cette bascule.");
@@ -327,9 +309,9 @@ export class MouvementsService implements OnModuleInit {
   // réels (Retrait sur la source, Incorporation sur la destination).
   private async basculerLot(
     personnes: AssureSante[], contratSource: Contrat, contratDestination: Contrat, dateEffet: string,
-    options: { detacherId?: string; ignorerAge?: boolean },
+    options: { detacherId?: string },
   ) {
-    const { detacherId, ignorerAge } = options;
+    const { detacherId } = options;
     const delta = { AS: 0, CJ: 0, EF: 0 };
     for (const p of personnes) {
       const t = (detacherId && p.id === detacherId ? "AS" : (p.typeAssure ?? "")).toUpperCase();
@@ -341,17 +323,15 @@ export class MouvementsService implements OnModuleInit {
     // même pour une personne déjà active depuis des années sur son contrat
     // d'origine.
     const dateReferenceBascule = parseDateFr(dateEffet);
-    if (!ignorerAge) {
-      const erreursAge = personnes
-        .map((p) => verifierAge(
-          contratDestination,
-          { typeAssure: detacherId && p.id === detacherId ? "AS" : p.typeAssure, dateNaissance: p.dateNaissance, scolarise: p.scolarise },
-          dateReferenceBascule,
-        ))
-        .filter((e): e is string => e !== null);
-      if (erreursAge.length > 0) {
-        throw new BadRequestException(`Bascule impossible — ${erreursAge.join(" ")}`);
-      }
+    const erreursAge = personnes
+      .map((p) => verifierAge(
+        contratDestination,
+        { typeAssure: detacherId && p.id === detacherId ? "AS" : p.typeAssure, dateNaissance: p.dateNaissance, scolarise: p.scolarise },
+        dateReferenceBascule,
+      ))
+      .filter((e): e is string => e !== null);
+    if (erreursAge.length > 0) {
+      throw new BadRequestException(`Bascule impossible — ${erreursAge.join(" ")}`);
     }
 
     await this.prisma.$transaction(
@@ -388,7 +368,7 @@ export class MouvementsService implements OnModuleInit {
       data: {
         id: `AVN-${new Date().getFullYear()}-${randomUUID().slice(0, 6).toUpperCase()}`,
         contratId: contratSource.id, type: "Retrait",
-        description: `Retrait de ${personnes.length} personne(s) suite à bascule vers la police ${numeroPolice(contratDestination)} : ${noms}`,
+        description: `Retrait de ${personnes.length} personne(s) suite à bascule vers le contrat ${contratDestination.id} : ${noms}`,
         primeAvant: Number(contratSource.prime), primeApres: Number(contratSourceMaj.prime),
         dateEffet, statut: "Appliqué", exerciceNumero: contratSource.exerciceNumero,
         avenantAssures: { create: avenantAssureData("Retrait") },
@@ -399,7 +379,7 @@ export class MouvementsService implements OnModuleInit {
       data: {
         id: `AVN-${new Date().getFullYear()}-${randomUUID().slice(0, 6).toUpperCase()}`,
         contratId: contratDestination.id, type: "Incorporation",
-        description: `Incorporation de ${personnes.length} personne(s) suite à bascule depuis la police ${numeroPolice(contratSource)} : ${noms}`,
+        description: `Incorporation de ${personnes.length} personne(s) suite à bascule depuis le contrat ${contratSource.id} : ${noms}`,
         primeAvant: Number(contratDestination.prime), primeApres: Number(contratDestinationMaj.prime),
         dateEffet, statut: "Appliqué", exerciceNumero: contratDestination.exerciceNumero,
         avenantAssures: { create: avenantAssureData("Incorporation") },
@@ -407,7 +387,6 @@ export class MouvementsService implements OnModuleInit {
       include: { contrat: { include: { client: true } }, avenantAssures: true },
     });
 
-    await recalculerPrimeSelonPopulation(this.prisma, [contratSource.id, contratDestination.id]);
     return {
       contratSource: contratSourceMaj, contratDestination: contratDestinationMaj,
       avenants: [avenantSource, avenantDestination], basculees: personnes.map((p) => p.id),
@@ -427,7 +406,7 @@ export class MouvementsService implements OnModuleInit {
     const aujourdhui = new Date();
     const dateEffet = aujourdhuiFr();
     const actifs = await this.prisma.assureSante.findMany({
-      where: { statut: "Actif" },
+      where: { statut: { not: "Radié" } },
       include: { contrat: true },
     });
 

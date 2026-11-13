@@ -6,6 +6,7 @@ import { FileInterceptor, FilesInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import type { Response } from "express";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { ROLES_IMPORT } from "../auth/access-roles";
 import { ImportService } from "./import.service";
 import { ImportFacturesDto } from "./dto/import-facture.dto";
 import { ImportReglementsDto } from "./dto/import-reglement.dto";
@@ -29,6 +30,7 @@ const LIMITE_PHOTOS = 2000; // dossier complet en une fois — voir demande util
 
 @Controller("import")
 @UseGuards(JwtAuthGuard)
+@Roles(...ROLES_IMPORT)
 export class ImportController {
   constructor(private readonly importService: ImportService, private readonly nettoyage: NettoyageDoublonsService) {}
 

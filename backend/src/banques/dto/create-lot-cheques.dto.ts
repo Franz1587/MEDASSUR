@@ -1,4 +1,4 @@
-import { IsInt, Min } from "class-validator";
+import { IsInt, IsOptional, IsString, Min } from "class-validator";
 
 // Un lot de numéros de chèque pré-paramétré pour une banque (ex. 50 à la
 // fois, voir schema.prisma LotCheques) — numeroDebut et numeroFin sont les
@@ -11,4 +11,8 @@ export class CreateLotChequesDto {
   @IsInt()
   @Min(1)
   numeroFin: number;
+
+  @IsOptional()
+  @IsString()
+  compteReglementId?: string;
 }

@@ -1,5 +1,6 @@
 import { Controller, Get, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { AllowExternal } from "../auth/access.decorators";
 import { PrismaService } from "../prisma/prisma.service";
 
 // Codification des affections CNAMGS (2026-08) — voir demande utilisateur :
@@ -9,6 +10,7 @@ import { PrismaService } from "../prisma/prisma.service";
 // Médecin prescripteur.
 @Controller("codes-affection")
 @UseGuards(JwtAuthGuard)
+@AllowExternal()
 export class CodesAffectionController {
   constructor(private readonly prisma: PrismaService) {}
 

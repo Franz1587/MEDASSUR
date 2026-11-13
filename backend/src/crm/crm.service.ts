@@ -7,6 +7,7 @@ import { CreateProspectDto } from "./dto/create-prospect.dto";
 import { UpdateProspectDto } from "./dto/update-prospect.dto";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
+import { sanitizeUpload } from "../storage/upload-security.util";
 import { calculerCommissionsProspect, commissionMoyenne } from "./commission.util";
 
 const UPLOADS_LOGOS_DIR = path.join(UPLOADS_ROOT, "logos-prospects");
@@ -201,17 +202,17 @@ export class CrmService {
   // Même pattern que CompagniesService.uploadLogo/deleteLogo — utilisé sur
   // le document de cotation à la place du nom du client dans l'en-tête.
   async uploadLogo(id: string, file: Express.Multer.File) {
-    await this.findOne(id);
+    const existant = await this.findOne(id);
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
-    const ext = path.extname(file.originalname) || ".png";
-    const filename = `${id}${ext.toLowerCase()}`;
+    const { storedName: filename, mime } = sanitizeUpload({ originalName: file.originalname, mimetype: file.mimetype, buffer: file.buffer, category: "logo" });
     if (this.storage.actif) {
-      await this.storage.upload("logos-prospects", filename, file.buffer, file.mimetype);
+      await this.storage.upload("logos-prospects", filename, file.buffer, mime);
     } else {
       await fs.promises.mkdir(UPLOADS_LOGOS_DIR, { recursive: true });
       await fs.promises.writeFile(path.join(UPLOADS_LOGOS_DIR, filename), file.buffer);
     }
     await this.prisma.prospect.update({ where: { id }, data: { logo: filename } });
+    if (existant.logo && existant.logo !== filename) await fs.promises.unlink(path.join(UPLOADS_LOGOS_DIR, path.basename(existant.logo))).catch(() => undefined);
     return this.findOne(id);
   }
 

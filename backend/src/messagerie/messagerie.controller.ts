@@ -4,6 +4,7 @@ import { FileFieldsInterceptor, FileInterceptor } from "@nestjs/platform-express
 import { CHAMPS_PIECES, TAILLE_MAX_PIECE, piecesRecues, type PiecesRecues } from "../lib/pieces-jointes.util";
 import { memoryStorage } from "multer";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { AllowExternal } from "../auth/access.decorators";
 import { MessagerieService } from "./messagerie.service";
 import { CreateConversationDto } from "./dto/create-conversation.dto";
 
@@ -20,6 +21,7 @@ type MessagerieRequest = Request & { user: { userId: string; nom: string; roleId
 // comme les contrôleurs portail-spécifiques.
 @Controller("messagerie")
 @UseGuards(JwtAuthGuard)
+@AllowExternal()
 export class MessagerieController {
   constructor(private readonly messagerie: MessagerieService) {}
 

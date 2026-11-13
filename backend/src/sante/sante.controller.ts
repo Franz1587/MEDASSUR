@@ -4,6 +4,8 @@ import { memoryStorage } from "multer";
 import type { Request } from "express";
 import { SanteService } from "./sante.service";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_PRODUCTION } from "../auth/access-roles";
 import { CreateAssureDto } from "./dto/create-assure.dto";
 import { UpdateAssureDto } from "./dto/update-assure.dto";
 import { SuspendreAssureDto } from "./dto/suspendre-assure.dto";
@@ -12,6 +14,7 @@ import { BasculerAssureDto } from "./dto/basculer-assure.dto";
 import { CreatePriseEnChargeDto } from "./dto/create-prise-en-charge.dto";
 import { UpdatePriseEnChargeDto } from "./dto/update-prise-en-charge.dto";
 import { ImportPopulationDto } from "./dto/import-population.dto";
+import { AncienMatriculeDto } from "./dto/ancien-matricule.dto";
 
 @Controller("sante")
 @UseGuards(JwtAuthGuard)
@@ -31,6 +34,7 @@ export class SanteController {
     return this.service.createAssure(dto);
   }
 
+  @Roles(...ROLES_PRODUCTION)
   @Post("assures/import")
   importPopulation(@Body() dto: ImportPopulationDto) {
     return this.service.importPopulation(dto);
@@ -48,16 +52,19 @@ export class SanteController {
     return this.service.compterPersonnesEnAttenteTransfert();
   }
 
+  @Roles(...ROLES_PRODUCTION)
   @Patch("personnes-en-attente-transfert/:id/valider")
   validerTransfertPersonne(@Param("id") id: string) {
     return this.service.validerTransfertPersonne(id);
   }
 
+  @Roles(...ROLES_PRODUCTION)
   @Delete("personnes-en-attente-transfert")
   ignorerToutesPersonnesEnAttenteTransfert() {
     return this.service.ignorerToutesPersonnesEnAttenteTransfert();
   }
 
+  @Roles(...ROLES_PRODUCTION)
   @Delete("personnes-en-attente-transfert/:id")
   ignorerPersonneEnAttenteTransfert(@Param("id") id: string) {
     return this.service.ignorerPersonneEnAttenteTransfert(id);
@@ -65,6 +72,7 @@ export class SanteController {
 
   // Correction globale des erreurs typeAssure EF sur un adulte ≥ 18 ans.
   // `contratId` optionnel (body) : absent = tous les contrats.
+  @Roles(...ROLES_PRODUCTION)
   @Post("corriger-type-assure-erreurs")
   corrigerTypeAssureErreurs(@Body("contratId") contratId?: string) {
     return this.service.corrigerTypeAssureErreurs(contratId);
@@ -73,6 +81,7 @@ export class SanteController {
   // Analyse a posteriori des écarts de taux (2026-09) — voir
   // SanteService.analyserEcartsTauxContrat. `contratId` optionnel (body),
   // absent = tous les contrats.
+  @Roles(...ROLES_PRODUCTION)
   @Post("analyser-ecarts-taux")
   analyserEcartsTauxContrat(@Body("contratId") contratId?: string) {
     return this.service.analyserEcartsTauxContrat(contratId);
@@ -104,11 +113,13 @@ export class SanteController {
     return this.service.suspendreAssure(id, dto.suspendre);
   }
 
+  @Roles(...ROLES_PRODUCTION)
   @Post("assures/:id/retrait")
   retirerDuContrat(@Param("id") id: string, @Body() dto: RetirerAssureDto) {
     return this.service.retirerDuContrat(id, dto.dateEffet, dto.motif);
   }
 
+  @Roles(...ROLES_PRODUCTION)
   @Post("assures/:id/bascule")
   basculerAssureVersContrat(@Param("id") id: string, @Body() dto: BasculerAssureDto) {
     return this.service.basculerAssureVersContrat(id, dto.contratDestinationId, dto.avecFamille, dto.dateEffet);
@@ -119,6 +130,7 @@ export class SanteController {
     return this.service.mouvementsDe(id);
   }
 
+  @Roles(...ROLES_PRODUCTION)
   @Delete("assures/:id")
   removeAssure(@Param("id") id: string) {
     return this.service.removeAssure(id);
@@ -130,15 +142,19 @@ export class SanteController {
   }
 
   @Post("assures/:id/matricules")
-  ajouterAncienMatricule(@Param("id") id: string, @Body() body: { matricule: string }) {
+  ajouterAncienMatricule(@Param("id") id: string, @Body() body: AncienMatriculeDto) {
     return this.service.ajouterAncienMatricule(id, body.matricule ?? "");
   }
 
   @Get("prises-en-charge")
   findPrisesEnCharge(
     @Query("assureIds") assureIds?: string, @Query("contratId") contratId?: string, @Query("gestionnaireId") gestionnaireId?: string,
+    @Query("modePaiement") modePaiement?: string, @Query("sansRemboursement") sansRemboursement?: string,
   ) {
-    return this.service.findPrisesEnCharge(assureIds ? assureIds.split(",").filter(Boolean) : undefined, contratId, gestionnaireId);
+    return this.service.findPrisesEnCharge(
+      assureIds ? assureIds.split(",").filter(Boolean) : undefined, contratId, gestionnaireId, false,
+      modePaiement, sansRemboursement === "true",
+    );
   }
 
   @Post("prises-en-charge")

@@ -6,7 +6,7 @@ import { DateInput } from "@/components/shared/DateInput";
 import { SPECIALITES_SANTE } from "@/lib/specialitesSante";
 import { GROUPES_ACTES, CATEGORIES_GARANTIES } from "@/features/portail-prestataire/prestationTypes";
 import {
-  createPrestataire, updatePrestataire, geolocaliserPrestataire,
+  createPrestataire, updatePrestataire, geolocaliserPrestataire, enregistrerPositionGpsPrestataire,
   getAccesSocietesPrestataire, ajouterAccesSocietePrestataire, retirerAccesSocietePrestataire,
   type PrestataireUpsertInput, type AccesSocietePrestataire,
 } from "@/services/prestataires.service";
@@ -57,6 +57,7 @@ export default function PrestataireForm({ prestataire, onClose, onSaved }: { pre
 
   const [localisation, setLocalisation] = useState(prestataire);
   const [geolocalisation, setGeolocalisation] = useState(false);
+  const [captureGps, setCaptureGps] = useState(false);
   const [accesSocietes, setAccesSocietes] = useState<AccesSocietePrestataire[]>([]);
   const [nouvellesSocieteId, setNouvellesSocieteId] = useState("");
 
@@ -87,6 +88,27 @@ export default function PrestataireForm({ prestataire, onClose, onSaved }: { pre
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Suppression impossible.");
     }
+  };
+
+  const handleCaptureGps = () => {
+    if (!prestataire) return;
+    if (!navigator.geolocation) { toast.error("Géolocalisation non disponible sur cet appareil."); return; }
+    setCaptureGps(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const maj = await enregistrerPositionGpsPrestataire(prestataire.id, pos.coords.latitude, pos.coords.longitude);
+          setLocalisation(maj);
+          toast.success(`Position GPS capturée : ${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`);
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Erreur lors de l'enregistrement.");
+        } finally {
+          setCaptureGps(false);
+        }
+      },
+      () => { toast.error("Impossible d'obtenir votre position. Vérifiez les autorisations."); setCaptureGps(false); },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
   };
 
   const handleGeolocaliser = async () => {
@@ -220,15 +242,28 @@ export default function PrestataireForm({ prestataire, onClose, onSaved }: { pre
                     <span className="text-muted-foreground">Aucune coordonnée — géolocalisation à partir de l'adresse/ville saisie.</span>
                   )}
                 </div>
-                <button
-                  type="button"
-                  disabled={geolocalisation}
-                  onClick={handleGeolocaliser}
-                  className="h-8 px-3 rounded-lg border border-border text-[12px] text-primary hover:bg-primary/10 disabled:opacity-50 inline-flex items-center gap-1.5 flex-shrink-0"
-                >
-                  {geolocalisation ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MapPin className="w-3.5 h-3.5" />}
-                  Localiser
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={captureGps}
+                    onClick={handleCaptureGps}
+                    title="Enregistrer exactement votre position GPS actuelle"
+                    className="h-8 px-3 rounded-lg border border-primary/50 bg-primary/8 text-[12px] text-primary hover:bg-primary/15 disabled:opacity-50 inline-flex items-center gap-1.5 flex-shrink-0"
+                  >
+                    {captureGps ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MapPin className="w-3.5 h-3.5" />}
+                    Capturer ma position
+                  </button>
+                  <button
+                    type="button"
+                    disabled={geolocalisation}
+                    onClick={handleGeolocaliser}
+                    title="Géocoder depuis l'adresse/ville saisie"
+                    className="h-8 px-3 rounded-lg border border-border text-[12px] text-muted-foreground hover:bg-secondary/60 disabled:opacity-50 inline-flex items-center gap-1.5 flex-shrink-0"
+                  >
+                    {geolocalisation ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MapPin className="w-3.5 h-3.5" />}
+                    Localiser (adresse)
+                  </button>
+                </div>
               </div>
             </div>
           )}

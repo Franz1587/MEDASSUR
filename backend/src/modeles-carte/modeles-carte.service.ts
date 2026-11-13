@@ -5,6 +5,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { PrismaService } from "../prisma/prisma.service";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
+import { sanitizeUpload } from "../storage/upload-security.util";
 import { CreateModeleCarteDto, UpdateModeleCarteDto } from "./dto/modele-carte.dto";
 
 const UPLOADS_MODELES_CARTE_DIR = path.join(UPLOADS_ROOT, "modeles-carte");
@@ -69,10 +70,9 @@ export class ModelesCarteService {
   async uploadImage(id: string, face: "recto" | "verso", file: Express.Multer.File) {
     const m = await this.findOne(id);
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
-    const ext = path.extname(file.originalname) || ".png";
-    const filename = `${id}-${face}-${randomUUID().slice(0, 6)}${ext.toLowerCase()}`;
+    const { storedName: filename, mime } = sanitizeUpload({ originalName: file.originalname, mimetype: file.mimetype, buffer: file.buffer, category: "image" });
     if (this.storage.actif) {
-      await this.storage.upload(CAT_MODELES_CARTE, filename, file.buffer, file.mimetype);
+      await this.storage.upload(CAT_MODELES_CARTE, filename, file.buffer, mime);
     } else {
       await fs.promises.mkdir(UPLOADS_MODELES_CARTE_DIR, { recursive: true });
       await fs.promises.writeFile(path.join(UPLOADS_MODELES_CARTE_DIR, filename), file.buffer);

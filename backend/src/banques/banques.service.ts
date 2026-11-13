@@ -4,6 +4,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CreateBanqueDto } from "./dto/create-banque.dto";
 import { CreateLotChequesDto } from "./dto/create-lot-cheques.dto";
 import { CreateCompteReglementDto } from "./dto/create-compte-reglement.dto";
+import { UpdateBanqueDto } from "./dto/update-banque.dto";
+import { UpdateCompteReglementDto } from "./dto/update-compte-reglement.dto";
 
 const INCLUDE_COMPTES = {
   compteReglements: {
@@ -32,7 +34,7 @@ export class BanquesService {
     return this.prisma.banque.create({ data: { id: randomUUID(), ...dto }, include: { ...INCLUDE_LOTS, ...INCLUDE_COMPTES } });
   }
 
-  async update(id: string, dto: Partial<CreateBanqueDto> & { statut?: string }) {
+  async update(id: string, dto: UpdateBanqueDto) {
     await this.findOne(id);
     return this.prisma.banque.update({ where: { id }, data: dto, include: { ...INCLUDE_LOTS, ...INCLUDE_COMPTES } });
   }
@@ -47,7 +49,7 @@ export class BanquesService {
     });
   }
 
-  async updateCompte(id: string, dto: Partial<CreateCompteReglementDto> & { statut?: string }) {
+  async updateCompte(id: string, dto: UpdateCompteReglementDto) {
     const compte = await this.prisma.compteReglement.findUnique({ where: { id } });
     if (!compte) throw new NotFoundException(`Compte ${id} introuvable`);
     return this.prisma.compteReglement.update({
@@ -63,7 +65,7 @@ export class BanquesService {
   // démarre à `numeroDebut`. Voir ReglementComptableService.genererLettreCheque,
   // qui consomme ce lot un numéro à la fois et le passe "Épuisé" une fois
   // `numeroFin` dépassé.
-  async ajouterLot(banqueId: string, dto: CreateLotChequesDto & { compteReglementId?: string }) {
+  async ajouterLot(banqueId: string, dto: CreateLotChequesDto) {
     await this.findOne(banqueId);
     if (dto.numeroFin < dto.numeroDebut) {
       throw new BadRequestException("Le numéro de chèque de fin doit être supérieur ou égal au numéro de départ.");

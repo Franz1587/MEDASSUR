@@ -12,6 +12,8 @@ import {
 } from "./dto/replace-listes.dto";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
+import { sanitizeUpload } from "../storage/upload-security.util";
+import { assertSameTenant } from "../tenant/tenant-guard.util";
 
 const UPLOADS_LOGOS_DIR = path.join(UPLOADS_ROOT, "logos");
 
@@ -113,6 +115,7 @@ export class CompagniesService {
     if (mereId === idCourant) throw new BadRequestException("Une compagnie ne peut pas être sa propre compagnie mère.");
     const mere = await this.prisma.compagnie.findUnique({ where: { id: mereId }, select: { compagnieMereId: true, nom: true } });
     if (!mere) throw new BadRequestException("Compagnie mère introuvable.");
+    await assertSameTenant(this.prisma, "Agence", agenceId, "Agence");
     if (mere.compagnieMereId) throw new BadRequestException(`"${mere.nom}" est elle-même une déclinaison : choisissez la compagnie principale comme mère.`);
     const existante = await this.prisma.compagnie.findFirst({ where: { compagnieMereId: mereId, agenceId, ...(idCourant ? { id: { not: idCourant } } : {}) }, select: { nom: true } });
     if (existante) throw new ConflictException(`"${existante.nom}" est déjà la déclinaison de "${mere.nom}" pour cette agence.`);
@@ -167,17 +170,17 @@ export class CompagniesService {
   }
 
   async uploadLogo(id: string, file: Express.Multer.File) {
-    await this.findOne(id);
+    const existant = await this.findOne(id);
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
-    const ext = path.extname(file.originalname) || ".png";
-    const filename = `${id}${ext.toLowerCase()}`;
+    const { storedName: filename, mime } = sanitizeUpload({ originalName: file.originalname, mimetype: file.mimetype, buffer: file.buffer, category: "logo" });
     if (this.storage.actif) {
-      await this.storage.upload("logos", filename, file.buffer, file.mimetype);
+      await this.storage.upload("logos", filename, file.buffer, mime);
     } else {
       await fs.promises.mkdir(UPLOADS_LOGOS_DIR, { recursive: true });
       await fs.promises.writeFile(path.join(UPLOADS_LOGOS_DIR, filename), file.buffer);
     }
     await this.prisma.compagnie.update({ where: { id }, data: { logo: filename } });
+    if (existant.logo && existant.logo !== filename) await fs.promises.unlink(path.join(UPLOADS_LOGOS_DIR, path.basename(existant.logo))).catch(() => undefined);
     return this.findOne(id);
   }
 

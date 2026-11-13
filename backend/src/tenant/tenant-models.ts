@@ -95,4 +95,27 @@ export const TENANT_MODELS = new Set<string>([
   // utilisateur ("lier un agent de saisie à une agence... afin que ce soit
   // cette agence qui remonte sur le décompte").
   "Agence",
+  // Audit isolation (2026-11) — modèles porteurs d'un societeId comblés après
+  // coup. Volontairement EXCLUS (à ne pas ajouter) :
+  //  - FactureAbonnement / SocieteAssurance / PlanAbonnement /
+  //    RubriqueFacturation / ModulePrix / TauxChange /
+  //    ParametresFacturationPlateforme : niveau plateforme (super_admin) ;
+  //  - PortailSocieteAcces : table de LIAISON prestataire ↔ sociétés clientes,
+  //    lue par le portail prestataire à travers plusieurs sociétés (le filtrer
+  //    par société d'appartenance casserait le sélecteur "Pour quel client ?") ;
+  //  - ArianaConnaissance : societeId NULL = connaissance partagée (CIMA),
+  //    filtrée à la main dans agent-ia.service.ts ;
+  //  - Notification / DocumentSignature / CarnetSanteDocument / EncaissementPrime /
+  //    Garantie / Exercice / AvenantAssure... : sans colonne societeId, atteints
+  //    via un parent cloisonné (vérifié dans le service, voir tenant-guard.util.ts).
+  "CompteReglement",
+  "NiveauRelance",
+  "RelanceEnvoyee",
+  "Transaction",
 ]);
+
+// Tables de liaison inter-sociétés : lisibles sans filtre société (le portail
+// prestataire doit voir TOUTES les sociétés qu'il sert), mais ÉCRITURES
+// limitées à la société du contexte (sinon l'administrateur d'une société
+// pourrait s'octroyer/retirer des accès au nom d'une autre).
+export const TENANT_WRITE_SCOPED_MODELS = new Set<string>(["PortailSocieteAcces"]);

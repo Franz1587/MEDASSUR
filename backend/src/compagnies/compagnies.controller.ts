@@ -9,6 +9,8 @@ import {
   ReplaceTerritorialitesDto, ReplaceTauxCouvertureDto, ReplaceGarantiesCatalogueDto,
 } from "./dto/replace-listes.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_PRODUCTION } from "../auth/access-roles";
 
 @Controller("compagnies")
 @UseGuards(JwtAuthGuard)
@@ -47,6 +49,7 @@ export class CompagniesController {
     return this.compagniesService.update(id, dto);
   }
 
+  @Roles(...ROLES_PRODUCTION, "gestionnaire_entreprises")
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.compagniesService.remove(id);

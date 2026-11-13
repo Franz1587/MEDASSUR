@@ -340,7 +340,7 @@ export default function MessagerieView() {
                     {fichiers.map((f, i) => (
                       <div key={`${f.name}-${i}`} className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground bg-secondary/40 rounded-lg px-2 py-1">
                         <Paperclip className="w-3.5 h-3.5" />{f.name}
-                        <button type="button" onClick={() => setFichiers((v) => v.filter((_, j) => j !== i))} className="text-destructive hover:underline">✕</button>
+                        <button type="button" onClick={() => setFichiers((v) => v.filter((_, j) => j !== i))} className="text-destructive hover:opacity-70 ml-0.5"><X className="w-3 h-3" /></button>
                       </div>
                     ))}
                   </div>

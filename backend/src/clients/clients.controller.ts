@@ -7,6 +7,7 @@ import { CreateClientDto } from "./dto/create-client.dto";
 import { UpdateClientDto } from "./dto/update-client.dto";
 import { ImportClientsDto } from "./dto/import-clients.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { ROLES_CLIENTS } from "../auth/access-roles";
 import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../auth/roles.decorator";
 
@@ -33,6 +34,7 @@ export class ClientsController {
     res.send(buffer);
   }
 
+  @Roles(...ROLES_CLIENTS)
   @Post("import/apercu")
   @UseInterceptors(FileInterceptor("fichier", { storage: memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } }))
   apercuImport(@UploadedFile() file: Express.Multer.File) {
@@ -40,6 +42,7 @@ export class ClientsController {
     return this.clientsService.parseImportFile(file.buffer);
   }
 
+  @Roles(...ROLES_CLIENTS)
   @Post("import")
   confirmerImport(@Body() dto: ImportClientsDto) {
     return this.clientsService.importer(dto.rows);
@@ -74,6 +77,7 @@ export class ClientsController {
     return this.clientsService.update(id, dto);
   }
 
+  @Roles(...ROLES_CLIENTS)
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.clientsService.remove(id);

@@ -1,25 +1,7 @@
 import { lireCache, ecrireCache, ajouterActionEnAttente, genererCleIdempotence } from "./offlineStore";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001/api";
+const API_URL = import.meta.env.VITE_API_URL ?? "/api";
 const TOKEN_KEY = "medassur-access-token";
-
-// Cache mémoire court terme (2026-10) — 45 s par entrée. Évite de
-// refaire le même appel réseau quand l'utilisateur navigue d'un écran
-// à l'autre en quelques secondes. Invalidé à chaque écriture sur le
-// même préfixe de route ("/prestataires", "/sante", etc.).
-const CACHE_TTL_MS = 45_000;
-const cacheMemoire = new Map<string, { data: unknown; expiry: number }>();
-
-export function invaliderCache(path: string) {
-  const prefixe = "/" + path.split("/")[1];
-  for (const cle of cacheMemoire.keys()) {
-    if (cle.startsWith(prefixe)) cacheMemoire.delete(cle);
-  }
-}
-
-export function viderCacheMemoire() {
-  cacheMemoire.clear();
-}
 
 // Mode hors-ligne (2026-09) — voir demande utilisateur : "je veux que
 // l'application puisse... travailler en off-line". Étendu à la CRÉATION de
@@ -91,14 +73,6 @@ export function runSilently<T>(fn: () => Promise<T>): Promise<T> {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getAccessToken();
   const lecture = !init?.method || init.method === "GET";
-
-  if (lecture) {
-    const entree = cacheMemoire.get(path);
-    if (entree && entree.expiry > Date.now()) return entree.data as T;
-  } else {
-    invaliderCache(path);
-  }
-
   const compteRequete = lecture && profondeurSilencieuse === 0;
   if (compteRequete) { requetesEnVol++; notifierRequetes(); }
   try {
@@ -106,7 +80,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     try {
       res = await fetch(`${API_URL}${path}`, {
         ...init,
-        ...(lecture ? { cache: "no-store" as const } : {}),
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -153,11 +126,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       throw erreur;
     }
     if (res.status === 204) return undefined as T;
-    const donnees = (await res.json()) as T;
-    if (lecture) {
-      ecrireCache(path, donnees);
-      cacheMemoire.set(path, { data: donnees, expiry: Date.now() + CACHE_TTL_MS });
-    }
+    // Corps vide (ex. DELETE NestJS sans @HttpCode(204)) — pas d'erreur JSON.
+    const contentLength = res.headers.get("content-length");
+    if (contentLength === "0") return undefined as T;
+    const bodyText = await res.text();
+    if (!bodyText) return undefined as T;
+    const donnees = JSON.parse(bodyText) as T;
+    if (lecture) ecrireCache(path, donnees);
     return donnees;
   } finally {
     if (compteRequete) { requetesEnVol--; notifierRequetes(); }
@@ -256,18 +231,6 @@ export async function uploadFile<T>(path: string, file: File, champ = "fichier")
   });
   if (!res.ok) throw new Error(`POST ${path} failed (${res.status}): ${await res.text()}`);
   return res.json() as Promise<T>;
-}
-
-// Les <img>, <a href> et visionneuses ne peuvent pas poser d'en-tête
-// Authorization : les fichiers servis sous /uploads (authentifiés côté
-// backend) reçoivent donc le JWT en `?token=`. Point d'entrée UNIQUE pour
-// toutes les URL de fichiers uploadés (voir les helpers `xxxUrl()` de
-// src/services/). Un lien déjà signé (`sig=`) est laissé intact.
-export function withAuthToken<T extends string | null | undefined>(url: T): T {
-  if (typeof url !== "string" || !url.includes("/uploads/") || /[?&](token|sig)=/.test(url)) return url;
-  const token = getAccessToken();
-  if (!token) return url;
-  return `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` as T;
 }
 
 export { API_URL };

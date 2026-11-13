@@ -233,7 +233,7 @@ function MappagePrestataires({ inconnus, mapping, onChange }: {
   return (
     <details className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 rounded-xl p-3" onToggle={(e) => setOuvert((e.target as HTMLDetailsElement).open)}>
       <summary className="cursor-pointer font-medium text-amber-700 dark:text-amber-400 flex items-center justify-between">
-        <span><span className="mr-1">⚠</span> Prestataire sans correspondance — {inconnus.reduce((s, p) => s + p.compte, 0)} ligne(s) ({inconnus.length} nom{inconnus.length > 1 ? "s" : ""} unique{inconnus.length > 1 ? "s" : ""})</span>
+        <span className="flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" /> Prestataire sans correspondance — {inconnus.reduce((s, p) => s + p.compte, 0)} ligne(s) ({inconnus.length} nom{inconnus.length > 1 ? "s" : ""} unique{inconnus.length > 1 ? "s" : ""})</span>
         {mapped.length > 0 && <span className="text-[11px] text-emerald-600 font-medium">{mapped.length} mappé{mapped.length > 1 ? "s" : ""}</span>}
       </summary>
       <p className="text-[11px] text-amber-600 dark:text-amber-500 mt-2 mb-3">
@@ -251,7 +251,7 @@ function MappagePrestataires({ inconnus, mapping, onChange }: {
                 <span className="text-emerald-700 dark:text-emerald-400 text-[11px] max-w-[150px] truncate" title={tousPrestataires.find((x) => x.id === mapping[p.nom])?.nom ?? mapping[p.nom]}>
                   → {tousPrestataires.find((x) => x.id === mapping[p.nom])?.nom ?? "…"}
                 </span>
-                <button onClick={() => delMap(p.nom)} className="text-muted-foreground hover:text-red-500 text-[10px]" title="Annuler">✕</button>
+                <button onClick={() => delMap(p.nom)} className="text-muted-foreground hover:text-red-500" title="Annuler"><X className="w-3 h-3" /></button>
               </div>
             ) : (
               <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
@@ -359,7 +359,7 @@ function PanneauPec({ r, mappingPrestataires, onMappingChange }: { r: ResultatPe
           {r.anomalies.filter((a) => a.type !== "Prestataire sans correspondance").map((a) => (
             <details key={a.type} className="bg-secondary/40 border border-border/40 rounded-xl p-3">
               <summary className="cursor-pointer font-medium text-foreground">
-                <span className="text-red-600 mr-1">⚠</span> {a.type} — {a.nombre}
+                <span className="flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 text-red-600 flex-shrink-0" /> {a.type} — {a.nombre}</span>
               </summary>
               {a.exemples.length > 0 && (
                 <ul className="mt-1 ml-3 text-[11px] text-muted-foreground space-y-0.5">

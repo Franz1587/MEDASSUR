@@ -504,10 +504,12 @@ function mapPriseEnCharge(pc: ApiPriseEnCharge): PriseEnCharge {
 // `assureIds` (optionnel) permet de récupérer en un seul appel les PEC de
 // toute une famille (assuré principal + ayants droit) — voir l'onglet
 // Consommations du profil Participants.
-export async function getPriseEnCharges(assureIds?: string[], gestionnaireId?: string): Promise<PriseEnCharge[]> {
+export async function getPriseEnCharges(assureIds?: string[], gestionnaireId?: string, opts?: { modePaiement?: string; sansRemboursement?: boolean }): Promise<PriseEnCharge[]> {
   const params = new URLSearchParams();
   if (assureIds && assureIds.length > 0) params.set("assureIds", assureIds.join(","));
   if (gestionnaireId) params.set("gestionnaireId", gestionnaireId);
+  if (opts?.modePaiement) params.set("modePaiement", opts.modePaiement);
+  if (opts?.sansRemboursement) params.set("sansRemboursement", "true");
   const qs = params.toString();
   const data = await http.get<ApiPriseEnCharge[]>(`/sante/prises-en-charge${qs ? `?${qs}` : ""}`);
   return data.map(mapPriseEnCharge);

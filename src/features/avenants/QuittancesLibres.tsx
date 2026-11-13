@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { format, parse, addMonths, isValid } from "date-fns";
-import { Plus, ChevronDown, ChevronUp, Ban, CheckCircle2, RotateCcw, ReceiptText, FileDown } from "lucide-react";
+import { Plus, ChevronDown, ChevronUp, Ban, CheckCircle2, RotateCcw, ReceiptText, FileDown, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/shared/Badge";
 import { Btn } from "@/components/shared/Btn";
@@ -416,7 +416,7 @@ export default function QuittancesLibresTab({ contrats }: Props) {
                           <input type="number" placeholder="Accessoires" value={t.accessoires} onChange={(e) => majTranchePerso(i, { accessoires: Number(e.target.value) })} className={`${fieldCls} flex-1 min-w-[110px]`} />
                           <DateInput value={t.dateEcheance} onChange={(v) => majTranchePerso(i, { dateEcheance: v })} className={`${fieldCls} flex-1 min-w-[130px]`} />
                           {tranchesPerso.length > 1 && (
-                            <button type="button" onClick={() => supprimerTranchePerso(i)} className="text-muted-foreground hover:text-destructive flex-shrink-0">✕</button>
+                            <button type="button" onClick={() => supprimerTranchePerso(i)} className="text-muted-foreground hover:text-destructive flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
                           )}
                         </div>
                         <div className="text-[10.5px] text-muted-foreground pl-[72px] flex items-center gap-3 flex-wrap">

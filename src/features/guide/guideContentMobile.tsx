@@ -5,13 +5,11 @@ export const chapitresMobile: GuideChapitre[] = [
   {
     id: "mobile-accueil",
     titre: "Accueil et connexion",
-    sources: ["mobile/src"],
-    majLe: "2026-09-27",
     sections: [
       {
         titre: "Connecter l’application mobile et accéder à son espace",
         texte: [
-          "L’application mobile MEDASSUR+ est dédiée au compte assuré. Une fois installée, l’ouverture de l’application affiche l’écran de connexion, qui demande les mêmes identifiants que le portail web. Les comptes mobiles sont générés depuis le portail interne grâce au contrat de l’assuré principal.",
+          "L’application mobile MedAssur est dédiée au compte assuré. Une fois installée, l’ouverture de l’application affiche l’écran de connexion, qui demande les mêmes identifiants que le portail web. Les comptes mobiles sont générés depuis le portail interne grâce au contrat de l’assuré principal.",
           "Après connexion, l’écran d’accueil présente les éléments les plus utiles au quotidien : votre carte, vos garanties, les remboursements, le réseau de soins, le carnet santé et la messagerie. C’est le point d’entrée le plus rapide pour la majorité des usages.",
           "Le mode hors ligne est également prévu pour certains parcours, et les notifications peuvent être activées pour être alerté de nouveaux messages ou demandes.",
         ],
@@ -32,8 +30,6 @@ export const chapitresMobile: GuideChapitre[] = [
   {
     id: "mobile-ma-carte",
     titre: "Ma carte",
-    sources: ["mobile/src"],
-    majLe: "2026-09-27",
     sections: [
       {
         titre: "Consulter la carte d’assurance de votre foyer",
@@ -48,8 +44,6 @@ export const chapitresMobile: GuideChapitre[] = [
   {
     id: "mobile-garanties",
     titre: "Mes garanties",
-    sources: ["mobile/src"],
-    majLe: "2026-09-27",
     sections: [
       {
         titre: "Suivre vos garanties et plafonds",
@@ -64,8 +58,6 @@ export const chapitresMobile: GuideChapitre[] = [
   {
     id: "mobile-demandes",
     titre: "Demandes et remboursements",
-    sources: ["mobile/src"],
-    majLe: "2026-09-27",
     sections: [
       {
         titre: "Créer une demande de prise en charge ou de remboursement",
@@ -80,8 +72,6 @@ export const chapitresMobile: GuideChapitre[] = [
   {
     id: "mobile-carnet",
     titre: "E-carnet santé",
-    sources: ["mobile/src"],
-    majLe: "2026-09-27",
     sections: [
       {
         titre: "Garder les documents de santé sur votre téléphone",
@@ -96,8 +86,6 @@ export const chapitresMobile: GuideChapitre[] = [
   {
     id: "mobile-messagerie",
     titre: "Messagerie et profil",
-    sources: ["mobile/src"],
-    majLe: "2026-09-27",
     sections: [
       {
         titre: "Échanger rapidement et gérer vos paramètres",

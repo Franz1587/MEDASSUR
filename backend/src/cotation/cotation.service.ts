@@ -8,6 +8,8 @@ import { CreateCotationDto } from "./dto/create-cotation.dto";
 import { UpdateCotationDto } from "./dto/update-cotation.dto";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
+import { sanitizeUpload } from "../storage/upload-security.util";
+import { assertSameTenant } from "../tenant/tenant-guard.util";
 
 // Même taux que documents.service.ts (TAUX_TAXE_GABON) — redéclaré ici pour
 // ne pas introduire de dépendance entre modules pour une seule constante.
@@ -50,7 +52,9 @@ export class CotationService {
     return cotation;
   }
 
-  create(dto: CreateCotationDto, gestionnaireId?: string) {
+  async create(dto: CreateCotationDto, gestionnaireId?: string) {
+    await assertSameTenant(this.prisma, "AppelOffres", dto.appelOffresId, "Appel d'offres");
+    await assertSameTenant(this.prisma, "Compagnie", dto.compagnieId, "Compagnie");
     const montantCartes = dto.montantCartes ?? 0;
     const montantAccessoires = dto.montantAccessoires ?? 0;
     const { montantTaxe, primeTTC } = calculerPrimes(dto.primeNette, montantCartes, montantAccessoires);
@@ -97,6 +101,8 @@ export class CotationService {
   async update(id: string, dto: UpdateCotationDto) {
     const existing = await this.prisma.cotation.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException(`Cotation ${id} introuvable`);
+    await assertSameTenant(this.prisma, "AppelOffres", dto.appelOffresId, "Appel d'offres");
+    await assertSameTenant(this.prisma, "Compagnie", dto.compagnieId, "Compagnie");
 
     const primeNette = dto.primeNette ?? Number(existing.primeNette);
     const montantCartes = dto.montantCartes ?? Number(existing.montantCartes);
@@ -148,17 +154,17 @@ export class CotationService {
   // uniquement quand la cotation n'a pas d'appel d'offres (donc pas de
   // Prospect propre, voir CrmService.uploadLogo pour ce cas).
   async uploadLogo(id: string, file: Express.Multer.File) {
-    await this.findOne(id);
+    const existant = await this.findOne(id);
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
-    const ext = path.extname(file.originalname) || ".png";
-    const filename = `${id}${ext.toLowerCase()}`;
+    const { storedName: filename, mime } = sanitizeUpload({ originalName: file.originalname, mimetype: file.mimetype, buffer: file.buffer, category: "logo" });
     if (this.storage.actif) {
-      await this.storage.upload("logos-cotations", filename, file.buffer, file.mimetype);
+      await this.storage.upload("logos-cotations", filename, file.buffer, mime);
     } else {
       await fs.promises.mkdir(UPLOADS_LOGOS_DIR, { recursive: true });
       await fs.promises.writeFile(path.join(UPLOADS_LOGOS_DIR, filename), file.buffer);
     }
     await this.prisma.cotation.update({ where: { id }, data: { logo: filename } });
+    if (existant.logo && existant.logo !== filename) await fs.promises.unlink(path.join(UPLOADS_LOGOS_DIR, path.basename(existant.logo))).catch(() => undefined);
     return this.findOne(id);
   }
 

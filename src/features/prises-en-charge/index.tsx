@@ -11,6 +11,7 @@ import { exporterFactures } from "@/services/documents.service";
 import { DateInput } from "@/components/shared/DateInput";
 import { useShellNavigation } from "@/layout/ShellNavigationContext";
 import { fmtM } from "@/lib/format";
+import { plageDatesSoins } from "@/lib/dateSoins";
 import {
   getPriseEnCharges, createPriseEnCharge, updatePriseEnCharge, getAssuresSante,
   type PriseEnChargeUpsertInput,
@@ -233,7 +234,7 @@ export default function PrisesEnChargeView() {
           assurePrincipalId: filtreRembAssurePrincipalId || undefined, statut: filtreRembStatut || undefined,
           du: filtreRembDu || undefined, au: filtreRembAu || undefined,
         }),
-        getPriseEnCharges().then((data) => setPriseEnCharges(data.filter((pc) => pc.modePaiement === "Remboursement" && !pc.remboursementId))),
+        getPriseEnCharges(undefined, undefined, { modePaiement: "Remboursement", sansRemboursement: true }).then(setPriseEnCharges),
       ]);
       setRemboursements(remb);
     } catch (err) {
@@ -454,7 +455,7 @@ export default function PrisesEnChargeView() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                {["Référence", "Prestataire", "Souscripteur", "Réception", "Lignes", "Net à payer *", "Statut", "Règlement / GED", "Règlement comptable", ""].map((h) => (
+                {["Référence", "Prestataire", "Souscripteur", "Réception", "Date de soins", "Lignes", "Net à payer *", "Statut", "Règlement / GED", "Règlement comptable", ""].map((h) => (
                   <th key={h} className="text-left text-xs text-muted-foreground font-semibold uppercase tracking-wide px-4 py-3 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -466,6 +467,7 @@ export default function PrisesEnChargeView() {
                   <td className="px-4 py-3 font-semibold text-foreground whitespace-nowrap">{f.prestataireNom}</td>
                   <td className="px-4 py-3 text-foreground whitespace-nowrap">{f.clientNom}</td>
                   <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{f.dateReception}</td>
+                  <td className="px-4 py-3 text-foreground whitespace-nowrap">{plageDatesSoins(f.lignes.map((l) => l.datePrestation))}</td>
                   <td className="px-4 py-3 text-center whitespace-nowrap">{f.lignes.length}</td>
                   <td className={`px-4 py-3 text-right whitespace-nowrap font-semibold ${estMontantDeclare(f) ? "text-muted-foreground italic" : "text-foreground"}`} style={{ fontFamily: "'DM Mono', monospace" }} title={estMontantDeclare(f) ? "Montant déclaré par le prestataire — pas encore validé en prise en charge" : undefined}>{fmtM(totalFacture(f))} FCFA{estMontantDeclare(f) ? " *" : ""}</td>
                   <td className="px-4 py-3 whitespace-nowrap"><Badge variant={f.statut === "Annulée" ? "danger" : f.statut === "Payée" ? "gold" : f.statut === "Soumise" ? "success" : "warning"}>{f.statut}</Badge></td>

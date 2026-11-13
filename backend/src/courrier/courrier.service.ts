@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateCourrierDto } from "./dto/create-courrier.dto";
+import { sanitizeHtmlRiche } from "../shared/sanitize-html.util";
 
 // Courrier Maladie (2026-08) — éditeur façon Word, voir demande utilisateur.
 // Référence auto-générée incluant les initiales de l'agent qui génère le
@@ -59,7 +60,7 @@ export class CourrierService {
         clientId: dto.clientId ?? null,
         prestataireId: dto.prestataireId ?? null,
         assureId: dto.assureId ?? null,
-        corps: dto.corps,
+        corps: sanitizeHtmlRiche(dto.corps),
         auteurId,
         dateCreation: dto.dateCreation,
       },

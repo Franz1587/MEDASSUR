@@ -5,9 +5,12 @@ import { ReglementPrestataireService } from "./reglement-prestataire.service";
 import { GenererBordereauDto } from "./dto/generer-bordereau.dto";
 import { PayerBordereauDto } from "./dto/payer-bordereau.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_REGLEMENT } from "../auth/access-roles";
 
 @Controller("reglement-prestataire")
 @UseGuards(JwtAuthGuard)
+@Roles(...ROLES_REGLEMENT)
 export class ReglementPrestataireController {
   constructor(private readonly service: ReglementPrestataireService) {}
 

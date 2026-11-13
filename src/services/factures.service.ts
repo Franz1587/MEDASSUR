@@ -1,5 +1,6 @@
 import { http } from "@/lib/http";
 import { toNumber } from "@/lib/decimal";
+import { trierParDateSoins } from "@/lib/dateSoins";
 import type { ApercuLigne, Facture, FactureLigne } from "@/types/facture";
 
 interface ApiFactureLigne {
@@ -107,7 +108,7 @@ function mapFacture(f: ApiFacture): Facture {
     lettreChequeNumero: bordereau?.lettreCheque?.numero,
     numeroCheque: bordereau?.lettreCheque?.numeroCheque,
     banqueNom: bordereau?.lettreCheque?.banque.nom,
-    lignes: f.lignes.map(mapLigne),
+    lignes: trierParDateSoins(f.lignes.map(mapLigne), (l) => l.datePrestation, "asc"),
     gedDocument: f.gedDocuments?.[0] ?? undefined,
   };
 }

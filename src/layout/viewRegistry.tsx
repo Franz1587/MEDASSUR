@@ -102,6 +102,8 @@ const SuperAdminPerformanceView = lazy(() => import("@/features/super-admin/Perf
 const SuperAdminTarificationView = lazy(() => import("@/features/super-admin/Tarification"));
 const SuperAdminModelesCarteView = lazy(() => import("@/features/super-admin/ModelesCarte"));
 const EbillingView = lazy(() => import("@/features/ebilling"));
+const ConsentementsView = lazy(() => import("@/features/admin/Consentements"));
+const MembreConsentementView = lazy(() => import("@/features/portail-membre/Consentement"));
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const viewRegistry: Record<View, React.ComponentType<any>> = {
@@ -206,4 +208,6 @@ export const viewRegistry: Record<View, React.ComponentType<any>> = {
   superAdminTarification: SuperAdminTarificationView,
   superAdminModelesCarte: SuperAdminModelesCarteView,
   ebilling: EbillingView,
+  consentements: ConsentementsView,
+  membreConsentement: MembreConsentementView,
 };

@@ -1,8 +1,11 @@
 import { Module } from "@nestjs/common";
-import { APP_INTERCEPTOR } from "@nestjs/core";
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
+import { GlobalJwtAuthGuard } from "./auth/global-auth.guard";
+import { GlobalAccessGuard } from "./auth/global-access.guard";
 import { ConfigModule } from "@nestjs/config";
 import { ScheduleModule } from "@nestjs/schedule";
 import { TenantContextInterceptor } from "./tenant/tenant-context.interceptor";
+import { PrismaNotFoundFilter } from "./tenant/prisma-not-found.filter";
 import { PrismaModule } from "./prisma/prisma.module";
 import { StorageModule } from "./storage/storage.module";
 import { MessagingModule } from "./messaging/messaging.module";
@@ -158,6 +161,11 @@ import { ImportLibreModule } from "./import-libre/import-libre.module";
     // Global : alimente TenantContext.societeId pour CHAQUE requête HTTP,
     // avant que le moindre service métier ne touche à Prisma.
     { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
+    { provide: APP_FILTER, useClass: PrismaNotFoundFilter },
+    // Sécurité d'accès (audit) : JWT obligatoire partout sauf @Public(), puis
+    // contrôle @Roles / @AllowExternal / @RequireModule. L'ordre compte.
+    { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },
+    { provide: APP_GUARD, useClass: GlobalAccessGuard },
   ],
 })
 export class AppModule {}

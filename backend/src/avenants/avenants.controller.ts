@@ -1,8 +1,11 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { AvenantsService } from "./avenants.service";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_PRODUCTION } from "../auth/access-roles";
 import { CreateAvenantDto } from "./dto/create-avenant.dto";
 import { UpdateAvenantDto } from "./dto/update-avenant.dto";
+import { AppliquerAvenantDto } from "./dto/appliquer-avenant.dto";
 
 @Controller("avenants")
 @UseGuards(JwtAuthGuard)
@@ -29,11 +32,13 @@ export class AvenantsController {
     return this.service.update(id, dto);
   }
 
+  @Roles(...ROLES_PRODUCTION)
   @Patch(":id/appliquer")
-  appliquer(@Param("id") id: string, @Body() body: { compagnieId?: string }) {
+  appliquer(@Param("id") id: string, @Body() body: AppliquerAvenantDto) {
     return this.service.appliquer(id, body.compagnieId);
   }
 
+  @Roles(...ROLES_PRODUCTION)
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.service.remove(id);

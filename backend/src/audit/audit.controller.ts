@@ -2,12 +2,17 @@ import { Controller, Get, Query, Res, UseGuards } from "@nestjs/common";
 import type { Response } from "express";
 import { AuditLogService } from "./audit-log.service";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_SANTE } from "../auth/access-roles";
 
 @Controller("audit")
 @UseGuards(JwtAuthGuard)
 export class AuditController {
   constructor(private readonly service: AuditLogService) {}
 
+  // Journal complet : réservé aux rôles qui possèdent l'écran Journal / Suivi
+  // des agents (derniere-modification reste ouvert au personnel interne).
+  @Roles(...ROLES_SANTE)
   @Get()
   findAll(
     @Query("entite") entite?: string,
@@ -28,6 +33,7 @@ export class AuditController {
   }
 
   // Capacité de traitement par agent — voir demande utilisateur.
+  @Roles(...ROLES_SANTE)
   @Get("stats-agents")
   statsParAgent(@Query("du") du?: string, @Query("au") au?: string) {
     return this.service.statsParAgent({ du, au });
@@ -37,6 +43,7 @@ export class AuditController {
   // demande utilisateur : "on doit pouvoir en éditer, télécharger et
   // imprimer un état global, par type d'action, par date, mais aussi par
   // agents." Mêmes filtres que la recherche à l'écran (voir findAll).
+  @Roles(...ROLES_SANTE)
   @Get("export")
   export(
     @Query("format") format: "pdf" | "xlsx" = "pdf",

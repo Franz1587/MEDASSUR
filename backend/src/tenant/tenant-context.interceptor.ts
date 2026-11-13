@@ -1,4 +1,4 @@
-import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from "@nestjs/common";
+import { CallHandler, ExecutionContext, ForbiddenException, Injectable, NestInterceptor } from "@nestjs/common";
 import { Observable } from "rxjs";
 import { TenantContext } from "./tenant-context";
 
@@ -18,6 +18,13 @@ export class TenantContextInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const req = context.switchToHttp().getRequest();
     const societeId: string | null = req?.user?.societeId ?? null;
+
+    // Échec fermé : un compte authentifié, autre que super_admin, sans société
+    // ne doit JAMAIS tourner sans cloisonnement (societeId null = non filtré).
+    // Les routes @Public() n'ont pas de req.user et restent non cloisonnées.
+    if (req?.user && !societeId && req.user.roleId !== "super_admin") {
+      throw new ForbiddenException("Compte non rattaché à une société : accès refusé.");
+    }
 
     return new Observable((subscriber) => {
       TenantContext.run(societeId, () => {

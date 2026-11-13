@@ -126,7 +126,7 @@ export const roles: Record<RoleId, RoleDefinition> = {
   // portails. membreDashboard reste TOUJOURS en premier dans la liste.
   assure_principal: {
     id: "assure_principal", label: "Assuré Principal", family: "externe", shell: "member-portal",
-    allowedModules: ["membreDashboard", "membreCarte", "membreGaranties", "membrePriseEnCharge", "membreRemboursement", "membreReseauSoins", "membreCarnetSante", "membreHistorique", "membreRendezVous", "membreSuiviSante", "membreAccesDossier", "membreFamille", "membreDelegations", "messagerie"],
+    allowedModules: ["membreDashboard", "membreCarte", "membreGaranties", "membrePriseEnCharge", "membreRemboursement", "membreReseauSoins", "membreCarnetSante", "membreHistorique", "membreRendezVous", "membreSuiviSante", "membreAccesDossier", "membreFamille", "membreDelegations", "membreConsentement", "messagerie"],
   },
   // Portail médecin (2026-08) — voir demande utilisateur : "le médecin doit
   // avoir ses accès différents de ceux de la clinique ou l'hôpital... il

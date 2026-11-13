@@ -2,6 +2,8 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } fro
 import type { Request } from "express";
 import { SinistresService } from "./sinistres.service";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_SANTE } from "../auth/access-roles";
 import { CreateSinistreDto } from "./dto/create-sinistre.dto";
 import { UpdateSinistreDto } from "./dto/update-sinistre.dto";
 
@@ -30,6 +32,7 @@ export class SinistresController {
     return this.service.update(id, dto);
   }
 
+  @Roles(...ROLES_SANTE)
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.service.remove(id);

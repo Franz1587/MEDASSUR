@@ -3,9 +3,11 @@ import type { Request } from "express";
 import { CourrierService } from "./courrier.service";
 import { CreateCourrierDto } from "./dto/create-courrier.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { RequireModule } from "../auth/access.decorators";
 
 @Controller("courrier")
 @UseGuards(JwtAuthGuard)
+@RequireModule("courrierMaladie")
 export class CourrierController {
   constructor(private readonly service: CourrierService) {}
 

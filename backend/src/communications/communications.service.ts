@@ -8,8 +8,11 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { MessagingService } from "../messaging/messaging.service";
 import { EmailService } from "./email.service";
 import { BrouillonCommunicationDto, EnvoyerCommunicationDto, MajCommunicationDto, SignatureDto } from "./dto/envoyer-communication.dto";
+import { sanitizeHtmlOptionnel, sanitizeHtmlRiche } from "../shared/sanitize-html.util";
 import { UPLOADS_ROOT } from "../uploads-dir.util";
 import { StorageService } from "../storage/storage.service";
+import { nomAffichagePieceJointe, nomStockeAvecLibelle, sanitizeUpload } from "../storage/upload-security.util";
+import { secretUrlsSignees, urlUploadSignee } from "../storage/uploads-access.middleware";
 import { telephoneAvecIndicatif } from "../lib/telephone.util";
 
 const UPLOADS_COMMUNICATIONS_DIR = path.join(UPLOADS_ROOT, "communications");
@@ -95,16 +98,24 @@ export class CommunicationsService {
   }
 
   async enregistrerSignature(userId: string, dto: SignatureDto) {
-    return this.prisma.user.update({ where: { id: userId }, data: dto, select: { signatureEmail: true, signatureSms: true } });
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { ...dto, ...(typeof dto.signatureEmail === "string" ? { signatureEmail: sanitizeHtmlRiche(dto.signatureEmail) } : {}) },
+      select: { signatureEmail: true, signatureSms: true },
+    });
   }
 
-  // Fichiers téléversés → uploads/communications/<6 hex>-<nom d'origine>.
+  // Fichiers téléversés → uploads/communications/<uuid>__<libellé>.<ext> (voir nomStockeAvecLibelle).
+  // Tout est validé AVANT la première écriture : un fichier refusé n'en laisse aucun autre orphelin.
   private async stockerFichiers(fichiers: Express.Multer.File[] = []): Promise<string[]> {
     if (!fichiers.length) return [];
+    const valides = fichiers.map((f) => {
+      const nomOrigine = Buffer.from(f.originalname, "latin1").toString("utf8");
+      return { buffer: f.buffer, nom: nomStockeAvecLibelle(sanitizeUpload({ originalName: nomOrigine, mimetype: f.mimetype, buffer: f.buffer, category: "document" }), nomOrigine) };
+    });
     await fs.promises.mkdir(UPLOADS_COMMUNICATIONS_DIR, { recursive: true });
-    return Promise.all(fichiers.map(async (f) => {
-      const nom = `${randomUUID().slice(0, 6)}-${path.basename(Buffer.from(f.originalname, "latin1").toString("utf8")).replace(/[^\p{L}\p{N}._ -]/gu, "_")}`;
-      await fs.promises.writeFile(path.join(UPLOADS_COMMUNICATIONS_DIR, nom), f.buffer);
+    return Promise.all(valides.map(async ({ buffer, nom }) => {
+      await fs.promises.writeFile(path.join(UPLOADS_COMMUNICATIONS_DIR, nom), buffer);
       return nom;
     }));
   }
@@ -121,7 +132,7 @@ export class CommunicationsService {
   private async chargerPieces(noms: string[]) {
     const pieces = await Promise.all(noms.map(async (nom) => {
       const content = await fs.promises.readFile(path.join(UPLOADS_COMMUNICATIONS_DIR, nom)).catch(() => null);
-      return content ? { filename: nom.replace(/^[0-9a-f]{6}-/, ""), content, contentType: mimeDe(nom) } : null;
+      return content ? { filename: nomAffichagePieceJointe(nom), content, contentType: mimeDe(nom) } : null;
     }));
     return pieces.filter((p): p is NonNullable<typeof p> => !!p);
   }
@@ -153,18 +164,21 @@ export class CommunicationsService {
     };
     if (dto.brouillonId) await this.prisma.communication.deleteMany({ where: { id: dto.brouillonId, statut: "Brouillon" } });
 
+    const htmlPropre = sanitizeHtmlOptionnel(dto.contenuHtml);
     if (dto.canal === "Email") {
       const destinataires = decouper(dto.destinataireContact);
-      const statut = await this.envoyerReel("Email", destinataires, dto.objet, dto.contenu, { html: dto.contenuHtml, cc: dto.cc, pieces });
+      const statut = await this.envoyerReel("Email", destinataires, dto.objet, dto.contenu, { html: htmlPropre, cc: dto.cc, pieces });
       return this.prisma.communication.create({
-        data: { ...commun, id: randomUUID(), destinataireContact: destinataires.join("; "), cc: dto.cc || null, contenu: dto.contenu, contenuHtml: dto.contenuHtml, statut },
+        data: { ...commun, id: randomUUID(), destinataireContact: destinataires.join("; "), cc: dto.cc || null, contenu: dto.contenu, contenuHtml: htmlPropre, statut },
       });
     }
 
-    // SMS/WhatsApp : pas de pièce jointe native → lien de téléchargement ajouté au texte.
+    // SMS/WhatsApp : pas de pièce jointe native → lien de téléchargement signé
+    // (HMAC) valable 7 jours, ajouté au texte — le destinataire n'a pas de compte.
     const base = process.env.APP_URL ?? "https://medassur.cloud";
+    const secretLiens = pieces.length ? secretUrlsSignees() : "";
     const contenu = pieces.length
-      ? `${dto.contenu}\n\n${pieces.map((p) => `PJ ${p.replace(/^[0-9a-f]{6}-/, "")} : ${base}/uploads/communications/${encodeURIComponent(p)}`).join("\n")}`
+      ? `${dto.contenu}\n\n${pieces.map((p) => `PJ ${nomAffichagePieceJointe(p)} : ${urlUploadSignee(secretLiens, base, "communications", p)}`).join("\n")}`
       : dto.contenu;
     const numeros = decouper(dto.destinataireContact);
     const crees = [];
@@ -183,7 +197,7 @@ export class CommunicationsService {
     const data = {
       canal: dto.canal ?? "Email", destinataireType: dto.destinataireType ?? "Libre", destinataireId: dto.destinataireId,
       destinataireNom: dto.destinataireNom ?? "", destinataireContact: dto.destinataireContact ?? "", cc: dto.cc || null,
-      objet: dto.objet, contenu: dto.contenu ?? "", contenuHtml: dto.contenuHtml,
+      objet: dto.objet, contenu: dto.contenu ?? "", contenuHtml: sanitizeHtmlOptionnel(dto.contenuHtml),
       piecesJointes: pieces, pieceJointe: pieces[0] ?? null, statut: "Brouillon", declencheur: "Manuel", auteurId, lu: true,
     };
     if (id) {

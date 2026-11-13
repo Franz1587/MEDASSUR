@@ -1,5 +1,7 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Post, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_DIRECTION } from "../auth/access-roles";
 import { TenantContext } from "../tenant/tenant-context";
 import { RelancesService } from "./relances.service";
 import { UpsertNiveauRelanceDto } from "./dto/upsert-niveau-relance.dto";
@@ -11,6 +13,7 @@ function sid() {
 }
 
 @UseGuards(JwtAuthGuard)
+@Roles(...ROLES_DIRECTION)
 @Controller("relances")
 export class RelancesController {
   constructor(private service: RelancesService) {}

@@ -7,6 +7,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { idsFamilleDe } from "../portail-membre/famille.util";
 import { SuiviSanteService } from "./suivi-sante.service";
 import { AjouterMesureDto, CreerRendezVousDto, RepondreRendezVousDto } from "./suivi-sante.dto";
+import { ChangerAccesDossierDto } from "./dto/changer-acces-dossier.dto";
 import { EN_TETE_SIGNATURE } from "../documents/signature-pdf.middleware";
 
 type Utilisateur = { userId: string; nom: string; roleId: string; assureSanteId: string | null; medecinId: string | null; prestataireId: string | null };
@@ -58,12 +59,12 @@ export class SuiviSanteMembreController {
   }
 
   @Post("acces/ouvrir")
-  async ouvrir(@Body() body: { assureId: string; medecinId: string }, @Req() req: RequeteSuivi) {
+  async ouvrir(@Body() body: ChangerAccesDossierDto, @Req() req: RequeteSuivi) {
     return this.suivi.changerAcces(body.assureId, body.medecinId, true, await this.famille(req));
   }
 
   @Post("acces/fermer")
-  async fermer(@Body() body: { assureId: string; medecinId: string }, @Req() req: RequeteSuivi) {
+  async fermer(@Body() body: ChangerAccesDossierDto, @Req() req: RequeteSuivi) {
     return this.suivi.changerAcces(body.assureId, body.medecinId, false, await this.famille(req));
   }
 

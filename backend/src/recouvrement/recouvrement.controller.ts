@@ -1,9 +1,12 @@
 import { Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { RecouvrementService } from "./recouvrement.service";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_RECOUVREMENT } from "../auth/access-roles";
 
 @Controller("recouvrement")
 @UseGuards(JwtAuthGuard)
+@Roles(...ROLES_RECOUVREMENT)
 export class RecouvrementController {
   constructor(private readonly service: RecouvrementService) {}
 

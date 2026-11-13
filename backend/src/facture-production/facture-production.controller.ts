@@ -2,9 +2,13 @@ import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/co
 import { FactureProductionService } from "./facture-production.service";
 import { CreateFactureProductionDto } from "./dto/create-facture-production.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { RequireModule } from "../auth/access.decorators";
+import { Roles } from "../auth/roles.decorator";
+import { ROLES_PRODUCTION } from "../auth/access-roles";
 
 @Controller("facture-production")
 @UseGuards(JwtAuthGuard)
+@RequireModule("factureProduction")
 export class FactureProductionController {
   constructor(private readonly service: FactureProductionService) {}
 
@@ -36,6 +40,7 @@ export class FactureProductionController {
     return this.service.findOne(id);
   }
 
+  @Roles(...ROLES_PRODUCTION)
   @Post()
   create(@Body() dto: CreateFactureProductionDto) {
     return this.service.create(dto);
