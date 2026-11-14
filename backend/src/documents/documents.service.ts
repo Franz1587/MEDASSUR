@@ -2786,7 +2786,7 @@ export class DocumentsService {
       assure: prescription.priseEnCharge.assure as unknown as FormulairePec["assure"],
       prestataireRef: prescription.priseEnCharge.prestataireRef,
       prescriptionOrigine: {
-        medecin: prescription.medecin,
+        medecin: prescription.medecin as any,
         numeroBonExamen: prescription.numeroBonExamen,
         medicaments: [],
       },
