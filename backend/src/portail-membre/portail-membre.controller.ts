@@ -22,6 +22,8 @@ import { resoudreExercice } from "./portail-membre.util";
 import { RUBRIQUES_PLAFONNEES } from "../sante/dto/create-facture-ligne.dto";
 import { CarnetSanteService } from "./carnet-sante.service";
 import { PushNotificationsService } from "../notifications/push-notifications.service";
+import { PrescriptionsService } from "../prescriptions/prescriptions.service";
+import { ValiderBonNumeriseDto } from "../prescriptions/dto/bon-numerise.dto";
 
 type PortailMembreRequest = Request & { user: { userId: string; nom: string; roleId: string; assureSanteId: string | null } };
 
@@ -44,6 +46,7 @@ export class PortailMembreController {
     private readonly carnetSante: CarnetSanteService,
     private readonly agentIa: MessagerieAgentIaService,
     private readonly pushNotifications: PushNotificationsService,
+    private readonly prescriptions: PrescriptionsService,
   ) {}
 
   private assureSanteIdDe(req: PortailMembreRequest): string {
@@ -548,6 +551,22 @@ export class PortailMembreController {
     if (prescription.lignes.some((l) => l.statut === "Traite")) throw new BadRequestException("Ce bon a déjà été traité et ne peut plus être supprimé.");
     await this.prisma.prescription.delete({ where: { id: prescriptionId } });
     return { ok: true };
+  }
+
+  @Post("carnet-sante/:id/lire")
+  async lireCarnetSante(@Param("id") id: string, @Req() req: PortailMembreRequest) {
+    const idsFamille = await this.idsFamilleDe(this.assureSanteIdDe(req));
+    const { doc, pdf } = await this.carnetSante.document(id, idsFamille);
+    const mediaType = doc.fichier.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg";
+    return this.prescriptions.lireBonPapier(pdf, mediaType as "image/jpeg" | "application/pdf");
+  }
+
+  @Post("carnet-sante/:id/convertir")
+  async convertirCarnetSante(@Param("id") id: string, @Body() dto: ValiderBonNumeriseDto, @Req() req: PortailMembreRequest) {
+    const idsFamille = await this.idsFamilleDe(this.assureSanteIdDe(req));
+    if (!idsFamille.includes(dto.assureId)) throw new ForbiddenException(`Assuré ${dto.assureId} inaccessible`);
+    const creee = await this.prescriptions.creerNumerise(id, dto);
+    return { numeroOrdonnance: creee.numeroOrdonnance ?? null, numeroBonExamen: creee.numeroBonExamen ?? null, prescriptionId: creee.id };
   }
 
   // Statut d'accès membre (2026-10) — voir demande utilisateur : "si un

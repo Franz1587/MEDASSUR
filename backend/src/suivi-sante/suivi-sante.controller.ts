@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
@@ -6,6 +6,7 @@ import { Roles } from "../auth/roles.decorator";
 import { PrismaService } from "../prisma/prisma.service";
 import { idsFamilleDe } from "../portail-membre/famille.util";
 import { SuiviSanteService } from "./suivi-sante.service";
+import { DocumentsService } from "../documents/documents.service";
 import { AjouterMesureDto, CreerRendezVousDto, RepondreRendezVousDto } from "./suivi-sante.dto";
 import { ChangerAccesDossierDto } from "./dto/changer-acces-dossier.dto";
 import { EN_TETE_SIGNATURE } from "../documents/signature-pdf.middleware";
@@ -89,7 +90,7 @@ export class SuiviSanteMembreController {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("medecin_prescripteur")
 export class SuiviSanteMedecinController {
-  constructor(private readonly prisma: PrismaService, private readonly suivi: SuiviSanteService) {}
+  constructor(private readonly prisma: PrismaService, private readonly suivi: SuiviSanteService, private readonly documents: DocumentsService) {}
 
   private medecinId(req: RequeteSuivi) {
     if (!req.user.medecinId) throw new ForbiddenException("Ce compte n'est rattaché à aucun médecin.");
@@ -139,6 +140,16 @@ export class SuiviSanteMedecinController {
   @Post("patients/:assureId/mesures")
   ajouterMesure(@Param("assureId") assureId: string, @Body() dto: AjouterMesureDto, @Req() req: RequeteSuivi) {
     return this.suivi.ajouterMesure({ ...dto, assureId }, [assureId], this.medecinId(req));
+  }
+
+  @Get("patients/:assureId/prescriptions/:prescriptionId/feuille-examen")
+  async feuilleExamenPrescription(@Param("assureId") assureId: string, @Param("prescriptionId") prescriptionId: string, @Req() req: RequeteSuivi, @Res() res: Response) {
+    const medecinId = this.medecinId(req);
+    const accesActif = await this.prisma.accesDossierMedical.findUnique({ where: { assureId_medecinId: { assureId, medecinId }, actif: true } as any });
+    if (!accesActif) throw new ForbiddenException("Accès au dossier non autorisé.");
+    const prescription = await this.prisma.prescription.findUnique({ where: { id: prescriptionId }, select: { assureId: true } });
+    if (!prescription || prescription.assureId !== assureId) throw new NotFoundException("Prescription introuvable.");
+    return this.documents.renderFeuilleExamenPrescription(prescriptionId, res, { id: req.user.userId, nom: req.user.nom, roleId: req.user.roleId });
   }
 }
 

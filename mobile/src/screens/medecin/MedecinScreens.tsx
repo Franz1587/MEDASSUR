@@ -9,7 +9,7 @@ import { colors, radius, spacing } from "../../theme/colors";
 import { messageErreur } from "../../api/http";
 import { useAuth } from "../../auth/AuthContext";
 import {
-  ajouterMesurePatient, cheminDocumentPatient, dateHeureFr, getDossierPatient, getPatientsPartages, getRendezVousMedecin, repondreRendezVousMedecin,
+  ajouterMesurePatient, cheminDocumentPatient, cheminFeuilleExamenPrescriptionMedecin, dateHeureFr, getDossierPatient, getPatientsPartages, getRendezVousMedecin, repondreRendezVousMedecin,
   TYPES_MESURE, UNITE_MESURE, versIso, type DossierPatient, type PatientPartage, type RendezVous,
 } from "../../api/suiviSante";
 import { BadgeRdv } from "../suiviSante/SuiviSanteScreens";
@@ -219,13 +219,26 @@ export function MedecinDossierScreen() {
         ))}
       </Card>
       <SectionTitle>Ordonnances et bons</SectionTitle>
-      {dossier.prescriptions.length === 0 ? <Text style={s.muted}>Aucune.</Text> : dossier.prescriptions.map((p) => (
-        <Card key={p.id}>
-          <Text style={s.titre}>{p.date} · {p.prescripteur}</Text>
-          {p.origine === "Numérisée" ? <Text style={s.muted}>Bon papier numérisé par le patient</Text> : null}
-          {p.lignes.map((l, i) => <Text key={i} style={s.texte}>{l.type === "Examen" ? "Examen" : "Médicament"} : {l.libelle} × {l.quantite}{l.posologie ? ` — ${l.posologie}` : ""}</Text>)}
-        </Card>
-      ))}
+      {dossier.prescriptions.length === 0 ? <Text style={s.muted}>Aucune.</Text> : dossier.prescriptions.map((p) => {
+        const aExamen = p.lignes.some((l) => l.type === "Examen");
+        return (
+          <Card key={p.id}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.titre}>{p.date} · {p.prescripteur}</Text>
+                {p.origine === "Numérisée" ? <Text style={s.muted}>Bon papier numérisé par le patient</Text> : null}
+                {p.lignes.map((l, i) => <Text key={i} style={s.texte}>{l.type === "Examen" ? "Examen" : "Médicament"} : {l.libelle} × {l.quantite}{l.posologie ? ` — ${l.posologie}` : ""}</Text>)}
+              </View>
+              {aExamen ? (
+                <Pressable onPress={() => navigation.navigate("DocumentViewer", { path: cheminFeuilleExamenPrescriptionMedecin(a.id, p.id), titre: "Feuille d'examen" })}
+                  style={{ padding: 6 }} accessibilityLabel="Voir la feuille d'examen">
+                  <Ionicons name="document-text-outline" size={20} color={colors.primary} />
+                </Pressable>
+              ) : null}
+            </View>
+          </Card>
+        );
+      })}
       <SectionTitle>Consultations</SectionTitle>
       <Card>{dossier.consultations.length === 0 ? <Text style={s.muted}>Aucune.</Text> : dossier.consultations.slice(0, 40).map((c) => (
         <Text key={c.id} style={s.muted}>{c.date} · {c.acte ?? c.type}{c.structure ? ` — ${c.structure}` : ""}</Text>

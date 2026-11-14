@@ -58,7 +58,7 @@ export interface LigneLue { type: "Medicament" | "Examen"; libelle: string; quan
 export interface LectureBon { assureId: string; lisible: boolean; typeDocument: string; prescripteur: string; titrePrescripteur: string; codePraticien: string; structure: string; codeEtablissement: string; date: string; codeAffection: string; remarques: string; lignes: LigneLue[]; cachetVisible?: boolean; cachetX?: number; cachetY?: number; cachetW?: number; cachetH?: number; }
 export const lireBonPapier = (documentId: string) => http.post<LectureBon>(`/portail-membre/carnet-sante/${documentId}/lire`);
 export const convertirBonPapier = (documentId: string, dto: { assureId: string; prescripteurNom?: string; titrePrescripteur?: string; codePraticien?: string; structureNom?: string; codeEtablissement?: string; dateOrdonnance?: string; codeAffection?: string; indicationsLibres?: string; cachetVisible?: boolean; cachetX?: number; cachetY?: number; cachetW?: number; cachetH?: number; lignes: { type: string; libelle: string; quantite: number; posologie?: string; acteMedicalId?: string }[] }) =>
-  http.post<{ numeroOrdonnance: string | null; numeroBonExamen: string | null }>(`/portail-membre/carnet-sante/${documentId}/convertir`, dto);
+  http.post<{ numeroOrdonnance: string | null; numeroBonExamen: string | null; prescriptionId: string }>(`/portail-membre/carnet-sante/${documentId}/convertir`, dto);
 
 // Médecin
 export interface PatientPartage { id: string; nom: string; prenom: string | null; matricule: string; dateNaissance: string | null; sexe: string | null; accesDepuis: string }
@@ -75,6 +75,7 @@ export const getPatientsPartages = () => http.get<PatientPartage[]>("/portail-me
 export const getDossierPatient = (assureId: string) => http.get<DossierPatient>(`/portail-medecin/suivi/patients/${assureId}`);
 export const ajouterMesurePatient = (assureId: string, dto: { type: string; valeur: string; unite?: string }) => http.post<MesureSante>(`/portail-medecin/suivi/patients/${assureId}/mesures`, dto);
 export const cheminDocumentPatient = (assureId: string, documentId: string) => `/portail-medecin/suivi/patients/${assureId}/documents/${documentId}`;
+export const cheminFeuilleExamenPrescriptionMedecin = (assureId: string, prescriptionId: string) => `/portail-medecin/suivi/patients/${assureId}/prescriptions/${prescriptionId}/feuille-examen`;
 
 // "JJ/MM/AAAA" + "HH:MM" (heure du téléphone) → ISO ; null si invalide.
 export function versIso(jour: string, heure: string): string | null {

@@ -7,7 +7,7 @@ import type { RootStackParamList } from "../../navigation/types";
 import { Badge, Card, EmptyState, ErrorView, FormField, inputStyle, LoadingView, PrimaryButton, Screen, SectionTitle } from "../../components/ui";
 import { colors, radius, spacing } from "../../theme/colors";
 import { messageErreur } from "../../api/http";
-import { getMaFamille, getMoi } from "../../api/portailMembre";
+import { cheminFeuilleExamenBon, getMaFamille, getMoi } from "../../api/portailMembre";
 import { obtenirPositionActuelle } from "../../utils/position";
 import { formatDateDigits, formatHeureDigits } from "../../utils/saisieDate";
 import { getReseauSoins, type PrestataireReseau } from "../../api/reseauSoins";
@@ -193,8 +193,17 @@ export function ConvertirBonScreen() {
         ...(cachet ? { cachetVisible: true, cachetX: cachet.x, cachetY: cachet.y, cachetW: cachet.w, cachetH: cachet.h } : {}),
         lignes: retenues.map((l) => ({ type: l.type, libelle: l.libelle, quantite: l.quantite, posologie: l.posologie || undefined, acteMedicalId: l.acteMedicalId ?? undefined })),
       });
-      Alert.alert("Bon électronique créé", `${[r.numeroOrdonnance && `Ordonnance ${r.numeroOrdonnance}`, r.numeroBonExamen && `Bon d'examen ${r.numeroBonExamen}`].filter(Boolean).join("\n")}\n\nPrésentez cette référence en pharmacie ou au laboratoire (aussi envoyée par SMS).`);
-      navigation.goBack();
+      const refs = [r.numeroOrdonnance && `Ordonnance ${r.numeroOrdonnance}`, r.numeroBonExamen && `Bon d'examen ${r.numeroBonExamen}`].filter(Boolean).join("\n");
+      const aExamen = retenues.some((l) => l.type === "Examen");
+      if (aExamen && r.numeroBonExamen && r.prescriptionId) {
+        Alert.alert("Bon électronique créé", `${refs}\n\nPrésentez cette référence au laboratoire (aussi envoyée par SMS).`, [
+          { text: "Fermer", onPress: () => navigation.goBack() },
+          { text: "Voir la feuille d'examen", onPress: () => { navigation.goBack(); navigation.navigate("DocumentViewer", { path: cheminFeuilleExamenBon(r.prescriptionId!), titre: "Feuille d'examen" }); } },
+        ]);
+      } else {
+        Alert.alert("Bon électronique créé", `${refs}\n\nPrésentez cette référence en pharmacie ou au laboratoire (aussi envoyée par SMS).`);
+        navigation.goBack();
+      }
     } catch (err) {
       Alert.alert("Erreur", messageErreur(err, "Conversion impossible."));
     } finally {
