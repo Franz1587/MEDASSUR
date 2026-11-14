@@ -98,10 +98,10 @@ function construireHtml(points: PointCarte[], position: Props["position"], inter
       rotate: ${inter}, touchRotate: ${inter}, rotateControl: ${inter}, bearing: 0,
     }).setView([${centre.latitude}, ${centre.longitude}], ${zoomInitial});
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-      subdomains: 'abcd',
+    L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+      maxZoom: 22,
+      attribution: '&copy; Google Maps',
+      subdomains: '0123',
     }).addTo(carte);
 
     // Restreindre la navigation aux limites du Gabon

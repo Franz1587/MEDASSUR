@@ -244,7 +244,7 @@ export default function PortailReseauSoinsView() {
             maxBoundsViscosity={1.0}
             style={{ height: "100%", width: "100%" }}
           >
-            <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
+            <TileLayer attribution='&copy; Google Maps' url="https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" subdomains="0123" maxZoom={22} />
             <CentrerSurPosition coords={gpsCoords} />
             {filtres.filter((p) => p.latitude != null && p.longitude != null).map((p) => (
               <Marker key={p.id} position={[p.latitude!, p.longitude!]}>
@@ -406,7 +406,7 @@ export default function PortailReseauSoinsView() {
                   {detail.latitude != null && detail.longitude != null ? (
                     <div className="h-56 rounded-xl overflow-hidden border border-border">
                       <MapContainer center={[detail.latitude, detail.longitude]} zoom={15} maxBounds={GABON_BOUNDS} maxBoundsViscosity={1.0} style={{ height: "100%", width: "100%" }}>
-                        <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
+                        <TileLayer attribution='&copy; Google Maps' url="https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" subdomains="0123" maxZoom={22} />
                         <Marker position={[detail.latitude, detail.longitude]}>
                           <Popup>{detail.nom}<br />{detail.adresse}</Popup>
                         </Marker>
