@@ -558,7 +558,8 @@ export class PortailMembreController {
     const idsFamille = await this.idsFamilleDe(this.assureSanteIdDe(req));
     const { doc, pdf } = await this.carnetSante.document(id, idsFamille);
     const mediaType = doc.fichier.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg";
-    return this.prescriptions.lireBonPapier(pdf, mediaType as "image/jpeg" | "application/pdf");
+    const lu = await this.prescriptions.lireBonPapier(pdf, mediaType as "image/jpeg" | "application/pdf");
+    return { assureId: doc.assureId, ...lu };
   }
 
   @Post("carnet-sante/:id/convertir")

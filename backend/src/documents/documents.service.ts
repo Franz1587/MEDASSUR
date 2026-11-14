@@ -2022,6 +2022,7 @@ export class DocumentsService {
     kind: "soins" | "examen", numero: string, pec: FormulairePec, lignes: LigneFormulaire[], res: Response,
     documentRef?: string, utilisateur?: { id: string | null; nom: string; roleId: string; masquerPrixPharmacie?: boolean },
     prestataireFiltre?: { id: string; nom: string; secteur?: string | null },
+    cachetNumerise?: Buffer | null,
   ) {
     const p = await this.parametresEntreprise.findOne();
     const logoImage = await this.chargerImage("logos-entreprises", p.logo, UPLOADS_LOGOS_ENTREPRISES_DIR);
@@ -2294,12 +2295,12 @@ export class DocumentsService {
       texte("Médecin traitant :", 76.4, 315.5);
       texte(nomMedecin, 175, 315.5, { w: 190 });
       texte("Signature et cachet du praticien", 372.8, 317.4, { gras: true });
-      if (medecin) {
+      if (medecin || cachetNumerise) {
         // Image de signature RÉELLE déposée dans le même espace que le
         // libellé "Signature et cachet du praticien" déjà dessiné
         // ci-dessus — jamais un second bloc "Signature du médecin"
         // supplémentaire, absent du modèle de référence.
-        const signatureMedecin = await this.chargerSignatureMedecin(medecin.id);
+        const signatureMedecin = (medecin ? await this.chargerSignatureMedecin(medecin.id) : null) ?? cachetNumerise ?? null;
         if (signatureMedecin) { try { doc.image(signatureMedecin, 400, 328, { fit: TAILLE_SIGNATURE }); } catch { /* jamais bloquant */ } }
       }
       texte("Code praticien", 75.5, 328.8);
@@ -2530,8 +2531,8 @@ export class DocumentsService {
       texte("Nom et prénom du praticien :", 50.0, 328.3);
       texte(nomMedecin, 200, 328.3, { w: 200 });
       texte("Signature et cachet du praticien", 413.2, 328.3, { gras: true });
-      if (medecin) {
-        const signatureMedecin = await this.chargerSignatureMedecin(medecin.id);
+      if (medecin || cachetNumerise) {
+        const signatureMedecin = (medecin ? await this.chargerSignatureMedecin(medecin.id) : null) ?? cachetNumerise ?? null;
         if (signatureMedecin) { try { doc.image(signatureMedecin, 413.2, 338, { fit: TAILLE_SIGNATURE }); } catch { /* jamais bloquant */ } }
       }
       texte("Code praticien", 50.0, 346.9);
@@ -2785,7 +2786,16 @@ export class DocumentsService {
         codeAffection: prescription.codeAffection ?? null,
         prescriptionOrigine: { medecin: mecin, numeroBonExamen: prescription.numeroBonExamen, medicaments: [] },
       };
-      return this.genererFormulaire("examen", prescription.numeroBonExamen, pec, lignes, res, prescriptionId, utilisateur, prestataireFiltre);
+      // Cachet du médecin extrait du scan original (best-effort).
+      let cachetNumerise: Buffer | null = null;
+      if (prescription.carnetDocumentId) {
+        const carnetDoc = await this.prisma.carnetSanteDocument.findUnique({ where: { id: prescription.carnetDocumentId }, select: { fichier: true } });
+        if (carnetDoc) {
+          const cachetPath = path.join(UPLOADS_ROOT, "carnet-sante", carnetDoc.fichier.replace(/\.pdf$/, "-cachet.png"));
+          cachetNumerise = await fs.promises.readFile(cachetPath).catch(() => null);
+        }
+      }
+      return this.genererFormulaire("examen", prescription.numeroBonExamen, pec, lignes, res, prescriptionId, utilisateur, prestataireFiltre, cachetNumerise);
     }
     // Cas normal : PEC associée à la prescription.
     const pec: FormulairePec = {
