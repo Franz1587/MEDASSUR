@@ -46,57 +46,42 @@ export class CartePubliqueController {
     const assure = await this.rechercherAssure(terme);
     if (!assure) { res.send(htmlFormulaire(terme, null)); return; }
     const actif = assure.statut === "Actif" && (assure.contrat as { statut?: string } | null)?.statut === "Actif";
-    const nomComplet = assure.famille
-      ? `${assure.famille.nom} ${assure.famille.prenom ?? ""}`.trim()
-      : `${assure.nom} ${(assure as { prenom?: string | null }).prenom ?? ""}`.trim();
+    const nomComplet = nomAffiche(assure);
     res.send(htmlFormulaire(terme, { matricule: assure.matricule, actif, nomComplet }));
   }
 
   // ── Scan QR ─────────────────────────────────────────────────────────
   @Get("v/:matricule")
   async afficher(@Param("matricule") matricule: string, @Res() res: Response): Promise<void> {
-    const assure = await this.prisma.assureSante.findFirst({
-      where: { matricule, NOT: { contrat: { societeId: "societe-bootstrap" } } },
-      include: {
-        contrat: {
-          select: {
-            statut: true,
-            tauxCouvertureAmbulatoire: true,
-            tauxCouvertureHospitalisation: true,
-            nomCarteSante: true,
-            societeId: true,
-            client: { select: { nom: true } },
-          },
-        },
-        famille: { select: { nom: true, prenom: true } },
-      },
-    }) ?? await this.prisma.assureSante.findFirst({
-      where: { matricule },
-      include: {
-        contrat: {
-          select: {
-            statut: true,
-            tauxCouvertureAmbulatoire: true,
-            tauxCouvertureHospitalisation: true,
-            nomCarteSante: true,
-            societeId: true,
-            client: { select: { nom: true } },
-          },
-        },
-        famille: { select: { nom: true, prenom: true } },
-      },
-    });
+    const include = {
+      contrat: { select: { statut: true, tauxCouvertureAmbulatoire: true, tauxCouvertureHospitalisation: true, nomCarteSante: true, societeId: true, client: { select: { nom: true } } } },
+      famille: { select: { nom: true, prenom: true } },
+    };
+    // Chercher par matricule exact (hors societe-bootstrap en priorité)
+    let assure: Awaited<ReturnType<typeof this.prisma.assureSante.findFirst>> =
+      await this.prisma.assureSante.findFirst({ where: { matricule, NOT: { contrat: { societeId: "societe-bootstrap" } } }, include })
+      ?? await this.prisma.assureSante.findFirst({ where: { matricule }, include });
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
-
     if (!assure) { res.send(htmlInconnu(matricule)); return; }
 
-    const actif = assure.statut === "Actif" && (assure.contrat as { statut?: string } | null)?.statut === "Actif";
-    const nomComplet = assure.famille
-      ? `${assure.famille.nom} ${assure.famille.prenom ?? ""}`.trim()
-      : `${assure.nom} ${(assure as { prenom?: string | null }).prenom ?? ""}`.trim();
-    res.send(htmlScanQR({ matricule, actif, nomComplet }));
+    // Si l'assuré a une identité transverse, utiliser l'affiliation la plus
+    // récente/active (priorité : contrat Actif + matricule alphabétiquement
+    // DESC pour favoriser les préfixes récents comme LRX- sur GAB-).
+    if ((assure as any).identiteId) {
+      const affiliations = await this.prisma.assureSante.findMany({
+        where: { identiteId: (assure as any).identiteId, NOT: { contrat: { societeId: "societe-bootstrap" } } },
+        include,
+        orderBy: [{ statut: "asc" }, { matricule: "desc" }],
+      });
+      const meilleure = affiliationPriorite(affiliations);
+      if (meilleure) assure = meilleure as typeof assure;
+    }
+
+    const a = assure as any;
+    const actif = a.statut === "Actif" && a.contrat?.statut === "Actif";
+    res.send(htmlScanQR({ matricule: a.matricule, actif, nomComplet: nomAffiche(a) }));
   }
 
   // ── PDF recto public ────────────────────────────────────────────────
@@ -107,32 +92,47 @@ export class CartePubliqueController {
 
   // ── Méthodes privées ─────────────────────────────────────────────────
 
-  /** Cherche un assuré par matricule OU numéro de téléphone (cross-tenant). */
+  /** Cherche un assuré par matricule OU numéro de téléphone (cross-tenant).
+   *  - Par matricule : exact, tous types (principal ou ayant droit).
+   *  - Par téléphone : assuré direct OU ayant droit dont le principal a ce tel.
+   *    Les principaux (familleId null) remontent en premier (NULL < UUID en PG).
+   */
   private async rechercherAssure(q: string) {
     const normalise = q.replace(/[\s\-().+]/g, "");
+    const include = {
+      contrat: { select: { statut: true, societeId: true, client: { select: { nom: true } } } },
+      famille: { select: { nom: true, prenom: true } },
+    } as const;
 
+    // 1. Matricule exact (hors societe-bootstrap en priorité)
     let assure = await this.prisma.assureSante.findFirst({
-      where: { matricule: q, NOT: { contrat: { societeId: "societe-bootstrap" } } },
-      include: {
-        contrat: { select: { statut: true, societeId: true, client: { select: { nom: true } } } },
-        famille: { select: { nom: true, prenom: true } },
-      },
-    }) ?? await this.prisma.assureSante.findFirst({
-      where: { matricule: q },
-      include: {
-        contrat: { select: { statut: true, societeId: true, client: { select: { nom: true } } } },
-        famille: { select: { nom: true, prenom: true } },
-      },
-    });
+      where: { matricule: q, NOT: { contrat: { societeId: "societe-bootstrap" } } }, include,
+    }) ?? await this.prisma.assureSante.findFirst({ where: { matricule: q }, include });
     if (assure) return assure;
 
+    // 2. Téléphone : cherche sur l'assuré direct ET sur le principal de la famille.
+    //    orderBy familleId asc → NULL en premier → les principaux remontent avant les ADs.
     if (normalise.length >= 6) {
+      const suffixe = normalise.slice(-8);
       assure = await this.prisma.assureSante.findFirst({
-        where: { telephone: { endsWith: normalise.slice(-8) } },
-        include: {
-          contrat: { select: { statut: true, societeId: true, client: { select: { nom: true } } } },
-          famille: { select: { nom: true, prenom: true } },
+        where: {
+          OR: [
+            { telephone: { endsWith: suffixe } },
+            { famille: { telephone: { endsWith: suffixe } } },
+          ],
+          NOT: { contrat: { societeId: "societe-bootstrap" } },
         },
+        include,
+        orderBy: [{ familleId: "asc" }, { statut: "asc" }, { matricule: "desc" }],
+      }) ?? await this.prisma.assureSante.findFirst({
+        where: {
+          OR: [
+            { telephone: { endsWith: suffixe } },
+            { famille: { telephone: { endsWith: suffixe } } },
+          ],
+        },
+        include,
+        orderBy: [{ familleId: "asc" }, { statut: "asc" }, { matricule: "desc" }],
       });
     }
     return assure ?? null;
@@ -148,6 +148,25 @@ interface ResultatCarte {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+function nomAffiche(a: { nom: string; prenom?: string | null; famille?: { nom: string; prenom?: string | null } | null }): string {
+  if (a.famille) return `${a.famille.nom} ${a.famille.prenom ?? ""}`.trim();
+  return `${a.nom} ${(a as { prenom?: string | null }).prenom ?? ""}`.trim();
+}
+
+/** Parmi plusieurs affiliations liées par identiteId, retourne la plus pertinente :
+ *  contrat Actif + statut Actif d'abord, puis matricule alphabétiquement DESC
+ *  (un préfixe récent type LRX- vient avant les anciens préfixes).
+ */
+function affiliationPriorite<T extends { statut: string; contrat: { statut: string } | null }>(list: T[]): T | null {
+  if (!list.length) return null;
+  return [...list].sort((a, b) => {
+    const aOk = a.statut === "Actif" && a.contrat?.statut === "Actif";
+    const bOk = b.statut === "Actif" && b.contrat?.statut === "Actif";
+    if (aOk !== bOk) return aOk ? -1 : 1;
+    return 0;
+  })[0];
+}
 
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -303,8 +322,8 @@ ${RESULT_CSS}
   <div class="status-desc">${desc}</div>
 </div>
 <div class="check-url-box">
-  <div class="check-url-label">Vérification manuelle (sans scanner)</div>
-  <div class="check-url">medassur.cloud/api/carte/check</div>
+  <div class="check-url-label">Vérifier un autre assuré</div>
+  <a href="/api/carte/check" class="check-url" style="display:block;text-decoration:none;padding:4px 0">Formulaire de vérification →</a>
 </div>
 <div class="footer" style="padding-bottom:16px">Vérification MEDASSUR+ &middot; medassur.cloud</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>

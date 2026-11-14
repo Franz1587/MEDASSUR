@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import { StyleSheet, View, Linking, type StyleProp, type ViewStyle } from "react-native";
 import { WebView } from "react-native-webview";
 
 // Carte interactive en WebView + Leaflet/OpenStreetMap.
@@ -98,19 +98,26 @@ function construireHtml(points: PointCarte[], position: Props["position"], inter
       rotate: ${inter}, touchRotate: ${inter}, rotateControl: ${inter}, bearing: 0,
     }).setView([${centre.latitude}, ${centre.longitude}], ${zoomInitial});
 
-    L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
-      maxZoom: 22,
-      attribution: '&copy; Google Maps',
-      subdomains: '0123',
-    }).addTo(carte);
+    // Contrôle Plan / Satellite
+    var planLayer = L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+      maxZoom: 22, attribution: '&copy; Google Maps', subdomains: '0123',
+    });
+    var satelliteLayer = L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+      maxZoom: 22, attribution: '&copy; Google Maps', subdomains: '0123',
+    });
+    planLayer.addTo(carte);
+    L.control.layers({ 'Plan': planLayer, 'Satellite': satelliteLayer }, {}, { position: 'topright' }).addTo(carte);
 
     // Restreindre la navigation aux limites du Gabon
     carte.setMaxBounds([[-5.2, 8.0], [2.5, 15.0]]);
 
     var bornes = [];
+    var posStr = position ? (position.latitude + ',' + position.longitude) : '';
     points.forEach(function (p) {
       var marqueur = L.marker([p.latitude, p.longitude]).addTo(carte);
-      var contenu = '<b>' + p.titre + '</b>' + (p.description ? '<br/>' + p.description : '');
+      var mapsUrl = 'https://www.google.com/maps/dir/?api=1' + (posStr ? '&origin=' + posStr : '') + '&destination=' + p.latitude + ',' + p.longitude + '&travelmode=driving';
+      var contenu = '<b>' + p.titre + '</b>' + (p.description ? '<br/>' + p.description : '')
+        + '<br/><a href="#" onclick="window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify({type:\'itineraire\',url:\'' + mapsUrl.replace(/'/g, "\\'") + '\'}));return false;" style="color:#004a9f;font-weight:bold;font-size:12px;">🗺 Itinéraire</a>';
       marqueur.bindPopup(contenu);
       marqueur.on('click', function () {
         if (window.ReactNativeWebView) {
@@ -159,6 +166,7 @@ export function LeafletMap({ points, position, onMarkerPress, interactive = true
           try {
             const data = JSON.parse(e.nativeEvent.data);
             if (data?.type === "marqueur" && data.id && onMarkerPress) onMarkerPress(data.id);
+            if (data?.type === "itineraire" && data.url) Linking.openURL(data.url).catch(() => null);
           } catch {
             // ignore
           }

@@ -1,7 +1,7 @@
 import "leaflet/dist/leaflet.css";
 import "@/lib/leafletIconFix";
 import { useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, LayersControl, Marker, Popup, useMap } from "react-leaflet";
 import {
   MapPin, Phone, Building2, Stethoscope, Search, X, ChevronDown, ChevronRight,
   FileDown, Shield, MapPinned, LocateFixed, Loader2, List,
@@ -244,12 +244,25 @@ export default function PortailReseauSoinsView() {
             maxBoundsViscosity={1.0}
             style={{ height: "100%", width: "100%" }}
           >
-            <TileLayer attribution='&copy; Google Maps' url="https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" subdomains="0123" maxZoom={22} />
+            <LayersControl position="topright">
+              <LayersControl.BaseLayer checked name="Plan">
+                <TileLayer attribution='&copy; Google Maps' url="https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" subdomains="0123" maxZoom={22} />
+              </LayersControl.BaseLayer>
+              <LayersControl.BaseLayer name="Satellite">
+                <TileLayer attribution='&copy; Google Maps' url="https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}" subdomains="0123" maxZoom={22} />
+              </LayersControl.BaseLayer>
+            </LayersControl>
             <CentrerSurPosition coords={gpsCoords} />
             {filtres.filter((p) => p.latitude != null && p.longitude != null).map((p) => (
               <Marker key={p.id} position={[p.latitude!, p.longitude!]}>
                 <Popup>
                   <strong>{p.nom}</strong><br />{p.type}{p.ville ? ` · ${p.ville}` : ""}
+                  <br />
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1${gpsCoords ? `&origin=${gpsCoords.lat},${gpsCoords.lng}` : ""}&destination=${p.latitude},${p.longitude}&travelmode=driving`}
+                    target="_blank" rel="noopener noreferrer"
+                    style={{ color: "#004a9f", fontWeight: "bold", fontSize: "12px" }}
+                  >🗺 Itinéraire</a>
                 </Popup>
               </Marker>
             ))}
@@ -404,14 +417,30 @@ export default function PortailReseauSoinsView() {
                   </div>
 
                   {detail.latitude != null && detail.longitude != null ? (
-                    <div className="h-56 rounded-xl overflow-hidden border border-border">
-                      <MapContainer center={[detail.latitude, detail.longitude]} zoom={15} maxBounds={GABON_BOUNDS} maxBoundsViscosity={1.0} style={{ height: "100%", width: "100%" }}>
-                        <TileLayer attribution='&copy; Google Maps' url="https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" subdomains="0123" maxZoom={22} />
-                        <Marker position={[detail.latitude, detail.longitude]}>
-                          <Popup>{detail.nom}<br />{detail.adresse}</Popup>
-                        </Marker>
-                      </MapContainer>
-                    </div>
+                    <>
+                      <div className="h-56 rounded-xl overflow-hidden border border-border">
+                        <MapContainer center={[detail.latitude, detail.longitude]} zoom={15} maxBounds={GABON_BOUNDS} maxBoundsViscosity={1.0} style={{ height: "100%", width: "100%" }}>
+                          <LayersControl position="topright">
+                            <LayersControl.BaseLayer checked name="Plan">
+                              <TileLayer attribution='&copy; Google Maps' url="https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" subdomains="0123" maxZoom={22} />
+                            </LayersControl.BaseLayer>
+                            <LayersControl.BaseLayer name="Satellite">
+                              <TileLayer attribution='&copy; Google Maps' url="https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}" subdomains="0123" maxZoom={22} />
+                            </LayersControl.BaseLayer>
+                          </LayersControl>
+                          <Marker position={[detail.latitude, detail.longitude]}>
+                            <Popup>{detail.nom}<br />{detail.adresse}</Popup>
+                          </Marker>
+                        </MapContainer>
+                      </div>
+                      <a
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${detail.latitude},${detail.longitude}&travelmode=driving`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-primary/30 bg-primary/5 text-primary text-[13px] font-medium hover:bg-primary/10 transition-colors"
+                      >
+                        <MapPin className="w-4 h-4" /> Itinéraire Google Maps
+                      </a>
+                    </>
                   ) : (
                     <div className="h-24 rounded-xl border border-dashed border-border flex items-center justify-center text-[12px] text-muted-foreground">
                       Coordonnées non disponibles pour ce prestataire.
