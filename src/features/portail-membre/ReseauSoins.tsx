@@ -405,7 +405,7 @@ export default function MembreReseauSoinsView() {
                 maxBoundsViscosity={1.0}
                 style={{ height: "100%", width: "100%" }}
               >
-                <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
                 <CentrerSurPosition coords={gpsCoords} />
                 {filtres.filter((p) => p.latitude != null && p.longitude != null).map((p) => (
                   <Marker key={p.id} position={[p.latitude!, p.longitude!]}>
@@ -494,7 +494,7 @@ export default function MembreReseauSoinsView() {
                   {detail.latitude != null && detail.longitude != null ? (
                     <div className="h-52 rounded-xl overflow-hidden border border-border">
                       <MapContainer center={[detail.latitude, detail.longitude]} zoom={15} maxBounds={GABON_BOUNDS} maxBoundsViscosity={1.0} style={{ height: "100%", width: "100%" }}>
-                        <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                        <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
                         <Marker position={[detail.latitude, detail.longitude]}>
                           <Popup>{detail.nom}<br />{detail.adresse}</Popup>
                         </Marker>

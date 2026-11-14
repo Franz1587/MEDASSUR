@@ -2041,12 +2041,17 @@ export class DocumentsService {
       ? prestataireFiltre.secteur
       : pec.prestataireRef?.secteur;
     const secteurPublic = secteurEffectif === "Public";
+    // t() normalise les chaînes vides en null avant ?? (cas courant en DB
+    // où les taux sont "" et non null quand non configurés par secteur).
+    const t = (v: string | null | undefined): string | null => v?.trim() || null;
     const tauxAmbulatoire = (estAyantDroit
-      ? (secteurPublic ? contrat.tauxAmbulatoirePubliqueAyantDroit : contrat.tauxAmbulatoirePriveeAyantDroit)
-      : (secteurPublic ? contrat.tauxAmbulatoirePublique : contrat.tauxAmbulatoirePrivee)) ?? contrat.tauxCouvertureAmbulatoire ?? null;
+      ? (t(secteurPublic ? contrat.tauxAmbulatoirePubliqueAyantDroit : contrat.tauxAmbulatoirePriveeAyantDroit)
+        ?? t(secteurPublic ? contrat.tauxAmbulatoirePublique : contrat.tauxAmbulatoirePrivee))
+      : t(secteurPublic ? contrat.tauxAmbulatoirePublique : contrat.tauxAmbulatoirePrivee)) ?? t(contrat.tauxCouvertureAmbulatoire);
     const tauxHospitalisation = (estAyantDroit
-      ? (secteurPublic ? contrat.tauxHospitalisationPubliqueAyantDroit : contrat.tauxHospitalisationPriveeAyantDroit)
-      : (secteurPublic ? contrat.tauxHospitalisationPublique : contrat.tauxHospitalisationPrivee)) ?? contrat.tauxCouvertureHospitalisation ?? null;
+      ? (t(secteurPublic ? contrat.tauxHospitalisationPubliqueAyantDroit : contrat.tauxHospitalisationPriveeAyantDroit)
+        ?? t(secteurPublic ? contrat.tauxHospitalisationPublique : contrat.tauxHospitalisationPrivee))
+      : t(secteurPublic ? contrat.tauxHospitalisationPublique : contrat.tauxHospitalisationPrivee)) ?? t(contrat.tauxCouvertureHospitalisation) ?? tauxAmbulatoire;
     const lignePrincipale = lignes[0] as LigneFormulaire | undefined;
     // Ticket modérateur = 100 - taux applicable (2026-09) — recalculé
     // depuis tauxAmbulatoire/tauxHospitalisation ci-dessus (donc lui aussi
